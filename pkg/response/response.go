@@ -3,6 +3,8 @@ package response
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Response 统一响应结构
@@ -16,7 +18,7 @@ type Response struct {
 const (
 	CodeSuccess           = 0
 	CodeInvalidRequest    = 1001
-	CodeUnauthorized       = 1002
+	CodeUnauthorized      = 1002
 	CodeForbidden         = 1003
 	CodeNotFound          = 1004
 	CodeInternalError     = 1005
@@ -29,7 +31,7 @@ const (
 	CodeTokenExpired      = 2006
 )
 
-// Success 成功响应
+// Success 成功响应 (http.ResponseWriter)
 func Success(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -43,7 +45,7 @@ func Success(w http.ResponseWriter, data interface{}) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// Error 错误响应
+// Error 错误响应 (http.ResponseWriter)
 func Error(w http.ResponseWriter, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -72,7 +74,7 @@ func Error(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// ErrorWithStatus 带自定义状态码的错误响应
+// ErrorWithStatus 带自定义状态码的错误响应 (http.ResponseWriter)
 func ErrorWithStatus(w http.ResponseWriter, httpStatus int, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
@@ -86,7 +88,7 @@ func ErrorWithStatus(w http.ResponseWriter, httpStatus int, code int, message st
 	json.NewEncoder(w).Encode(resp)
 }
 
-// Created 创建成功响应
+// Created 创建成功响应 (http.ResponseWriter)
 func Created(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -98,4 +100,56 @@ func Created(w http.ResponseWriter, data interface{}) {
 	}
 
 	json.NewEncoder(w).Encode(resp)
+}
+
+// ========== Gin框架兼容函数 ==========
+
+// GinSuccess Gin框架成功响应
+func GinSuccess(c *gin.Context, data interface{}) {
+	c.JSON(http.StatusOK, Response{
+		Code:    CodeSuccess,
+		Message: "操作成功",
+		Data:    data,
+	})
+}
+
+// GinError Gin框架错误响应
+func GinError(c *gin.Context, code int, message string) {
+	httpStatus := http.StatusOK
+	switch code {
+	case CodeUnauthorized:
+		httpStatus = http.StatusUnauthorized
+	case CodeForbidden:
+		httpStatus = http.StatusForbidden
+	case CodeNotFound:
+		httpStatus = http.StatusNotFound
+	case CodeInvalidRequest:
+		httpStatus = http.StatusBadRequest
+	default:
+		httpStatus = http.StatusInternalServerError
+	}
+
+	c.JSON(httpStatus, Response{
+		Code:    code,
+		Message: message,
+		Data:    nil,
+	})
+}
+
+// GinErrorWithStatus Gin框架带自定义状态码的错误响应
+func GinErrorWithStatus(c *gin.Context, httpStatus int, code int, message string) {
+	c.JSON(httpStatus, Response{
+		Code:    code,
+		Message: message,
+		Data:    nil,
+	})
+}
+
+// GinCreated Gin框架创建成功响应
+func GinCreated(c *gin.Context, data interface{}) {
+	c.JSON(http.StatusCreated, Response{
+		Code:    CodeSuccess,
+		Message: "创建成功",
+		Data:    data,
+	})
 }
