@@ -1,0 +1,51 @@
+/* 基础布局样式 */
+
+.basic-layout {
+  min-height: 100vh;
+}
+
+.basic-layout .ant-layout-sider {
+  border-right: 1px solid #f0f0f0;
+}
+
+.basic-layout .logo {
+  padding: 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.basic-layout .logo h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1890ff;
+}
+
+.basic-layout .ant-menu {
+  border-right: none;
+}
+
+.layout-header {
+  background: #fff;
+  padding: 0 24px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-name {
+  font-size: 14px;
+  color: #333;
+}
+
+.layout-content {
+  padding: 24px;
+  background: #f5f5f5;
+  min-height: calc(100vh - 64px);
+}
