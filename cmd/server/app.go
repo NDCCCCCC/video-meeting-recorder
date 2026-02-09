@@ -9,10 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cpic/record_v2/internal/auth"
 	"github.com/cpic/record_v2/internal/common"
 	"github.com/cpic/record_v2/internal/config"
+	"github.com/cpic/record_v2/internal/handlers"
+	"github.com/cpic/record_v2/internal/middleware"
 	"github.com/cpic/record_v2/internal/models"
 	"github.com/cpic/record_v2/pkg/response"
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -26,9 +30,16 @@ type MinimalApp struct {
 	logger     *zap.Logger
 	db         *gorm.DB
 	httpServer *http.Server
+	router     *gin.Engine
+	jwtService *auth.JWTService
+	handlers   *Handlers
 	services   map[string]common.Service
-	router     http.Handler
 	wg         sync.WaitGroup
+}
+
+// Handlers 处理器集合
+type Handlers struct {
+	Auth *handlers.AuthHandler
 }
 
 // NewMinimalApp 创建应用实例
@@ -49,9 +60,19 @@ func (a *MinimalApp) Initialize() error {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	// 初始化HTTP路由
+	// 初始化Gin路由
 	if err := a.initRouter(); err != nil {
 		return fmt.Errorf("failed to initialize router: %w", err)
+	}
+
+	// 初始化处理器
+	if err := a.initHandlers(); err != nil {
+		return fmt.Errorf("failed to initialize handlers: %w", err)
+	}
+
+	// 注册路由
+	if err := a.registerRoutes(); err != nil {
+		return fmt.Errorf("failed to register routes: %w", err)
 	}
 
 	// 注册服务
@@ -111,6 +132,11 @@ func (a *MinimalApp) initDatabase() error {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
+	// 创建种子数据
+	if err := a.seedDatabase(); err != nil {
+		a.logger.Warn("Failed to seed database", zap.Error(err))
+	}
+
 	return nil
 }
 
@@ -139,12 +165,140 @@ func (a *MinimalApp) migrateDatabase() error {
 	return nil
 }
 
+// seedDatabase 创建种子数据
+func (a *MinimalApp) seedDatabase() error {
+	// 创建默认角色
+	roles := []*models.Role{
+		{Name: models.RoleAdmin, Description: "系统管理员"},
+		{Name: models.RoleOperator, Description: "操作员"},
+		{Name: models.RoleViewer, Description: "查看者"},
+		{Name: models.RoleAPIClient, Description: "API客户端"},
+	}
+
+	for _, role := range roles {
+		var existing models.Role
+		if err := a.db.Where("name = ?", role.Name).First(&existing).Error; err == gorm.ErrRecordNotFound {
+			if err := a.db.Create(role).Error; err != nil {
+				return fmt.Errorf("failed to create role %s: %w", role.Name, err)
+			}
+			a.logger.Info("Created default role", zap.String("name", role.Name))
+		}
+	}
+
+	// 创建默认管理员用户
+	var adminRole models.Role
+	if err := a.db.Where("name = ?", models.RoleAdmin).First(&adminRole).Error; err != nil {
+		return fmt.Errorf("failed to find admin role: %w", err)
+	}
+
+	var existingUser models.User
+	if err := a.db.Where("username = ?", "admin").First(&existingUser).Error; err == gorm.ErrRecordNotFound {
+		admin := &models.User{
+			Username: "admin",
+			Email:    "admin@example.com",
+			FullName: "系统管理员",
+			RoleID:   adminRole.ID,
+			IsActive:  true,
+		}
+		if err := admin.SetPassword("admin123"); err != nil {
+			return fmt.Errorf("failed to set admin password: %w", err)
+		}
+		if err := a.db.Create(admin).Error; err != nil {
+			return fmt.Errorf("failed to create admin user: %w", err)
+		}
+		a.logger.Info("Created default admin user",
+			zap.String("username", "admin"),
+			zap.String("password", "admin123"),
+		)
+	}
+
+	return nil
+}
+
+// initRouter 初始化路由
+func (a *MinimalApp) initRouter() error {
+	// 设置Gin为发布模式
+	gin.SetMode(gin.ReleaseMode)
+
+	a.router = gin.New()
+	a.router.Use(gin.Recovery())
+	a.router.Use(gin.Logger())
+
+	// CORS中间件
+	a.router.Use(corsMiddleware())
+
+	return nil
+}
+
+// corsMiddleware CORS中间件
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-API-Key, Authorization")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// initHandlers 初始化处理器
+func (a *MinimalApp) initHandlers() error {
+	a.jwtService = auth.NewJWTService(a.config, a.db, a.logger)
+	authService := auth.NewService(a.config, a.db, a.logger)
+
+	a.handlers = &Handlers{
+		Auth: handlers.NewAuthHandler(authService, a.logger),
+	}
+
+	return nil
+}
+
+// registerRoutes 注册路由
+func (a *MinimalApp) registerRoutes() error {
+	// 健康检查端点（无需认证）
+	a.router.GET("/health", a.healthHandler)
+	a.router.GET("/api/v1/system/stats", a.statsHandler)
+
+	// 认证路由
+	auth := a.router.Group("/api/v1/auth")
+	{
+		auth.POST("/login", a.handlers.Auth.Login)
+		auth.POST("/refresh", a.handlers.Auth.RefreshToken)
+		auth.POST("/validate-password", a.handlers.Auth.ValidatePassword)
+	}
+
+	// 需要认证的路由
+	authenticated := a.router.Group("/api/v1/auth")
+	authenticated.Use(middleware.JWTAuth(a.jwtService))
+	{
+		authenticated.POST("/logout", a.handlers.Auth.Logout)
+		authenticated.POST("/logout-all", a.handlers.Auth.LogoutAll)
+		authenticated.POST("/change-password", a.handlers.Auth.ChangePassword)
+		authenticated.GET("/me", a.handlers.Auth.GetCurrentUser)
+	}
+
+	// API路由组（待实现）
+	api := a.router.Group("/api/v1")
+	// api.Use(middleware.JWTAuth(...))  // 需要全局认证时启用
+	_ = api.Group("/users")    // 用户管理（待实现）
+	_ = api.Group("/roles")    // 角色管理（待实现）
+	_ = api.Group("/tasks")    // 任务管理（待实现）
+	_ = api.Group("/conferences") // 会议管理（待实现）
+	_ = api.Group("/files")    // 文件管理（待实现）
+
+	return nil
+}
+
 // registerServices 注册服务
 func (a *MinimalApp) registerServices() error {
 	a.logger.Info("Registering services...")
 
 	// TODO: 注册各个服务
-	// 例如:
 	// authService := auth.NewService(a.db, a.config.Auth, a.logger)
 	// a.services["auth"] = authService
 	// if err := authService.Initialize(); err != nil {
@@ -254,25 +408,9 @@ func (a *MinimalApp) checkPort(addr string) error {
 	return nil
 }
 
-// initRouter 初始化路由
-func (a *MinimalApp) initRouter() error {
-	mux := http.NewServeMux()
-
-	// 健康检查端点
-	mux.HandleFunc("/health", a.healthHandler)
-	mux.HandleFunc("/api/v1/system/stats", a.statsHandler)
-
-	// API路由（待实现）
-	// mux.HandleFunc("/api/v1/auth/login", a.handleLogin)
-	// ...
-
-	a.router = mux
-	return nil
-}
-
 // healthHandler 健康检查处理器
-func (a *MinimalApp) healthHandler(w http.ResponseWriter, r *http.Request) {
-	response.Success(w, map[string]interface{}{
+func (a *MinimalApp) healthHandler(c *gin.Context) {
+	response.GinSuccess(c, map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now().Unix(),
 		"version":   "2.0.0",
@@ -280,9 +418,9 @@ func (a *MinimalApp) healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // statsHandler 系统统计处理器
-func (a *MinimalApp) statsHandler(w http.ResponseWriter, r *http.Request) {
+func (a *MinimalApp) statsHandler(c *gin.Context) {
 	// TODO: 实现系统统计信息
-	response.Success(w, map[string]interface{}{
+	response.GinSuccess(c, map[string]interface{}{
 		"services": len(a.services),
 		"uptime":   time.Since(time.Now()).Seconds(),
 	})
