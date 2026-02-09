@@ -42,6 +42,7 @@ type MinimalApp struct {
 type Handlers struct {
 	Auth *handlers.AuthHandler
 	User *handlers.UserHandler
+	Role *handlers.RoleHandler
 }
 
 // NewMinimalApp 创建应用实例
@@ -253,10 +254,12 @@ func (a *MinimalApp) initHandlers() error {
 	a.jwtService = auth.NewJWTService(a.config, a.db, a.logger)
 	authService := auth.NewService(a.config, a.db, a.logger)
 	userService := services.NewUserService(a.db, a.logger)
+	roleService := services.NewRoleService(a.db, a.logger)
 
 	a.handlers = &Handlers{
 		Auth: handlers.NewAuthHandler(authService, a.logger),
 		User: handlers.NewUserHandler(userService, a.logger),
+		Role: handlers.NewRoleHandler(roleService, a.logger),
 	}
 
 	return nil
@@ -304,8 +307,21 @@ func (a *MinimalApp) registerRoutes() error {
 		users.POST("/:id/toggle-status", a.handlers.User.ToggleUserStatus) // 切换状态
 	}
 
-	// 角色管理（待实现）
-	_ = api.Group("/roles")
+	// 角色管理
+	roles := api.Group("/roles")
+	{
+		roles.GET("", a.handlers.Role.ListRoles)                    // 获取角色列表
+		roles.GET("/:id", a.handlers.Role.GetRole)                   // 获取角色详情
+		roles.POST("", a.handlers.Role.CreateRole)                  // 创建角色
+		roles.PUT("/:id", a.handlers.Role.UpdateRole)               // 更新角色
+		roles.DELETE("/:id", a.handlers.Role.DeleteRole)            // 删除角色
+		roles.GET("/:id/permissions", a.handlers.Role.GetRolePermissions) // 获取角色权限
+		roles.POST("/:id/permissions", a.handlers.Role.AssignPermissions) // 分配权限
+	}
+
+	// 权限列表
+	api.GET("/permissions", a.handlers.Role.GetAllPermissions)
+
 	// 任务管理（待实现）
 	_ = api.Group("/tasks")
 	// 会议管理（待实现）

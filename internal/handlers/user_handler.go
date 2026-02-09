@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"fmt"
-
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
@@ -269,14 +267,4 @@ func (h *UserHandler) UpdateCurrentProfile(c *gin.Context) {
 
 	h.logger.Info("User profile updated", zap.Uint("user_id", userID))
 	response.GinSuccess(c, user)
-}
-
-// parseUintParam 解析无符号整数参数
-func parseUintParam(c *gin.Context, key string) (uint, error) {
-	idStr := c.Param(key)
-	var id uint
-	if _, err := fmt.Sscanf(idStr, "%d", &id); err != nil {
-		return 0, err
-	}
-	return id, nil
 }

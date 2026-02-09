@@ -1,0 +1,239 @@
+package handlers
+
+import (
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+)
+
+// RoleHandler 角色处理器
+type RoleHandler struct {
+	roleService *services.RoleService
+	logger      *zap.Logger
+}
+
+// NewRoleHandler 创建角色处理器
+func NewRoleHandler(roleService *services.RoleService, logger *zap.Logger) *RoleHandler {
+	return &RoleHandler{
+		roleService: roleService,
+		logger:      logger,
+	}
+}
+
+// ListRoles 获取角色列表
+// @Summary 获取角色列表
+// @Description 分页获取角色列表，支持关键词搜索
+// @Tags 角色管理
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(20)
+// @Param keyword query string false "搜索关键词"
+// @Success 200 {object} response.Response{data=services.ListRolesResponse}
+// @Router /api/v1/roles [get]
+func (h *RoleHandler) ListRoles(c *gin.Context) {
+	var req services.ListRolesRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误")
+		return
+	}
+
+	// 设置默认值
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.PageSize == 0 {
+		req.PageSize = 20
+	}
+
+	result, err := h.roleService.ListRoles(&req)
+	if err != nil {
+		h.logger.Error("Failed to list roles", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "获取角色列表失败")
+		return
+	}
+
+	response.GinSuccess(c, result)
+}
+
+// GetRole 获取角色详情
+// @Summary 获取角色详情
+// @Description 根据ID获取角色详细信息
+// @Tags 角色管理
+// @Security Bearer
+// @Param id path int true "角色ID"
+// @Success 200 {object} response.Response{data=models.Role}
+// @Router /api/v1/roles/{id} [get]
+func (h *RoleHandler) GetRole(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的角色ID")
+		return
+	}
+
+	role, err := h.roleService.GetRoleByID(id)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "角色不存在")
+		return
+	}
+
+	response.GinSuccess(c, role)
+}
+
+// CreateRole 创建角色
+// @Summary 创建角色
+// @Description 创建新角色
+// @Tags 角色管理
+// @Security Bearer
+// @Accept json
+// @Produce json
+// @Param request body services.CreateRoleRequest true "创建角色请求"
+// @Success 200 {object} response.Response{data=models.Role}
+// @Router /api/v1/roles [post]
+func (h *RoleHandler) CreateRole(c *gin.Context) {
+	var req services.CreateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	role, err := h.roleService.CreateRole(&req)
+	if err != nil {
+		response.GinError(c, response.CodeDuplicateRecord, err.Error())
+		return
+	}
+
+	h.logger.Info("Role created", zap.Uint("role_id", role.ID), zap.String("name", role.Name))
+	response.GinSuccess(c, role)
+}
+
+// UpdateRole 更新角色
+// @Summary 更新角色
+// @Description 更新角色信息
+// @Tags 角色管理
+// @Security Bearer
+// @Accept json
+// @Produce json
+// @Param id path int true "角色ID"
+// @Param request body services.UpdateRoleRequest true "更新角色请求"
+// @Success 200 {object} response.Response{data=models.Role}
+// @Router /api/v1/roles/{id} [put]
+func (h *RoleHandler) UpdateRole(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的角色ID")
+		return
+	}
+
+	var req services.UpdateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	role, err := h.roleService.UpdateRole(id, &req)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		return
+	}
+
+	h.logger.Info("Role updated", zap.Uint("role_id", id))
+	response.GinSuccess(c, role)
+}
+
+// DeleteRole 删除角色
+// @Summary 删除角色
+// @Description 删除指定角色
+// @Tags 角色管理
+// @Security Bearer
+// @Param id path int true "角色ID"
+// @Success 200 {object} response.Response
+// @Router /api/v1/roles/{id} [delete]
+func (h *RoleHandler) DeleteRole(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的角色ID")
+		return
+	}
+
+	if err := h.roleService.DeleteRole(id); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		return
+	}
+
+	h.logger.Info("Role deleted", zap.Uint("role_id", id))
+	response.GinSuccess(c, gin.H{"message": "删除成功"})
+}
+
+// GetRolePermissions 获取角色权限
+// @Summary 获取角色权限
+// @Description 获取指定角色的权限列表
+// @Tags 角色管理
+// @Security Bearer
+// @Param id path int true "角色ID"
+// @Success 200 {object} response.Response{data=[]models.Permission}
+// @Router /api/v1/roles/{id}/permissions [get]
+func (h *RoleHandler) GetRolePermissions(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的角色ID")
+		return
+	}
+
+	permissions, err := h.roleService.GetRolePermissions(id)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, err.Error())
+		return
+	}
+
+	response.GinSuccess(c, permissions)
+}
+
+// AssignPermissions 分配权限
+// @Summary 分配权限
+// @Description 为角色分配权限
+// @Tags 角色管理
+// @Security Bearer
+// @Accept json
+// @Param id path int true "角色ID"
+// @Param request body services.AssignPermissionsRequest true "分配权限请求"
+// @Success 200 {object} response.Response
+// @Router /api/v1/roles/{id}/permissions [post]
+func (h *RoleHandler) AssignPermissions(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的角色ID")
+		return
+	}
+
+	var req services.AssignPermissionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误")
+		return
+	}
+
+	if err := h.roleService.AssignPermissions(id, &req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		return
+	}
+
+	h.logger.Info("Role permissions assigned", zap.Uint("role_id", id))
+	response.GinSuccess(c, gin.H{"message": "权限分配成功"})
+}
+
+// GetAllPermissions 获取所有权限
+// @Summary 获取所有权限
+// @Description 获取系统中所有可用权限
+// @Tags 角色管理
+// @Security Bearer
+// @Success 200 {object} response.Response{data=[]models.Permission}
+// @Router /api/v1/permissions [get]
+func (h *RoleHandler) GetAllPermissions(c *gin.Context) {
+	permissions, err := h.roleService.GetAllPermissions()
+	if err != nil {
+		response.GinError(c, response.CodeInternalError, "获取权限列表失败")
+		return
+	}
+
+	response.GinSuccess(c, permissions)
+}
