@@ -15,6 +15,7 @@ import (
 	"github.com/cpic/record_v2/internal/handlers"
 	"github.com/cpic/record_v2/internal/middleware"
 	"github.com/cpic/record_v2/internal/models"
+	"github.com/cpic/record_v2/internal/services"
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -40,6 +41,7 @@ type MinimalApp struct {
 // Handlers 处理器集合
 type Handlers struct {
 	Auth *handlers.AuthHandler
+	User *handlers.UserHandler
 }
 
 // NewMinimalApp 创建应用实例
@@ -250,9 +252,11 @@ func corsMiddleware() gin.HandlerFunc {
 func (a *MinimalApp) initHandlers() error {
 	a.jwtService = auth.NewJWTService(a.config, a.db, a.logger)
 	authService := auth.NewService(a.config, a.db, a.logger)
+	userService := services.NewUserService(a.db, a.logger)
 
 	a.handlers = &Handlers{
 		Auth: handlers.NewAuthHandler(authService, a.logger),
+		User: handlers.NewUserHandler(userService, a.logger),
 	}
 
 	return nil
@@ -282,14 +286,32 @@ func (a *MinimalApp) registerRoutes() error {
 		authenticated.GET("/me", a.handlers.Auth.GetCurrentUser)
 	}
 
-	// API路由组（待实现）
+	// API路由组
 	api := a.router.Group("/api/v1")
-	// api.Use(middleware.JWTAuth(...))  // 需要全局认证时启用
-	_ = api.Group("/users")    // 用户管理（待实现）
-	_ = api.Group("/roles")    // 角色管理（待实现）
-	_ = api.Group("/tasks")    // 任务管理（待实现）
-	_ = api.Group("/conferences") // 会议管理（待实现）
-	_ = api.Group("/files")    // 文件管理（待实现）
+	api.Use(middleware.JWTAuth(a.jwtService)) // 全局认证
+
+	// 用户管理
+	users := api.Group("/users")
+	{
+		users.GET("", a.handlers.User.ListUsers)           // 获取用户列表
+		users.GET("/profile", a.handlers.User.GetCurrentProfile) // 获取当前用户资料
+		users.PUT("/profile", a.handlers.User.UpdateCurrentProfile) // 更新当前用户资料
+		users.GET("/:id", a.handlers.User.GetUser)         // 获取用户详情
+		users.POST("", a.handlers.User.CreateUser)         // 创建用户
+		users.PUT("/:id", a.handlers.User.UpdateUser)      // 更新用户
+		users.DELETE("/:id", a.handlers.User.DeleteUser)   // 删除用户
+		users.POST("/:id/reset-password", a.handlers.User.ResetPassword) // 重置密码
+		users.POST("/:id/toggle-status", a.handlers.User.ToggleUserStatus) // 切换状态
+	}
+
+	// 角色管理（待实现）
+	_ = api.Group("/roles")
+	// 任务管理（待实现）
+	_ = api.Group("/tasks")
+	// 会议管理（待实现）
+	_ = api.Group("/conferences")
+	// 文件管理（待实现）
+	_ = api.Group("/files")
 
 	return nil
 }
