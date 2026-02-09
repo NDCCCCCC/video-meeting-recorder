@@ -1,0 +1,102 @@
+package models
+
+import (
+	"errors"
+	"time"
+)
+
+// VideoRecordingTask 视频录制任务模型
+type VideoRecordingTask struct {
+	Base
+	Name               string                    `gorm:"type:varchar(200);not null" json:"name"`
+	Description        string                    `gorm:"type:text" json:"description"`
+	StartTime          time.Time                 `gorm:"not null;index" json:"start_time"`
+	EndTime            time.Time                 `gorm:"not null;index" json:"end_time"`
+	PreJoinMinutes     int                       `gorm:"default:5" json:"pre_join_minutes"`
+	RecordDelayMinutes int                       `gorm:"default:0" json:"record_delay_minutes"`
+	ConferenceNumber   string                    `gorm:"type:varchar(50);not null;index" json:"conference_number"`
+	HuaweiConfigID     uint                      `gorm:"not null;index" json:"huawei_config_id"`
+	HuaweiConfig       *HuaweiConfig             `gorm:"foreignKey:HuaweiConfigID" json:"huawei_config,omitempty"`
+	Status             VideoRecordingTaskStatus  `gorm:"type:varchar(20);index" json:"status"`
+	RecordingFile      string                    `gorm:"type:varchar(500)" json:"recording_file"`
+	RecordingDuration  int                       `json:"recording_duration"` // 秒
+	ErrorMsg           string                    `gorm:"type:text" json:"error_msg,omitempty"`
+	CreatedBy          uint                      `gorm:"not null" json:"created_by"`
+	Creator            *User                     `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+	ConferenceRecord   *ConferenceRecord         `gorm:"foreignKey:ConferenceRecordID" json:"conference_record,omitempty"`
+	ConferenceRecordID *uint                     `json:"conference_record_id,omitempty"`
+}
+
+// VideoRecordingTaskStatus 任务状态枚举
+type VideoRecordingTaskStatus string
+
+const (
+	VideoStatusPending    VideoRecordingTaskStatus = "pending"     // 待执行
+	VideoStatusConnecting VideoRecordingTaskStatus = "connecting"  // 连接会议中
+	VideoStatusRecording  VideoRecordingTaskStatus = "recording"   // 录制中
+	VideoStatusCompleted  VideoRecordingTaskStatus = "completed"   // 已完成
+	VideoStatusFailed     VideoRecordingTaskStatus = "failed"      // 执行失败
+	VideoStatusCancelled  VideoRecordingTaskStatus = "cancelled"   // 已取消
+)
+
+// GetTriggerTime 返回实际触发时间
+func (t *VideoRecordingTask) GetTriggerTime() time.Time {
+	return t.StartTime.Add(-time.Duration(t.PreJoinMinutes) * time.Minute)
+}
+
+// GetRecordDelayMinutes 返回连接后延迟录制时间
+func (t *VideoRecordingTask) GetRecordDelayMinutes() int {
+	return t.RecordDelayMinutes
+}
+
+// IsExpired 检查任务是否已过期
+func (t *VideoRecordingTask) IsExpired() bool {
+	expiryTime := t.EndTime.Add(24 * time.Hour)
+	return time.Now().After(expiryTime)
+}
+
+// IsValid 验证任务数据
+func (t *VideoRecordingTask) IsValid() error {
+	if t.StartTime.After(t.EndTime) {
+		return errors.New("开始时间不能晚于结束时间")
+	}
+	if t.PreJoinMinutes < 0 || t.PreJoinMinutes > 60 {
+		return errors.New("提前进入时间必须在0-60分钟之间")
+	}
+	if t.ConferenceNumber == "" {
+		return errors.New("会议号不能为空")
+	}
+	if t.HuaweiConfigID == 0 {
+		return errors.New("必须指定华为配置")
+	}
+	return nil
+}
+
+// CanTransitionTo 检查状态转换是否合法
+func (t *VideoRecordingTask) CanTransitionTo(newStatus VideoRecordingTaskStatus) bool {
+	validTransitions := map[VideoRecordingTaskStatus][]VideoRecordingTaskStatus{
+		VideoStatusPending:    {VideoStatusConnecting, VideoStatusCancelled},
+		VideoStatusConnecting: {VideoStatusRecording, VideoStatusFailed, VideoStatusCancelled},
+		VideoStatusRecording:  {VideoStatusCompleted, VideoStatusFailed, VideoStatusCancelled},
+		VideoStatusCompleted:  {}, // 终态
+		VideoStatusFailed:     {VideoStatusPending}, // 可重试
+		VideoStatusCancelled:  {}, // 终态
+	}
+
+	allowed, ok := validTransitions[t.Status]
+	if !ok {
+		return false
+	}
+
+	for _, status := range allowed {
+		if status == newStatus {
+			return true
+		}
+	}
+	return false
+}
+
+// TableName 指定表名
+func (VideoRecordingTask) TableName() string {
+	return "video_recording_tasks"
+}
