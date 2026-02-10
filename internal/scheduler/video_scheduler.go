@@ -289,6 +289,7 @@ func (s *VideoSimpleScheduler) calculateTriggerTime(startTime time.Time, preJoin
 // generateCronExpression 生成Cron表达式
 func (s *VideoSimpleScheduler) generateCronExpression(triggerTime time.Time) string {
 	// Cron 格式: 秒 分 时 日 月 周
+	// 注意：任务执行后会通过RemoveTask移除，确保只执行一次
 	return fmt.Sprintf("%d %d %d %d %d *",
 		triggerTime.Second(),
 		triggerTime.Minute(),
@@ -350,6 +351,9 @@ func (s *VideoSimpleScheduler) HealthCheck() error {
 // Start 启动调度器
 func (s *VideoSimpleScheduler) Start() error {
 	s.logger.Info("启动调度器")
+
+	// 启动Cron调度器
+	s.cron.Start()
 
 	// 从数据库加载待执行的任务
 	tasks, err := s.taskService.GetPendingTasks()
