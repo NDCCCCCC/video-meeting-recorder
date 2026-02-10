@@ -158,7 +158,7 @@ func (c *SimpleRecordingCoordinator) buildRecordingInput(task *models.VideoRecor
 		CameraDevice:  huaweiConfig.USBCameraDevice,
 		AudioDevice:   huaweiConfig.USBAudioDevice,
 		CameraName:    huaweiConfig.USBCameraName,
-		AudioName:     huaweiConfig.USBAudioDevice, // 音频设备名称同样从该字段获取
+		AudioName:     huaweiConfig.USBAudioName,
 	}
 
 	// 检查任务配置的RTSP流
@@ -345,8 +345,11 @@ func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]
 
 	deviceParam := input.AudioDevice
 	if input.AudioBackend == "dshow" {
-		// 检查设备名称是否已包含 audio= 前缀
-		if !strings.HasPrefix(input.AudioDevice, "audio=") {
+		// dshow 需要使用实际设备名称
+		// 如果有设备名称，使用实际设备名称（如 "麦克风"）
+		if input.AudioName != "" {
+			deviceParam = fmt.Sprintf("audio=%s", input.AudioName)
+		} else if !strings.HasPrefix(input.AudioDevice, "audio=") {
 			deviceParam = fmt.Sprintf("audio=%s", input.AudioDevice)
 		}
 	}
