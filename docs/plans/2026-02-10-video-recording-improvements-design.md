@@ -8,8 +8,8 @@
 
 - [x] **Phase 1**: 数据库迁移 + MKV 录制 (已完成)
 - [x] **Phase 2**: 转换服务 (已完成)
-- [ ] **Phase 3**: HLS 预览服务 (进行中)
-- [ ] **Phase 4**: 前端预览组件
+- [x] **Phase 3**: HLS 预览服务 (已完成)
+- [ ] **Phase 4**: 前端预览组件 (进行中)
 
 ## 概述
 
@@ -473,6 +473,51 @@ ALTER TABLE video_recording_tasks ADD COLUMN conversion_retry_count INTEGER DEFA
 ```
 GET /api/v1/recordings/:id/conversion-status - 获取转换状态
 POST /api/v1/recordings/:id/conversion-retry - 重试转换
+```
+
+## 13. Phase 3 实施记录 ✅
+
+**完成日期**: 2026-02-10
+
+### 已修改文件
+
+1. **`internal/config/config.go`**
+   - 添加 `HLSPath` 字段到 `StorageConfig`
+   - 默认值: `./data/hls`
+   - 在 `setDefaults` 和 `ensureDirectories` 中处理
+
+2. **`internal/recorder/coordinator.go`**
+   - 更新 `RecordingProcess` 添加 `HLSPath` 字段
+   - 添加 `hlsSegmentDuration` 常量 (10秒)
+   - 添加 `getHLSPath` 函数生成 HLS 目录路径
+   - 修改 `buildRecordingCommand` 使用 tee muxer 双输出
+   - 修改 `StartRecording` 同时设置 MKV 和 HLS 路径
+   - Tee muxer 格式: `[f=mkv]{mkv}|[f=hls:hls_time=10:hls_list_size=0:hls_segment_filename={segment}]{m3u8}]`
+
+3. **`internal/handlers/video_recording_task_handler.go`**
+   - 添加 `GetHLSPreview` 端点
+   - 添加 `ServeHLSStream` 端点
+   - 添加路径遍历安全检查函数
+   - 权限验证：仅任务创建者可访问
+
+4. **`cmd/server/app.go`**
+   - 注册 HLS 预览相关路由
+
+### API 端点
+
+```
+GET /api/v1/recordings/:id/preview - 获取HLS预览信息
+GET /api/v1/recordings/:id/preview/stream/:file - 提供HLS流文件
+```
+
+### HLS 文件结构
+
+```
+data/hls/
+└── task_{id}/
+    └── {name}_{conf}_{timestamp}/
+        ├── index.m3u8
+        └── segment_*.ts
 ```
 
 ## 附录：相关文件
