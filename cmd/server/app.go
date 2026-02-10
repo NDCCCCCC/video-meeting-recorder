@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"net"
@@ -47,7 +46,7 @@ type MinimalApp struct {
 	// 调度器和协调器
 	scheduler            *scheduler.VideoSimpleScheduler
 	coordinator          *recorder.SimpleRecordingCoordinator
-	huaweiService        *huaweiapi.HuaweiService
+	huaweiManager        *huaweiapi.Manager
 	huaweiConnector      *video_recording.HuaweiConferenceConnector
 }
 
@@ -63,6 +62,30 @@ type Handlers struct {
 	File         *handlers.FileHandler
 	Audit        *handlers.AuditHandler
 	Notification *handlers.NotificationHandler
+}
+
+// huaweiDBAdapter 实现 huawei.DBInterface 接口
+type huaweiDBAdapter struct {
+	db *gorm.DB
+}
+
+func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huaweiapi.HuaweiConfigDB, error) {
+	var config models.HuaweiConfig
+	if err := a.db.First(&config, configID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("华为配置不存在: ID=%d", configID)
+		}
+		return nil, err
+	}
+
+	return &huaweiapi.HuaweiConfigDB{
+		ID:             config.ID,
+		Server:         config.Server,
+		Port:           config.Port,
+		Username:       config.Username,
+		Password:       config.Password,
+		TerminalNumber: config.TerminalNumber,
+	}, nil
 }
 
 // NewMinimalApp 创建应用实例
@@ -301,10 +324,10 @@ func (a *MinimalApp) initHandlers() error {
 	notificationHandler := handlers.NewNotificationHandler(notificationService)
 	notificationHandler.SetLogger(a.logger)
 
-	// 华为服务
-	huaweiCfg := a.convertHuaweiConfig()
-	a.huaweiService = huaweiapi.NewHuaweiService(a.db, huaweiCfg, a.logger)
-	a.huaweiConnector = video_recording.NewHuaweiConferenceConnector(a.db, a.huaweiService, a.logger)
+	// 华为管理器（使用数据库配置动态创建客户端）
+	dbAdapter := &huaweiDBAdapter{db: a.db}
+	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
+	a.huaweiConnector = video_recording.NewHuaweiConferenceConnector(a.db, a.huaweiManager, a.logger)
 
 	a.handlers = &Handlers{
 		Auth:         handlers.NewAuthHandler(authService, a.logger),
@@ -320,43 +343,6 @@ func (a *MinimalApp) initHandlers() error {
 	}
 
 	return nil
-}
-
-// convertHuaweiConfig 转换华为配置
-func (a *MinimalApp) convertHuaweiConfig() *huaweiapi.Config {
-	cfg := &huaweiapi.Config{
-		Server:            a.config.Huawei.ConferenceServer,
-		Port:              a.config.Huawei.ConferencePort,
-		Username:          a.config.Huawei.Username,
-		Password:          a.config.Huawei.Password,
-		APITimeout:        a.config.Huawei.APITimeout,
-		SessionTimeout:    a.config.Huawei.SessionTimeout,
-		KeepAliveInterval: a.config.Huawei.KeepAliveInterval,
-		InsecureSkipVerify: a.config.Huawei.InsecureSkipVerify,
-	}
-
-	// 构建API基础URL
-	scheme := "https"
-	if !a.config.Huawei.HTTPS {
-		scheme = "http"
-	}
-	cfg.APIBase = fmt.Sprintf("%s://%s:%d/api/v1", scheme, cfg.Server, cfg.Port)
-
-	// 设置最小TLS版本
-	switch a.config.Huawei.MinTLSVersion {
-	case "1.0":
-		cfg.MinTLSVersion = tls.VersionTLS10
-	case "1.1":
-		cfg.MinTLSVersion = tls.VersionTLS11
-	case "1.2":
-		cfg.MinTLSVersion = tls.VersionTLS12
-	case "1.3":
-		cfg.MinTLSVersion = tls.VersionTLS13
-	default:
-		cfg.MinTLSVersion = tls.VersionTLS10 // 默认TLS 1.0以兼容旧设备
-	}
-
-	return cfg
 }
 
 // registerRoutes 注册路由
@@ -583,16 +569,8 @@ func (a *taskServiceAdapter) GetHuaweiConfig(id uint) (*models.HuaweiConfig, err
 func (a *MinimalApp) Start() error {
 	a.logger.Info("Starting application...")
 
-	// 启动华为服务
-	if a.huaweiService != nil {
-		a.logger.Info("Starting Huawei service...")
-		if err := a.huaweiService.Start(context.Background()); err != nil {
-			a.logger.Warn("Failed to start Huawei service", zap.Error(err))
-			// 华为服务启动失败不阻止应用启动
-		} else {
-			a.logger.Info("Huawei service started successfully")
-		}
-	}
+	// 华为管理器无需预先启动，客户端按需创建
+	a.logger.Info("Huawei manager initialized (clients created on demand)")
 
 	// 启动所有服务
 	for name, service := range a.services {
@@ -665,11 +643,11 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 		a.handlers.Notification.Stop()
 	}
 
-	// 停止华为服务
-	if a.huaweiService != nil {
-		a.logger.Info("Stopping Huawei service...")
-		if err := a.huaweiService.Stop(ctx); err != nil {
-			a.logger.Error("Failed to stop Huawei service", zap.Error(err))
+	// 停止华为管理器
+	if a.huaweiManager != nil {
+		a.logger.Info("Stopping Huawei manager...")
+		if err := a.huaweiManager.Close(ctx); err != nil {
+			a.logger.Error("Failed to close Huawei manager", zap.Error(err))
 		}
 	}
 
