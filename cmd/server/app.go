@@ -498,7 +498,7 @@ func (a *MinimalApp) registerServices() error {
 	// 创建任务调度器
 	// 注意：这里使用一个适配器将VideoRecordingTaskService转换为TaskServiceInterface
 	taskServiceAdapter := &taskServiceAdapter{db: a.db, logger: a.logger}
-	a.scheduler = scheduler.NewVideoSimpleScheduler(taskServiceAdapter, a.coordinator, a.logger, a.config)
+	a.scheduler = scheduler.NewVideoSimpleScheduler(taskServiceAdapter, a.coordinator, a.huaweiConnector, a.logger, a.config)
 	a.logger.Info("Scheduler created")
 
 	// 启动调度器

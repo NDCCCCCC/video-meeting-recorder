@@ -8,6 +8,7 @@ import (
 
 	"github.com/cpic/record_v2/internal/config"
 	"github.com/cpic/record_v2/internal/models"
+	"github.com/cpic/record_v2/internal/services/video_recording"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 )
@@ -27,6 +28,8 @@ type SchedulerInterface interface {
 	SyncPendingTasks() error
 	IsTaskScheduled(taskID uint) bool
 	IsTaskExecuting(taskID uint) bool
+	ExecuteTask(taskID uint) error
+	CancelTaskExecution(taskID uint) error
 }
 
 // VideoSimpleScheduler 视频录制任务调度器
@@ -34,6 +37,7 @@ type VideoSimpleScheduler struct {
 	cron          *cron.Cron
 	taskService   TaskServiceInterface
 	coordinator   RecorderCoordinatorInterface
+	connector     *video_recording.HuaweiConferenceConnector
 	taskEntries   map[uint]cron.EntryID
 	entryTasks    map[cron.EntryID]uint
 	executing     map[uint]bool
@@ -63,6 +67,7 @@ type RecorderCoordinatorInterface interface {
 func NewVideoSimpleScheduler(
 	taskService TaskServiceInterface,
 	coordinator RecorderCoordinatorInterface,
+	connector *video_recording.HuaweiConferenceConnector,
 	logger *zap.Logger,
 	cfg *config.Config,
 ) *VideoSimpleScheduler {
@@ -73,6 +78,7 @@ func NewVideoSimpleScheduler(
 		cron:         c,
 		taskService:  taskService,
 		coordinator:   coordinator,
+		connector:    connector,
 		taskEntries:  make(map[uint]cron.EntryID),
 		entryTasks:   make(map[cron.EntryID]uint),
 		executing:    make(map[uint]bool),
@@ -217,6 +223,25 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		return
 	}
 
+	// 连接华为会议
+	if s.connector != nil {
+		s.logger.Info("开始连接华为会议",
+			zap.Uint("task_id", taskID),
+			zap.String("conference_number", task.ConferenceNumber),
+		)
+		if err := s.connector.ConnectToConference(ctx, task); err != nil {
+			s.logger.Error("连接华为会议失败",
+				zap.Uint("task_id", taskID),
+				zap.Error(err),
+			)
+			s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
+			return
+		}
+		s.logger.Info("华为会议连接成功",
+			zap.Uint("task_id", taskID),
+		)
+	}
+
 	// 等待录制延迟
 	if task.RecordDelayMinutes > 0 {
 		s.logger.Info("等待录制延迟",
@@ -294,6 +319,28 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 	s.logger.Info("开始完成任务",
 		zap.Uint("task_id", taskID),
 	)
+
+	// 加载任务（用于断开华为会议连接）
+	task, err := s.taskService.GetTask(taskID)
+	if err != nil {
+		s.logger.Error("加载任务失败", zap.Error(err))
+	} else {
+		// 断开华为会议连接
+		if s.connector != nil {
+			s.logger.Info("断开华为会议连接",
+				zap.Uint("task_id", taskID),
+				zap.String("conference_number", task.ConferenceNumber),
+			)
+			if err := s.connector.DisconnectFromConference(context.Background(), task); err != nil {
+				s.logger.Error("断开华为会议连接失败", zap.Error(err))
+				// 继续执行，不阻止任务完成
+			} else {
+				s.logger.Info("华为会议连接已断开",
+					zap.Uint("task_id", taskID),
+				)
+			}
+		}
+	}
 
 	// 停止录制
 	if err := s.coordinator.StopRecording(taskID); err != nil {
@@ -551,4 +598,67 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 	)
 
 	return nil
+}
+
+// ExecuteTask 手动执行任务（供外部调用）
+func (s *VideoSimpleScheduler) ExecuteTask(taskID uint) error {
+	s.logger.Info("手动执行任务",
+		zap.Uint("task_id", taskID),
+	)
+
+	// 检查任务是否正在执行
+	s.mu.RLock()
+	if s.executing[taskID] {
+		s.mu.RUnlock()
+		return fmt.Errorf("任务正在执行中: %d", taskID)
+	}
+	s.mu.RUnlock()
+
+	// 加载任务
+	task, err := s.taskService.GetTask(taskID)
+	if err != nil {
+		return fmt.Errorf("加载任务失败: %w", err)
+	}
+
+	// 验证任务状态
+	if task.Status != models.VideoStatusPending {
+		return fmt.Errorf("任务状态不正确: %s", task.Status)
+	}
+
+	// 检查任务是否过期
+	if time.Now().After(task.EndTime) {
+		return fmt.Errorf("任务已过期: %s", task.EndTime.Format(time.RFC3339))
+	}
+
+	// 直接执行任务
+	go s.executeTask(taskID)
+
+	return nil
+}
+
+// CancelTaskExecution 取消正在执行的任务
+func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
+	s.logger.Info("取消任务执行",
+		zap.Uint("task_id", taskID),
+	)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 检查是否有取消函数
+	cancel, hasCancel := s.cancelFuncs[taskID]
+	if hasCancel {
+		cancel()
+		s.logger.Info("任务执行已取消",
+			zap.Uint("task_id", taskID),
+		)
+		return nil
+	}
+
+	// 如果没有取消函数，检查是否在执行中
+	if s.executing[taskID] {
+		return fmt.Errorf("任务正在执行中，但无法取消")
+	}
+
+	return fmt.Errorf("任务未在执行中")
 }
