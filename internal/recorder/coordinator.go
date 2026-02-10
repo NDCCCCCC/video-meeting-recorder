@@ -161,6 +161,17 @@ func (c *SimpleRecordingCoordinator) buildRecordingInput(task *models.VideoRecor
 		AudioName:     huaweiConfig.USBAudioName,
 	}
 
+	// 调试日志：显示设备配置
+	c.logger.Info("录制设备配置",
+		zap.Uint("task_id", task.ID),
+		zap.String("camera_backend", input.CameraBackend),
+		zap.String("camera_name", input.CameraName),
+		zap.String("camera_device", input.CameraDevice),
+		zap.String("audio_backend", input.AudioBackend),
+		zap.String("audio_name", input.AudioName),
+		zap.String("audio_device", input.AudioDevice),
+	)
+
 	// 检查任务配置的RTSP流
 	if task.RTSPStreamURL != "" {
 		input.Type = InputSourceRTSP
@@ -193,7 +204,7 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 	}
 
 	process.CancelFunc()
-	c.waitForProcess(process, taskID)
+	c.waitForProcess(process, taskID, true) // true 表示是主动停止
 
 	// 关闭日志文件
 	if process.logFile != nil {
@@ -208,14 +219,21 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 }
 
 // waitForProcess 等待进程结束（带超时）
-func (c *SimpleRecordingCoordinator) waitForProcess(process *RecordingProcess, taskID uint) {
+// expectedStop: 是否是预期的停止（主动停止录制），如果是则不会记录错误日志
+func (c *SimpleRecordingCoordinator) waitForProcess(process *RecordingProcess, taskID uint, expectedStop bool) {
 	done := make(chan error, 1)
 	go func() { done <- process.Cmd.Wait() }()
 
 	select {
 	case err := <-done:
 		if err != nil {
-			c.logger.Error("FFmpeg进程退出异常", zap.Uint("task_id", taskID), zap.Error(err))
+			if expectedStop {
+				// 主动停止时，FFmpeg进程被终止是正常行为
+				c.logger.Debug("FFmpeg进程已停止", zap.Uint("task_id", taskID), zap.Error(err))
+			} else {
+				// 非预期退出才记录为错误
+				c.logger.Error("FFmpeg进程退出异常", zap.Uint("task_id", taskID), zap.Error(err))
+			}
 		}
 	case <-time.After(10 * time.Second):
 		if process.Cmd.Process != nil {

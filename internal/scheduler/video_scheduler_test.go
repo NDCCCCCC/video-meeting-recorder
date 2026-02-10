@@ -105,7 +105,7 @@ func TestNewVideoSimpleScheduler(t *testing.T) {
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
 
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, logger, cfg)
 
 	assert.NotNil(t, scheduler)
 	assert.NotNil(t, scheduler.cron)
@@ -119,7 +119,7 @@ func TestNewVideoSimpleScheduler(t *testing.T) {
 func TestCalculateTriggerTime(t *testing.T) {
 	logger := zap.NewNop()
 	cfg := &config.Config{}
-	scheduler := NewVideoSimpleScheduler(newMockTaskService(), newMockCoordinator(), logger, cfg)
+	scheduler := NewVideoSimpleScheduler(newMockTaskService(), newMockCoordinator(), nil, logger, cfg)
 
 	startTime := time.Date(2026, 2, 10, 14, 30, 0, 0, time.UTC)
 	triggerTime := scheduler.calculateTriggerTime(startTime, 5)
@@ -132,7 +132,7 @@ func TestCalculateTriggerTime(t *testing.T) {
 func TestGenerateCronExpression(t *testing.T) {
 	logger := zap.NewNop()
 	cfg := &config.Config{}
-	scheduler := NewVideoSimpleScheduler(newMockTaskService(), newMockCoordinator(), logger, cfg)
+	scheduler := NewVideoSimpleScheduler(newMockTaskService(), newMockCoordinator(), nil, logger, cfg)
 
 	triggerTime := time.Date(2026, 2, 10, 14, 25, 30, 0, time.UTC)
 	cronExpr := scheduler.generateCronExpression(triggerTime)
@@ -147,7 +147,7 @@ func TestAddTask(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -173,7 +173,7 @@ func TestAddTask_DuplicateTask(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -201,22 +201,48 @@ func TestAddTask_ExpiredTime(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
 	assert.NoError(t, err)
 	defer scheduler.Stop()
 
-	// 创建已过期的任务
+	// 创建已过期的任务（结束时间已过）
 	startTime := time.Now().Add(-2 * time.Hour)
 	task := createTestTask(1, "Expired Task", startTime)
-	taskSvc.tasks[1] = task
+	// 任务的结束时间是 startTime + 1小时 = 当前时间 - 1小时（已过期）
 
-	// 添加过期任务
+	// 添加过期任务应该失败
 	err = scheduler.AddTask(task)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "触发时间已过期")
+	assert.Contains(t, err.Error(), "任务已过期")
+}
+
+// TestAddTaskWithPastStartTime 测试开始时间已过但未过期的任务
+func TestAddTaskWithPastStartTime(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &config.Config{}
+	taskSvc := newMockTaskService()
+	coord := newMockCoordinator()
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, logger, cfg)
+
+	// 启动调度器
+	err := scheduler.Start()
+	assert.NoError(t, err)
+	defer scheduler.Stop()
+
+	// 创建开始时间已过但结束时间未到的任务
+	startTime := time.Now().Add(-30 * time.Minute)
+	task := createTestTask(1, "Immediate Task", startTime)
+	// 任务的结束时间是 startTime + 1小时 = 当前时间 + 30分钟（未过期）
+	taskSvc.tasks[1] = task
+
+	// 添加任务应该成功（立即执行）
+	err = scheduler.AddTask(task)
+	assert.NoError(t, err)
+	// 立即执行的任务不在 cron 调度器中，所以 IsTaskScheduled 返回 false
+	assert.False(t, scheduler.IsTaskScheduled(1))
 }
 
 // TestRemoveTask 测试移除任务
@@ -225,7 +251,7 @@ func TestRemoveTask(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -253,7 +279,7 @@ func TestGetScheduledTasks(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -280,7 +306,7 @@ func TestGetStats(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -104,9 +105,23 @@ func (s *VideoSimpleScheduler) AddTask(task *models.VideoRecordingTask) error {
 	// 计算触发时间
 	triggerTime := s.calculateTriggerTime(task.StartTime, task.PreJoinMinutes)
 
-	// 检查触发时间是否在未来
-	if triggerTime.Before(time.Now().Add(-1 * TriggerTimeTolerance)) {
-		return fmt.Errorf("触发时间已过期: %s", triggerTime.Format(time.RFC3339))
+	// 检查任务是否已过期（超过结束时间）
+	if time.Now().After(task.EndTime) {
+		return fmt.Errorf("任务已过期: 结束时间 %s", task.EndTime.Format(time.RFC3339))
+	}
+
+	// 如果当前时间已超过触发时间，立即执行任务
+	if time.Now().After(triggerTime) {
+		s.logger.Info("任务触发时间已过，立即执行",
+			zap.Uint("task_id", task.ID),
+			zap.String("name", task.Name),
+			zap.Time("trigger_time", triggerTime),
+			zap.Time("end_time", task.EndTime),
+		)
+		// 在 goroutine 中执行，避免阻塞
+		go s.executeTask(task.ID)
+		// 不添加到 taskEntries，因为不是通过 cron 调度的
+		return nil
 	}
 
 	// 生成Cron表达式
@@ -461,20 +476,25 @@ func (s *VideoSimpleScheduler) Start() error {
 
 	// 添加到调度器
 	addedCount := 0
+	expiredCount := 0
 	for _, task := range tasks {
-		triggerTime := s.calculateTriggerTime(task.StartTime, task.PreJoinMinutes)
-		if triggerTime.After(time.Now().Add(-1 * TriggerTimeTolerance)) {
-			if err := s.AddTask(task); err != nil {
+		if err := s.AddTask(task); err != nil {
+			// 检查是否是过期错误
+			if strings.Contains(err.Error(), "任务已过期") {
+				expiredCount++
+				s.logger.Info("跳过已过期任务",
+					zap.Uint("task_id", task.ID),
+					zap.String("name", task.Name),
+					zap.Error(err),
+				)
+			} else {
 				s.logger.Error("添加任务失败",
 					zap.Uint("task_id", task.ID),
 					zap.Error(err),
 				)
-			} else {
-				addedCount++
 			}
 		} else {
-			// 触发时间已过，标记为失败
-			s.updateTaskStatus(task.ID, models.VideoStatusFailed, "触发时间已过期")
+			addedCount++
 		}
 	}
 
@@ -546,6 +566,8 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 
 	// 添加新的待执行任务
 	addedCount := 0
+	immediateCount := 0
+	expiredCount := 0
 	for _, task := range tasks {
 		// 检查是否已在调度器中
 		if _, exists := s.taskEntries[task.ID]; exists {
@@ -555,14 +577,28 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 		// 计算触发时间
 		triggerTime := s.calculateTriggerTime(task.StartTime, task.PreJoinMinutes)
 
-		// 检查触发时间是否在未来（或在容错窗口内）
-		if triggerTime.Before(time.Now().Add(-1 * TriggerTimeTolerance)) {
-			s.logger.Warn("任务触发时间已过期，跳过",
+		// 检查任务是否已过期（超过结束时间）
+		if time.Now().After(task.EndTime) {
+			expiredCount++
+			s.logger.Info("跳过已过期任务",
 				zap.Uint("task_id", task.ID),
+				zap.Time("end_time", task.EndTime),
+			)
+			go s.updateTaskStatus(task.ID, models.VideoStatusFailed, "任务已过期")
+			continue
+		}
+
+		// 如果当前时间已超过触发时间，立即执行任务
+		if time.Now().After(triggerTime) {
+			immediateCount++
+			s.logger.Info("任务触发时间已过，立即执行",
+				zap.Uint("task_id", task.ID),
+				zap.String("name", task.Name),
 				zap.Time("trigger_time", triggerTime),
 			)
-			// 标记为失败
-			go s.updateTaskStatus(task.ID, models.VideoStatusFailed, "触发时间已过期")
+			// 在 goroutine 中执行，避免阻塞
+			go s.executeTask(task.ID)
+			// 不添加到 taskEntries，因为不是通过 cron 调度的
 			continue
 		}
 
