@@ -1,6 +1,11 @@
 package handlers
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
@@ -341,4 +346,160 @@ func (h *VideoRecordingTaskHandler) RetryConversion(c *gin.Context) {
 
 	h.logger.Info("Conversion task retried", zap.Uint("task_id", id))
 	response.GinSuccess(c, gin.H{"message": "转换任务已重新提交"})
+}
+
+// GetHLSPreview 获取HLS预览信息
+// @Summary 获取HLS预览信息
+// @Description 获取任务的HLS实时预览播放地址（仅任务创建者可访问）
+// @Tags 录制任务
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Success 200 {object} response.Response{data=map[string]interface{}}
+// @Router /api/v1/recordings/{id}/preview [get]
+func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的任务ID")
+		return
+	}
+
+	// 获取任务信息
+	task, err := h.taskService.GetTaskByID(id)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "任务不存在")
+		return
+	}
+
+	// 检查HLS预览路径是否存在
+	if task.HLSPreviewPath == "" {
+		response.GinError(c, response.CodeNotFound, "该任务没有HLS预览")
+		return
+	}
+
+	// 检查文件是否存在
+	if _, err := os.Stat(task.HLSPreviewPath); os.IsNotExist(err) {
+		response.GinError(c, response.CodeNotFound, "HLS预览文件不存在")
+		return
+	}
+
+	// 验证权限：只有任务创建者可以访问
+	userID := middleware.GetUserID(c)
+	if task.CreatedBy != userID {
+		response.GinError(c, response.CodeForbidden, "无权限访问此预览")
+		return
+	}
+
+	// 返回播放URL
+	response.GinSuccess(c, gin.H{
+		"task_id":      id,
+		"playback_url": fmt.Sprintf("/api/v1/recordings/%d/preview/stream", id),
+		"status":       task.Status,
+	})
+}
+
+// ServeHLSStream 提供HLS流文件服务
+// @Summary 提供HLS流文件
+// @Description 返回HLS m3u8播放列表或TS分片文件（仅任务创建者可访问）
+// @Tags 录制任务
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Param file path string true "文件名 (index.m3u8 或 segment_xxx.ts)"
+// @Success 200 {file} file
+// @Router /api/v1/recordings/{id}/preview/stream/{file} [get]
+func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的任务ID")
+		return
+	}
+
+	// 获取请求的文件名
+	filePath := c.Param("file")
+	if filePath == "" {
+		response.GinError(c, response.CodeInvalidRequest, "文件名不能为空")
+		return
+	}
+
+	// 安全检查：确保文件名不包含路径遍历字符
+	if containsPathTraversal(filePath) {
+		response.GinError(c, response.CodeInvalidRequest, "无效的文件名")
+		return
+	}
+
+	// 获取任务信息
+	task, err := h.taskService.GetTaskByID(id)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "任务不存在")
+		return
+	}
+
+	// 验证权限：只有任务创建者可以访问
+	userID := middleware.GetUserID(c)
+	if task.CreatedBy != userID {
+		c.JSON(403, gin.H{"error": "无权限访问此预览"})
+		c.Abort()
+		return
+	}
+
+	// 构建完整的文件路径
+	hlsDir := filepath.Dir(task.HLSPreviewPath)
+	fullPath := filepath.Join(hlsDir, filePath)
+
+	// 安全检查：确保请求的文件在HLS目录内
+	if !isPathWithinDirectory(fullPath, hlsDir) {
+		response.GinError(c, response.CodeForbidden, "访问被拒绝")
+		return
+	}
+
+	// 检查文件是否存在
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		c.Status(404)
+		c.Abort()
+		return
+	}
+
+	// 设置正确的Content-Type
+	c.Header("Content-Type", getHLSContentType(filePath))
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Access-Control-Allow-Origin", "*")
+
+	// 返回文件内容
+	c.File(fullPath)
+}
+
+// containsPathTraversal 检查文件名是否包含路径遍历字符
+func containsPathTraversal(filename string) bool {
+	return strings.Contains(filename, "..") ||
+		strings.Contains(filename, "\\") ||
+		strings.Contains(filename, "\x00") ||
+		strings.HasPrefix(filename, "/") ||
+		strings.HasPrefix(filename, "\\")
+}
+
+// isPathWithinDirectory 检查路径是否在指定目录内
+func isPathWithinDirectory(path, dir string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absDir, absPath)
+	if err != nil {
+		return false
+	}
+	return !strings.HasPrefix(rel, "..")
+}
+
+// getHLSContentType 根据文件扩展名返回Content-Type
+func getHLSContentType(filename string) string {
+	if strings.HasSuffix(filename, ".m3u8") {
+		return "application/vnd.apple.mpegurl"
+	}
+	if strings.HasSuffix(filename, ".ts") {
+		return "video/mp2t"
+	}
+	return "application/octet-stream"
 }

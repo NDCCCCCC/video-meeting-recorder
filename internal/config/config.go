@@ -68,6 +68,7 @@ type LoggingConfig struct {
 // StorageConfig 存储配置
 type StorageConfig struct {
 	RecordingsPath string `mapstructure:"recordings_path" json:"recordings_path" yaml:"recordings_path"`
+	HLSPath        string `mapstructure:"hls_path" json:"hls_path" yaml:"hls_path"`        // HLS预览文件存储路径
 	TempPath       string `mapstructure:"temp_path" json:"temp_path" yaml:"temp_path"`
 	MaxDiskUsage   int    `mapstructure:"max_disk_usage" json:"max_disk_usage" yaml:"max_disk_usage"`
 
@@ -292,6 +293,9 @@ func setDefaults(cfg *Config) {
 	if cfg.Storage.RecordingsPath == "" {
 		cfg.Storage.RecordingsPath = "./data/recordings"
 	}
+	if cfg.Storage.HLSPath == "" {
+		cfg.Storage.HLSPath = "./data/hls"
+	}
 	if cfg.Storage.TempPath == "" {
 		cfg.Storage.TempPath = "./data/temp"
 	}
@@ -349,6 +353,7 @@ func ensureDirectories(cfg *Config) error {
 	dirs := []string{
 		filepath.Dir(cfg.Database.Path),
 		cfg.Storage.RecordingsPath,
+		cfg.Storage.HLSPath,
 		cfg.Storage.TempPath,
 		cfg.Storage.Local.BasePath,
 		cfg.Logging.Output,
