@@ -28,6 +28,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import * as taskApi from '../../api/task'
+import * as huaweiConfigApi from '../../api/huawei-config'
 import type {
   VideoRecordingTask,
   TaskListParams,
@@ -35,6 +36,7 @@ import type {
   UpdateTaskRequest,
   VideoRecordingTaskStatus,
 } from '../../types/task'
+import type { HuaweiConfig } from '../../types/huawei-config'
 
 const { RangePicker } = DatePicker
 
@@ -45,6 +47,10 @@ export default function TaskManagement() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingTask, setEditingTask] = useState<VideoRecordingTask | null>(null)
   const [form] = Form.useForm()
+
+  // 华为配置列表
+  const [huaweiConfigs, setHuaweiConfigs] = useState<HuaweiConfig[]>([])
+  const [configsLoading, setConfigsLoading] = useState(false)
 
   // 查询参数
   const [params, setParams] = useState<TaskListParams>({
@@ -71,6 +77,25 @@ export default function TaskManagement() {
   useEffect(() => {
     loadTasks()
   }, [params])
+
+  // 加载华为配置列表
+  const loadHuaweiConfigs = async () => {
+    setConfigsLoading(true)
+    try {
+      const response = await huaweiConfigApi.getActiveHuaweiConfigs()
+      if (response.data) {
+        setHuaweiConfigs(response.data)
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '加载华为配置失败')
+    } finally {
+      setConfigsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadHuaweiConfigs()
+  }, [])
 
   // 搜索
   const handleSearch = (value: string) => {
@@ -485,9 +510,17 @@ export default function TaskManagement() {
             label="华为配置"
             rules={[{ required: true, message: '请选择华为配置' }]}
           >
-            <Select placeholder="请选择华为配置">
-              <Select.Option value={1}>配置1</Select.Option>
-              <Select.Option value={2}>配置2</Select.Option>
+            <Select
+              placeholder="请选择华为配置"
+              loading={configsLoading}
+              showSearch
+              optionFilterProp="label"
+            >
+              {huaweiConfigs.map((config) => (
+                <Select.Option key={config.id} value={config.id}>
+                  {config.name} ({config.server}:{config.port})
+                </Select.Option>
+              ))}
             </Select>
           </Form.Item>
 
