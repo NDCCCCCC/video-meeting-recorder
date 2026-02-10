@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -322,14 +323,14 @@ func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.Vid
 		return nil, errors.New("只能启动待执行状态的任务")
 	}
 
-	// 更新状态为连接中
-	task.Status = models.VideoStatusConnecting
-	if err := s.db.Save(&task).Error; err != nil {
-		return nil, err
+	// 触发任务执行
+	if s.scheduler != nil {
+		if err := s.scheduler.ExecuteTask(id); err != nil {
+			return nil, fmt.Errorf("触发任务执行失败: %w", err)
+		}
+	} else {
+		return nil, errors.New("调度器未初始化")
 	}
-
-	// TODO: 触发任务执行逻辑
-	// 这里应该调用 scheduler.executeTask(task.ID)
 
 	s.logger.Info("Video recording task started manually",
 		zap.Uint("task_id", id),
@@ -356,14 +357,19 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint) (*models.Vide
 		return nil, errors.New("只能停止录制中或连接中的任务")
 	}
 
+	// 取消任务执行
+	if s.scheduler != nil {
+		if err := s.scheduler.CancelTaskExecution(id); err != nil {
+			s.logger.Warn("取消任务执行失败", zap.Error(err))
+			// 继续执行状态更新
+		}
+	}
+
 	// 更新状态为已取消
 	task.Status = models.VideoStatusCancelled
 	if err := s.db.Save(&task).Error; err != nil {
 		return nil, err
 	}
-
-	// TODO: 触发停止逻辑
-	// 这里应该调用 scheduler.stopTask(task.ID)
 
 	s.logger.Info("Video recording task stopped manually",
 		zap.Uint("task_id", id),
@@ -390,8 +396,12 @@ func (s *VideoRecordingTaskService) CancelTask(id uint, userID uint) error {
 		return errors.New("只能取消待执行或连接中的任务")
 	}
 
-	// TODO: 从调度器移除
-	// s.scheduler.RemoveTask(id)
+	// 从调度器移除
+	if s.scheduler != nil {
+		if err := s.scheduler.RemoveTask(id); err != nil {
+			s.logger.Warn("从调度器移除任务失败", zap.Error(err))
+		}
+	}
 
 	// 更新状态
 	task.Status = models.VideoStatusCancelled
@@ -439,12 +449,22 @@ func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint) (*models.Vid
 		return nil, err
 	}
 
-	// TODO: 重新调度
-	// s.scheduler.ScheduleTask(task)
+	// 重新调度任务
+	if s.scheduler != nil {
+		go func() {
+			if err := s.scheduler.SyncPendingTasks(); err != nil {
+				s.logger.Error("重新调度任务失败",
+					zap.Uint("task_id", id),
+					zap.Error(err),
+				)
+			}
+		}()
+	}
 
 	s.logger.Info("Video recording task retried",
 		zap.Uint("task_id", id),
 		zap.Uint("retried_by", userID),
+		zap.Time("new_start_time", task.StartTime),
 	)
 
 	return &task, nil
