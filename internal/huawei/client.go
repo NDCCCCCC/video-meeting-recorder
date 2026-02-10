@@ -109,12 +109,25 @@ type CallSiteRequest struct {
 	StSiteInfo   SiteInfoRequest `json:"stSiteInfo"`   // 站点信息
 }
 
-// SiteInfoRequest 站点信息
+// SiteInfoRequest 站点信息（匹配华为TE40 API格式）
 type SiteInfoRequest struct {
-	SiteName     string `json:"site_name"`     // 站点名称
-	SiteURI      string `json:"site_uri"`      // 站点URI（会议号）
-	SitePassword string `json:"site_password"` // 站点密码
-	SiteIP       string `json:"site_ip"`       // 站点IP
+	UwID      int     `json:"uwID"`      // 站点ID
+	SzName    string  `json:"szName"`    // 站点名称
+	SzPName   string  `json:"szPName"`   // 父名称
+	UcType    int     `json:"ucType"`    // 类型（8=会议号）
+	BIsLdap   int     `json:"bIsLdap"`   // 是否LDAP
+	UcDevice  int     `json:"ucDevice"`  // 设备类型
+	UcOnline  int     `json:"ucOnline"`  // 在线状态
+	UwSortPos int     `json:"uwSortPos"` // 排序位置
+	StSIP     SIPInfo `json:"stSIP"`     // SIP信息
+}
+
+// SIPInfo SIP信息
+type SIPInfo struct {
+	UcBaudRate int    `json:"ucBaudRate"` // 带宽
+	SzAlias    string `json:"szAlias"`    // 别名
+	SzIP       string `json:"szIP"`       // IP地址
+	SzUri      string `json:"szUri"`      // URI
 }
 
 // CallSiteResponse 呼叫会议响应
@@ -179,6 +192,21 @@ type USBDeviceInfo struct {
 	Name     string `json:"name"`
 	DeviceID string `json:"device_id"`
 	Status   string `json:"status"`   // available, busy, error
+}
+
+// MailboxState 邮箱状态信息（来自WEB_GetMailboxDataAPI）
+type MailboxState struct {
+	State struct {
+		Sitename   string `json:"sitename"`
+		Speaker    int    `json:"speaker"`
+		Mic        int    `json:"mic"`
+		Gk         int    `json:"gk"`
+		Sip        int    `json:"sip"`
+		Callstate  int    `json:"callstate"`  // 通话状态
+		Calltype   int    `json:"calltype"`
+		Conftype   int    `json:"conftype"`
+		IsInConf   int    `json:"isInConf"`   // 是否在会议中，1表示在会议中
+	} `json:"state"`
 }
 
 // HTTPClient HTTP客户端封装
