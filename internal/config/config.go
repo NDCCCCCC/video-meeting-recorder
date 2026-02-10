@@ -261,6 +261,23 @@ func setDefaults(cfg *Config) {
 	if cfg.FFmpeg.DefaultFormat == "" {
 		cfg.FFmpeg.DefaultFormat = "mp4"
 	}
+
+	// Huawei config defaults
+	if cfg.Huawei.ConferencePort == 0 {
+		cfg.Huawei.ConferencePort = 80
+	}
+	if cfg.Huawei.APITimeout == 0 {
+		cfg.Huawei.APITimeout = 30 * time.Second
+	}
+	if cfg.Huawei.SessionTimeout == 0 {
+		cfg.Huawei.SessionTimeout = 3600 * time.Second
+	}
+	if cfg.Huawei.KeepAliveInterval == 0 {
+		cfg.Huawei.KeepAliveInterval = 300 * time.Second
+	}
+	if cfg.Huawei.MinTLSVersion == "" {
+		cfg.Huawei.MinTLSVersion = "1.0"
+	}
 }
 
 // ensureDirectories 确保目录存在
