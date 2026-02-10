@@ -583,7 +583,7 @@ func (c *HuaweiClient) StartKeepAlive(ctx context.Context) {
 				c.logger.Debug("停止会话保活")
 				return
 			case <-ticker.C:
-				if err := c.GetMailboxData(keepAliveCtx); err != nil {
+				if _, err := c.GetMailboxData(keepAliveCtx); err != nil {
 					c.logger.Error("会话保活失败", zap.Error(err))
 					// 保活失败，尝试重新初始化
 					if err := c.InitializeAndStartKeepAlive(keepAliveCtx); err != nil {
@@ -597,19 +597,19 @@ func (c *HuaweiClient) StartKeepAlive(ctx context.Context) {
 	c.logger.Info("启动会话自动保活", zap.Duration("interval", c.config.KeepAliveInterval))
 }
 
-// GetMailboxData 获取邮箱数据用于保活
-func (c *HuaweiClient) GetMailboxData(ctx context.Context) error {
+// GetMailboxData 获取邮箱数据用于保活，返回终端状态
+func (c *HuaweiClient) GetMailboxData(ctx context.Context) (*MailboxState, error) {
 	if !c.hasSession() {
-		return NewHuaweiError(ErrCodeSessionInvalid, nil)
+		return nil, NewHuaweiError(ErrCodeSessionInvalid, nil)
 	}
 
 	headers := map[string]string{
 		"Cookie": fmt.Sprintf("SessionID=%s", c.getSessionID()),
 	}
 
-	_, err := c.httpClient.Post(ctx, "WEB_GetMailboxDataAPI", nil, headers)
+	resp, err := c.httpClient.Post(ctx, "WEB_GetMailboxDataAPI", nil, headers)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// 更新过期时间
@@ -619,8 +619,36 @@ func (c *HuaweiClient) GetMailboxData(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
+	// 解析响应数据获取终端状态
+	var mailboxState MailboxState
+	if resp != nil && resp.Data != "" {
+		// data字段是一个JSON字符串，需要再次解析
+		var dataWrapper struct {
+			State json.RawMessage `json:"state"`
+		}
+		if err := json.Unmarshal([]byte(resp.Data), &dataWrapper); err == nil {
+			if err := json.Unmarshal(dataWrapper.State, &mailboxState.State); err == nil {
+				c.logger.Debug("会话保活成功",
+					zap.Int("isInConf", mailboxState.State.IsInConf),
+					zap.Int("callstate", mailboxState.State.Callstate),
+				)
+				return &mailboxState, nil
+			}
+		}
+	}
+
 	c.logger.Debug("会话保活成功")
-	return nil
+	return &mailboxState, nil
+}
+
+// IsInConference 检查终端是否在会议中
+func (c *HuaweiClient) IsInConference(ctx context.Context) (bool, error) {
+	state, err := c.GetMailboxData(ctx)
+	if err != nil {
+		return false, err
+	}
+	// isInConf=1 表示在会议中，callstate=2 表示通话中
+	return state.State.IsInConf == 1 && state.State.Callstate == 2, nil
 }
 
 // CallConference 呼叫会议
