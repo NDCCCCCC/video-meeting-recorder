@@ -117,3 +117,13 @@ export async function retryTask(id: number): Promise<TaskApiResponse> {
     method: 'POST',
   })
 }
+
+// 获取HLS预览信息
+export async function getTaskPreview(id: number): Promise<{ data: { task_id: number; playback_url: string; status: string } }> {
+  return request(`/api/v1/recordings/${id}/preview`)
+}
+
+// 获取HLS流文件URL
+export function getHLSStreamUrl(id: number, file: string): string {
+  return `${API_BASE_URL}/api/v1/recordings/${id}/preview/stream/${file}`
+}

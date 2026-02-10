@@ -29,6 +29,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import * as taskApi from '../../api/task'
 import * as huaweiConfigApi from '../../api/huawei-config'
+import { HLSPreview } from '../../components/HLSPreview'
 import type {
   VideoRecordingTask,
   TaskListParams,
@@ -272,9 +273,13 @@ export default function TaskManagement() {
     const canStop = record.status === 'recording' || record.status === 'connecting'
     const canCancel = record.status === 'pending' || record.status === 'connecting'
     const canRetry = record.status === 'failed'
+    const canPreview = record.status === 'recording'
 
     return (
       <Space size="small">
+        {canPreview && (
+          <HLSPreview taskId={record.id} taskName={record.name} status={record.status} />
+        )}
         {canStart && (
           <Tooltip title="启动任务">
             <Button
