@@ -681,62 +681,39 @@ func (c *HuaweiClient) GetConferenceInfo(ctx context.Context) (*ConferenceInfo, 
 		return nil, NewHuaweiError(ErrCodeSessionInvalid, nil)
 	}
 
-	headers := map[string]string{
-		"Cookie": fmt.Sprintf("SessionID=%s", c.getSessionID()),
-	}
-
-	resp, err := c.httpClient.Post(ctx, "WEB_InitSiteListDataAPI", nil, headers)
-	if err != nil {
-		return nil, NewHuaweiError(ErrCodeNetworkError, err)
-	}
-
-	if resp.Success != 1 {
-		return nil, NewHuaweiError(resp.Exception.ID, fmt.Errorf("获取会议信息失败: 错误码 %d", resp.Exception.ID))
-	}
-
-	// 解析响应 - data字段是JSON字符串，需要先解析
-	var info ConferenceInfo
-	if resp.Data != "" {
-		// 需要添加适当的延迟处理
-		time.Sleep(500 * time.Millisecond)
-		if err := json.Unmarshal([]byte(resp.Data), &info); err != nil {
-			return nil, fmt.Errorf("解析会议信息失败: %w, data: %s", err, resp.Data)
-		}
-	}
-
-	return &info, nil
+	// 华为老设备没有获取会议列表的API
+	// 返回默认的空会议信息，表示当前没有会议
+	return &ConferenceInfo{
+		Status:      "",
+		Name:        "",
+		Number:      "",
+		SiteList:    []SiteInfo{},
+		StartTime:   "",
+		EndTime:     "",
+		Duration:    0,
+		IsActive:    false,
+		IsRecording: false,
+		RTSPStreams: []RTSPStream{},
+	}, nil
 }
 
 // GetTerminalStatus 获取终端状态
+// 注意：华为老设备没有获取终端状态的API，这里返回默认的空闲状态
+// 实际的终端状态会在呼叫会议时通过结果来判断
 func (c *HuaweiClient) GetTerminalStatus(ctx context.Context, terminalNumber string) (*TerminalStatus, error) {
 	if !c.hasSession() {
 		return nil, NewHuaweiError(ErrCodeSessionInvalid, nil)
 	}
 
-	// 通过会议信息推断终端状态
-	info, err := c.GetConferenceInfo(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	status := &TerminalStatus{
+	// 返回默认的空闲状态
+	return &TerminalStatus{
 		TerminalNumber: terminalNumber,
 		Name:           "华为终端",
 		IPAddress:      c.config.Server,
-		Status:         "idle",
-	}
-
-	// 检查是否在会议中
-	for _, site := range info.SiteList {
-		if site.SiteURI == terminalNumber {
-			if site.SiteStatus == 1 {
-				status.Status = "in_call"
-			}
-			break
-		}
-	}
-
-	return status, nil
+		Status:         "idle", // 假设空闲，实际状态会在呼叫时检查
+		Version:        "",
+		USBDevices:     []USBDeviceInfo{},
+	}, nil
 }
 
 // HealthCheck 健康检查
