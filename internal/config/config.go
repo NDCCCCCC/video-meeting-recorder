@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/spf13/viper"
@@ -115,6 +116,53 @@ type FFmpegConfig struct {
 	DefaultAudioBitrate string    `mapstructure:"default_audio_bitrate" json:"default_audio_bitrate" yaml:"default_audio_bitrate"`
 }
 
+// expandEnvWithDefault 展开环境变量，支持 ${VAR:default} 格式
+func expandEnvWithDefault(s string) string {
+	// 匹配 ${VAR:default} 或 ${VAR} 格式
+	re := regexp.MustCompile(`\$\{([^:}]+)(?::([^}]*))?\}`)
+
+	return re.ReplaceAllStringFunc(s, func(match string) string {
+		parts := re.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+
+		varName := parts[1]
+		defaultValue := ""
+		if len(parts) >= 3 {
+			defaultValue = parts[2]
+		}
+
+		// 优先使用环境变量的值
+		if envValue := os.Getenv(varName); envValue != "" {
+			return envValue
+		}
+
+		// 否则使用默认值
+		return defaultValue
+	})
+}
+
+// expandConfig 递归展开配置中的所有字符串值
+func expandConfig(cfg interface{}) interface{} {
+	switch v := cfg.(type) {
+	case map[string]interface{}:
+		for key, val := range v {
+			v[key] = expandConfig(val)
+		}
+		return v
+	case []interface{}:
+		for i, val := range v {
+			v[i] = expandConfig(val)
+		}
+		return v
+	case string:
+		return expandEnvWithDefault(v)
+	default:
+		return v
+	}
+}
+
 // Load 加载配置
 func Load() (*Config, error) {
 	v := viper.New()
@@ -132,6 +180,22 @@ func Load() (*Config, error) {
 	// 读取配置文件
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
+	}
+
+	// 获取原始配置
+	var rawCfg map[string]interface{}
+	if err := v.Unmarshal(&rawCfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal raw config: %w", err)
+	}
+
+	// 展开环境变量
+	expandedCfg := expandConfig(rawCfg)
+
+	// 将展开后的配置转换回 viper
+	v = viper.New()
+	v.SetConfigType("yaml")
+	if err := v.MergeConfigMap(expandedCfg.(map[string]interface{})); err != nil {
+		return nil, fmt.Errorf("failed to merge expanded config: %w", err)
 	}
 
 	var cfg Config
