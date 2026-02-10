@@ -17,13 +17,13 @@ import (
 
 // 录制编码参数常量
 const (
-	videoCodec     = "libx264"
-	videoPreset    = "medium"
-	videoBitrate   = "5M"
+	videoCodec       = "libx264"
+	videoPreset      = "medium"
+	videoBitrate     = "5M"
 	videoPixelFormat = "yuv420p"
-	audioCodec     = "aac"
-	audioBitrate   = "128k"
-	outputFormat   = "mp4"
+	audioCodec       = "aac"
+	audioBitrate     = "128k"
+	outputFormat     = "mkv" // 使用 MKV 格式，防止中断时文件损坏
 )
 
 // SimpleRecordingCoordinator 简单的录制协调器
@@ -83,7 +83,8 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	outputPath := c.getOutputPath(task.ID, huaweiConfig.OutputFormat)
+	// 使用 MKV 格式（MKV 在中断时不易损坏）
+	outputPath := c.getOutputPath(task, outputFormat)
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		return fmt.Errorf("创建输出目录失败: %w", err)
 	}
@@ -113,7 +114,8 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 		logFile:    logFile,
 	}
 	c.cancelFuncs[task.ID] = cancel
-	task.RecordingFile = outputPath
+	task.RecordingFile = outputPath  // 兼容旧字段
+	task.MKVFilePath = outputPath    // 新字段指向 MKV 文件
 
 	c.logger.Info("录制已启动",
 		zap.Uint("task_id", task.ID),
@@ -125,10 +127,55 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 }
 
 // getOutputPath 生成输出文件路径
-func (c *SimpleRecordingCoordinator) getOutputPath(taskID uint, format string) string {
-	outputDir := filepath.Join(c.config.Storage.RecordingsPath, fmt.Sprintf("task_%d", taskID))
+// 格式: {任务名称}_{会议号}_{时间戳}.mkv
+func (c *SimpleRecordingCoordinator) getOutputPath(task *models.VideoRecordingTask, format string) string {
+	// 清理任务名称中的特殊字符，用于文件名
+	safeName := sanitizeFilename(task.Name)
+	conferenceNumber := task.ConferenceNumber
 	timestamp := time.Now().Format("20060102150405")
-	return filepath.Join(outputDir, fmt.Sprintf("recording_%s.%s", timestamp, format))
+
+	filename := fmt.Sprintf("%s_%s_%s.%s", safeName, conferenceNumber, timestamp, format)
+	outputDir := filepath.Join(c.config.Storage.RecordingsPath, fmt.Sprintf("task_%d", task.ID))
+	return filepath.Join(outputDir, filename)
+}
+
+// sanitizeFilename 清理文件名中的特殊字符
+func sanitizeFilename(name string) string {
+	// 替换不允许在文件名中出现的字符
+	replacements := map[rune]string{
+		' ':  "_",
+		'/':  "_",
+		'\\': "_",
+		':':  "_",
+		'*':  "_",
+		'?':  "_",
+		'"':  "_",
+		'<':  "_",
+		'>':  "_",
+		'|':  "_",
+		'\n': "",
+		'\r': "",
+		'\t': "",
+	}
+
+	result := make([]rune, 0, len(name))
+	for _, r := range name {
+		if repl, ok := replacements[r]; ok {
+			result = append(result, []rune(repl)...)
+		} else if r < 32 {
+			// 跳过控制字符
+			continue
+		} else {
+			result = append(result, r)
+		}
+	}
+
+	// 限制文件名长度
+	if len(result) > 100 {
+		result = result[:100]
+	}
+
+	return string(result)
 }
 
 // startFFmpegProcess 启动FFmpeg进程并配置日志
