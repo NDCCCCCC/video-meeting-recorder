@@ -24,6 +24,8 @@ const (
 	audioCodec       = "aac"
 	audioBitrate     = "128k"
 	outputFormat     = "mkv" // 使用 MKV 格式，防止中断时文件损坏
+	// HLS 参数
+	hlsSegmentDuration = 10 // HLS 分片时长（秒）
 )
 
 // SimpleRecordingCoordinator 简单的录制协调器
@@ -41,6 +43,7 @@ type RecordingProcess struct {
 	Cmd        *exec.Cmd
 	StartTime  time.Time
 	OutputPath string
+	HLSPath    string // HLS预览路径
 	Status     string
 	CancelFunc context.CancelFunc
 	logFile    *os.File
@@ -84,13 +87,19 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	defer c.mu.Unlock()
 
 	// 使用 MKV 格式（MKV 在中断时不易损坏）
-	outputPath := c.getOutputPath(task, outputFormat)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	mkvPath := c.getOutputPath(task, outputFormat)
+	if err := os.MkdirAll(filepath.Dir(mkvPath), 0755); err != nil {
 		return fmt.Errorf("创建输出目录失败: %w", err)
 	}
 
+	// 生成 HLS 输出路径
+	hlsPath := c.getHLSPath(task)
+	if err := os.MkdirAll(hlsPath, 0755); err != nil {
+		return fmt.Errorf("创建HLS目录失败: %w", err)
+	}
+
 	input := c.buildRecordingInput(task, huaweiConfig)
-	args, err := c.buildRecordingCommand(input, outputPath, task.EndTime.Sub(task.StartTime))
+	args, err := c.buildRecordingCommand(input, mkvPath, hlsPath, task.EndTime.Sub(task.StartTime))
 	if err != nil {
 		return fmt.Errorf("构建录制命令失败: %w", err)
 	}
@@ -98,29 +107,35 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, c.config.FFmpeg.Path, args...)
 
-	logFile, err := c.startFFmpegProcess(cmd, outputPath)
+	logFile, err := c.startFFmpegProcess(cmd, mkvPath)
 	if err != nil {
 		cancel()
 		return err
 	}
 
+	// HLS m3u8 文件路径
+	m3u8Path := filepath.Join(hlsPath, "index.m3u8")
+
 	c.processes[task.ID] = &RecordingProcess{
 		TaskID:     task.ID,
 		Cmd:        cmd,
 		StartTime:  time.Now(),
-		OutputPath: outputPath,
+		OutputPath: mkvPath,
+		HLSPath:    m3u8Path,
 		Status:     "running",
 		CancelFunc: cancel,
 		logFile:    logFile,
 	}
 	c.cancelFuncs[task.ID] = cancel
-	task.RecordingFile = outputPath  // 兼容旧字段
-	task.MKVFilePath = outputPath    // 新字段指向 MKV 文件
+	task.RecordingFile = mkvPath     // 兼容旧字段
+	task.MKVFilePath = mkvPath       // 新字段指向 MKV 文件
+	task.HLSPreviewPath = m3u8Path   // HLS 预览路径
 
 	c.logger.Info("录制已启动",
 		zap.Uint("task_id", task.ID),
 		zap.String("input_type", string(input.Type)),
-		zap.String("output_path", outputPath),
+		zap.String("mkv_path", mkvPath),
+		zap.String("hls_path", m3u8Path),
 	)
 
 	return nil
@@ -137,6 +152,18 @@ func (c *SimpleRecordingCoordinator) getOutputPath(task *models.VideoRecordingTa
 	filename := fmt.Sprintf("%s_%s_%s.%s", safeName, conferenceNumber, timestamp, format)
 	outputDir := filepath.Join(c.config.Storage.RecordingsPath, fmt.Sprintf("task_%d", task.ID))
 	return filepath.Join(outputDir, filename)
+}
+
+// getHLSPath 生成 HLS 输出目录路径
+// 格式: data/hls/task_{id}/{name}_{conf}_{timestamp}/
+func (c *SimpleRecordingCoordinator) getHLSPath(task *models.VideoRecordingTask) string {
+	safeName := sanitizeFilename(task.Name)
+	conferenceNumber := task.ConferenceNumber
+	timestamp := time.Now().Format("20060102150405")
+
+	dirname := fmt.Sprintf("%s_%s_%s", safeName, conferenceNumber, timestamp)
+	hlsDir := filepath.Join(c.config.Storage.HLSPath, fmt.Sprintf("task_%d", task.ID), dirname)
+	return hlsDir
 }
 
 // sanitizeFilename 清理文件名中的特殊字符
@@ -290,8 +317,8 @@ func (c *SimpleRecordingCoordinator) waitForProcess(process *RecordingProcess, t
 	}
 }
 
-// buildRecordingCommand 构建录制命令
-func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput, outputPath string, duration time.Duration) ([]string, error) {
+// buildRecordingCommand 构建录制命令（使用 tee muxer 双输出）
+func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput, mkvPath string, hlsPath string, duration time.Duration) ([]string, error) {
 	args := []string{"-y"}
 
 	// 添加输入源
@@ -314,15 +341,29 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 		args = append(args, "-c:a", audioCodec, "-b:a", audioBitrate)
 	}
 
-	// 添加输出参数
-	args = append(args, "-f", outputFormat, "-movflags", "+faststart")
-
 	// 添加时长限制
 	if duration > 0 {
 		args = append(args, "-t", fmt.Sprintf("%.0f", duration.Seconds()))
 	}
 
-	args = append(args, outputPath)
+	// 使用 tee muxer 进行双输出（MKV + HLS）
+	// 格式: [f=mkv]{mkv_output}|[f=hls:hls_time=10:hls_list_size=0:hls_segment_filename={segment_path}]{hls_output}
+	hlsSegmentPath := filepath.Join(hlsPath, "segment_%03d.ts")
+	teeSpec := fmt.Sprintf("[f=mkv]%s|[f=hls:hls_time=%d:hls_list_size=0:hls_segment_filename=%s]%s",
+		mkvPath,
+		hlsSegmentDuration,
+		hlsSegmentPath,
+		filepath.Join(hlsPath, "index.m3u8"))
+
+	args = append(args,
+		"-f", "tee",
+		"-map", "0:v",
+	)
+	if input.hasAudio {
+		args = append(args, "-map", "0:a")
+	}
+	args = append(args, teeSpec)
+
 	return args, nil
 }
 

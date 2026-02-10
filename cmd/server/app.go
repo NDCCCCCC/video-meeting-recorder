@@ -426,6 +426,9 @@ func (a *MinimalApp) registerRoutes() error {
 		// 转换相关
 		recordings.GET("/:id/conversion-status", a.handlers.VideoTask.GetConversionStatus)  // 获取转换状态
 		recordings.POST("/:id/conversion-retry", a.handlers.VideoTask.RetryConversion)     // 重试转换
+		// HLS 预览相关
+		recordings.GET("/:id/preview", a.handlers.VideoTask.GetHLSPreview)      // 获取HLS预览信息
+		recordings.GET("/:id/preview/stream/:file", a.handlers.VideoTask.ServeHLSStream) // 提供HLS流文件
 	}
 
 	// 华为配置管理
