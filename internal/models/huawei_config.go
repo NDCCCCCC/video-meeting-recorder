@@ -31,6 +31,7 @@ type HuaweiConfig struct {
 	AudioBackend string `gorm:"type:varchar(20);default:'dshow'" json:"audio_backend"` // dshow (Windows) | alsa (Linux) | coreaudio (macOS)
 
 	// USB音频设备配置
+	USBAudioName       string `gorm:"type:varchar(100)" json:"usb_audio_name"`
 	USBAudioDevice     string `gorm:"type:varchar(100)" json:"usb_audio_device"`
 	AudioBindingStatus string `gorm:"type:varchar(20);default:'unbound'" json:"audio_binding_status"`
 
