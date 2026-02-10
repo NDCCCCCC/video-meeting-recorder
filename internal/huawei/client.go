@@ -8,30 +8,31 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 )
 
-// Config 华为API配置
+// Config 华为终端API配置
 type Config struct {
-	Server            string
-	Port             int
-	Username         string
-	Password         string
-	APIBase          string
-	APITimeout       time.Duration
-	SessionTimeout   time.Duration
-	KeepAliveInterval time.Duration
-	InsecureSkipVerify bool
-	MinTLSVersion    uint16
+	Server            string        // 终端设备IP地址
+	Port              int           // 终端设备端口（通常是443）
+	Username          string        // 登录用户名
+	Password          string        // 登录密码
+	APITimeout        time.Duration // API超时时间
+	SessionTimeout    time.Duration // 会话超时时间
+	KeepAliveInterval time.Duration // 保活间隔（必须小于60秒）
+	InsecureSkipVerify bool         // 是否跳过证书验证
+	MinTLSVersion     uint16        // 最小TLS版本
 }
 
 // Session 会话信息
 type Session struct {
 	ID        string
 	ExpiresAt time.Time
+	IsActive  bool
 	mu        sync.RWMutex
 }
 
@@ -39,7 +40,7 @@ type Session struct {
 func (s *Session) IsExpired() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return time.Now().After(s.ExpiresAt)
+	return !s.IsActive || time.Now().After(s.ExpiresAt)
 }
 
 // GetID 获取会话ID
@@ -54,65 +55,88 @@ func (s *Session) Extend(duration time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ExpiresAt = time.Now().Add(duration)
+	s.IsActive = true
+}
+
+// SetActive 设置会话活跃状态
+func (s *Session) SetActive(active bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.IsActive = active
 }
 
 // APIResponse 统一API响应格式
 type APIResponse struct {
-	Code int         `json:"code"`
-	Msg  string      `json:"msg"`
-	Data interface{} `json:"data"`
+	Code int             `json:"code"`
+	Msg  string          `json:"msg"`
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
-// LoginResponse 登录响应
-type LoginResponse struct {
+// SessionIDResponse 获取会话ID响应
+type SessionIDResponse struct {
 	SessionID string `json:"session_id"`
-	ExpiresIn int    `json:"expires_in"`
 }
 
-// LoginRequest 登录请求
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+// AuthenticateResponse 认证响应
+type AuthenticateResponse struct {
+	Result int    `json:"result"`
+	Msg    string `json:"msg"`
 }
 
-// CallConferenceRequest 呼叫会议请求
-type CallConferenceRequest struct {
-	ConferenceNumber string `json:"conference_number"`
-	TerminalNumber   string `json:"terminal_number"`
-	Password         string `json:"password"`
-	Subject          string `json:"subject"`
+// CallSiteRequest 呼叫会议请求
+type CallSiteRequest struct {
+	BIsLdapCall  int             `json:"bIsLdapCall"`  // 是否LDAP呼叫
+	BIsVideoCall int             `json:"bIsVideoCall"` // 是否视频呼叫
+	UcEnableH239 int             `json:"ucEnableH239"` // 是否启用H.239
+	StSiteInfo   SiteInfoRequest `json:"stSiteInfo"`   // 站点信息
 }
 
-// CallConferenceResponse 呼叫会议响应
-type CallConferenceResponse struct {
-	CallID string `json:"call_id"`
-	Status string `json:"status"`
+// SiteInfoRequest 站点信息
+type SiteInfoRequest struct {
+	SiteName     string `json:"site_name"`     // 站点名称
+	SiteURI      string `json:"site_uri"`      // 站点URI（会议号）
+	SitePassword string `json:"site_password"` // 站点密码
+	SiteIP       string `json:"site_ip"`       // 站点IP
 }
 
-// HangupConferenceRequest 挂断会议请求
-type HangupConferenceRequest struct {
-	CallID          string `json:"call_id"`
-	TerminalNumber  string `json:"terminal_number"`
+// CallSiteResponse 呼叫会议响应
+type CallSiteResponse struct {
+	Result int    `json:"result"`
+	Msg    string `json:"msg"`
+}
+
+// HangupCallRequest 挂断呼叫请求
+type HangupCallRequest struct {
+	StHangupType int `json:"stHangupType"` // 挂断类型
+}
+
+// HangupCallResponse 挂断呼叫响应
+type HangupCallResponse struct {
+	Result int    `json:"result"`
+	Msg    string `json:"msg"`
 }
 
 // ConferenceInfo 会议信息
 type ConferenceInfo struct {
-	ConferenceNumber string         `json:"conference_number"`
-	Subject          string         `json:"subject"`
-	Status           string         `json:"status"`
-	StartTime        string         `json:"start_time"`
-	EndTime          string         `json:"end_time"`
-	AttendeesCount   int            `json:"attendees_count"`
-	Attendees        []AttendeeInfo `json:"attendees"`
-	RTSPStreams      []RTSPStream   `json:"rtsp_streams"`
+	Status      string      `json:"status"`       // 会议状态
+	Name        string      `json:"name"`         // 会议名称
+	Number      string      `json:"number"`       // 会议号
+	SiteList    []SiteInfo  `json:"site_list"`    // 站点列表
+	StartTime   string      `json:"start_time"`   // 开始时间
+	EndTime     string      `json:"end_time"`     // 结束时间
+	Duration    int         `json:"duration"`     // 持续时间
+	IsActive    bool        `json:"is_active"`    // 是否活跃
+	IsRecording bool        `json:"is_recording"` // 是否录制
+	RTSPStreams []RTSPStream `json:"rtsp_streams"` // RTSP流列表
 }
 
-// AttendeeInfo 参会者信息
-type AttendeeInfo struct {
-	TerminalNumber string `json:"terminal_number"`
-	Name           string `json:"name"`
-	Status         string `json:"status"`
-	JoinTime       string `json:"join_time"`
+// SiteInfo 站点信息
+type SiteInfo struct {
+	SiteURI      string `json:"site_uri"`       // 站点URI
+	SiteName     string `json:"site_name"`      // 站点名称
+	SiteIP       string `json:"site_ip"`        // 站点IP
+	SiteStatus   int    `json:"site_status"`    // 站点状态
+	JoinTime     string `json:"join_time"`      // 加入时间
 }
 
 // RTSPStream RTSP流信息
@@ -143,10 +167,23 @@ type USBDeviceInfo struct {
 type HTTPClient struct {
 	client *http.Client
 	logger *zap.Logger
+	baseURL *url.URL
 }
 
 // NewHTTPClient 创建HTTP客户端
-func NewHTTPClient(timeout time.Duration, insecureSkipVerify bool, minTLSVersion uint16, logger *zap.Logger) *HTTPClient {
+func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipVerify bool, minTLSVersion uint16, logger *zap.Logger) *HTTPClient {
+	// 构建基础URL
+	scheme := "https"
+	if port == 80 {
+		scheme = "http"
+	}
+
+	baseURL := &url.URL{
+		Scheme: scheme,
+		Host:   fmt.Sprintf("%s:%d", server, port),
+		Path:   "/action.cgi",
+	}
+
 	return &HTTPClient{
 		client: &http.Client{
 			Timeout: timeout,
@@ -155,12 +192,13 @@ func NewHTTPClient(timeout time.Duration, insecureSkipVerify bool, minTLSVersion
 					InsecureSkipVerify: insecureSkipVerify,
 					MinVersion:         minTLSVersion,
 				},
-				MaxIdleConns:        10,
-				MaxIdleConnsPerHost: 5,
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		logger: logger,
+		logger:  logger,
+		baseURL: baseURL,
 	}
 }
 
@@ -169,8 +207,19 @@ func (c *HTTPClient) SetLogger(logger *zap.Logger) {
 	c.logger = logger
 }
 
+// buildURL 构建API URL
+func (c *HTTPClient) buildURL(actionID string) string {
+	u := *c.baseURL
+	query := u.Query()
+	query.Set("ActionID", actionID)
+	u.RawQuery = query.Encode()
+	return u.String()
+}
+
 // Post 发送POST请求
-func (c *HTTPClient) Post(ctx context.Context, url string, body interface{}, headers ...map[string]string) (*APIResponse, error) {
+func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}, headers ...map[string]string) (*APIResponse, error) {
+	url := c.buildURL(actionID)
+
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -178,6 +227,16 @@ func (c *HTTPClient) Post(ctx context.Context, url string, body interface{}, hea
 			return nil, fmt.Errorf("序列化请求体失败: %w", err)
 		}
 		reqBody = bytes.NewReader(jsonBody)
+		c.logger.Debug("发送请求",
+			zap.String("action_id", actionID),
+			zap.String("url", url),
+			zap.String("body", string(jsonBody)),
+		)
+	} else {
+		c.logger.Debug("发送请求",
+			zap.String("action_id", actionID),
+			zap.String("url", url),
+		)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, reqBody)
@@ -189,6 +248,15 @@ func (c *HTTPClient) Post(ctx context.Context, url string, body interface{}, hea
 	for _, h := range headers {
 		for k, v := range h {
 			req.Header.Set(k, v)
+		}
+	}
+
+	// 添加会话ID头（如果存在）
+	if len(headers) > 0 {
+		for _, h := range headers {
+			if sessionID, ok := h["X-Session-Id"]; ok {
+				req.Header.Set("X-Session-Id", sessionID)
+			}
 		}
 	}
 
@@ -204,8 +272,8 @@ func (c *HTTPClient) Post(ctx context.Context, url string, body interface{}, hea
 	}
 
 	if c.logger != nil {
-		c.logger.Debug("HTTP请求",
-			zap.String("url", url),
+		c.logger.Debug("收到响应",
+			zap.String("action_id", actionID),
 			zap.Int("status", resp.StatusCode),
 			zap.String("response", string(respBody)),
 		)
@@ -219,115 +287,150 @@ func (c *HTTPClient) Post(ctx context.Context, url string, body interface{}, hea
 	return &apiResp, nil
 }
 
-// Get 发送GET请求
-func (c *HTTPClient) Get(ctx context.Context, url string, headers ...map[string]string) (*APIResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	for _, h := range headers {
-		for k, v := range h {
-			req.Header.Set(k, v)
-		}
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
-	}
-
-	var apiResp APIResponse
-	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
-	}
-
-	return &apiResp, nil
-}
-
-// HuaweiClient 华为API客户端
+// HuaweiClient 华为终端API客户端
 type HuaweiClient struct {
-	config     *Config
-	httpClient *HTTPClient
-	session    *Session
-	logger     *zap.Logger
-	mu         sync.RWMutex
+	config         *Config
+	httpClient     *HTTPClient
+	session        *Session
+	logger         *zap.Logger
+	mu             sync.RWMutex
 	cancelKeepAlive context.CancelFunc
 }
 
-// NewHuaweiClient 创建华为API客户端
+// NewHuaweiClient 创建华为终端API客户端
 func NewHuaweiClient(config *Config, logger *zap.Logger) *HuaweiClient {
 	return &HuaweiClient{
 		config:     config,
-		httpClient: NewHTTPClient(config.APITimeout, config.InsecureSkipVerify, config.MinTLSVersion, logger),
+		httpClient: NewHTTPClient(config.Server, config.Port, config.APITimeout, config.InsecureSkipVerify, config.MinTLSVersion, logger),
 		logger:     logger,
 	}
 }
 
-// Login 登录获取会话
-func (c *HuaweiClient) Login(ctx context.Context) error {
-	c.logger.Info("华为API登录",
+// InitializeAndStartKeepAlive 初始化并启动会话保活
+// 功能：完成登录并启动后台保活机制
+func (c *HuaweiClient) InitializeAndStartKeepAlive(ctx context.Context) error {
+	c.logger.Info("初始化华为终端客户端",
 		zap.String("server", c.config.Server),
+		zap.Int("port", c.config.Port),
 		zap.String("username", c.config.Username),
 	)
 
-	url := fmt.Sprintf("%s/sessions", c.config.APIBase)
-
-	req := &LoginRequest{
-		Username: c.config.Username,
-		Password: c.config.Password,
+	// 1. 获取会话ID
+	if err := c.GetSessionID(ctx); err != nil {
+		return fmt.Errorf("获取会话ID失败: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(ctx, url, req)
+	// 2. 用户认证
+	if err := c.Authenticate(ctx); err != nil {
+		return fmt.Errorf("用户认证失败: %w", err)
+	}
+
+	// 3. 替换会话ID
+	if err := c.ChangeSessionID(ctx); err != nil {
+		return fmt.Errorf("替换会话ID失败: %w", err)
+	}
+
+	// 4. 启动后台保活机制
+	c.StartKeepAlive(ctx)
+
+	c.logger.Info("华为终端客户端初始化成功",
+		zap.String("session_id", c.session.GetID()),
+	)
+
+	return nil
+}
+
+// GetSessionID 获取会话ID
+func (c *HuaweiClient) GetSessionID(ctx context.Context) error {
+	c.logger.Debug("获取会话ID")
+
+	resp, err := c.httpClient.Post(ctx, "Web_RequestSessionID", nil)
 	if err != nil {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
 	if resp.Code != 0 {
-		return NewHuaweiError(resp.Code, fmt.Errorf("登录失败: %s", resp.Msg))
+		return NewHuaweiError(resp.Code, fmt.Errorf("获取会话ID失败: %s", resp.Msg))
 	}
 
-	// 解析响应数据
-	dataBytes, err := json.Marshal(resp.Data)
-	if err != nil {
-		return fmt.Errorf("序列化响应数据失败: %w", err)
-	}
-	var loginResp LoginResponse
-	if err := json.Unmarshal(dataBytes, &loginResp); err != nil {
-		return fmt.Errorf("解析登录响应失败: %w", err)
+	// 解析响应
+	var sessionResp SessionIDResponse
+	if resp.Data != nil {
+		if err := json.Unmarshal(resp.Data, &sessionResp); err != nil {
+			return fmt.Errorf("解析会话ID响应失败: %w", err)
+		}
 	}
 
 	c.mu.Lock()
 	c.session = &Session{
-		ID:        loginResp.SessionID,
-		ExpiresAt: time.Now().Add(time.Duration(loginResp.ExpiresIn) * time.Second),
+		ID:        sessionResp.SessionID,
+		ExpiresAt: time.Now().Add(c.config.SessionTimeout),
+		IsActive:  true,
 	}
 	c.mu.Unlock()
 
-	c.logger.Info("华为API登录成功", zap.String("session_id", loginResp.SessionID))
-
+	c.logger.Debug("获取会话ID成功", zap.String("session_id", sessionResp.SessionID))
 	return nil
 }
 
-// Logout 登出
-func (c *HuaweiClient) Logout(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// Authenticate 用户认证
+func (c *HuaweiClient) Authenticate(ctx context.Context) error {
+	c.logger.Info("华为终端用户认证",
+		zap.String("username", c.config.Username),
+	)
 
-	// 停止保活
-	if c.cancelKeepAlive != nil {
-		c.cancelKeepAlive()
-		c.cancelKeepAlive = nil
+	reqBody := map[string]string{
+		"user":     c.config.Username,
+		"password": c.config.Password,
 	}
 
-	c.session = nil
-	c.logger.Info("华为API登出")
+	headers := map[string]string{
+		"X-Session-Id": c.getSessionID(),
+	}
+
+	resp, err := c.httpClient.Post(ctx, "WEB_RequestCertificateAPI", reqBody, headers)
+	if err != nil {
+		return NewHuaweiError(ErrCodeNetworkError, err)
+	}
+
+	if resp.Code != 0 {
+		return NewHuaweiError(resp.Code, fmt.Errorf("认证失败: %s", resp.Msg))
+	}
+
+	// 解析响应
+	var authResp AuthenticateResponse
+	if resp.Data != nil {
+		if err := json.Unmarshal(resp.Data, &authResp); err != nil {
+			return fmt.Errorf("解析认证响应失败: %w", err)
+		}
+	}
+
+	if authResp.Result != 0 {
+		return NewHuaweiError(authResp.Result, fmt.Errorf("认证失败: %s", authResp.Msg))
+	}
+
+	c.logger.Info("用户认证成功")
+	return nil
+}
+
+// ChangeSessionID 替换会话ID
+func (c *HuaweiClient) ChangeSessionID(ctx context.Context) error {
+	c.logger.Debug("替换会话ID")
+
+	headers := map[string]string{
+		"X-Session-Id": c.getSessionID(),
+	}
+
+	resp, err := c.httpClient.Post(ctx, "WEB_ChangeSessionID", nil, headers)
+	if err != nil {
+		return NewHuaweiError(ErrCodeNetworkError, err)
+	}
+
+	if resp.Code != 0 {
+		return NewHuaweiError(resp.Code, fmt.Errorf("替换会话ID失败: %s", resp.Msg))
+	}
+
+	c.logger.Debug("替换会话ID成功")
 	return nil
 }
 
@@ -347,34 +450,7 @@ func (c *HuaweiClient) hasSession() bool {
 	if c.session == nil {
 		return false
 	}
-	return time.Now().Before(c.session.ExpiresAt)
-}
-
-// KeepAlive 保活会话
-func (c *HuaweiClient) KeepAlive(ctx context.Context) error {
-	if !c.hasSession() {
-		return NewHuaweiError(ErrCodeSessionInvalid, nil)
-	}
-
-	sessionID := c.getSessionID()
-	url := fmt.Sprintf("%s/sessions/%s/keep-alive", c.config.APIBase, sessionID)
-
-	_, err := c.httpClient.Post(ctx, url, nil)
-	if err != nil {
-		// 保活失败，尝试重新登录
-		c.logger.Warn("会话保活失败，尝试重新登录", zap.Error(err))
-		return c.Login(ctx)
-	}
-
-	// 更新过期时间
-	c.mu.Lock()
-	if c.session != nil {
-		c.session.ExpiresAt = time.Now().Add(c.config.SessionTimeout)
-	}
-	c.mu.Unlock()
-
-	c.logger.Debug("会话保活成功", zap.String("session_id", sessionID))
-	return nil
+	return !c.session.IsExpired()
 }
 
 // StartKeepAlive 启动自动保活
@@ -397,8 +473,12 @@ func (c *HuaweiClient) StartKeepAlive(ctx context.Context) {
 				c.logger.Debug("停止会话保活")
 				return
 			case <-ticker.C:
-				if err := c.KeepAlive(ctx); err != nil {
+				if err := c.GetMailboxData(keepAliveCtx); err != nil {
 					c.logger.Error("会话保活失败", zap.Error(err))
+					// 保活失败，尝试重新初始化
+					if err := c.InitializeAndStartKeepAlive(keepAliveCtx); err != nil {
+						c.logger.Error("重新初始化失败", zap.Error(err))
+					}
 				}
 			}
 		}
@@ -407,84 +487,121 @@ func (c *HuaweiClient) StartKeepAlive(ctx context.Context) {
 	c.logger.Info("启动会话自动保活", zap.Duration("interval", c.config.KeepAliveInterval))
 }
 
-// CallConference 呼叫会议
-func (c *HuaweiClient) CallConference(ctx context.Context, req *CallConferenceRequest) (*CallConferenceResponse, error) {
-	if !c.hasSession() {
-		return nil, NewHuaweiError(ErrCodeSessionInvalid, nil)
-	}
-
-	url := fmt.Sprintf("%s/confctrl/conferences/call", c.config.APIBase)
-
-	headers := map[string]string{
-		"X-Session-Id": c.getSessionID(),
-	}
-
-	resp, err := c.httpClient.Post(ctx, url, req, headers)
-	if err != nil {
-		return nil, NewHuaweiError(ErrCodeNetworkError, err)
-	}
-
-	if resp.Code != 0 {
-		return nil, NewHuaweiError(resp.Code, fmt.Errorf("呼叫会议失败: %s", resp.Msg))
-	}
-
-	// 解析响应
-	dataBytes, err := json.Marshal(resp.Data)
-	if err != nil {
-		return nil, fmt.Errorf("序列化响应数据失败: %w", err)
-	}
-	var callResp CallConferenceResponse
-	if err := json.Unmarshal(dataBytes, &callResp); err != nil {
-		return nil, fmt.Errorf("解析呼叫响应失败: %w", err)
-	}
-
-	c.logger.Info("呼叫会议成功",
-		zap.String("conference_number", req.ConferenceNumber),
-		zap.String("terminal_number", req.TerminalNumber),
-		zap.String("call_id", callResp.CallID),
-	)
-
-	return &callResp, nil
-}
-
-// HangupConference 挂断会议
-func (c *HuaweiClient) HangupConference(ctx context.Context, req *HangupConferenceRequest) error {
+// GetMailboxData 获取邮箱数据用于保活
+func (c *HuaweiClient) GetMailboxData(ctx context.Context) error {
 	if !c.hasSession() {
 		return NewHuaweiError(ErrCodeSessionInvalid, nil)
 	}
 
-	url := fmt.Sprintf("%s/confctrl/conferences/hangup", c.config.APIBase)
+	headers := map[string]string{
+		"X-Session-Id": c.getSessionID(),
+	}
+
+	_, err := c.httpClient.Post(ctx, "WEB_GetMailboxDataAPI", nil, headers)
+	if err != nil {
+		return err
+	}
+
+	// 更新过期时间
+	c.mu.Lock()
+	if c.session != nil {
+		c.session.ExpiresAt = time.Now().Add(c.config.SessionTimeout)
+	}
+	c.mu.Unlock()
+
+	c.logger.Debug("会话保活成功")
+	return nil
+}
+
+// CallConference 呼叫会议
+func (c *HuaweiClient) CallConference(ctx context.Context, conferenceNumber string) error {
+	if !c.hasSession() {
+		return NewHuaweiError(ErrCodeSessionInvalid, nil)
+	}
+
+	c.logger.Info("呼叫会议", zap.String("conference_number", conferenceNumber))
+
+	req := &CallSiteRequest{
+		BIsLdapCall:  0,
+		BIsVideoCall: 1, // 默认视频呼叫
+		UcEnableH239: 0,
+		StSiteInfo: SiteInfoRequest{
+			SiteURI: conferenceNumber,
+			SiteName: "录制会议",
+		},
+	}
 
 	headers := map[string]string{
 		"X-Session-Id": c.getSessionID(),
 	}
 
-	resp, err := c.httpClient.Post(ctx, url, req, headers)
+	resp, err := c.httpClient.Post(ctx, "WEB_CallSiteAPI", req, headers)
 	if err != nil {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	if resp.Code != 0 {
-		return NewHuaweiError(resp.Code, fmt.Errorf("挂断会议失败: %s", resp.Msg))
+	// 检查特殊错误码（正常状态）
+	if resp.Code == 100665897 {
+		// 呼叫请求已发出，正在等待响应（正常状态）
+		c.logger.Info("呼叫请求已发出，正在等待响应")
+		return nil
 	}
 
-	c.logger.Info("挂断会议成功", zap.String("terminal_number", req.TerminalNumber))
+	if resp.Code != 0 {
+		return NewHuaweiError(resp.Code, fmt.Errorf("呼叫会议失败: %s", resp.Msg))
+	}
+
+	c.logger.Info("呼叫会议成功")
 	return nil
 }
 
-// GetConferenceInfo 获取会议信息
-func (c *HuaweiClient) GetConferenceInfo(ctx context.Context, conferenceNumber string) (*ConferenceInfo, error) {
+// HangupCall 挂断呼叫
+func (c *HuaweiClient) HangupCall(ctx context.Context) error {
 	if !c.hasSession() {
-		return nil, NewHuaweiError(ErrCodeSessionInvalid, nil)
+		return NewHuaweiError(ErrCodeSessionInvalid, nil)
 	}
 
-	url := fmt.Sprintf("%s/confctrl/conferences/%s", c.config.APIBase, conferenceNumber)
+	c.logger.Info("挂断呼叫")
+
+	req := &HangupCallRequest{
+		StHangupType: 0,
+	}
 
 	headers := map[string]string{
 		"X-Session-Id": c.getSessionID(),
 	}
 
-	resp, err := c.httpClient.Get(ctx, url, headers)
+	resp, err := c.httpClient.Post(ctx, "WEB_HangupCallAPI", req, headers)
+	if err != nil {
+		return NewHuaweiError(ErrCodeNetworkError, err)
+	}
+
+	// 检查特殊错误码（正常状态）
+	if resp.Code == 100666794 || resp.Code == 100666777 || resp.Code == 100666767 {
+		// 呼叫已正常结束、没有进行中的呼叫、未进入会议（正常状态）
+		c.logger.Info("挂断呼叫成功", zap.Int("code", resp.Code))
+		return nil
+	}
+
+	if resp.Code != 0 {
+		return NewHuaweiError(resp.Code, fmt.Errorf("挂断呼叫失败: %s", resp.Msg))
+	}
+
+	c.logger.Info("挂断呼叫成功")
+	return nil
+}
+
+// GetConferenceInfo 获取会议信息
+func (c *HuaweiClient) GetConferenceInfo(ctx context.Context) (*ConferenceInfo, error) {
+	if !c.hasSession() {
+		return nil, NewHuaweiError(ErrCodeSessionInvalid, nil)
+	}
+
+	headers := map[string]string{
+		"X-Session-Id": c.getSessionID(),
+	}
+
+	resp, err := c.httpClient.Post(ctx, "WEB_InitSiteListDataAPI", nil, headers)
 	if err != nil {
 		return nil, NewHuaweiError(ErrCodeNetworkError, err)
 	}
@@ -494,13 +611,13 @@ func (c *HuaweiClient) GetConferenceInfo(ctx context.Context, conferenceNumber s
 	}
 
 	// 解析响应
-	dataBytes, err := json.Marshal(resp.Data)
-	if err != nil {
-		return nil, fmt.Errorf("序列化响应数据失败: %w", err)
-	}
 	var info ConferenceInfo
-	if err := json.Unmarshal(dataBytes, &info); err != nil {
-		return nil, fmt.Errorf("解析会议信息失败: %w", err)
+	if resp.Data != nil {
+		// 需要添加适当的延迟处理
+		time.Sleep(500 * time.Millisecond)
+		if err := json.Unmarshal(resp.Data, &info); err != nil {
+			return nil, fmt.Errorf("解析会议信息失败: %w", err)
+		}
 	}
 
 	return &info, nil
@@ -512,38 +629,90 @@ func (c *HuaweiClient) GetTerminalStatus(ctx context.Context, terminalNumber str
 		return nil, NewHuaweiError(ErrCodeSessionInvalid, nil)
 	}
 
-	url := fmt.Sprintf("%s/terminals/%s/status", c.config.APIBase, terminalNumber)
-
-	headers := map[string]string{
-		"X-Session-Id": c.getSessionID(),
-	}
-
-	resp, err := c.httpClient.Get(ctx, url, headers)
+	// 通过会议信息推断终端状态
+	info, err := c.GetConferenceInfo(ctx)
 	if err != nil {
-		return nil, NewHuaweiError(ErrCodeNetworkError, err)
+		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, NewHuaweiError(resp.Code, fmt.Errorf("获取终端状态失败: %s", resp.Msg))
+	status := &TerminalStatus{
+		TerminalNumber: terminalNumber,
+		Name:           "华为终端",
+		IPAddress:      c.config.Server,
+		Status:         "idle",
 	}
 
-	// 解析响应
-	dataBytes, err := json.Marshal(resp.Data)
-	if err != nil {
-		return nil, fmt.Errorf("序列化响应数据失败: %w", err)
-	}
-	var status TerminalStatus
-	if err := json.Unmarshal(dataBytes, &status); err != nil {
-		return nil, fmt.Errorf("解析终端状态失败: %w", err)
+	// 检查是否在会议中
+	for _, site := range info.SiteList {
+		if site.SiteURI == terminalNumber {
+			if site.SiteStatus == 1 {
+				status.Status = "in_call"
+			}
+			break
+		}
 	}
 
-	return &status, nil
+	return status, nil
 }
 
-// EnsureLogin 确保已登录
+// HealthCheck 健康检查
+func (c *HuaweiClient) HealthCheck() error {
+	if !c.hasSession() {
+		return fmt.Errorf("会话未初始化")
+	}
+	return nil
+}
+
+// GetRTSPStreamURL 获取RTSP流地址
+func (c *HuaweiClient) GetRTSPStreamURL(conferenceNumber string) (string, error) {
+	// RTSP流地址通常由终端设备提供
+	// 格式：rtsp://{server}:554/stream
+	return fmt.Sprintf("rtsp://%s:554/stream", c.config.Server), nil
+}
+
+// Logout 登出
+func (c *HuaweiClient) Logout(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 停止保活
+	if c.cancelKeepAlive != nil {
+		c.cancelKeepAlive()
+		c.cancelKeepAlive = nil
+	}
+
+	if c.session != nil {
+		c.session.SetActive(false)
+	}
+
+	c.logger.Info("华为终端登出")
+	return nil
+}
+
+// EnsureLogin 确保已登录（用于兼容）
 func (c *HuaweiClient) EnsureLogin(ctx context.Context) error {
 	if c.hasSession() {
 		return nil
 	}
-	return c.Login(ctx)
+	return c.InitializeAndStartKeepAlive(ctx)
+}
+
+// CallConferenceRequest 呼叫会议请求（兼容旧接口）
+type CallConferenceRequest struct {
+	ConferenceNumber string
+	TerminalNumber   string
+	Password         string
+	Subject          string
+}
+
+// CallConferenceResponse 呼叫会议响应（兼容旧接口）
+type CallConferenceResponse struct {
+	CallID string
+	Status string
+}
+
+// HangupConferenceRequest 挂断会议请求（兼容旧接口）
+type HangupConferenceRequest struct {
+	CallID         string
+	TerminalNumber string
 }
