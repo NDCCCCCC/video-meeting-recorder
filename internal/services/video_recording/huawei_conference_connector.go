@@ -182,7 +182,11 @@ func (c *HuaweiConferenceConnector) GetConferenceInfo(ctx context.Context, task 
 
 // GetTerminalStatus 获取终端状态
 func (c *HuaweiConferenceConnector) GetTerminalStatus(ctx context.Context, configID uint) (*huawei.TerminalStatus, error) {
-	return c.manager.GetTerminalStatus(ctx, configID, "")
+	config, err := c.getHuaweiConfig(configID)
+	if err != nil {
+		return nil, err
+	}
+	return c.manager.GetTerminalStatus(ctx, configID, config.TerminalNumber)
 }
 
 // IsTerminalAvailable 检查终端是否可用
