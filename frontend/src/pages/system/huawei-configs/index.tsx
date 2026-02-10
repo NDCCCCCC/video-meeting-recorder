@@ -210,9 +210,19 @@ export default function HuaweiConfigManagement() {
 
   // 选择摄像头
   const handleSelectCamera = (device: USBDeviceInfo) => {
+    // 提取设备索引（用于兼容）
+    let deviceIndex = device.device_id
+    if (device.backend === 'dshow' && device.device_id.startsWith('video=')) {
+      // video=0 -> 0
+      deviceIndex = device.device_id.replace('video=', '')
+    } else if (device.backend === 'v4l2' && device.device_id.startsWith('/dev/video')) {
+      // /dev/video0 -> video0
+      deviceIndex = device.device_id.replace('/dev/', '')
+    }
+
     form.setFieldsValue({
       usb_camera_name: device.name,
-      usb_camera_device: device.device_id,
+      usb_camera_device: deviceIndex,  // 只存储索引，不包含前缀
       usb_camera_path: device.backend === 'v4l2' ? `/sys/class/video4linux/${device.device_id.replace('/dev/', '')}` : device.device_id,
     })
     message.info(`已选择摄像头: ${device.name}`)
@@ -220,8 +230,21 @@ export default function HuaweiConfigManagement() {
 
   // 选择音频设备
   const handleSelectAudio = (device: USBDeviceInfo) => {
+    // 提取设备索引（用于兼容）
+    let deviceIndex = device.device_id
+    if (device.backend === 'dshow' && device.device_id.startsWith('audio=')) {
+      // audio=0 -> 0
+      deviceIndex = device.device_id.replace('audio=', '')
+    } else if (device.backend === 'wasapi' || device.backend === 'dshow') {
+      // Windows 音频设备使用完整名称
+      deviceIndex = device.name
+    } else if (device.backend === 'alsa' && device.device_id.startsWith('hw:')) {
+      // hw:0,0 -> hw:0,0 (保持不变)
+      deviceIndex = device.device_id
+    }
+
     form.setFieldsValue({
-      usb_audio_device: device.device_id,
+      usb_audio_device: deviceIndex,
       usb_audio_path: device.backend === 'alsa' ? `/proc/asound/${device.device_id}` : device.device_id,
     })
     message.info(`已选择音频设备: ${device.name}`)
