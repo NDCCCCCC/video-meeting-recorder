@@ -14,22 +14,46 @@ import (
 // HuaweiConferenceConnector 华为会议连接器
 // 负责华为终端与会议的连接管理
 type HuaweiConferenceConnector struct {
-	db             *gorm.DB
-	huaweiService  *huawei.HuaweiService
-	logger         *zap.Logger
+	db      *gorm.DB
+	manager *huawei.Manager
+	logger  *zap.Logger
 }
 
 // NewHuaweiConferenceConnector 创建华为会议连接器
 func NewHuaweiConferenceConnector(
 	db *gorm.DB,
-	huaweiService *huawei.HuaweiService,
+	manager *huawei.Manager,
 	logger *zap.Logger,
 ) *HuaweiConferenceConnector {
 	return &HuaweiConferenceConnector{
-		db:            db,
-		huaweiService: huaweiService,
-		logger:        logger,
+		db:      db,
+		manager: manager,
+		logger:  logger,
 	}
+}
+
+// huaweiDBAdapter 实现 huawei.DBInterface 接口
+type huaweiDBAdapter struct {
+	db *gorm.DB
+}
+
+func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huawei.HuaweiConfigDB, error) {
+	var config models.HuaweiConfig
+	if err := a.db.First(&config, configID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("华为配置不存在: ID=%d", configID)
+		}
+		return nil, err
+	}
+
+	return &huawei.HuaweiConfigDB{
+		ID:             config.ID,
+		Server:         config.Server,
+		Port:           config.Port,
+		Username:       config.Username,
+		Password:       config.Password,
+		TerminalNumber: config.TerminalNumber,
+	}, nil
 }
 
 // ConnectToConference 连接到华为会议
@@ -66,14 +90,14 @@ func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, tas
 		Subject:          fmt.Sprintf("录制任务: %s", task.Name),
 	}
 
-	if err := c.huaweiService.SafeCallConference(ctx, callReq); err != nil {
+	if err := c.manager.SafeCallConference(ctx, task.HuaweiConfigID, callReq); err != nil {
 		c.unlockTerminal(config.ID) // 释放锁
 		return fmt.Errorf("呼叫会议失败: %w", err)
 	}
 
 	// 5. 等待连接确认
 	waitTimeout := 30 * time.Second
-	if err := c.huaweiService.WaitForConnection(ctx, task.ConferenceNumber, config.TerminalNumber, waitTimeout); err != nil {
+	if err := c.manager.WaitForConnection(ctx, task.HuaweiConfigID, task.ConferenceNumber, config.TerminalNumber, waitTimeout); err != nil {
 		c.unlockTerminal(config.ID)
 		return fmt.Errorf("等待连接失败: %w", err)
 	}
@@ -105,7 +129,7 @@ func (c *HuaweiConferenceConnector) DisconnectFromConference(ctx context.Context
 		TerminalNumber: config.TerminalNumber,
 	}
 
-	if err := c.huaweiService.HangupConference(ctx, hangupReq); err != nil {
+	if err := c.manager.HangupConference(ctx, task.HuaweiConfigID, hangupReq); err != nil {
 		c.logger.Warn("挂断会议失败", zap.Error(err))
 		// 继续执行解锁操作
 	}
@@ -130,7 +154,7 @@ func (c *HuaweiConferenceConnector) GetRTSPStreams(ctx context.Context, task *mo
 		zap.String("conference_number", task.ConferenceNumber),
 	)
 
-	streams, err := c.huaweiService.GetRTSPStreams(ctx, task.ConferenceNumber)
+	streams, err := c.manager.GetRTSPStreams(ctx, task.HuaweiConfigID, task.ConferenceNumber)
 	if err != nil {
 		return nil, fmt.Errorf("获取RTSP流失败: %w", err)
 	}
@@ -153,16 +177,12 @@ func (c *HuaweiConferenceConnector) GetRTSPStreams(ctx context.Context, task *mo
 
 // GetConferenceInfo 获取会议信息
 func (c *HuaweiConferenceConnector) GetConferenceInfo(ctx context.Context, task *models.VideoRecordingTask) (*huawei.ConferenceInfo, error) {
-	return c.huaweiService.GetConferenceInfo(ctx, task.ConferenceNumber)
+	return c.manager.GetConferenceInfo(ctx, task.HuaweiConfigID, task.ConferenceNumber)
 }
 
 // GetTerminalStatus 获取终端状态
 func (c *HuaweiConferenceConnector) GetTerminalStatus(ctx context.Context, configID uint) (*huawei.TerminalStatus, error) {
-	config, err := c.getHuaweiConfig(configID)
-	if err != nil {
-		return nil, err
-	}
-	return c.huaweiService.GetTerminalStatus(ctx, config.TerminalNumber)
+	return c.manager.GetTerminalStatus(ctx, configID, "")
 }
 
 // IsTerminalAvailable 检查终端是否可用
@@ -178,7 +198,7 @@ func (c *HuaweiConferenceConnector) IsTerminalAvailable(ctx context.Context, con
 	}
 
 	// 检查终端状态
-	idle, err := c.huaweiService.IsTerminalIdle(ctx, config.TerminalNumber)
+	idle, err := c.manager.IsTerminalIdle(ctx, configID, config.TerminalNumber)
 	if err != nil {
 		return false, err
 	}
@@ -206,14 +226,8 @@ func (c *HuaweiConferenceConnector) lockTerminal(ctx context.Context, taskID uin
 		return fmt.Errorf("终端已被任务 %d 锁定", *config.LockedBy)
 	}
 
-	// 如果没有传入context，创建一个带超时的context
-	if ctx == nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-	}
-
-	status, err := c.huaweiService.GetTerminalStatus(ctx, config.TerminalNumber)
+	// 获取终端状态
+	status, err := c.manager.GetTerminalStatus(ctx, config.ID, config.TerminalNumber)
 	if err != nil {
 		return fmt.Errorf("获取终端状态失败: %w", err)
 	}
@@ -278,9 +292,9 @@ func (c *HuaweiConferenceConnector) getHuaweiConfig(configID uint) (*models.Huaw
 }
 
 // ValidateConference 验证会议是否可连接
-func (c *HuaweiConferenceConnector) ValidateConference(ctx context.Context, conferenceNumber string) error {
+func (c *HuaweiConferenceConnector) ValidateConference(ctx context.Context, configID uint, conferenceNumber string) error {
 	// 获取会议信息
-	info, err := c.huaweiService.GetConferenceInfo(ctx, conferenceNumber)
+	info, err := c.manager.GetConferenceInfo(ctx, configID, conferenceNumber)
 	if err != nil {
 		return err
 	}
