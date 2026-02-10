@@ -70,6 +70,7 @@ type APIResponse struct {
 	Success   int             `json:"success"`
 	Data      string          `json:"data,omitempty"`      // 注意：华为API返回的是JSON字符串，不是对象
 	Exception ExceptionInfo   `json:"exception,omitempty"`
+	Cookies   []*http.Cookie  `json:"-"`                   // 从响应中提取的Cookies
 }
 
 // ExceptionInfo 异常信息
@@ -301,6 +302,9 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 
+	// 提取Cookies（华为终端使用SessionID cookie进行认证）
+	apiResp.Cookies = resp.Cookies()
+
 	return &apiResp, nil
 }
 
@@ -371,26 +375,38 @@ func (c *HuaweiClient) GetSessionID(ctx context.Context) error {
 		return NewHuaweiError(resp.Exception.ID, fmt.Errorf("获取会话ID失败: 错误码 %d", resp.Exception.ID))
 	}
 
-	// 解析data字段（它是一个JSON字符串）
-	var sessionResp SessionIDResponse
-	if resp.Data != "" {
+	// 从Cookie中提取SessionID（华为终端使用Cookie而不是data字段）
+	var sessionID string
+	for _, cookie := range resp.Cookies {
+		if cookie.Name == "SessionID" {
+			sessionID = cookie.Value
+			c.logger.Debug("从Cookie获取到SessionID", zap.String("session_id", sessionID))
+			break
+		}
+	}
+
+	// 如果Cookie中没有，尝试从data字段解析
+	if sessionID == "" && resp.Data != "" {
+		var sessionResp SessionIDResponse
 		if err := json.Unmarshal([]byte(resp.Data), &sessionResp); err != nil {
 			return fmt.Errorf("解析会话ID响应失败: %w, data: %s", err, resp.Data)
 		}
+		sessionID = sessionResp.AcSessionID
+		c.logger.Debug("从data字段获取到SessionID", zap.String("session_id", sessionID))
 	}
 
 	c.mu.Lock()
 	c.session = &Session{
-		ID:        sessionResp.AcSessionID, // 使用正确的字段名
+		ID:        sessionID,
 		ExpiresAt: time.Now().Add(c.config.SessionTimeout),
 		IsActive:  true,
 	}
 	c.mu.Unlock()
 
 	c.logger.Debug("获取会话ID成功",
-		zap.String("session_id", sessionResp.AcSessionID),
-		zap.String("term_type", sessionResp.SzTermType),
+		zap.String("session_id", sessionID),
 	)
+
 	return nil
 }
 
@@ -400,16 +416,16 @@ func (c *HuaweiClient) Authenticate(ctx context.Context) error {
 		zap.String("username", c.config.Username),
 	)
 
-	// 华为API需要使用大写的User和Password
+	// 华为API需要使用小写的user和password
 	reqBody := map[string]string{
-		"User":     c.config.Username,
-		"Password": c.config.Password,
+		"user":     c.config.Username,
+		"password": c.config.Password,
 	}
 
-	// 如果有会话ID，添加到请求中
+	// 使用Cookie头部传递SessionID
 	headers := make(map[string]string)
 	if sessionID := c.getSessionID(); sessionID != "" {
-		headers["X-Session-Id"] = sessionID
+		headers["Cookie"] = fmt.Sprintf("SessionID=%s", sessionID)
 	}
 
 	resp, err := c.httpClient.Post(ctx, "WEB_RequestCertificateAPI", reqBody, headers)
@@ -417,7 +433,7 @@ func (c *HuaweiClient) Authenticate(ctx context.Context) error {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	// 华为API返回格式：{"success":1,"data":"{\"acSessionId\":\"...\"}"} 或 {"success":0,"exception":{"id":3}}
+	// 华为API返回格式：{"success":1,"data":""} 或 {"success":0,"exception":{"id":3}}
 	if resp.Success != 1 {
 		return NewHuaweiError(resp.Exception.ID, fmt.Errorf("认证失败: 错误码 %d", resp.Exception.ID))
 	}
@@ -431,7 +447,7 @@ func (c *HuaweiClient) ChangeSessionID(ctx context.Context) error {
 	c.logger.Debug("替换会话ID")
 
 	headers := map[string]string{
-		"X-Session-Id": c.getSessionID(),
+		"Cookie": fmt.Sprintf("SessionID=%s", c.getSessionID()),
 	}
 
 	resp, err := c.httpClient.Post(ctx, "WEB_ChangeSessionID", nil, headers)
@@ -507,7 +523,7 @@ func (c *HuaweiClient) GetMailboxData(ctx context.Context) error {
 	}
 
 	headers := map[string]string{
-		"X-Session-Id": c.getSessionID(),
+		"Cookie": fmt.Sprintf("SessionID=%s", c.getSessionID()),
 	}
 
 	_, err := c.httpClient.Post(ctx, "WEB_GetMailboxDataAPI", nil, headers)
@@ -545,7 +561,7 @@ func (c *HuaweiClient) CallConference(ctx context.Context, conferenceNumber stri
 	}
 
 	headers := map[string]string{
-		"X-Session-Id": c.getSessionID(),
+		"Cookie": fmt.Sprintf("SessionID=%s", c.getSessionID()),
 	}
 
 	resp, err := c.httpClient.Post(ctx, "WEB_CallSiteAPI", req, headers)
@@ -582,7 +598,7 @@ func (c *HuaweiClient) HangupCall(ctx context.Context) error {
 	}
 
 	headers := map[string]string{
-		"X-Session-Id": c.getSessionID(),
+		"Cookie": fmt.Sprintf("SessionID=%s", c.getSessionID()),
 	}
 
 	resp, err := c.httpClient.Post(ctx, "WEB_HangupCallAPI", req, headers)
@@ -613,7 +629,7 @@ func (c *HuaweiClient) GetConferenceInfo(ctx context.Context) (*ConferenceInfo, 
 	}
 
 	headers := map[string]string{
-		"X-Session-Id": c.getSessionID(),
+		"Cookie": fmt.Sprintf("SessionID=%s", c.getSessionID()),
 	}
 
 	resp, err := c.httpClient.Post(ctx, "WEB_InitSiteListDataAPI", nil, headers)
