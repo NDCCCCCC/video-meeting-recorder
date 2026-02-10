@@ -70,10 +70,15 @@ storage:
 # 华为会议系统配置
 huawei:
   conference_server: "${HUAWEI_CONF_SERVER:10.62.10.3}"
+  conference_port: 80
   username: "${HUAWEI_USERNAME:admin}"
   password: "${HUAWEI_PASSWORD:}"
   https: false
   insecure_skip_verify: true
+  api_timeout: "30s"
+  session_timeout: "3600s"   # 会话超时(秒)
+  keep_alive_interval: "300s" # 保活间隔(秒)
+  min_tls_version: "1.0"
 
 # RTSP配置
 rtsp:

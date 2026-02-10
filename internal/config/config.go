@@ -84,11 +84,16 @@ type LocalStorageConfig struct {
 
 // HuaweiConfig 华为会议系统配置
 type HuaweiConfig struct {
-	ConferenceServer string `mapstructure:"conference_server" json:"conference_server" yaml:"conference_server"`
-	Username         string `mapstructure:"username" json:"username" yaml:"username"`
-	Password         string `mapstructure:"password" json:"password" yaml:"password"`
-	HTTPS            bool   `mapstructure:"https" json:"https" yaml:"https"`
-	InsecureSkipVerify bool `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecure_skip_verify"`
+	ConferenceServer string        `mapstructure:"conference_server" json:"conference_server" yaml:"conference_server"`
+	ConferencePort   int           `mapstructure:"conference_port" json:"conference_port" yaml:"conference_port"`
+	Username         string        `mapstructure:"username" json:"username" yaml:"username"`
+	Password         string        `mapstructure:"password" json:"password" yaml:"password"`
+	HTTPS            bool          `mapstructure:"https" json:"https" yaml:"https"`
+	InsecureSkipVerify bool         `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecure_skip_verify"`
+	APITimeout       time.Duration `mapstructure:"api_timeout" json:"api_timeout" yaml:"api_timeout"`
+	SessionTimeout   time.Duration `mapstructure:"session_timeout" json:"session_timeout" yaml:"session_timeout"`
+	KeepAliveInterval time.Duration `mapstructure:"keep_alive_interval" json:"keep_alive_interval" yaml:"keep_alive_interval"`
+	MinTLSVersion    string        `mapstructure:"min_tls_version" json:"min_tls_version" yaml:"min_tls_version"`
 }
 
 // RTSPConfig RTSP配置
