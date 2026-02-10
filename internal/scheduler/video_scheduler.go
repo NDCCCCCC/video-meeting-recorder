@@ -35,18 +35,24 @@ type SchedulerInterface interface {
 
 // VideoSimpleScheduler 视频录制任务调度器
 type VideoSimpleScheduler struct {
-	cron          *cron.Cron
-	taskService   TaskServiceInterface
-	coordinator   RecorderCoordinatorInterface
-	connector     *video_recording.HuaweiConferenceConnector
-	taskEntries   map[uint]cron.EntryID
-	entryTasks    map[cron.EntryID]uint
-	executing     map[uint]bool
-	cancelFuncs   map[uint]context.CancelFunc // 任务取消函数
-	logger        *zap.Logger
-	config        *config.Config
-	mu            sync.RWMutex
-	startTime     time.Time
+	cron             *cron.Cron
+	taskService      TaskServiceInterface
+	coordinator      RecorderCoordinatorInterface
+	connector        *video_recording.HuaweiConferenceConnector
+	conversionService ConversionServiceInterface // 转换服务
+	taskEntries      map[uint]cron.EntryID
+	entryTasks       map[cron.EntryID]uint
+	executing        map[uint]bool
+	cancelFuncs      map[uint]context.CancelFunc // 任务取消函数
+	logger           *zap.Logger
+	config           *config.Config
+	mu               sync.RWMutex
+	startTime        time.Time
+}
+
+// ConversionServiceInterface 转换服务接口
+type ConversionServiceInterface interface {
+	SubmitConversion(taskID uint) error
 }
 
 // TaskServiceInterface 任务服务接口
@@ -69,6 +75,7 @@ func NewVideoSimpleScheduler(
 	taskService TaskServiceInterface,
 	coordinator RecorderCoordinatorInterface,
 	connector *video_recording.HuaweiConferenceConnector,
+	conversionService ConversionServiceInterface,
 	logger *zap.Logger,
 	cfg *config.Config,
 ) *VideoSimpleScheduler {
@@ -76,17 +83,18 @@ func NewVideoSimpleScheduler(
 	c := cron.New(cron.WithSeconds())
 
 	scheduler := &VideoSimpleScheduler{
-		cron:         c,
-		taskService:  taskService,
-		coordinator:   coordinator,
-		connector:    connector,
-		taskEntries:  make(map[uint]cron.EntryID),
-		entryTasks:   make(map[cron.EntryID]uint),
-		executing:    make(map[uint]bool),
-		cancelFuncs:  make(map[uint]context.CancelFunc),
-		logger:       logger,
-		config:       cfg,
-		startTime:    time.Now(),
+		cron:             c,
+		taskService:      taskService,
+		coordinator:      coordinator,
+		connector:        connector,
+		conversionService: conversionService,
+		taskEntries:      make(map[uint]cron.EntryID),
+		entryTasks:       make(map[cron.EntryID]uint),
+		executing:        make(map[uint]bool),
+		cancelFuncs:      make(map[uint]context.CancelFunc),
+		logger:           logger,
+		config:           cfg,
+		startTime:        time.Now(),
 	}
 
 	return scheduler
@@ -373,6 +381,20 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 	// 从调度器移除
 	s.RemoveTask(taskID)
 
+	// 提交转换任务（如果有转换服务）
+	if s.conversionService != nil && task != nil && task.MKVFilePath != "" {
+		s.logger.Info("提交MKV到MP4转换任务",
+			zap.Uint("task_id", taskID),
+			zap.String("mkv_file", task.MKVFilePath),
+		)
+		if err := s.conversionService.SubmitConversion(taskID); err != nil {
+			s.logger.Error("提交转换任务失败",
+				zap.Uint("task_id", taskID),
+				zap.Error(err),
+			)
+		}
+	}
+
 	s.logger.Info("任务已完成",
 		zap.Uint("task_id", taskID),
 	)
@@ -514,6 +536,13 @@ func (s *VideoSimpleScheduler) Stop() {
 	s.cron.Stop()
 
 	s.logger.Info("调度器已停止")
+}
+
+// SetConversionService 设置转换服务
+func (s *VideoSimpleScheduler) SetConversionService(conversionService ConversionServiceInterface) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.conversionService = conversionService
 }
 
 // IsTaskScheduled 检查任务是否已调度
