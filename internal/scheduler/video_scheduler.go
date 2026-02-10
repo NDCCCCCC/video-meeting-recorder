@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -11,18 +12,25 @@ import (
 	"go.uber.org/zap"
 )
 
+// 调度器常量
+const (
+	// TriggerTimeTolerance 触发时间容错窗口（任务在触发时间之前1分钟内仍可执行）
+	TriggerTimeTolerance = 1 * time.Minute
+)
+
 // VideoSimpleScheduler 视频录制任务调度器
 type VideoSimpleScheduler struct {
-	cron         *cron.Cron
-	taskService  TaskServiceInterface
-	coordinator  RecorderCoordinatorInterface
-	taskEntries  map[uint]cron.EntryID
-	entryTasks   map[cron.EntryID]uint
-	executing    map[uint]bool
-	logger       *zap.Logger
-	config       *config.Config
-	mu           sync.RWMutex
-	startTime    time.Time
+	cron          *cron.Cron
+	taskService   TaskServiceInterface
+	coordinator   RecorderCoordinatorInterface
+	taskEntries   map[uint]cron.EntryID
+	entryTasks    map[cron.EntryID]uint
+	executing     map[uint]bool
+	cancelFuncs   map[uint]context.CancelFunc // 任务取消函数
+	logger        *zap.Logger
+	config        *config.Config
+	mu            sync.RWMutex
+	startTime     time.Time
 }
 
 // TaskServiceInterface 任务服务接口
@@ -57,6 +65,7 @@ func NewVideoSimpleScheduler(
 		taskEntries:  make(map[uint]cron.EntryID),
 		entryTasks:   make(map[cron.EntryID]uint),
 		executing:    make(map[uint]bool),
+		cancelFuncs:  make(map[uint]context.CancelFunc),
 		logger:       logger,
 		config:       cfg,
 		startTime:    time.Now(),
@@ -79,7 +88,7 @@ func (s *VideoSimpleScheduler) AddTask(task *models.VideoRecordingTask) error {
 	triggerTime := s.calculateTriggerTime(task.StartTime, task.PreJoinMinutes)
 
 	// 检查触发时间是否在未来
-	if triggerTime.Before(time.Now().Add(-1 * time.Minute)) {
+	if triggerTime.Before(time.Now().Add(-1 * TriggerTimeTolerance)) {
 		return fmt.Errorf("触发时间已过期: %s", triggerTime.Format(time.RFC3339))
 	}
 
@@ -99,7 +108,7 @@ func (s *VideoSimpleScheduler) AddTask(task *models.VideoRecordingTask) error {
 	s.taskEntries[task.ID] = entryID
 	s.entryTasks[entryID] = task.ID
 
-	s.logger.Info("任务已添加到调度器",
+	s.logger.Debug("任务已添加到调度器",
 		zap.Uint("task_id", task.ID),
 		zap.String("name", task.Name),
 		zap.String("cron_expr", cronExpr),
@@ -127,7 +136,7 @@ func (s *VideoSimpleScheduler) RemoveTask(taskID uint) error {
 	delete(s.taskEntries, taskID)
 	delete(s.entryTasks, entryID)
 
-	s.logger.Info("任务已从调度器移除",
+	s.logger.Debug("任务已从调度器移除",
 		zap.Uint("task_id", taskID),
 	)
 
@@ -140,19 +149,25 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		zap.Uint("task_id", taskID),
 	)
 
+	// 创建任务context用于取消
+	ctx, cancel := context.WithCancel(context.Background())
+
 	// 检查是否正在执行
 	s.mu.Lock()
 	if s.executing[taskID] {
 		s.mu.Unlock()
+		cancel()
 		s.logger.Warn("任务正在执行中", zap.Uint("task_id", taskID))
 		return
 	}
 	s.executing[taskID] = true
+	s.cancelFuncs[taskID] = cancel
 	s.mu.Unlock()
 
 	defer func() {
 		s.mu.Lock()
 		delete(s.executing, taskID)
+		delete(s.cancelFuncs, taskID)
 		s.mu.Unlock()
 	}()
 
@@ -224,8 +239,8 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		return
 	}
 
-	// 启动监控
-	go s.monitorTask(task)
+	// 启动监控（传递context用于取消）
+	go s.monitorTask(ctx, task)
 
 	s.logger.Info("任务进入录制状态",
 		zap.Uint("task_id", taskID),
@@ -234,7 +249,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 }
 
 // monitorTask 监控任务直到结束
-func (s *VideoSimpleScheduler) monitorTask(task *models.VideoRecordingTask) {
+func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.VideoRecordingTask) {
 	// 计算剩余时间
 	remaining := time.Until(task.EndTime)
 	if remaining < 0 {
@@ -246,12 +261,21 @@ func (s *VideoSimpleScheduler) monitorTask(task *models.VideoRecordingTask) {
 		zap.Duration("remaining", remaining),
 	)
 
-	// 等待会议结束
+	// 等待会议结束或取消
 	timer := time.NewTimer(remaining)
-	<-timer.C
+	defer timer.Stop()
 
-	// 完成任务
-	s.completeTask(task.ID)
+	select {
+	case <-timer.C:
+		// 正常结束
+		s.completeTask(task.ID)
+	case <-ctx.Done():
+		// 任务被取消
+		s.logger.Info("任务监控被取消",
+			zap.Uint("task_id", task.ID),
+		)
+		return
+	}
 }
 
 // completeTask 完成任务
@@ -299,8 +323,24 @@ func (s *VideoSimpleScheduler) generateCronExpression(triggerTime time.Time) str
 	)
 }
 
-// updateTaskStatus 更新任务状态
+// updateTaskStatus 更新任务状态（带状态转换验证）
 func (s *VideoSimpleScheduler) updateTaskStatus(taskID uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
+	// 重新加载任务以获取最新状态
+	task, err := s.taskService.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+
+	// 验证状态转换是否合法
+	if !task.CanTransitionTo(status) {
+		s.logger.Warn("非法的状态转换",
+			zap.Uint("task_id", taskID),
+			zap.String("from", string(task.Status)),
+			zap.String("to", string(status)),
+		)
+		return fmt.Errorf("非法状态转换: %s -> %s", task.Status, status)
+	}
+
 	return s.taskService.UpdateTaskStatus(taskID, status, errorMsg)
 }
 
@@ -365,7 +405,7 @@ func (s *VideoSimpleScheduler) Start() error {
 	addedCount := 0
 	for _, task := range tasks {
 		triggerTime := s.calculateTriggerTime(task.StartTime, task.PreJoinMinutes)
-		if triggerTime.After(time.Now().Add(-1 * time.Minute)) {
+		if triggerTime.After(time.Now().Add(-1 * TriggerTimeTolerance)) {
 			if err := s.AddTask(task); err != nil {
 				s.logger.Error("添加任务失败",
 					zap.Uint("task_id", task.ID),

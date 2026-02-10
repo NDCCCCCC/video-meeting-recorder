@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
@@ -141,7 +142,12 @@ func (s *HuaweiConfigService) CreateConfig(req *CreateConfigRequest) (*models.Hu
 		IsActive:         true,
 	}
 
-	// 设置默认后端
+	// 验证后端配置
+	if err := s.validateBackendConfig(config); err != nil {
+		return nil, err
+	}
+
+	// 设置默认值
 	if config.CameraBackend == "" {
 		config.CameraBackend = "dshow"
 	}
@@ -149,10 +155,6 @@ func (s *HuaweiConfigService) CreateConfig(req *CreateConfigRequest) (*models.Hu
 		config.AudioBackend = "dshow"
 	}
 	if config.OutputFormat == "" {
-		config.OutputFormat = "mp4"
-	}
-
-	if req.OutputFormat == "" {
 		config.OutputFormat = "mp4"
 	}
 
@@ -323,4 +325,36 @@ func (s *HuaweiConfigService) GetActiveConfigs() ([]models.HuaweiConfig, error) 
 		return nil, err
 	}
 	return configs, nil
+}
+
+// validateBackendConfig 验证后端配置
+func (s *HuaweiConfigService) validateBackendConfig(config *models.HuaweiConfig) error {
+	validCameraBackends := map[string]bool{
+		"dshow":        true,
+		"v4l2":         true,
+		"avfoundation": true,
+	}
+	validAudioBackends := map[string]bool{
+		"dshow":      true,
+		"alsa":       true,
+		"coreaudio":  true,
+		"wasapi":     true,
+	}
+	validOutputFormats := map[string]bool{
+		"mp4":  true,
+		"mkv":  true,
+		"avi":  true,
+	}
+
+	if config.CameraBackend != "" && !validCameraBackends[config.CameraBackend] {
+		return fmt.Errorf("无效的摄像头后端: %s，支持的后端: dshow, v4l2, avfoundation", config.CameraBackend)
+	}
+	if config.AudioBackend != "" && !validAudioBackends[config.AudioBackend] {
+		return fmt.Errorf("无效的音频后端: %s，支持的后端: dshow, alsa, coreaudio, wasapi", config.AudioBackend)
+	}
+	if config.OutputFormat != "" && !validOutputFormats[config.OutputFormat] {
+		return fmt.Errorf("无效的输出格式: %s，支持的格式: mp4, mkv, avi", config.OutputFormat)
+	}
+
+	return nil
 }
