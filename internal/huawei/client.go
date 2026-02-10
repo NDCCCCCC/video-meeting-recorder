@@ -704,6 +704,12 @@ func (c *HuaweiClient) CallConference(ctx context.Context, conferenceNumber stri
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
+	// 检查是否成功
+	if resp.Success == 1 {
+		c.logger.Info("呼叫会议成功")
+		return nil
+	}
+
 	// 获取错误ID（兼容error和exception字段）
 	errorID := resp.Error.GetErrorID()
 	if errorID == 0 {
