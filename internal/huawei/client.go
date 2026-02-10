@@ -378,8 +378,8 @@ func (c *HuaweiClient) InitializeAndStartKeepAlive(ctx context.Context) error {
 func (c *HuaweiClient) GetSessionID(ctx context.Context) error {
 	c.logger.Debug("获取会话ID")
 
-	// 使用正确的API名称：WEB_RequestSessionIDAPI
-	resp, err := c.httpClient.Post(ctx, "WEB_RequestSessionIDAPI", nil)
+	// 使用正确的API名称：Web_RequestSessionID（注意：首字母大写，没有API后缀）
+	resp, err := c.httpClient.Post(ctx, "Web_RequestSessionID", nil)
 	if err != nil {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
@@ -390,26 +390,24 @@ func (c *HuaweiClient) GetSessionID(ctx context.Context) error {
 		return NewHuaweiError(errorID, fmt.Errorf("获取会话ID失败: 错误码 %d", errorID))
 	}
 
-	// 从data字段解析会话ID
+	// 优先从Cookie中提取SessionID（Postman显示Session ID保存在Cookie中）
 	var sessionID string
-	if resp.Data != "" {
+	for _, cookie := range resp.Cookies {
+		if cookie.Name == "SessionID" {
+			sessionID = cookie.Value
+			c.logger.Debug("从Cookie获取到SessionID", zap.String("session_id", sessionID))
+			break
+		}
+	}
+
+	// 如果Cookie中没有，尝试从data字段解析
+	if sessionID == "" && resp.Data != "" {
 		var sessionResp SessionIDResponse
 		if err := json.Unmarshal([]byte(resp.Data), &sessionResp); err != nil {
 			return fmt.Errorf("解析会话ID响应失败: %w, data: %s", err, resp.Data)
 		}
 		sessionID = sessionResp.AcSessionID
 		c.logger.Debug("从data字段获取到SessionID", zap.String("session_id", sessionID))
-	}
-
-	// 如果data中没有，尝试从Cookie提取
-	if sessionID == "" {
-		for _, cookie := range resp.Cookies {
-			if cookie.Name == "SessionID" {
-				sessionID = cookie.Value
-				c.logger.Debug("从Cookie获取到SessionID", zap.String("session_id", sessionID))
-				break
-			}
-		}
 	}
 
 	if sessionID == "" {
