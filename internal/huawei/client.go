@@ -69,13 +69,24 @@ func (s *Session) SetActive(active bool) {
 type APIResponse struct {
 	Success   int             `json:"success"`
 	Data      string          `json:"data,omitempty"`      // 注意：华为API返回的是JSON字符串，不是对象
-	Exception ExceptionInfo   `json:"exception,omitempty"`
+	Exception ExceptionInfo   `json:"exception,omitempty"` // 某些API使用exception
+	Error     ExceptionInfo   `json:"error,omitempty"`     // 某些API使用error
 	Cookies   []*http.Cookie  `json:"-"`                   // 从响应中提取的Cookies
 }
 
 // ExceptionInfo 异常信息
 type ExceptionInfo struct {
-	ID int `json:"id"`
+	ID     int    `json:"id"`
+	Code   int    `json:"code,omitempty"`   // 错误码
+	Params []int  `json:"params,omitempty"`  // 错误参数
+}
+
+// GetErrorID 获取错误ID（兼容exception和error字段）
+func (e *ExceptionInfo) GetErrorID() int {
+	if e.ID != 0 {
+		return e.ID
+	}
+	return e.Code
 }
 
 // SessionIDResponse 获取会话ID响应（解析data字段后的结构）
@@ -365,34 +376,42 @@ func (c *HuaweiClient) InitializeAndStartKeepAlive(ctx context.Context) error {
 func (c *HuaweiClient) GetSessionID(ctx context.Context) error {
 	c.logger.Debug("获取会话ID")
 
-	resp, err := c.httpClient.Post(ctx, "Web_RequestSessionID", nil)
+	// 使用正确的API名称：WEB_RequestSessionIDAPI
+	resp, err := c.httpClient.Post(ctx, "WEB_RequestSessionIDAPI", nil)
 	if err != nil {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	// 华为API返回格式：{"success":1,"data":"{\"acSessionId\":\"\",\"szTermType\":\"...\"}"}
+	// 华为API返回格式：{"success":1,"data":"{\"acSessionId\":\"sK9SGDKmCSuuXWzOeT0vL8OLPTn9rXX\"}"}
 	if resp.Success != 1 {
-		return NewHuaweiError(resp.Exception.ID, fmt.Errorf("获取会话ID失败: 错误码 %d", resp.Exception.ID))
+		errorID := resp.Exception.GetErrorID()
+		return NewHuaweiError(errorID, fmt.Errorf("获取会话ID失败: 错误码 %d", errorID))
 	}
 
-	// 从Cookie中提取SessionID（华为终端使用Cookie而不是data字段）
+	// 从data字段解析会话ID
 	var sessionID string
-	for _, cookie := range resp.Cookies {
-		if cookie.Name == "SessionID" {
-			sessionID = cookie.Value
-			c.logger.Debug("从Cookie获取到SessionID", zap.String("session_id", sessionID))
-			break
-		}
-	}
-
-	// 如果Cookie中没有，尝试从data字段解析
-	if sessionID == "" && resp.Data != "" {
+	if resp.Data != "" {
 		var sessionResp SessionIDResponse
 		if err := json.Unmarshal([]byte(resp.Data), &sessionResp); err != nil {
 			return fmt.Errorf("解析会话ID响应失败: %w, data: %s", err, resp.Data)
 		}
 		sessionID = sessionResp.AcSessionID
 		c.logger.Debug("从data字段获取到SessionID", zap.String("session_id", sessionID))
+	}
+
+	// 如果data中没有，尝试从Cookie提取
+	if sessionID == "" {
+		for _, cookie := range resp.Cookies {
+			if cookie.Name == "SessionID" {
+				sessionID = cookie.Value
+				c.logger.Debug("从Cookie获取到SessionID", zap.String("session_id", sessionID))
+				break
+			}
+		}
+	}
+
+	if sessionID == "" {
+		return fmt.Errorf("未能获取到会话ID")
 	}
 
 	c.mu.Lock()
@@ -433,9 +452,13 @@ func (c *HuaweiClient) Authenticate(ctx context.Context) error {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	// 华为API返回格式：{"success":1,"data":""} 或 {"success":0,"exception":{"id":3}}
+	// 华为API返回格式：{"success":1,"data":""} 或 {"success":0,"error":{"id":100666995}}
 	if resp.Success != 1 {
-		return NewHuaweiError(resp.Exception.ID, fmt.Errorf("认证失败: 错误码 %d", resp.Exception.ID))
+		errorID := resp.Error.GetErrorID()
+		if errorID == 0 {
+			errorID = resp.Exception.GetErrorID()
+		}
+		return NewHuaweiError(errorID, fmt.Errorf("认证失败: 错误码 %d", errorID))
 	}
 
 	c.logger.Info("用户认证成功")
@@ -456,7 +479,11 @@ func (c *HuaweiClient) ChangeSessionID(ctx context.Context) error {
 	}
 
 	if resp.Success != 1 {
-		return NewHuaweiError(resp.Exception.ID, fmt.Errorf("替换会话ID失败: 错误码 %d", resp.Exception.ID))
+		errorID := resp.Error.GetErrorID()
+		if errorID == 0 {
+			errorID = resp.Exception.GetErrorID()
+		}
+		return NewHuaweiError(errorID, fmt.Errorf("替换会话ID失败: 错误码 %d", errorID))
 	}
 
 	c.logger.Debug("替换会话ID成功")
