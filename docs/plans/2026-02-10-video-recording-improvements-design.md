@@ -9,7 +9,7 @@
 - [x] **Phase 1**: 数据库迁移 + MKV 录制 (已完成)
 - [x] **Phase 2**: 转换服务 (已完成)
 - [x] **Phase 3**: HLS 预览服务 (已完成)
-- [ ] **Phase 4**: 前端预览组件 (进行中)
+- [x] **Phase 4**: 前端预览组件 (已完成)
 
 ## 概述
 
@@ -519,6 +519,35 @@ data/hls/
         ├── index.m3u8
         └── segment_*.ts
 ```
+
+## 14. Phase 4 实施记录 ✅
+
+**完成日期**: 2026-02-10
+
+### 已修改文件
+
+1. **`frontend/src/api/task.ts`**
+   - 添加 `getTaskPreview` 函数获取预览信息
+   - 添加 `getHLSStreamUrl` 函数构建流文件 URL
+
+2. **`frontend/src/components/HLSPreview.tsx`** (新建)
+   - 创建 `HLSPreview` 组件
+   - 使用原生 Media Source Extensions API 播放 HLS
+   - 支持错误处理和刷新功能
+   - 模态对话框显示预览播放器
+
+3. **`frontend/src/pages/tasks/index.tsx`**
+   - 导入 `HLSPreview` 组件
+   - 在操作列添加预览按钮
+   - 仅在任务状态为 `recording` 时显示预览按钮
+
+### 功能特性
+
+- 原生 HLS 播放（无需外部库）
+- 仅录制中任务可预览
+- 权限验证（仅任务创建者）
+- 错误处理和重试
+- 预览延迟约 3-10 秒
 
 ## 附录：相关文件
 
