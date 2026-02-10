@@ -34,28 +34,39 @@ func main() {
 	fmt.Printf("用户名: %s\n\n", username)
 
 	// 创建HTTP客户端（跳过TLS验证，使用正确的密码套件）
+	// 华为终端需要 TLS 1.0-1.2 版本范围和特定的密码套件
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
-				MinVersion:         tls.VersionTLS12,
-				MaxVersion:         tls.VersionTLS12,
+				MinVersion:         tls.VersionTLS10, // TLS 1.0
+				MaxVersion:         tls.VersionTLS12, // 限制最大版本为 TLS 1.2
+				// 华为终端支持的密码套件（尽可能多地包含以兼容老设备）
 				CipherSuites: []uint16{
 					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 					tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 					tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
 					tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+					tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
 					tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+					tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+					tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+				},
+				// 使用支持所有密码套件的曲线偏好
+				CurvePreferences: []tls.CurveID{
+					tls.CurveP256,
+					tls.CurveP384,
+					tls.CurveP521,
 				},
 			},
 		},
 	}
 
 	// 步骤1: 获取会话ID
-	fmt.Println("步骤1: 获取会话ID (WEB_RequestSessionIDAPI)")
-	sessionURL := baseURL + "/action.cgi?ActionID=WEB_RequestSessionIDAPI"
+	fmt.Println("步骤1: 获取会话ID (Web_RequestSessionID)")
+	sessionURL := baseURL + "/action.cgi?ActionID=Web_RequestSessionID"
 	req1, _ := http.NewRequest("POST", sessionURL, nil)
 	req1.Header.Set("userType", "web")
 
@@ -112,9 +123,11 @@ func main() {
 	fmt.Println("步骤2: 用户认证 (WEB_RequestCertificateAPI)")
 	authURL := baseURL + "/action.cgi?ActionID=WEB_RequestCertificateAPI"
 
+	// 注意：华为API需要小写的user和password字段名
 	authPayload := fmt.Sprintf(`{"user":"%s","password":"%s"}`, username, password)
 	req2, _ := http.NewRequest("POST", authURL, strings.NewReader(authPayload))
 	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 	req2.Header.Set("userType", "web")
 	req2.Header.Set("Cookie", fmt.Sprintf("SessionID=%s", sessionID))
 
