@@ -49,6 +49,7 @@ type MinimalApp struct {
 	huaweiManager        *huaweiapi.Manager
 	huaweiConnector      *video_recording.HuaweiConferenceConnector
 	videoTaskService     *services.VideoRecordingTaskService
+	conversionService    services.ConversionService
 }
 
 // Handlers 处理器集合
@@ -325,11 +326,15 @@ func (a *MinimalApp) initHandlers() error {
 	notificationHandler := handlers.NewNotificationHandler(notificationService)
 	notificationHandler.SetLogger(a.logger)
 
+	// 转换服务
+	a.conversionService = services.NewFFmpegConversionService(a.db, a.logger, a.config)
+
 	// 华为管理器（使用数据库配置动态创建客户端）
 	dbAdapter := &huaweiDBAdapter{db: a.db}
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
 	a.huaweiConnector = video_recording.NewHuaweiConferenceConnector(a.db, a.huaweiManager, a.logger)
 
+	// 创建handlers（先创建不设置conversion service）
 	a.handlers = &Handlers{
 		Auth:         handlers.NewAuthHandler(authService, a.logger),
 		User:         handlers.NewUserHandler(userService, a.logger),
@@ -342,6 +347,9 @@ func (a *MinimalApp) initHandlers() error {
 		Audit:        auditHandler,
 		Notification: notificationHandler,
 	}
+
+	// 设置转换服务到 VideoTask handler
+	a.handlers.VideoTask.SetConversionService(a.conversionService)
 
 	return nil
 }
@@ -406,15 +414,18 @@ func (a *MinimalApp) registerRoutes() error {
 	// 录制任务管理 (使用 /recordings 路径符合API文档规范)
 	recordings := api.Group("/recordings")
 	{
-		recordings.GET("", a.handlers.VideoTask.ListTasks)                   // 获取任务列表
-		recordings.GET("/:id", a.handlers.VideoTask.GetTask)                 // 获取任务详情
-		recordings.POST("", a.handlers.VideoTask.CreateTask)                 // 创建任务
-		recordings.PUT("/:id", a.handlers.VideoTask.UpdateTask)              // 更新任务
-		recordings.DELETE("/:id", a.handlers.VideoTask.DeleteTask)           // 删除任务
-		recordings.POST("/:id/start", a.handlers.VideoTask.StartTask)        // 启动任务
-		recordings.POST("/:id/stop", a.handlers.VideoTask.StopTask)          // 停止任务
-		recordings.POST("/:id/cancel", a.handlers.VideoTask.CancelTask)      // 取消任务
-		recordings.POST("/:id/retry", a.handlers.VideoTask.RetryTask)        // 重试任务
+		recordings.GET("", a.handlers.VideoTask.ListTasks)                      // 获取任务列表
+		recordings.GET("/:id", a.handlers.VideoTask.GetTask)                    // 获取任务详情
+		recordings.POST("", a.handlers.VideoTask.CreateTask)                    // 创建任务
+		recordings.PUT("/:id", a.handlers.VideoTask.UpdateTask)                 // 更新任务
+		recordings.DELETE("/:id", a.handlers.VideoTask.DeleteTask)              // 删除任务
+		recordings.POST("/:id/start", a.handlers.VideoTask.StartTask)           // 启动任务
+		recordings.POST("/:id/stop", a.handlers.VideoTask.StopTask)             // 停止任务
+		recordings.POST("/:id/cancel", a.handlers.VideoTask.CancelTask)         // 取消任务
+		recordings.POST("/:id/retry", a.handlers.VideoTask.RetryTask)           // 重试任务
+		// 转换相关
+		recordings.GET("/:id/conversion-status", a.handlers.VideoTask.GetConversionStatus)  // 获取转换状态
+		recordings.POST("/:id/conversion-retry", a.handlers.VideoTask.RetryConversion)     // 重试转换
 	}
 
 	// 华为配置管理
@@ -499,7 +510,7 @@ func (a *MinimalApp) registerServices() error {
 	// 创建任务调度器
 	// 注意：这里使用一个适配器将VideoRecordingTaskService转换为TaskServiceInterface
 	taskServiceAdapter := &taskServiceAdapter{db: a.db, logger: a.logger}
-	a.scheduler = scheduler.NewVideoSimpleScheduler(taskServiceAdapter, a.coordinator, a.huaweiConnector, a.logger, a.config)
+	a.scheduler = scheduler.NewVideoSimpleScheduler(taskServiceAdapter, a.coordinator, a.huaweiConnector, a.conversionService, a.logger, a.config)
 	a.logger.Info("Scheduler created")
 
 	// 启动调度器
@@ -511,6 +522,14 @@ func (a *MinimalApp) registerServices() error {
 	// 设置调度器到任务服务
 	if a.videoTaskService != nil {
 		a.videoTaskService.SetScheduler(a.scheduler)
+	}
+
+	// 启动转换服务
+	if a.conversionService != nil {
+		if err := a.conversionService.Start(); err != nil {
+			return fmt.Errorf("failed to start conversion service: %w", err)
+		}
+		a.logger.Info("Conversion service started successfully")
 	}
 
 	a.logger.Info("Services registered successfully")
@@ -656,6 +675,12 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 		if err := a.huaweiManager.Close(ctx); err != nil {
 			a.logger.Error("Failed to close Huawei manager", zap.Error(err))
 		}
+	}
+
+	// 停止转换服务
+	if a.conversionService != nil {
+		a.logger.Info("Stopping conversion service...")
+		a.conversionService.Stop()
 	}
 
 	// 停止所有服务

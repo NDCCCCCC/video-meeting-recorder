@@ -10,8 +10,9 @@ import (
 
 // VideoRecordingTaskHandler 视频录制任务处理器
 type VideoRecordingTaskHandler struct {
-	taskService *services.VideoRecordingTaskService
-	logger      *zap.Logger
+	taskService      *services.VideoRecordingTaskService
+	conversionService services.ConversionService
+	logger           *zap.Logger
 }
 
 // NewVideoRecordingTaskHandler 创建视频录制任务处理器
@@ -20,6 +21,11 @@ func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskServic
 		taskService: taskService,
 		logger:      logger,
 	}
+}
+
+// SetConversionService 设置转换服务
+func (h *VideoRecordingTaskHandler) SetConversionService(conversionService services.ConversionService) {
+	h.conversionService = conversionService
 }
 
 // ListTasks 获取录制任务列表
@@ -274,4 +280,65 @@ func (h *VideoRecordingTaskHandler) RetryTask(c *gin.Context) {
 
 	h.logger.Info("Video recording task retried", zap.Uint("task_id", id))
 	response.GinSuccess(c, task)
+}
+
+// GetConversionStatus 获取转换状态
+// @Summary 获取转换状态
+// @Description 获取任务的MKV到MP4转换状态
+// @Tags 录制任务
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Success 200 {object} response.Response{data=map[string]interface{}}
+// @Router /api/v1/recordings/{id}/conversion-status [get]
+func (h *VideoRecordingTaskHandler) GetConversionStatus(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的任务ID")
+		return
+	}
+
+	if h.conversionService == nil {
+		response.GinError(c, response.CodeInternalError, "转换服务未启用")
+		return
+	}
+
+	status, err := h.conversionService.GetConversionStatus(id)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "任务不存在")
+		return
+	}
+
+	response.GinSuccess(c, gin.H{
+		"task_id": id,
+		"status":  status,
+	})
+}
+
+// RetryConversion 重试转换任务
+// @Summary 重试转换任务
+// @Description 重试失败的MKV到MP4转换任务
+// @Tags 录制任务
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Success 200 {object} response.Response
+// @Router /api/v1/recordings/{id}/conversion-retry [post]
+func (h *VideoRecordingTaskHandler) RetryConversion(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的任务ID")
+		return
+	}
+
+	if h.conversionService == nil {
+		response.GinError(c, response.CodeInternalError, "转换服务未启用")
+		return
+	}
+
+	if err := h.conversionService.RetryConversion(id); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		return
+	}
+
+	h.logger.Info("Conversion task retried", zap.Uint("task_id", id))
+	response.GinSuccess(c, gin.H{"message": "转换任务已重新提交"})
 }
