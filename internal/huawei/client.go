@@ -191,6 +191,15 @@ func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipV
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: insecureSkipVerify,
 					MinVersion:         minTLSVersion,
+					// 华为终端使用的密码套件
+					CipherSuites: []uint16{
+						tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+						tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+						tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+						tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+						tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+						tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+					},
 				},
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 10,
@@ -245,6 +254,8 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	// 华为API需要userType header
+	req.Header.Set("userType", "web")
 	for _, h := range headers {
 		for k, v := range h {
 			req.Header.Set(k, v)
