@@ -19,10 +19,19 @@ type VideoRecordingTask struct {
 	HuaweiConfig       *HuaweiConfig             `gorm:"foreignKey:HuaweiConfigID" json:"huawei_config,omitempty"`
 	RTSPStreamURL      string                    `gorm:"type:varchar(500)" json:"rtsp_stream_url"` // RTSP流地址（可选，与USB设备同级）
 	Status             VideoRecordingTaskStatus  `gorm:"type:varchar(20);index" json:"status"`
-	RecordingFile      string                    `gorm:"type:varchar(500)" json:"recording_file"`
+	RecordingFile      string                    `gorm:"type:varchar(500)" json:"recording_file"` // 兼容旧字段，指向MKV文件
 	RecordingDuration  int                       `json:"recording_duration"` // 秒
 	ErrorMsg           string                    `gorm:"type:text" json:"error_msg,omitempty"`
-	CreatedBy          uint                      `gorm:"not null" json:"created_by"`
+	// MKV录制和MP4转换相关字段
+	MKVFilePath            string           `gorm:"type:varchar(500)" json:"mkv_file_path"`             // MKV文件路径
+	HLSPreviewPath         string           `gorm:"type:varchar(500)" json:"hls_preview_path"`         // HLS预览路径
+	MP4FilePath            string           `gorm:"type:varchar(500)" json:"mp4_file_path"`            // MP4文件路径（转换后）
+	ConversionStatus       ConversionStatus `gorm:"type:varchar(20);default:'pending'" json:"conversion_status"` // 转换状态
+	ConversionErrorMsg     string           `gorm:"type:text" json:"conversion_error_msg,omitempty"`   // 转换错误信息
+	ConversionStartedAt    *time.Time       `json:"conversion_started_at,omitempty"`                  // 转换开始时间
+	ConversionCompletedAt  *time.Time       `json:"conversion_completed_at,omitempty"`                // 转换完成时间
+	ConversionRetryCount   int              `gorm:"default:0" json:"conversion_retry_count"`           // 转换重试次数
+	CreatedBy              uint             `gorm:"not null" json:"created_by"`
 	Creator            *User                     `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
 	ConferenceRecord   *ConferenceRecord         `gorm:"foreignKey:ConferenceRecordID" json:"conference_record,omitempty"`
 	ConferenceRecordID *uint                     `json:"conference_record_id,omitempty"`
@@ -38,6 +47,16 @@ const (
 	VideoStatusCompleted  VideoRecordingTaskStatus = "completed"   // 已完成
 	VideoStatusFailed     VideoRecordingTaskStatus = "failed"      // 执行失败
 	VideoStatusCancelled  VideoRecordingTaskStatus = "cancelled"   // 已取消
+)
+
+// ConversionStatus 转换状态枚举
+type ConversionStatus string
+
+const (
+	ConversionStatusPending    ConversionStatus = "pending"    // 待转换
+	ConversionStatusProcessing ConversionStatus = "processing" // 转换中
+	ConversionStatusCompleted  ConversionStatus = "completed"  // 转换完成
+	ConversionStatusFailed     ConversionStatus = "failed"     // 转换失败
 )
 
 // GetTriggerTime 返回实际触发时间

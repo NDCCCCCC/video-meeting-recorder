@@ -2,7 +2,14 @@
 
 **日期**: 2026-02-10
 **作者**: Claude Code
-**状态**: 已批准
+**状态**: 实施中
+
+## 实施状态
+
+- [x] **Phase 1**: 数据库迁移 + MKV 录制 (已完成)
+- [ ] **Phase 2**: 转换服务 (进行中)
+- [ ] **Phase 3**: HLS 预览服务
+- [ ] **Phase 4**: 前端预览组件
 
 ## 概述
 
@@ -389,10 +396,42 @@ storage:
 
 ## 10. 实施顺序
 
-1. **Phase 1**: 数据库迁移 + MKV 录制
-2. **Phase 2**: 转换服务
+1. **Phase 1**: 数据库迁移 + MKV 录制 ✅
+2. **Phase 2**: 转换服务 (进行中)
 3. **Phase 3**: HLS 预览服务
 4. **Phase 4**: 前端预览组件
+
+## 11. Phase 1 实施记录 ✅
+
+**完成日期**: 2026-02-10
+
+### 已修改文件
+
+1. **`internal/models/video_recording_task.go`**
+   - 添加 `ConversionStatus` 枚举类型
+   - 添加新字段: `MKVFilePath`, `HLSPreviewPath`, `MP4FilePath`
+   - 添加转换追踪字段: `ConversionStatus`, `ConversionErrorMsg`, `ConversionStartedAt`, `ConversionCompletedAt`, `ConversionRetryCount`
+
+2. **`internal/recorder/coordinator.go`**
+   - 输出格式从 `mp4` 改为 `mkv`
+   - 更新文件命名格式: `{任务名称}_{会议号}_{时间戳}.mkv`
+   - 添加 `sanitizeFilename` 函数
+   - 同时更新 `RecordingFile` 和 `MKVFilePath` 字段
+
+### 数据库变更
+
+GORM AutoMigrate 将在下次启动时自动添加以下字段：
+
+```sql
+ALTER TABLE video_recording_tasks ADD COLUMN mkv_file_path TEXT;
+ALTER TABLE video_recording_tasks ADD COLUMN hls_preview_path TEXT;
+ALTER TABLE video_recording_tasks ADD COLUMN mp4_file_path TEXT;
+ALTER TABLE video_recording_tasks ADD COLUMN conversion_status TEXT DEFAULT 'pending';
+ALTER TABLE video_recording_tasks ADD COLUMN conversion_error_msg TEXT;
+ALTER TABLE video_recording_tasks ADD COLUMN conversion_started_at TIMESTAMP;
+ALTER TABLE video_recording_tasks ADD COLUMN conversion_completed_at TIMESTAMP;
+ALTER TABLE video_recording_tasks ADD COLUMN conversion_retry_count INTEGER DEFAULT 0;
+```
 
 ## 附录：相关文件
 
