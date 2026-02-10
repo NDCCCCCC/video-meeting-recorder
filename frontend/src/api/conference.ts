@@ -103,6 +103,19 @@ export async function deleteConference(
   })
 }
 
+// 批量删除会议
+export async function batchDeleteConferences(
+  ids: number[]
+): Promise<ApiResponse<{ deleted_ids: number[]; failed_count: number; errors: string[] }>> {
+  return request<ApiResponse<{ deleted_ids: number[]; failed_count: number; errors: string[] }>>(
+    '/api/v1/conferences/batch-delete',
+    {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }
+  )
+}
+
 // 根据状态获取会议列表
 export async function getConferencesByStatus(
   status: string

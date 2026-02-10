@@ -264,6 +264,30 @@ func (s *ConferenceRecordService) DeleteConference(id uint) error {
 	return nil
 }
 
+// BatchDeleteConferencesRequest 批量删除会议请求
+type BatchDeleteConferencesRequest struct {
+	IDs []uint `json:"ids" binding:"required,min=1"`
+}
+
+// BatchDeleteConferences 批量删除会议
+func (s *ConferenceRecordService) BatchDeleteConferences(req *BatchDeleteConferencesRequest) ([]uint, []error) {
+	var deletedIDs []uint
+	var errors []error
+
+	for _, id := range req.IDs {
+		if err := s.DeleteConference(id); err != nil {
+			s.logger.Warn("Failed to delete conference",
+				zap.Uint("conference_id", id),
+				zap.Error(err))
+			errors = append(errors, err)
+		} else {
+			deletedIDs = append(deletedIDs, id)
+		}
+	}
+
+	return deletedIDs, errors
+}
+
 // canTransitionStatus 检查状态转换是否合法
 func canTransitionStatus(current, new models.ConferenceStatus) bool {
 	validTransitions := map[models.ConferenceStatus][]models.ConferenceStatus{
