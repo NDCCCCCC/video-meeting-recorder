@@ -296,6 +296,16 @@ func (c *SimpleRecordingCoordinator) buildInputArgs(input RecordingInput) ([]str
 
 // buildUSBVideoArgs 构建USB视频输入参数
 func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]string, error) {
+	validBackends := map[string]bool{
+		"dshow":        true,
+		"v4l2":         true,
+		"avfoundation":  true,
+	}
+
+	if !validBackends[input.CameraBackend] {
+		return nil, fmt.Errorf("不支持的摄像头后端: %s", input.CameraBackend)
+	}
+
 	deviceParam := input.CameraDevice
 	if input.CameraBackend == "dshow" {
 		deviceParam = fmt.Sprintf("video=%s", input.CameraDevice)
@@ -311,6 +321,17 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 
 // buildUSBAudioArgs 构建USB音频输入参数
 func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]string, error) {
+	validBackends := map[string]bool{
+		"dshow":      true,
+		"alsa":       true,
+		"coreaudio":  true,
+		"wasapi":     true,
+	}
+
+	if !validBackends[input.AudioBackend] {
+		return nil, fmt.Errorf("不支持的音频后端: %s", input.AudioBackend)
+	}
+
 	deviceParam := input.AudioDevice
 	if input.AudioBackend == "dshow" {
 		deviceParam = fmt.Sprintf("audio=%s", input.AudioDevice)
@@ -331,6 +352,39 @@ func (c *SimpleRecordingCoordinator) buildRTSPArgs(input RecordingInput) ([]stri
 func (c *SimpleRecordingCoordinator) HealthCheck() error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	// 检查是否有僵尸进程（状态为running但进程已退出）
+	now := time.Now()
+	zombieCount := 0
+	longRunningCount := 0
+
+	for taskID, process := range c.processes {
+		if process.Status == "running" {
+			// 检查进程是否还在运行（通过检查进程状态）
+			if process.Cmd.Process != nil {
+				// 检查进程是否已退出
+				if process.Cmd.ProcessState != nil && process.Cmd.ProcessState.Exited() {
+					c.logger.Warn("发现僵尸录制进程",
+						zap.Uint("task_id", taskID),
+					)
+					zombieCount++
+				}
+			}
+			// 检查是否有运行时间过长的任务（超过24小时）
+			if now.Sub(process.StartTime) > 24*time.Hour {
+				c.logger.Warn("发现运行时间过长的录制进程",
+					zap.Uint("task_id", taskID),
+					zap.Duration("runtime", now.Sub(process.StartTime)),
+				)
+				longRunningCount++
+			}
+		}
+	}
+
+	if zombieCount > 0 {
+		return fmt.Errorf("发现%d个僵尸录制进程", zombieCount)
+	}
+
 	return nil
 }
 
