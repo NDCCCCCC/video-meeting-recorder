@@ -540,6 +540,19 @@ func (c *HuaweiClient) ChangeSessionID(ctx context.Context) error {
 		return NewHuaweiError(errorID, fmt.Errorf("替换会话ID失败: 错误码 %d", errorID))
 	}
 
+	// 解析新的会话ID并更新
+	if resp.Data != "" {
+		var sessionResp SessionIDResponse
+		if err := json.Unmarshal([]byte(resp.Data), &sessionResp); err == nil {
+			if sessionResp.AcSessionID != "" {
+				c.mu.Lock()
+				c.session.ID = sessionResp.AcSessionID
+				c.mu.Unlock()
+				c.logger.Debug("更新会话ID成功", zap.String("new_session_id", sessionResp.AcSessionID))
+			}
+		}
+	}
+
 	c.logger.Debug("替换会话ID成功")
 	return nil
 }
