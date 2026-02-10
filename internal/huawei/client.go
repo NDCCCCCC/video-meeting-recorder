@@ -65,22 +65,28 @@ func (s *Session) SetActive(active bool) {
 	s.IsActive = active
 }
 
-// APIResponse 统一API响应格式
+// APIResponse 统一API响应格式（华为终端实际返回格式）
 type APIResponse struct {
-	Code int             `json:"code"`
-	Msg  string          `json:"msg"`
-	Data json.RawMessage `json:"data,omitempty"`
+	Success   int             `json:"success"`
+	Data      string          `json:"data,omitempty"`      // 注意：华为API返回的是JSON字符串，不是对象
+	Exception ExceptionInfo   `json:"exception,omitempty"`
 }
 
-// SessionIDResponse 获取会话ID响应
+// ExceptionInfo 异常信息
+type ExceptionInfo struct {
+	ID int `json:"id"`
+}
+
+// SessionIDResponse 获取会话ID响应（解析data字段后的结构）
 type SessionIDResponse struct {
-	SessionID string `json:"session_id"`
+	AcSessionID string `json:"acSessionId"`  // 注意：华为API使用驼峰命名
+	SzTermType  string `json:"szTermType"`
 }
 
-// AuthenticateResponse 认证响应
+// AuthenticateResponse 认证响应（解析data字段后的结构）
 type AuthenticateResponse struct {
-	Result int    `json:"result"`
-	Msg    string `json:"msg"`
+	AcSessionID string `json:"acSessionId"`
+	Result      int    `json:"result"`
 }
 
 // CallSiteRequest 呼叫会议请求
@@ -360,27 +366,31 @@ func (c *HuaweiClient) GetSessionID(ctx context.Context) error {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	if resp.Code != 0 {
-		return NewHuaweiError(resp.Code, fmt.Errorf("获取会话ID失败: %s", resp.Msg))
+	// 华为API返回格式：{"success":1,"data":"{\"acSessionId\":\"\",\"szTermType\":\"...\"}"}
+	if resp.Success != 1 {
+		return NewHuaweiError(resp.Exception.ID, fmt.Errorf("获取会话ID失败: 错误码 %d", resp.Exception.ID))
 	}
 
-	// 解析响应
+	// 解析data字段（它是一个JSON字符串）
 	var sessionResp SessionIDResponse
-	if resp.Data != nil {
-		if err := json.Unmarshal(resp.Data, &sessionResp); err != nil {
-			return fmt.Errorf("解析会话ID响应失败: %w", err)
+	if resp.Data != "" {
+		if err := json.Unmarshal([]byte(resp.Data), &sessionResp); err != nil {
+			return fmt.Errorf("解析会话ID响应失败: %w, data: %s", err, resp.Data)
 		}
 	}
 
 	c.mu.Lock()
 	c.session = &Session{
-		ID:        sessionResp.SessionID,
+		ID:        sessionResp.AcSessionID, // 使用正确的字段名
 		ExpiresAt: time.Now().Add(c.config.SessionTimeout),
 		IsActive:  true,
 	}
 	c.mu.Unlock()
 
-	c.logger.Debug("获取会话ID成功", zap.String("session_id", sessionResp.SessionID))
+	c.logger.Debug("获取会话ID成功",
+		zap.String("session_id", sessionResp.AcSessionID),
+		zap.String("term_type", sessionResp.SzTermType),
+	)
 	return nil
 }
 
@@ -390,13 +400,16 @@ func (c *HuaweiClient) Authenticate(ctx context.Context) error {
 		zap.String("username", c.config.Username),
 	)
 
+	// 华为API需要使用大写的User和Password
 	reqBody := map[string]string{
-		"user":     c.config.Username,
-		"password": c.config.Password,
+		"User":     c.config.Username,
+		"Password": c.config.Password,
 	}
 
-	headers := map[string]string{
-		"X-Session-Id": c.getSessionID(),
+	// 如果有会话ID，添加到请求中
+	headers := make(map[string]string)
+	if sessionID := c.getSessionID(); sessionID != "" {
+		headers["X-Session-Id"] = sessionID
 	}
 
 	resp, err := c.httpClient.Post(ctx, "WEB_RequestCertificateAPI", reqBody, headers)
@@ -404,20 +417,9 @@ func (c *HuaweiClient) Authenticate(ctx context.Context) error {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	if resp.Code != 0 {
-		return NewHuaweiError(resp.Code, fmt.Errorf("认证失败: %s", resp.Msg))
-	}
-
-	// 解析响应
-	var authResp AuthenticateResponse
-	if resp.Data != nil {
-		if err := json.Unmarshal(resp.Data, &authResp); err != nil {
-			return fmt.Errorf("解析认证响应失败: %w", err)
-		}
-	}
-
-	if authResp.Result != 0 {
-		return NewHuaweiError(authResp.Result, fmt.Errorf("认证失败: %s", authResp.Msg))
+	// 华为API返回格式：{"success":1,"data":"{\"acSessionId\":\"...\"}"} 或 {"success":0,"exception":{"id":3}}
+	if resp.Success != 1 {
+		return NewHuaweiError(resp.Exception.ID, fmt.Errorf("认证失败: 错误码 %d", resp.Exception.ID))
 	}
 
 	c.logger.Info("用户认证成功")
@@ -437,8 +439,8 @@ func (c *HuaweiClient) ChangeSessionID(ctx context.Context) error {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	if resp.Code != 0 {
-		return NewHuaweiError(resp.Code, fmt.Errorf("替换会话ID失败: %s", resp.Msg))
+	if resp.Success != 1 {
+		return NewHuaweiError(resp.Exception.ID, fmt.Errorf("替换会话ID失败: 错误码 %d", resp.Exception.ID))
 	}
 
 	c.logger.Debug("替换会话ID成功")
@@ -551,19 +553,20 @@ func (c *HuaweiClient) CallConference(ctx context.Context, conferenceNumber stri
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	// 检查特殊错误码（正常状态）
-	if resp.Code == 100665897 {
+	// 华为API: success=1表示成功，success=0表示失败
+	if resp.Success == 1 {
+		c.logger.Info("呼叫会议成功")
+		return nil
+	}
+
+	// 检查特殊错误码（可能仍然是正常状态）
+	if resp.Exception.ID == 100665897 {
 		// 呼叫请求已发出，正在等待响应（正常状态）
 		c.logger.Info("呼叫请求已发出，正在等待响应")
 		return nil
 	}
 
-	if resp.Code != 0 {
-		return NewHuaweiError(resp.Code, fmt.Errorf("呼叫会议失败: %s", resp.Msg))
-	}
-
-	c.logger.Info("呼叫会议成功")
-	return nil
+	return NewHuaweiError(resp.Exception.ID, fmt.Errorf("呼叫会议失败: 错误码 %d", resp.Exception.ID))
 }
 
 // HangupCall 挂断呼叫
@@ -587,19 +590,20 @@ func (c *HuaweiClient) HangupCall(ctx context.Context) error {
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	// 检查特殊错误码（正常状态）
-	if resp.Code == 100666794 || resp.Code == 100666777 || resp.Code == 100666767 {
-		// 呼叫已正常结束、没有进行中的呼叫、未进入会议（正常状态）
-		c.logger.Info("挂断呼叫成功", zap.Int("code", resp.Code))
+	// 华为API: success=1表示成功
+	if resp.Success == 1 {
+		c.logger.Info("挂断呼叫成功")
 		return nil
 	}
 
-	if resp.Code != 0 {
-		return NewHuaweiError(resp.Code, fmt.Errorf("挂断呼叫失败: %s", resp.Msg))
+	// 检查特殊错误码（可能仍是正常状态）
+	if resp.Exception.ID == 100666794 || resp.Exception.ID == 100666777 || resp.Exception.ID == 100666767 {
+		// 呼叫已正常结束、没有进行中的呼叫、未进入会议（正常状态）
+		c.logger.Info("挂断呼叫成功（特殊状态）", zap.Int("code", resp.Exception.ID))
+		return nil
 	}
 
-	c.logger.Info("挂断呼叫成功")
-	return nil
+	return NewHuaweiError(resp.Exception.ID, fmt.Errorf("挂断呼叫失败: 错误码 %d", resp.Exception.ID))
 }
 
 // GetConferenceInfo 获取会议信息
@@ -617,17 +621,17 @@ func (c *HuaweiClient) GetConferenceInfo(ctx context.Context) (*ConferenceInfo, 
 		return nil, NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	if resp.Code != 0 {
-		return nil, NewHuaweiError(resp.Code, fmt.Errorf("获取会议信息失败: %s", resp.Msg))
+	if resp.Success != 1 {
+		return nil, NewHuaweiError(resp.Exception.ID, fmt.Errorf("获取会议信息失败: 错误码 %d", resp.Exception.ID))
 	}
 
-	// 解析响应
+	// 解析响应 - data字段是JSON字符串，需要先解析
 	var info ConferenceInfo
-	if resp.Data != nil {
+	if resp.Data != "" {
 		// 需要添加适当的延迟处理
 		time.Sleep(500 * time.Millisecond)
-		if err := json.Unmarshal(resp.Data, &info); err != nil {
-			return nil, fmt.Errorf("解析会议信息失败: %w", err)
+		if err := json.Unmarshal([]byte(resp.Data), &info); err != nil {
+			return nil, fmt.Errorf("解析会议信息失败: %w, data: %s", err, resp.Data)
 		}
 	}
 
