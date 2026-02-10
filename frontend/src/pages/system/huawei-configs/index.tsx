@@ -105,6 +105,7 @@ export default function HuaweiConfigManagement() {
         usb_camera_name: config.usb_camera_name,
         usb_camera_device: config.usb_camera_device,
         usb_camera_path: config.usb_camera_path,
+        usb_audio_name: config.usb_audio_name,
         usb_audio_device: config.usb_audio_device,
         usb_audio_path: config.usb_audio_path,
         record_directory: config.record_directory,
@@ -140,6 +141,7 @@ export default function HuaweiConfigManagement() {
           usb_camera_name: values.usb_camera_name,
           usb_camera_device: values.usb_camera_device,
           usb_camera_path: values.usb_camera_path,
+          usb_audio_name: values.usb_audio_name,
           usb_audio_device: values.usb_audio_device,
           usb_audio_path: values.usb_audio_path,
           record_directory: values.record_directory,
@@ -160,6 +162,7 @@ export default function HuaweiConfigManagement() {
           usb_camera_name: values.usb_camera_name,
           usb_camera_device: values.usb_camera_device,
           usb_camera_path: values.usb_camera_path,
+          usb_audio_name: values.usb_audio_name,
           usb_audio_device: values.usb_audio_device,
           usb_audio_path: values.usb_audio_path,
           record_directory: values.record_directory,
@@ -244,7 +247,8 @@ export default function HuaweiConfigManagement() {
     }
 
     form.setFieldsValue({
-      usb_audio_device: deviceIndex,
+      usb_audio_name: device.name,      // 实际设备名称
+      usb_audio_device: deviceIndex,     // 设备索引
       usb_audio_path: device.backend === 'alsa' ? `/proc/asound/${device.device_id}` : device.device_id,
     })
     message.info(`已选择音频设备: ${device.name}`)

@@ -28,6 +28,7 @@ export interface HuaweiConfig {
   usb_camera_name: string | null
   usb_camera_device: string | null
   usb_camera_path: string | null
+  usb_audio_name: string | null
   usb_audio_device: string | null
   usb_audio_path: string | null
   record_directory: string | null
@@ -68,6 +69,7 @@ export interface CreateHuaweiConfigRequest {
   usb_camera_name?: string
   usb_camera_device?: string
   usb_camera_path?: string
+  usb_audio_name?: string
   usb_audio_device?: string
   usb_audio_path?: string
   record_directory?: string
@@ -86,6 +88,7 @@ export interface UpdateHuaweiConfigRequest {
   usb_camera_name?: string
   usb_camera_device?: string
   usb_camera_path?: string
+  usb_audio_name?: string
   usb_audio_device?: string
   usb_audio_path?: string
   record_directory?: string
