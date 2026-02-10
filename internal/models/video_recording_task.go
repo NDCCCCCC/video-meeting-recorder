@@ -76,7 +76,7 @@ func (t *VideoRecordingTask) IsValid() error {
 // CanTransitionTo 检查状态转换是否合法
 func (t *VideoRecordingTask) CanTransitionTo(newStatus VideoRecordingTaskStatus) bool {
 	validTransitions := map[VideoRecordingTaskStatus][]VideoRecordingTaskStatus{
-		VideoStatusPending:    {VideoStatusConnecting, VideoStatusCancelled},
+		VideoStatusPending:    {VideoStatusConnecting, VideoStatusFailed, VideoStatusCancelled}, // pending可直接转为failed（如触发时间已过期）
 		VideoStatusConnecting: {VideoStatusRecording, VideoStatusFailed, VideoStatusCancelled},
 		VideoStatusRecording:  {VideoStatusCompleted, VideoStatusFailed, VideoStatusCancelled},
 		VideoStatusCompleted:  {}, // 终态
