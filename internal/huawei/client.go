@@ -277,6 +277,10 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 	for _, h := range headers {
 		for k, v := range h {
 			req.Header.Set(k, v)
+			// 调试：记录设置的头部
+			if k == "Cookie" {
+				c.logger.Debug("设置Cookie头部", zap.String("cookie", v))
+			}
 		}
 	}
 
@@ -435,6 +439,10 @@ func (c *HuaweiClient) Authenticate(ctx context.Context) error {
 		zap.String("username", c.config.Username),
 	)
 
+	// 检查是否有会话ID
+	currentSessionID := c.getSessionID()
+	c.logger.Debug("当前会话ID", zap.String("session_id", currentSessionID))
+
 	// 华为API需要使用小写的user和password
 	reqBody := map[string]string{
 		"user":     c.config.Username,
@@ -443,8 +451,11 @@ func (c *HuaweiClient) Authenticate(ctx context.Context) error {
 
 	// 使用Cookie头部传递SessionID
 	headers := make(map[string]string)
-	if sessionID := c.getSessionID(); sessionID != "" {
-		headers["Cookie"] = fmt.Sprintf("SessionID=%s", sessionID)
+	if currentSessionID != "" {
+		headers["Cookie"] = fmt.Sprintf("SessionID=%s", currentSessionID)
+		c.logger.Debug("设置Cookie头部", zap.String("cookie", headers["Cookie"]))
+	} else {
+		c.logger.Warn("会话ID为空，可能无法完成认证")
 	}
 
 	resp, err := c.httpClient.Post(ctx, "WEB_RequestCertificateAPI", reqBody, headers)
