@@ -173,6 +173,32 @@ func (h *ConferenceRecordHandler) DeleteConference(c *gin.Context) {
 	response.GinSuccess(c, gin.H{"message": "删除成功"})
 }
 
+// BatchDeleteConferences 批量删除会议
+// @Summary 批量删除会议
+// @Description 批量删除会议记录
+// @Tags 会议管理
+// @Security Bearer
+// @Accept json
+// @Produce json
+// @Param request body services.BatchDeleteConferencesRequest true "批量删除请求"
+// @Success 200 {object} response.Response{data=services.BatchDeleteConferencesResponse}
+// @Router /api/v1/conferences/batch-delete [post]
+func (h *ConferenceRecordHandler) BatchDeleteConferences(c *gin.Context) {
+	var req services.BatchDeleteConferencesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	deletedIDs, errors := h.conferenceService.BatchDeleteConferences(&req)
+
+	response.GinSuccess(c, gin.H{
+		"deleted_ids": deletedIDs,
+		"failed_count": len(errors),
+		"errors": errors,
+	})
+}
+
 // GetConferencesByStatus 根据状态获取会议列表
 // @Summary 根据状态获取会议列表
 // @Description 根据指定状态获取会议列表

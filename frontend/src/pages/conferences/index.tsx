@@ -26,6 +26,7 @@ import {
   VideoCameraOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import type { TableRowSelection } from 'antd/es/table/interface'
 import dayjs from 'dayjs'
 import * as conferenceApi from '../../api/conference'
 import * as huaweiConfigApi from '../../api/huawei-config'
@@ -68,6 +69,7 @@ export default function ConferenceManagement() {
   const [detailVisible, setDetailVisible] = useState(false)
   const [editingConference, setEditingConference] = useState<ConferenceRecord | null>(null)
   const [viewingConference, setViewingConference] = useState<ConferenceRecord | null>(null)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [form] = Form.useForm()
 
   const [params, setParams] = useState<ConferenceListParams>({
@@ -196,6 +198,53 @@ export default function ConferenceManagement() {
     }
   }
 
+  // 批量删除处理
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的会议')
+      return
+    }
+
+    Modal.confirm({
+      title: '确认批量删除',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个会议吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const response = await conferenceApi.batchDeleteConferences(selectedRowKeys as number[])
+          if (response.data) {
+            const { deleted_ids, failed_count, errors } = response.data
+            if (deleted_ids && deleted_ids.length > 0) {
+              message.success(`成功删除 ${deleted_ids.length} 个会议`)
+            }
+            if (failed_count > 0) {
+              message.warning(`${failed_count} 个会议删除失败`)
+              console.error('Delete errors:', errors)
+            }
+            setSelectedRowKeys([])
+            loadConferences()
+          }
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : '批量删除失败')
+        }
+      },
+    })
+  }
+
+  // 行选择配置
+  const rowSelection: TableRowSelection<ConferenceRecord> = {
+    selectedRowKeys,
+    onChange: (keys) => {
+      setSelectedRowKeys(keys)
+    },
+    getCheckboxProps: (record) => ({
+      disabled: record.video_recording_task !== null,
+      name: String(record.id),
+    }),
+  }
+
   const viewDetail = (conference: ConferenceRecord) => {
     setViewingConference(conference)
     setDetailVisible(true)
@@ -321,6 +370,15 @@ export default function ConferenceManagement() {
           <Button icon={<ReloadOutlined />} onClick={loadConferences}>
             刷新
           </Button>
+          {selectedRowKeys.length > 0 && (
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleBatchDelete}
+            >
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -328,6 +386,7 @@ export default function ConferenceManagement() {
         columns={columns}
         dataSource={conferences}
         rowKey="id"
+        rowSelection={rowSelection}
         loading={loading}
         scroll={{ x: 1200 }}
         pagination={{

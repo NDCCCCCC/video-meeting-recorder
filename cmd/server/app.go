@@ -433,12 +433,13 @@ func (a *MinimalApp) registerRoutes() error {
 	// 会议管理
 	conferences := api.Group("/conferences")
 	{
-		conferences.GET("", a.handlers.Conference.ListConferences)                 // 获取会议列表
-		conferences.GET("/by-status", a.handlers.Conference.GetConferencesByStatus) // 按状态获取会议
-		conferences.GET("/:id", a.handlers.Conference.GetConference)               // 获取会议详情
-		conferences.POST("", a.handlers.Conference.CreateConference)               // 创建会议
-		conferences.PUT("/:id", a.handlers.Conference.UpdateConference)            // 更新会议
-		conferences.DELETE("/:id", a.handlers.Conference.DeleteConference)         // 删除会议
+		conferences.GET("", a.handlers.Conference.ListConferences)                         // 获取会议列表
+		conferences.GET("/by-status", a.handlers.Conference.GetConferencesByStatus)       // 按状态获取会议
+		conferences.GET("/:id", a.handlers.Conference.GetConference)                      // 获取会议详情
+		conferences.POST("", a.handlers.Conference.CreateConference)                      // 创建会议
+		conferences.PUT("/:id", a.handlers.Conference.UpdateConference)                   // 更新会议
+		conferences.DELETE("/:id", a.handlers.Conference.DeleteConference)                // 删除会议
+		conferences.POST("/batch-delete", a.handlers.Conference.BatchDeleteConferences)    // 批量删除会议
 	}
 
 	// 文件管理
