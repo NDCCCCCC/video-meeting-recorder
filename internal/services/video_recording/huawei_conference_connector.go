@@ -311,7 +311,7 @@ func (c *HuaweiConferenceConnector) ValidateConference(ctx context.Context, conf
 	c.logger.Info("会议验证通过",
 		zap.String("conference_number", conferenceNumber),
 		zap.String("status", info.Status),
-		zap.Int("attendees_count", info.AttendeesCount),
+		zap.Int("sites_count", len(info.SiteList)),
 	)
 
 	return nil
