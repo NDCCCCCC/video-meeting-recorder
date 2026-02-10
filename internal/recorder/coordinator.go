@@ -63,6 +63,8 @@ type RecordingInput struct {
 	AudioBackend  string         `json:"audio_backend"`
 	CameraDevice  string          `json:"camera_device,omitempty"`
 	AudioDevice   string          `json:"audio_device,omitempty"`
+	CameraName    string          `json:"camera_name,omitempty"`    // 实际设备名称
+	AudioName     string          `json:"audio_name,omitempty"`     // 实际设备名称
 	hasAudio      bool            // 内部标记是否有音频
 }
 
@@ -155,6 +157,8 @@ func (c *SimpleRecordingCoordinator) buildRecordingInput(task *models.VideoRecor
 		AudioBackend:  huaweiConfig.AudioBackend,
 		CameraDevice:  huaweiConfig.USBCameraDevice,
 		AudioDevice:   huaweiConfig.USBAudioDevice,
+		CameraName:    huaweiConfig.USBCameraName,
+		AudioName:     huaweiConfig.USBAudioDevice, // 音频设备名称同样从该字段获取
 	}
 
 	// 检查任务配置的RTSP流
@@ -309,8 +313,11 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 
 	deviceParam := input.CameraDevice
 	if input.CameraBackend == "dshow" {
-		// 检查设备名称是否已包含 video= 前缀
-		if !strings.HasPrefix(input.CameraDevice, "video=") {
+		// dshow 需要使用实际设备名称
+		// 如果有设备名称，使用实际设备名称（如 "OBS Virtual Camera"）
+		if input.CameraName != "" {
+			deviceParam = fmt.Sprintf("video=%s", input.CameraName)
+		} else if !strings.HasPrefix(input.CameraDevice, "video=") {
 			deviceParam = fmt.Sprintf("video=%s", input.CameraDevice)
 		}
 	}
