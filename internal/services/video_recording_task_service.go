@@ -280,9 +280,9 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint) error {
 		return errors.New("任务不存在")
 	}
 
-	// 只能删除待执行状态的任务
-	if task.Status != models.VideoStatusPending {
-		return errors.New("只能删除待执行状态的任务")
+	// 只能删除非运行状态的任务（运行中的任务不能删除）
+	if task.Status == models.VideoStatusRecording || task.Status == models.VideoStatusConnecting {
+		return errors.New("运行中的任务无法删除，请先停止任务")
 	}
 
 	// 检查权限
@@ -301,6 +301,7 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint) error {
 	s.logger.Info("Video recording task deleted",
 		zap.Uint("task_id", id),
 		zap.Uint("deleted_by", userID),
+		zap.String("task_status", string(task.Status)),
 	)
 
 	return nil
