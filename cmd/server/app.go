@@ -15,6 +15,8 @@ import (
 	"github.com/cpic/record_v2/internal/handlers"
 	"github.com/cpic/record_v2/internal/middleware"
 	"github.com/cpic/record_v2/internal/models"
+	"github.com/cpic/record_v2/internal/recorder"
+	"github.com/cpic/record_v2/internal/scheduler"
 	"github.com/cpic/record_v2/internal/services"
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -36,13 +38,20 @@ type MinimalApp struct {
 	handlers   *Handlers
 	services   map[string]common.Service
 	wg         sync.WaitGroup
+	// 调度器和协调器
+	scheduler  *scheduler.VideoSimpleScheduler
+	coordinator *recorder.SimpleRecordingCoordinator
 }
 
 // Handlers 处理器集合
 type Handlers struct {
-	Auth *handlers.AuthHandler
-	User *handlers.UserHandler
-	Role *handlers.RoleHandler
+	Auth         *handlers.AuthHandler
+	User         *handlers.UserHandler
+	Role         *handlers.RoleHandler
+	VideoTask    *handlers.VideoRecordingTaskHandler
+	HuaweiConfig *handlers.HuaweiConfigHandler
+	Conference   *handlers.ConferenceRecordHandler
+	VideoFile    *handlers.VideoFileHandler
 }
 
 // NewMinimalApp 创建应用实例
@@ -255,11 +264,20 @@ func (a *MinimalApp) initHandlers() error {
 	authService := auth.NewService(a.config, a.db, a.logger)
 	userService := services.NewUserService(a.db, a.logger)
 	roleService := services.NewRoleService(a.db, a.logger)
+	videoTaskService := services.NewVideoRecordingTaskService(a.db, a.logger)
+	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger)
+	conferenceService := services.NewConferenceRecordService(a.db, a.logger)
+	videoFileService := services.NewVideoFileService(a.db, a.logger)
+	usbScanner := services.NewUSBDeviceScanner(a.logger)
 
 	a.handlers = &Handlers{
-		Auth: handlers.NewAuthHandler(authService, a.logger),
-		User: handlers.NewUserHandler(userService, a.logger),
-		Role: handlers.NewRoleHandler(roleService, a.logger),
+		Auth:         handlers.NewAuthHandler(authService, a.logger),
+		User:         handlers.NewUserHandler(userService, a.logger),
+		Role:         handlers.NewRoleHandler(roleService, a.logger),
+		VideoTask:    handlers.NewVideoRecordingTaskHandler(videoTaskService, a.logger),
+		HuaweiConfig: handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
+		Conference:   handlers.NewConferenceRecordHandler(conferenceService, a.logger),
+		VideoFile:    handlers.NewVideoFileHandler(videoFileService, a.logger),
 	}
 
 	return nil
@@ -322,12 +340,53 @@ func (a *MinimalApp) registerRoutes() error {
 	// 权限列表
 	api.GET("/permissions", a.handlers.Role.GetAllPermissions)
 
-	// 任务管理（待实现）
-	_ = api.Group("/tasks")
-	// 会议管理（待实现）
-	_ = api.Group("/conferences")
-	// 文件管理（待实现）
-	_ = api.Group("/files")
+	// 录制任务管理 (使用 /recordings 路径符合API文档规范)
+	recordings := api.Group("/recordings")
+	{
+		recordings.GET("", a.handlers.VideoTask.ListTasks)                   // 获取任务列表
+		recordings.GET("/:id", a.handlers.VideoTask.GetTask)                 // 获取任务详情
+		recordings.POST("", a.handlers.VideoTask.CreateTask)                 // 创建任务
+		recordings.PUT("/:id", a.handlers.VideoTask.UpdateTask)              // 更新任务
+		recordings.DELETE("/:id", a.handlers.VideoTask.DeleteTask)           // 删除任务
+		recordings.POST("/:id/start", a.handlers.VideoTask.StartTask)        // 启动任务
+		recordings.POST("/:id/stop", a.handlers.VideoTask.StopTask)          // 停止任务
+		recordings.POST("/:id/cancel", a.handlers.VideoTask.CancelTask)      // 取消任务
+		recordings.POST("/:id/retry", a.handlers.VideoTask.RetryTask)        // 重试任务
+	}
+
+	// 华为配置管理
+	huaweiConfigs := api.Group("/huawei-configs")
+	{
+		huaweiConfigs.GET("/scan-devices", a.handlers.HuaweiConfig.ScanUSBDevices)       // 扫描USB设备
+		huaweiConfigs.GET("/recommended-device", a.handlers.HuaweiConfig.GetRecommendedDevice) // 获取推荐设备
+		huaweiConfigs.GET("", a.handlers.HuaweiConfig.ListConfigs)             // 获取配置列表
+		huaweiConfigs.GET("/active", a.handlers.HuaweiConfig.GetActiveConfigs) // 获取可用配置
+		huaweiConfigs.GET("/:id", a.handlers.HuaweiConfig.GetConfig)           // 获取配置详情
+		huaweiConfigs.POST("", a.handlers.HuaweiConfig.CreateConfig)           // 创建配置
+		huaweiConfigs.PUT("/:id", a.handlers.HuaweiConfig.UpdateConfig)        // 更新配置
+		huaweiConfigs.DELETE("/:id", a.handlers.HuaweiConfig.DeleteConfig)     // 删除配置
+	}
+
+	// 会议管理
+	conferences := api.Group("/conferences")
+	{
+		conferences.GET("", a.handlers.Conference.ListConferences)                 // 获取会议列表
+		conferences.GET("/by-status", a.handlers.Conference.GetConferencesByStatus) // 按状态获取会议
+		conferences.GET("/:id", a.handlers.Conference.GetConference)               // 获取会议详情
+		conferences.POST("", a.handlers.Conference.CreateConference)               // 创建会议
+		conferences.PUT("/:id", a.handlers.Conference.UpdateConference)            // 更新会议
+		conferences.DELETE("/:id", a.handlers.Conference.DeleteConference)         // 删除会议
+	}
+
+	// 文件管理
+	files := api.Group("/files")
+	{
+		files.GET("/stats", a.handlers.VideoFile.GetFileStats)          // 获取文件统计（必须在 /:id 之前）
+		files.GET("", a.handlers.VideoFile.ListFiles)                  // 获取文件列表
+		files.GET("/:id", a.handlers.VideoFile.GetFile)                // 获取文件详情
+		files.GET("/:id/download", a.handlers.VideoFile.DownloadFile)  // 下载文件
+		files.DELETE("/:id", a.handlers.VideoFile.DeleteFile)          // 删除文件
+	}
 
 	return nil
 }
@@ -336,15 +395,79 @@ func (a *MinimalApp) registerRoutes() error {
 func (a *MinimalApp) registerServices() error {
 	a.logger.Info("Registering services...")
 
-	// TODO: 注册各个服务
-	// authService := auth.NewService(a.db, a.config.Auth, a.logger)
-	// a.services["auth"] = authService
-	// if err := authService.Initialize(); err != nil {
-	//     return err
-	// }
+	// 创建录制协调器
+	a.coordinator = recorder.NewSimpleRecordingCoordinator(a.logger, a.config)
+	a.logger.Info("Recording coordinator created")
+
+	// 创建任务调度器
+	// 注意：这里使用一个适配器将VideoRecordingTaskService转换为TaskServiceInterface
+	taskServiceAdapter := &taskServiceAdapter{db: a.db, logger: a.logger}
+	a.scheduler = scheduler.NewVideoSimpleScheduler(taskServiceAdapter, a.coordinator, a.logger, a.config)
+	a.logger.Info("Scheduler created")
+
+	// 启动调度器
+	if err := a.scheduler.Start(); err != nil {
+		return fmt.Errorf("failed to start scheduler: %w", err)
+	}
+	a.logger.Info("Scheduler started successfully")
 
 	a.logger.Info("Services registered successfully")
 	return nil
+}
+
+// taskServiceAdapter 任务服务适配器
+type taskServiceAdapter struct {
+	db     *gorm.DB
+	logger *zap.Logger
+}
+
+// GetTask 获取任务
+func (a *taskServiceAdapter) GetTask(id uint) (*models.VideoRecordingTask, error) {
+	var task models.VideoRecordingTask
+	if err := a.db.Preload("HuaweiConfig").First(&task, id).Error; err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+// GetPendingTasks 获取待执行任务
+func (a *taskServiceAdapter) GetPendingTasks() ([]*models.VideoRecordingTask, error) {
+	var tasks []*models.VideoRecordingTask
+	if err := a.db.Where("status = ?", models.VideoStatusPending).
+		Preload("HuaweiConfig").
+		Order("start_time ASC").
+		Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+// UpdateTaskStatus 更新任务状态
+func (a *taskServiceAdapter) UpdateTaskStatus(id uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
+	updates := map[string]interface{}{
+		"status": status,
+	}
+	if errorMsg != "" {
+		updates["error_msg"] = errorMsg
+	}
+
+	result := a.db.Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("任务不存在")
+	}
+	return nil
+}
+
+// GetHuaweiConfig 获取华为配置
+func (a *taskServiceAdapter) GetHuaweiConfig(id uint) (*models.HuaweiConfig, error) {
+	var config models.HuaweiConfig
+	if err := a.db.First(&config, id).Error; err != nil {
+		return nil, err
+	}
+	return &config, nil
 }
 
 // Start 启动应用
