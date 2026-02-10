@@ -9,9 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
@@ -186,14 +183,9 @@ type USBDeviceInfo struct {
 
 // HTTPClient HTTP客户端封装
 type HTTPClient struct {
-	client   *http.Client
-	logger   *zap.Logger
-	baseURL  *url.URL
-	useCurl  bool  // 是否使用curl（用于华为老设备兼容）
-	server   string
-	port     int
-	timeout  time.Duration
-	insecureSkipVerify bool
+	client *http.Client
+	logger *zap.Logger
+	baseURL *url.URL
 }
 
 // NewHTTPClient 创建HTTP客户端
@@ -210,9 +202,6 @@ func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipV
 		Path:   "/action.cgi",
 	}
 
-	// 检测是否需要使用curl（华为老设备可能需要）
-	useCurl := shouldUseCurlForLegacyDevice()
-
 	return &HTTPClient{
 		client: &http.Client{
 			Timeout: timeout,
@@ -228,35 +217,27 @@ func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipV
 						tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 						tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
 						tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+						tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 						tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+						tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+					},
+					// 支持更多的曲线以兼容老设备
+					CurvePreferences: []tls.CurveID{
+						tls.CurveP256,
+						tls.CurveP384,
+						tls.CurveP521,
 					},
 				},
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 10,
 				IdleConnTimeout:     90 * time.Second,
+				// 禁用 HTTP/2，强制使用 HTTP/1.1（华为老设备兼容）
+				ForceAttemptHTTP2:   false,
 			},
 		},
-		logger:             logger,
-		baseURL:            baseURL,
-		useCurl:            useCurl,
-		server:             server,
-		port:               port,
-		timeout:            timeout,
-		insecureSkipVerify: insecureSkipVerify,
+		logger:  logger,
+		baseURL: baseURL,
 	}
-}
-
-// shouldUseCurlForLegacyDevice 检测是否应该使用curl（华为老设备兼容）
-func shouldUseCurlForLegacyDevice() bool {
-	// 检查curl是否可用
-	if _, err := exec.LookPath("curl"); err != nil {
-		return false
-	}
-	// 可以通过环境变量或配置来控制
-	if os.Getenv("HUAWEI_USE_CURL") == "true" {
-		return true
-	}
-	return false
 }
 
 // SetLogger 设置日志记录器
@@ -275,11 +256,6 @@ func (c *HTTPClient) buildURL(actionID string) string {
 
 // Post 发送POST请求
 func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}, headers ...map[string]string) (*APIResponse, error) {
-	// 如果启用了curl（用于华为老设备兼容）
-	if c.useCurl {
-		return c.postWithCurl(ctx, actionID, body, headers...)
-	}
-
 	url := c.buildURL(actionID)
 
 	var reqBody io.Reader
@@ -297,33 +273,36 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	// 华为API需要userType header
-	req.Header.Set("userType", "web")
 
-	// 设置自定义headers（包括Cookie）
+	// 合并所有headers
+	allHeaders := make(map[string]string)
 	for _, h := range headers {
 		for k, v := range h {
-			req.Header.Set(k, v)
+			allHeaders[k] = v
 		}
+	}
+
+	// 只有在没有传递任何自定义headers时才添加默认的userType
+	// 这是为了匹配华为API的行为：认证请求不发送userType
+	if len(allHeaders) == 0 {
+		req.Header.Set("userType", "web")
+	}
+
+	// 设置自定义headers（包括Cookie）
+	for k, v := range allHeaders {
+		req.Header.Set(k, v)
 	}
 
 	// 调试日志：显示请求详情（不包含敏感数据）
 	if c.logger != nil {
 		hasCookie := req.Header.Get("Cookie") != ""
+		hasUserType := req.Header.Get("userType") != ""
 		c.logger.Debug("发送请求",
 			zap.String("action_id", actionID),
 			zap.Bool("has_body", body != nil),
 			zap.Bool("has_cookie", hasCookie),
+			zap.Bool("has_userType", hasUserType),
 		)
-	}
-
-	// 添加会话ID头（如果存在）
-	if len(headers) > 0 {
-		for _, h := range headers {
-			if sessionID, ok := h["X-Session-Id"]; ok {
-				req.Header.Set("X-Session-Id", sessionID)
-			}
-		}
 	}
 
 	resp, err := c.client.Do(req)
@@ -354,148 +333,6 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 	apiResp.Cookies = resp.Cookies()
 
 	return &apiResp, nil
-}
-
-// postWithCurl 使用curl发送POST请求（用于华为老设备兼容）
-func (c *HTTPClient) postWithCurl(ctx context.Context, actionID string, body interface{}, headers ...map[string]string) (*APIResponse, error) {
-	// 构建curl命令
-	args := []string{
-		"-k",                           // 跳过SSL证书验证
-		"-s",                           // 静默模式
-		"-i",                           // 包含响应头（用于获取Cookies）
-		"-X", "POST",                   // POST方法
-		"--tlsv1.0",                    // 最小TLS版本1.0
-		"--tls-max", "1.2",             // 最大TLS版本1.2
-		"--connect-timeout", fmt.Sprintf("%.0f", c.timeout.Seconds()),
-		"-H", "Content-Type: application/json",
-		"-H", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-	}
-
-	// 合并所有headers（不默认添加userType，因为某些API如认证请求不需要）
-	allHeaders := make(map[string]string)
-	for _, h := range headers {
-		for k, v := range h {
-			allHeaders[k] = v
-		}
-	}
-
-	// 只有在没有传递任何自定义headers时才添加默认的userType
-	// 这是为了匹配Python脚本的行为：认证请求不发送userType
-	if len(allHeaders) == 0 {
-		allHeaders["userType"] = "web"
-	}
-
-	// 添加自定义headers
-	for k, v := range allHeaders {
-		args = append(args, "-H", fmt.Sprintf("%s: %s", k, v))
-	}
-
-	// 添加请求体
-	if body != nil {
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("序列化请求体失败: %w", err)
-		}
-		jsonBodyStr := string(jsonBody)
-		args = append(args, "-d", jsonBodyStr)
-		if c.logger != nil {
-			c.logger.Debug("请求体", zap.String("body", jsonBodyStr))
-		}
-	}
-
-	// 添加URL
-	fullURL := c.buildURL(actionID)
-	args = append(args, fullURL)
-
-	if c.logger != nil {
-		c.logger.Debug("使用curl发送请求",
-			zap.String("action_id", actionID),
-			zap.String("url", fullURL),
-			zap.Strings("curl_args", args), // 显示实际参数
-		)
-	}
-
-	// 执行curl命令
-	cmd := exec.CommandContext(ctx, "curl", args...)
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("curl请求失败: %w", err)
-	}
-
-	// 解析响应（包含头部和body）
-	outputStr := string(output)
-
-	// 找到头部和body的分界线（空行）
-	headerEnd := strings.Index(outputStr, "\r\n\r\n")
-	if headerEnd == -1 {
-		headerEnd = strings.Index(outputStr, "\n\n")
-	}
-	if headerEnd == -1 {
-		return nil, fmt.Errorf("无法解析响应格式")
-	}
-
-	headerStr := outputStr[:headerEnd]
-	bodyStr := outputStr[headerEnd:]
-
-	// 跳过空行
-	if len(bodyStr) >= 2 && bodyStr[0] == '\r' && bodyStr[1] == '\n' {
-		bodyStr = bodyStr[2:]
-	} else if len(bodyStr) >= 1 && bodyStr[0] == '\n' {
-		bodyStr = bodyStr[1:]
-	}
-
-	if c.logger != nil {
-		c.logger.Debug("curl收到响应",
-			zap.String("action_id", actionID),
-			zap.String("body", bodyStr),
-		)
-	}
-
-	// 解析响应体
-	var apiResp APIResponse
-	if err := json.Unmarshal([]byte(bodyStr), &apiResp); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
-	}
-
-	// 解析Set-Cookie头部
-	lines := strings.Split(headerStr, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Set-Cookie:") || strings.HasPrefix(line, "set-cookie:") {
-			cookieStr := strings.TrimPrefix(line, "Set-Cookie:")
-			cookieStr = strings.TrimPrefix(cookieStr, "set-cookie:")
-			cookieStr = strings.TrimSpace(cookieStr)
-
-			// 解析cookie格式: SessionID=xxx; Path=/; ...
-			parts := strings.SplitN(cookieStr, "=", 2)
-			if len(parts) == 2 {
-				name := strings.TrimSpace(parts[0])
-				valueParts := strings.SplitN(parts[1], ";", 2)
-				value := strings.TrimSpace(valueParts[0])
-
-				apiResp.Cookies = append(apiResp.Cookies, &http.Cookie{
-					Name:  name,
-					Value: value,
-				})
-
-				if c.logger != nil {
-					c.logger.Debug("解析到Cookie",
-						zap.String("name", name),
-						zap.String("value", maskCookieValue(value)),
-					)
-				}
-			}
-		}
-	}
-
-	return &apiResp, nil
-}
-
-// maskCookieValue 隐藏cookie值用于日志
-func maskCookieValue(v string) string {
-	if len(v) <= 8 {
-		return "****"
-	}
-	return v[:4] + "****" + v[len(v)-4:]
 }
 
 // HuaweiClient 华为终端API客户端
