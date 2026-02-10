@@ -17,6 +17,7 @@ type VideoRecordingTask struct {
 	ConferenceNumber   string                    `gorm:"type:varchar(50);not null;index" json:"conference_number"`
 	HuaweiConfigID     uint                      `gorm:"not null;index" json:"huawei_config_id"`
 	HuaweiConfig       *HuaweiConfig             `gorm:"foreignKey:HuaweiConfigID" json:"huawei_config,omitempty"`
+	RTSPStreamURL      string                    `gorm:"type:varchar(500)" json:"rtsp_stream_url"` // RTSP流地址（可选，与USB设备同级）
 	Status             VideoRecordingTaskStatus  `gorm:"type:varchar(20);index" json:"status"`
 	RecordingFile      string                    `gorm:"type:varchar(500)" json:"recording_file"`
 	RecordingDuration  int                       `json:"recording_duration"` // 秒
