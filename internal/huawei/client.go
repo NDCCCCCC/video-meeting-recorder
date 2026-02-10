@@ -254,18 +254,8 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 			return nil, fmt.Errorf("序列化请求体失败: %w", err)
 		}
 		reqBody = bytes.NewReader(jsonBody)
-		c.logger.Debug("发送请求",
-			zap.String("action_id", actionID),
-			zap.String("url", url),
-			zap.String("body", string(jsonBody)),
-		)
-	} else {
-		c.logger.Debug("发送请求",
-			zap.String("action_id", actionID),
-			zap.String("url", url),
-		)
 	}
-
+	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, "POST", url, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
@@ -274,14 +264,22 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 	req.Header.Set("Content-Type", "application/json")
 	// 华为API需要userType header
 	req.Header.Set("userType", "web")
+
+	// 设置自定义headers（包括Cookie）
 	for _, h := range headers {
 		for k, v := range h {
 			req.Header.Set(k, v)
-			// 调试：记录设置的头部
-			if k == "Cookie" {
-				c.logger.Debug("设置Cookie头部", zap.String("cookie", v))
-			}
 		}
+	}
+
+	// 调试日志：显示请求详情（不包含敏感数据）
+	if c.logger != nil {
+		hasCookie := req.Header.Get("Cookie") != ""
+		c.logger.Debug("发送请求",
+			zap.String("action_id", actionID),
+			zap.Bool("has_body", body != nil),
+			zap.Bool("has_cookie", hasCookie),
+		)
 	}
 
 	// 添加会话ID头（如果存在）
