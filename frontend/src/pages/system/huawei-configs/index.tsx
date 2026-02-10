@@ -99,7 +99,7 @@ export default function HuaweiConfigManagement() {
         server: config.server,
         port: config.port,
         username: config.username,
-        password: config.password,
+        password: '', // 编辑模式下密码为空，表示不修改
         terminal_number: config.terminal_number,
         conference_number: config.conference_number,
         usb_camera_name: config.usb_camera_name,
@@ -129,27 +129,32 @@ export default function HuaweiConfigManagement() {
       const values = await form.validateFields()
 
       if (editingConfig) {
+        // 编辑模式：密码为空则不更新密码
         const req: UpdateHuaweiConfigRequest = {
           name: values.name,
           description: values.description,
           server: values.server,
           port: values.port,
           username: values.username,
-          password: values.password,
           terminal_number: values.terminal_number,
           conference_number: values.conference_number,
           usb_camera_name: values.usb_camera_name,
           usb_camera_device: values.usb_camera_device,
           usb_camera_path: values.usb_camera_path,
-          usb_audio_name: values.usb_audio_name,
+          usb_audio_name: values.usb_audio_name || '',
           usb_audio_device: values.usb_audio_device,
           usb_audio_path: values.usb_audio_path,
           record_directory: values.record_directory,
           output_format: values.output_format,
         }
+        // 只有在密码字段有值时才更新密码
+        if (values.password && values.password.trim() !== '') {
+          req.password = values.password
+        }
         await huaweiConfigApi.updateHuaweiConfig(editingConfig.id, req)
         message.success('更新成功')
       } else {
+        // 新建模式：密码必填
         const req: CreateHuaweiConfigRequest = {
           name: values.name,
           description: values.description,
@@ -162,7 +167,7 @@ export default function HuaweiConfigManagement() {
           usb_camera_name: values.usb_camera_name,
           usb_camera_device: values.usb_camera_device,
           usb_camera_path: values.usb_camera_path,
-          usb_audio_name: values.usb_audio_name,
+          usb_audio_name: values.usb_audio_name || '',
           usb_audio_device: values.usb_audio_device,
           usb_audio_path: values.usb_audio_path,
           record_directory: values.record_directory,
@@ -174,8 +179,19 @@ export default function HuaweiConfigManagement() {
 
       closeModal()
       loadConfigs()
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '操作失败')
+    } catch (error: any) {
+      // 改进错误提示，显示具体的验证错误信息
+      if (error?.errorFields) {
+        // Ant Design 表单验证错误
+        const firstError = error.errorFields[0]
+        const fieldName = firstError?.name?.[0] || '字段'
+        const errorMessage = firstError?.errors?.[0] || '验证失败'
+        message.error(`${fieldName}: ${errorMessage}`)
+      } else if (error?.message) {
+        message.error(error.message)
+      } else {
+        message.error('操作失败，请检查表单填写是否正确')
+      }
     }
   }
 
@@ -444,10 +460,10 @@ export default function HuaweiConfigManagement() {
 
                       <Form.Item
                         name="password"
-                        label="密码"
-                        rules={[{ required: true, message: '请输入密码' }]}
+                        label={editingConfig ? "密码（留空不修改）" : "密码"}
+                        rules={editingConfig ? [] : [{ required: true, message: '请输入密码' }]}
                       >
-                        <Input.Password placeholder="请输入密码" />
+                        <Input.Password placeholder={editingConfig ? "留空则不修改密码" : "请输入密码"} />
                       </Form.Item>
                     </Space>
 
@@ -555,6 +571,10 @@ export default function HuaweiConfigManagement() {
                         />
                       </Form.Item>
                     )}
+
+                    <Form.Item name="usb_audio_name" label="音频设备名称">
+                      <Input placeholder="请输入USB音频设备名称" addonBefore={<AudioOutlined />} />
+                    </Form.Item>
 
                     <Form.Item name="usb_audio_device" label="音频设备">
                       <Input placeholder="例如: hw:1,0" addonBefore={<AudioOutlined />} />

@@ -51,6 +51,7 @@ type CreateConfigRequest struct {
 	AudioBackend     string `json:"audio_backend" binding:"omitempty,max=20"`     // dshow | alsa | coreaudio | wasapi
 	USBCameraName    string `json:"usb_camera_name" binding:"omitempty,max=100"`
 	USBCameraDevice  string `json:"usb_camera_device" binding:"omitempty,max=100"`
+	USBAudioName     string `json:"usb_audio_name" binding:"omitempty,max=100"`
 	USBAudioDevice   string `json:"usb_audio_device" binding:"omitempty,max=100"`
 	OutputFormat     string `json:"output_format" binding:"omitempty,max=20"`
 }
@@ -69,6 +70,7 @@ type UpdateConfigRequest struct {
 	AudioBackend     *string `json:"audio_backend" binding:"omitempty,max=20"`
 	USBCameraName    *string `json:"usb_camera_name" binding:"omitempty,max=100"`
 	USBCameraDevice  *string `json:"usb_camera_device" binding:"omitempty,max=100"`
+	USBAudioName     *string `json:"usb_audio_name" binding:"omitempty,max=100"`
 	USBAudioDevice   *string `json:"usb_audio_device" binding:"omitempty,max=100"`
 	OutputFormat     *string `json:"output_format" binding:"omitempty,max=20"`
 	IsActive         *bool   `json:"is_active"`
@@ -219,6 +221,9 @@ func (s *HuaweiConfigService) UpdateConfig(id uint, req *UpdateConfigRequest) (*
 	}
 	if req.USBCameraDevice != nil {
 		updates["usb_camera_device"] = *req.USBCameraDevice
+	}
+	if req.USBAudioName != nil {
+		updates["usb_audio_name"] = *req.USBAudioName
 	}
 	if req.USBAudioDevice != nil {
 		updates["usb_audio_device"] = *req.USBAudioDevice
