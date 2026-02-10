@@ -11,6 +11,7 @@ import {
   FileTextOutlined,
   FolderOutlined,
   HistoryOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import type { MenuProps } from 'antd'
@@ -42,6 +43,7 @@ export default function BasicLayout() {
       children: [
         { key: '/system/users', label: '用户管理' },
         { key: '/system/roles', label: '角色管理' },
+        { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' },
         { key: '/system/settings', label: '系统设置' },
       ],
     },
