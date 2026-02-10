@@ -246,7 +246,8 @@ func (m *Manager) WaitForConnection(ctx context.Context, configID uint, conferen
 				continue
 			}
 
-			info, err := client.GetConferenceInfo(ctx)
+			// 使用 IsInConference 检查终端是否在会议中
+			inConf, err := client.IsInConference(ctx)
 			if err != nil {
 				retryCount++
 				if retryCount >= maxRetries {
@@ -260,20 +261,16 @@ func (m *Manager) WaitForConnection(ctx context.Context, configID uint, conferen
 			}
 			retryCount = 0 // 重置重试计数
 
-			// 检查终端是否已加入
-			for _, site := range info.SiteList {
-				if site.SiteURI == conferenceNumber && site.SiteStatus == 1 {
-					m.logger.Info("终端已连接到会议",
-						zap.String("terminal_number", terminalNumber),
-						zap.String("conference_number", conferenceNumber),
-					)
-					return nil
-				}
+			if inConf {
+				m.logger.Info("终端已连接到会议",
+					zap.String("terminal_number", terminalNumber),
+					zap.String("conference_number", conferenceNumber),
+				)
+				return nil
 			}
 
 			m.logger.Debug("终端尚未连接，继续等待",
 				zap.String("terminal_number", terminalNumber),
-				zap.Int("sites_count", len(info.SiteList)),
 			)
 		}
 	}
