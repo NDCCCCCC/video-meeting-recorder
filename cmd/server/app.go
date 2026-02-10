@@ -48,6 +48,7 @@ type MinimalApp struct {
 	coordinator          *recorder.SimpleRecordingCoordinator
 	huaweiManager        *huaweiapi.Manager
 	huaweiConnector      *video_recording.HuaweiConferenceConnector
+	videoTaskService     *services.VideoRecordingTaskService
 }
 
 // Handlers 处理器集合
@@ -304,7 +305,7 @@ func (a *MinimalApp) initHandlers() error {
 	authService := auth.NewService(a.config, a.db, a.logger)
 	userService := services.NewUserService(a.db, a.logger)
 	roleService := services.NewRoleService(a.db, a.logger)
-	videoTaskService := services.NewVideoRecordingTaskService(a.db, a.logger)
+	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
 	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger)
 	conferenceService := services.NewConferenceRecordService(a.db, a.logger)
 	videoFileService := services.NewVideoFileService(a.db, a.logger)
@@ -333,7 +334,7 @@ func (a *MinimalApp) initHandlers() error {
 		Auth:         handlers.NewAuthHandler(authService, a.logger),
 		User:         handlers.NewUserHandler(userService, a.logger),
 		Role:         handlers.NewRoleHandler(roleService, a.logger),
-		VideoTask:    handlers.NewVideoRecordingTaskHandler(videoTaskService, a.logger),
+		VideoTask:    handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger),
 		HuaweiConfig: handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
 		Conference:   handlers.NewConferenceRecordHandler(conferenceService, a.logger),
 		VideoFile:    handlers.NewVideoFileHandler(videoFileService, a.logger),
@@ -505,6 +506,11 @@ func (a *MinimalApp) registerServices() error {
 		return fmt.Errorf("failed to start scheduler: %w", err)
 	}
 	a.logger.Info("Scheduler started successfully")
+
+	// 设置调度器到任务服务
+	if a.videoTaskService != nil {
+		a.videoTaskService.SetScheduler(a.scheduler)
+	}
 
 	a.logger.Info("Services registered successfully")
 	return nil
