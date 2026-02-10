@@ -7,8 +7,8 @@
 ## 实施状态
 
 - [x] **Phase 1**: 数据库迁移 + MKV 录制 (已完成)
-- [ ] **Phase 2**: 转换服务 (进行中)
-- [ ] **Phase 3**: HLS 预览服务
+- [x] **Phase 2**: 转换服务 (已完成)
+- [ ] **Phase 3**: HLS 预览服务 (进行中)
 - [ ] **Phase 4**: 前端预览组件
 
 ## 概述
@@ -431,6 +431,48 @@ ALTER TABLE video_recording_tasks ADD COLUMN conversion_error_msg TEXT;
 ALTER TABLE video_recording_tasks ADD COLUMN conversion_started_at TIMESTAMP;
 ALTER TABLE video_recording_tasks ADD COLUMN conversion_completed_at TIMESTAMP;
 ALTER TABLE video_recording_tasks ADD COLUMN conversion_retry_count INTEGER DEFAULT 0;
+```
+
+## 12. Phase 2 实施记录 ✅
+
+**完成日期**: 2026-02-10
+
+### 已修改文件
+
+1. **`internal/services/conversion_service.go`** (新建)
+   - 创建 `ConversionService` 接口
+   - 实现 `FFmpegConversionService`
+   - Worker Pool 架构（3个并发worker）
+   - 任务队列（100容量缓冲）
+   - 重试机制：最多3次，指数退避（1分钟、5分钟、30分钟）
+   - FFmpeg转换使用 `-c:v copy` 直接复制视频流
+
+2. **`cmd/server/app.go`**
+   - 添加 `conversionService` 字段到 `MinimalApp`
+   - 在 `initHandlers` 中创建转换服务
+   - 在 `registerServices` 中启动转换服务
+   - 在 `Stop` 中停止转换服务
+
+3. **`internal/scheduler/video_scheduler.go`**
+   - 添加 `ConversionServiceInterface` 接口
+   - 添加 `conversionService` 字段
+   - 在 `completeTask` 中自动提交转换任务
+   - 添加 `SetConversionService` 方法
+
+4. **`internal/handlers/video_recording_task_handler.go`**
+   - 添加 `conversionService` 字段
+   - 添加 `SetConversionService` 方法
+   - 添加 `GetConversionStatus` 端点
+   - 添加 `RetryConversion` 端点
+
+5. **`internal/scheduler/video_scheduler_test.go`**
+   - 更新所有测试调用以传入新的 `conversionService` 参数
+
+### API 端点
+
+```
+GET /api/v1/recordings/:id/conversion-status - 获取转换状态
+POST /api/v1/recordings/:id/conversion-retry - 重试转换
 ```
 
 ## 附录：相关文件
