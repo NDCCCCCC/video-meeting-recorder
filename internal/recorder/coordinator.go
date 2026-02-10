@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -308,7 +309,10 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 
 	deviceParam := input.CameraDevice
 	if input.CameraBackend == "dshow" {
-		deviceParam = fmt.Sprintf("video=%s", input.CameraDevice)
+		// 检查设备名称是否已包含 video= 前缀
+		if !strings.HasPrefix(input.CameraDevice, "video=") {
+			deviceParam = fmt.Sprintf("video=%s", input.CameraDevice)
+		}
 	}
 
 	return []string{
@@ -334,7 +338,10 @@ func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]
 
 	deviceParam := input.AudioDevice
 	if input.AudioBackend == "dshow" {
-		deviceParam = fmt.Sprintf("audio=%s", input.AudioDevice)
+		// 检查设备名称是否已包含 audio= 前缀
+		if !strings.HasPrefix(input.AudioDevice, "audio=") {
+			deviceParam = fmt.Sprintf("audio=%s", input.AudioDevice)
+		}
 	}
 
 	return []string{"-f", input.AudioBackend, "-i", deviceParam}, nil
