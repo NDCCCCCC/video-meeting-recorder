@@ -18,6 +18,17 @@ const (
 	TriggerTimeTolerance = 1 * time.Minute
 )
 
+// SchedulerInterface 调度器接口
+type SchedulerInterface interface {
+	Start() error
+	Stop()
+	AddTask(task *models.VideoRecordingTask) error
+	RemoveTask(taskID uint) error
+	SyncPendingTasks() error
+	IsTaskScheduled(taskID uint) bool
+	IsTaskExecuting(taskID uint) bool
+}
+
 // VideoSimpleScheduler 视频录制任务调度器
 type VideoSimpleScheduler struct {
 	cron          *cron.Cron
@@ -451,4 +462,93 @@ func (s *VideoSimpleScheduler) IsTaskExecuting(taskID uint) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.executing[taskID]
+}
+
+// SyncPendingTasks 同步待执行任务到调度器
+// 从数据库重新加载所有待执行任务，并更新调度器中的任务
+func (s *VideoSimpleScheduler) SyncPendingTasks() error {
+	s.logger.Info("同步待执行任务")
+
+	// 从数据库加载待执行的任务
+	tasks, err := s.taskService.GetPendingTasks()
+	if err != nil {
+		return fmt.Errorf("加载待执行任务失败: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 收集数据库中的待执行任务ID
+	dbTaskIDs := make(map[uint]bool)
+	for _, task := range tasks {
+		dbTaskIDs[task.ID] = true
+	}
+
+	// 移除不再待执行的任务
+	for taskID := range s.taskEntries {
+		if !dbTaskIDs[taskID] {
+			entryID := s.taskEntries[taskID]
+			s.cron.Remove(entryID)
+			delete(s.taskEntries, taskID)
+			delete(s.entryTasks, entryID)
+			s.logger.Debug("移除已取消/完成的任务",
+				zap.Uint("task_id", taskID),
+			)
+		}
+	}
+
+	// 添加新的待执行任务
+	addedCount := 0
+	for _, task := range tasks {
+		// 检查是否已在调度器中
+		if _, exists := s.taskEntries[task.ID]; exists {
+			continue
+		}
+
+		// 计算触发时间
+		triggerTime := s.calculateTriggerTime(task.StartTime, task.PreJoinMinutes)
+
+		// 检查触发时间是否在未来（或在容错窗口内）
+		if triggerTime.Before(time.Now().Add(-1 * TriggerTimeTolerance)) {
+			s.logger.Warn("任务触发时间已过期，跳过",
+				zap.Uint("task_id", task.ID),
+				zap.Time("trigger_time", triggerTime),
+			)
+			// 标记为失败
+			go s.updateTaskStatus(task.ID, models.VideoStatusFailed, "触发时间已过期")
+			continue
+		}
+
+		// 生成Cron表达式并添加
+		cronExpr := s.generateCronExpression(triggerTime)
+		taskID := task.ID
+		entryID, err := s.cron.AddFunc(cronExpr, func() {
+			s.executeTask(taskID)
+		})
+		if err != nil {
+			s.logger.Error("添加Cron任务失败",
+				zap.Uint("task_id", task.ID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		s.taskEntries[task.ID] = entryID
+		s.entryTasks[entryID] = task.ID
+		addedCount++
+
+		s.logger.Info("新任务已添加到调度器",
+			zap.Uint("task_id", task.ID),
+			zap.String("name", task.Name),
+			zap.Time("trigger_time", triggerTime),
+		)
+	}
+
+	s.logger.Info("同步待执行任务完成",
+		zap.Int("total_pending", len(tasks)),
+		zap.Int("newly_added", addedCount),
+		zap.Int("scheduled_total", len(s.taskEntries)),
+	)
+
+	return nil
 }

@@ -5,14 +5,16 @@ import (
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 // VideoRecordingTaskService 视频录制任务服务
 type VideoRecordingTaskService struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db        *gorm.DB
+	logger    *zap.Logger
+	scheduler scheduler.SchedulerInterface
 }
 
 // NewVideoRecordingTaskService 创建视频录制任务服务
@@ -21,6 +23,11 @@ func NewVideoRecordingTaskService(db *gorm.DB, logger *zap.Logger) *VideoRecordi
 		db:     db,
 		logger: logger,
 	}
+}
+
+// SetScheduler 设置调度器
+func (s *VideoRecordingTaskService) SetScheduler(scheduler scheduler.SchedulerInterface) {
+	s.scheduler = scheduler
 }
 
 // ListTasksRequest 任务列表请求
@@ -178,6 +185,22 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 		zap.String("name", task.Name),
 		zap.Uint("created_by", createdBy),
 	)
+
+	// 同步任务到调度器
+	if s.scheduler != nil {
+		go func() {
+			if err := s.scheduler.SyncPendingTasks(); err != nil {
+				s.logger.Error("同步任务到调度器失败",
+					zap.Uint("task_id", task.ID),
+					zap.Error(err),
+				)
+			} else {
+				s.logger.Info("任务已同步到调度器",
+					zap.Uint("task_id", task.ID),
+				)
+			}
+		}()
+	}
 
 	return task, nil
 }
