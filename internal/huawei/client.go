@@ -294,7 +294,10 @@ func (c *HuaweiClient) Login(ctx context.Context) error {
 	}
 
 	// 解析响应数据
-	dataBytes, _ := json.Marshal(resp.Data)
+	dataBytes, err := json.Marshal(resp.Data)
+	if err != nil {
+		return fmt.Errorf("序列化响应数据失败: %w", err)
+	}
 	var loginResp LoginResponse
 	if err := json.Unmarshal(dataBytes, &loginResp); err != nil {
 		return fmt.Errorf("解析登录响应失败: %w", err)
@@ -330,21 +333,21 @@ func (c *HuaweiClient) Logout(ctx context.Context) error {
 
 // getSessionID 获取会话ID
 func (c *HuaweiClient) getSessionID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	if c.session == nil {
 		return ""
 	}
-	return c.session.GetID()
+	return c.session.ID
 }
 
 // hasSession 检查是否有有效会话
 func (c *HuaweiClient) hasSession() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	return c.session != nil && !c.session.IsExpired()
+	if c.session == nil {
+		return false
+	}
+	return time.Now().Before(c.session.ExpiresAt)
 }
 
 // KeepAlive 保活会话
@@ -426,7 +429,10 @@ func (c *HuaweiClient) CallConference(ctx context.Context, req *CallConferenceRe
 	}
 
 	// 解析响应
-	dataBytes, _ := json.Marshal(resp.Data)
+	dataBytes, err := json.Marshal(resp.Data)
+	if err != nil {
+		return nil, fmt.Errorf("序列化响应数据失败: %w", err)
+	}
 	var callResp CallConferenceResponse
 	if err := json.Unmarshal(dataBytes, &callResp); err != nil {
 		return nil, fmt.Errorf("解析呼叫响应失败: %w", err)
@@ -488,7 +494,10 @@ func (c *HuaweiClient) GetConferenceInfo(ctx context.Context, conferenceNumber s
 	}
 
 	// 解析响应
-	dataBytes, _ := json.Marshal(resp.Data)
+	dataBytes, err := json.Marshal(resp.Data)
+	if err != nil {
+		return nil, fmt.Errorf("序列化响应数据失败: %w", err)
+	}
 	var info ConferenceInfo
 	if err := json.Unmarshal(dataBytes, &info); err != nil {
 		return nil, fmt.Errorf("解析会议信息失败: %w", err)
@@ -519,7 +528,10 @@ func (c *HuaweiClient) GetTerminalStatus(ctx context.Context, terminalNumber str
 	}
 
 	// 解析响应
-	dataBytes, _ := json.Marshal(resp.Data)
+	dataBytes, err := json.Marshal(resp.Data)
+	if err != nil {
+		return nil, fmt.Errorf("序列化响应数据失败: %w", err)
+	}
 	var status TerminalStatus
 	if err := json.Unmarshal(dataBytes, &status); err != nil {
 		return nil, fmt.Errorf("解析终端状态失败: %w", err)
