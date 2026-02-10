@@ -267,7 +267,7 @@ export default function TaskManagement() {
   // 渲染操作按钮
   const renderActions = (record: VideoRecordingTask) => {
     const canEdit = record.status === 'pending'
-    const canDelete = record.status === 'pending'
+    const canDelete = record.status === 'pending' || record.status === 'completed' || record.status === 'failed' || record.status === 'cancelled'
     const canStart = record.status === 'pending'
     const canStop = record.status === 'recording' || record.status === 'connecting'
     const canCancel = record.status === 'pending' || record.status === 'connecting'
