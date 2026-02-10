@@ -659,13 +659,26 @@ func (c *HuaweiClient) CallConference(ctx context.Context, conferenceNumber stri
 
 	c.logger.Info("呼叫会议", zap.String("conference_number", conferenceNumber))
 
+	// 构造呼叫会议请求（匹配Python脚本格式）
 	req := &CallSiteRequest{
 		BIsLdapCall:  0,
-		BIsVideoCall: 1, // 默认视频呼叫
-		UcEnableH239: 0,
+		BIsVideoCall: 0, // 注意：Python脚本使用0（可能表示语音+H.239内容）
+		UcEnableH239: 1, // 启用H.239
 		StSiteInfo: SiteInfoRequest{
-			SiteURI: conferenceNumber,
-			SiteName: "录制会议",
+			UwID:      0,
+			SzName:    conferenceNumber, // 使用会议号作为名称
+			SzPName:   "",
+			UcType:    8,  // 8表示会议号类型
+			BIsLdap:   0,
+			UcDevice:  0,
+			UcOnline:  0,
+			UwSortPos: 0,
+			StSIP: SIPInfo{
+				UcBaudRate: 1920,
+				SzAlias:    "",
+				SzIP:       "",
+				SzUri:      "",
+			},
 		},
 	}
 
@@ -678,20 +691,20 @@ func (c *HuaweiClient) CallConference(ctx context.Context, conferenceNumber stri
 		return NewHuaweiError(ErrCodeNetworkError, err)
 	}
 
-	// 华为API: success=1表示成功，success=0表示失败
-	if resp.Success == 1 {
-		c.logger.Info("呼叫会议成功")
-		return nil
+	// 获取错误ID（兼容error和exception字段）
+	errorID := resp.Error.GetErrorID()
+	if errorID == 0 {
+		errorID = resp.Exception.GetErrorID()
 	}
 
 	// 检查特殊错误码（可能仍然是正常状态）
-	if resp.Exception.ID == 100665897 {
+	if errorID == 100665897 {
 		// 呼叫请求已发出，正在等待响应（正常状态）
 		c.logger.Info("呼叫请求已发出，正在等待响应")
 		return nil
 	}
 
-	return NewHuaweiError(resp.Exception.ID, fmt.Errorf("呼叫会议失败: 错误码 %d", resp.Exception.ID))
+	return NewHuaweiError(errorID, fmt.Errorf("呼叫会议失败: 错误码 %d", errorID))
 }
 
 // HangupCall 挂断呼叫
