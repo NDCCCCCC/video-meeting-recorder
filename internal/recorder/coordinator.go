@@ -42,6 +42,7 @@ type RecordingProcess struct {
 	OutputPath string
 	Status     string
 	CancelFunc context.CancelFunc
+	logFile    *os.File
 }
 
 // InputSourceType 输入源类型
@@ -91,9 +92,10 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd := exec.CommandContext(ctx, c.config.FFmpeg.Path, args...)
 
-	if err := c.startFFmpegProcess(cmd, outputPath); err != nil {
+	logFile, err := c.startFFmpegProcess(cmd, outputPath)
+	if err != nil {
 		cancel()
 		return err
 	}
@@ -105,6 +107,7 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 		OutputPath: outputPath,
 		Status:     "running",
 		CancelFunc: cancel,
+		logFile:    logFile,
 	}
 	c.cancelFuncs[task.ID] = cancel
 	task.RecordingFile = outputPath
@@ -126,11 +129,11 @@ func (c *SimpleRecordingCoordinator) getOutputPath(taskID uint, format string) s
 }
 
 // startFFmpegProcess 启动FFmpeg进程并配置日志
-func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPath string) error {
+func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPath string) (*os.File, error) {
 	logPath := filepath.Join(filepath.Dir(outputPath), "ffmpeg.log")
 	logFile, err := os.Create(logPath)
 	if err != nil {
-		return fmt.Errorf("创建日志文件失败: %w", err)
+		return nil, fmt.Errorf("创建日志文件失败: %w", err)
 	}
 
 	cmd.Stdout = logFile
@@ -138,10 +141,10 @@ func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPat
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
-		return fmt.Errorf("启动FFmpeg进程失败: %w", err)
+		return nil, fmt.Errorf("启动FFmpeg进程失败: %w", err)
 	}
 
-	return nil
+	return logFile, nil
 }
 
 // buildRecordingInput 构建录制输入配置
@@ -186,6 +189,11 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 
 	process.CancelFunc()
 	c.waitForProcess(process, taskID)
+
+	// 关闭日志文件
+	if process.logFile != nil {
+		process.logFile.Close()
+	}
 
 	delete(c.processes, taskID)
 	delete(c.cancelFuncs, taskID)
