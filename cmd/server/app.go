@@ -18,6 +18,9 @@ import (
 	"github.com/cpic/record_v2/internal/recorder"
 	"github.com/cpic/record_v2/internal/scheduler"
 	"github.com/cpic/record_v2/internal/services"
+	"github.com/cpic/record_v2/internal/services/audit"
+	"github.com/cpic/record_v2/internal/services/notification"
+	"github.com/cpic/record_v2/internal/services/storage"
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -52,6 +55,9 @@ type Handlers struct {
 	HuaweiConfig *handlers.HuaweiConfigHandler
 	Conference   *handlers.ConferenceRecordHandler
 	VideoFile    *handlers.VideoFileHandler
+	File         *handlers.FileHandler
+	Audit        *handlers.AuditHandler
+	Notification *handlers.NotificationHandler
 }
 
 // NewMinimalApp 创建应用实例
@@ -167,6 +173,12 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.ConferenceRecord{},
 		&models.VideoFile{},
 		&models.PPTFile{},
+		&models.UploadedFile{},
+		&models.FileShare{},
+		&models.UserStorageQuota{},
+		&models.AuditLog{},
+		&models.NotificationMessage{},
+		&models.UserNotificationSetting{},
 	)
 
 	if err != nil {
@@ -269,6 +281,20 @@ func (a *MinimalApp) initHandlers() error {
 	conferenceService := services.NewConferenceRecordService(a.db, a.logger)
 	videoFileService := services.NewVideoFileService(a.db, a.logger)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
+	fileService := storage.NewFileService(a.db, a.logger, a.config)
+	fileHandler := handlers.NewFileHandler(fileService)
+	fileHandler.SetLogger(a.logger)
+	fileHandler.SetJWTService(a.jwtService)
+
+	// 审计日志服务
+	auditService := audit.NewAuditLogService(a.db, a.logger)
+	auditHandler := handlers.NewAuditHandler(auditService)
+	auditHandler.SetLogger(a.logger)
+
+	// 通知服务
+	notificationService := notification.NewNotificationService(a.db, a.logger, a.config)
+	notificationHandler := handlers.NewNotificationHandler(notificationService)
+	notificationHandler.SetLogger(a.logger)
 
 	a.handlers = &Handlers{
 		Auth:         handlers.NewAuthHandler(authService, a.logger),
@@ -278,6 +304,9 @@ func (a *MinimalApp) initHandlers() error {
 		HuaweiConfig: handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
 		Conference:   handlers.NewConferenceRecordHandler(conferenceService, a.logger),
 		VideoFile:    handlers.NewVideoFileHandler(videoFileService, a.logger),
+		File:         fileHandler,
+		Audit:        auditHandler,
+		Notification: notificationHandler,
 	}
 
 	return nil
@@ -386,6 +415,39 @@ func (a *MinimalApp) registerRoutes() error {
 		files.GET("/:id", a.handlers.VideoFile.GetFile)                // 获取文件详情
 		files.GET("/:id/download", a.handlers.VideoFile.DownloadFile)  // 下载文件
 		files.DELETE("/:id", a.handlers.VideoFile.DeleteFile)          // 删除文件
+	}
+
+	// 文件存储管理
+	storage := api.Group("/storage")
+	{
+		storage.POST("/upload", a.handlers.File.Upload)               // 上传文件
+		storage.GET("/quota", a.handlers.File.GetQuota)                // 获取配额
+		storage.GET("", a.handlers.File.List)                          // 获取文件列表
+		storage.DELETE("/:id", a.handlers.File.Delete)                 // 删除文件
+		storage.POST("/:id/share", a.handlers.File.Share)              // 生成分享链接
+	}
+
+	// 公开文件访问（无需认证）
+	a.router.GET("/api/v1/files/download/:token", a.handlers.File.Download)
+	a.router.GET("/api/v1/files/share/:token", a.handlers.File.ShareDownload)
+
+	// 审计日志管理
+	auditLog := api.Group("/audit")
+	{
+		auditLog.GET("/logs", a.handlers.Audit.Query)                    // 查询审计日志
+		auditLog.GET("/logs/:id", a.handlers.Audit.GetByID)              // 获取日志详情
+		auditLog.GET("/statistics", a.handlers.Audit.Statistics)        // 获取操作统计
+	}
+
+	// 通知管理
+	notifications := api.Group("/notifications")
+	{
+		notifications.GET("", a.handlers.Notification.ListNotifications)                   // 获取通知列表
+		notifications.GET("/unread-count", a.handlers.Notification.GetUnreadCount)         // 获取未读数量
+		notifications.PUT("/:id/read", a.handlers.Notification.MarkAsRead)               // 标记为已读
+		notifications.PUT("/read-all", a.handlers.Notification.MarkAllAsRead)             // 全部标记为已读
+		notifications.GET("/settings", a.handlers.Notification.GetUserSetting)           // 获取通知配置
+		notifications.PUT("/settings", a.handlers.Notification.UpdateUserSetting)        // 更新通知配置
 	}
 
 	return nil
@@ -531,6 +593,18 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 		if err := a.httpServer.Shutdown(shutdownCtx); err != nil {
 			a.logger.Error("HTTP server shutdown error", zap.Error(err))
 		}
+	}
+
+	// 停止审计日志服务
+	if a.handlers.Audit != nil {
+		a.logger.Info("Stopping audit log service...")
+		a.handlers.Audit.Stop()
+	}
+
+	// 停止通知服务
+	if a.handlers.Notification != nil {
+		a.logger.Info("Stopping notification service...")
+		a.handlers.Notification.Stop()
 	}
 
 	// 停止所有服务

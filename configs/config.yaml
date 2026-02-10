@@ -43,6 +43,29 @@ storage:
   recordings_path: "./data/recordings"
   temp_path: "./data/temp"
   max_disk_usage: 90
+  # 文件存储配置
+  local:
+    base_path: "./data/files"
+    base_url: "http://localhost:8080/files"
+  max_file_size: 5368709120  # 5GB
+  allowed_extensions:
+    - ".jpg"
+    - ".jpeg"
+    - ".png"
+    - ".gif"
+    - ".pdf"
+    - ".doc"
+    - ".docx"
+    - ".xls"
+    - ".xlsx"
+    - ".ppt"
+    - ".pptx"
+    - ".txt"
+    - ".zip"
+    - ".rar"
+    - ".mp4"
+    - ".mkv"
+    - ".avi"
 
 # 华为会议系统配置
 huawei:

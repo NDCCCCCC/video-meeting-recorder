@@ -69,6 +69,17 @@ type StorageConfig struct {
 	RecordingsPath string `mapstructure:"recordings_path" json:"recordings_path" yaml:"recordings_path"`
 	TempPath       string `mapstructure:"temp_path" json:"temp_path" yaml:"temp_path"`
 	MaxDiskUsage   int    `mapstructure:"max_disk_usage" json:"max_disk_usage" yaml:"max_disk_usage"`
+
+	// 文件存储配置
+	Local          LocalStorageConfig `mapstructure:"local" json:"local" yaml:"local"`
+	MaxFileSize    int64              `mapstructure:"max_file_size" json:"max_file_size" yaml:"max_file_size"`
+	AllowedExtensions []string        `mapstructure:"allowed_extensions" json:"allowed_extensions" yaml:"allowed_extensions"`
+}
+
+// LocalStorageConfig 本地存储配置
+type LocalStorageConfig struct {
+	BasePath string `mapstructure:"base_path" json:"base_path" yaml:"base_path"`
+	BaseURL  string `mapstructure:"base_url" json:"base_url" yaml:"base_url"`
 }
 
 // HuaweiConfig 华为会议系统配置
@@ -219,6 +230,17 @@ func setDefaults(cfg *Config) {
 		cfg.Storage.MaxDiskUsage = 90 // 90%
 	}
 
+	// 文件存储默认值
+	if cfg.Storage.Local.BasePath == "" {
+		cfg.Storage.Local.BasePath = "./data/files"
+	}
+	if cfg.Storage.Local.BaseURL == "" {
+		cfg.Storage.Local.BaseURL = fmt.Sprintf("http://%s:%d/files", cfg.Server.Host, cfg.Server.Port)
+	}
+	if cfg.Storage.MaxFileSize == 0 {
+		cfg.Storage.MaxFileSize = 5 * 1024 * 1024 * 1024 // 5GB
+	}
+
 	if cfg.FFmpeg.Path == "" {
 		cfg.FFmpeg.Path = "ffmpeg"
 	}
@@ -242,6 +264,7 @@ func ensureDirectories(cfg *Config) error {
 		filepath.Dir(cfg.Database.Path),
 		cfg.Storage.RecordingsPath,
 		cfg.Storage.TempPath,
+		cfg.Storage.Local.BasePath,
 		cfg.Logging.Output,
 	}
 
