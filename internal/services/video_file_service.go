@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -254,8 +255,12 @@ func (s *VideoFileService) extractVideoMetadata(filePath string) (*internalVideo
 		return metadata, nil
 	}
 
+	// 创建带超时的 context（30秒超时）
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// 执行 ffprobe 命令
-	cmd := exec.Command(ffprobePath,
+	cmd := exec.CommandContext(ctx, ffprobePath,
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_format",
@@ -331,7 +336,7 @@ func (s *VideoFileService) extractVideoMetadata(filePath string) (*internalVideo
 // CreateFileFromTask 从录制任务创建文件记录
 func (s *VideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, format string) (*models.VideoFile, error) {
 	if task == nil {
-		return nil, errors.New("任务不能为空")
+		return nil, fmt.Errorf("创建文件记录失败：任务对象为 nil")
 	}
 
 	// 根据格式确定文件路径
@@ -357,7 +362,7 @@ func (s *VideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, f
 	// 检查是否已存在相同路径的记录
 	var existingFile models.VideoFile
 	if err := s.db.Where("file_path = ?", filePath).First(&existingFile).Error; err == nil {
-		s.logger.Debug("文件记录已存在",
+		s.logger.Info("文件记录已存在（幂等性）",
 			zap.Uint("task_id", task.ID),
 			zap.String("file_path", filePath),
 			zap.Uint("existing_id", existingFile.ID),
@@ -430,7 +435,7 @@ func (s *VideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, f
 // CreateFile 从文件路径创建文件记录（通用方法）
 func (s *VideoFileService) CreateFile(filePath string, conferenceID *uint, recordedAt *time.Time) (*models.VideoFile, error) {
 	if filePath == "" {
-		return nil, errors.New("文件路径不能为空")
+		return nil, fmt.Errorf("创建文件记录失败：文件路径为空")
 	}
 
 	// 检查文件是否存在
