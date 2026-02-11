@@ -10,7 +10,7 @@ import (
 type VideoFile struct {
 	Base
 	FileName           string    `gorm:"type:varchar(200);not null" json:"file_name"`
-	FilePath           string    `gorm:"type:varchar(500);not null" json:"file_path"`
+	FilePath           string    `gorm:"type:varchar(500);not null;uniqueIndex:idx_file_path" json:"file_path"`
 	FileSize           int64     `gorm:"default:0" json:"file_size"`  // 字节
 	Duration           int       `gorm:"default:0" json:"duration"`   // 秒
 	Format             string    `gorm:"type:varchar(20)" json:"format"` // mp4, mkv
@@ -19,9 +19,9 @@ type VideoFile struct {
 	Codec              string    `gorm:"type:varchar(50)" json:"codec"`
 	ConferenceRecordID *uint     `gorm:"index" json:"conference_record_id,omitempty"`
 	ConferenceRecord   *ConferenceRecord `gorm:"foreignKey:ConferenceRecordID" json:"conference_record,omitempty"`
-	Status             string    `gorm:"type:varchar(20);default:'ready'" json:"status"` // ready, processing, error
+	Status             string    `gorm:"type:varchar(20);default:'ready';index:idx_status_created,priority:1;index:idx_conference_record_id" json:"status"` // ready, processing, error
 	ThumbnailPath      *string   `json:"thumbnail_path,omitempty"`
-	RecordedAt         *time.Time `json:"recorded_at,omitempty"`
+	RecordedAt         *time.Time `gorm:"index" json:"recorded_at,omitempty"`
 }
 
 // 文件状态常量
