@@ -40,6 +40,7 @@ type VideoSimpleScheduler struct {
 	coordinator      RecorderCoordinatorInterface
 	connector        *video_recording.HuaweiConferenceConnector
 	conversionService ConversionServiceInterface // 转换服务
+	videoFileService VideoFileServiceInterface   // 视频文件服务
 	taskEntries      map[uint]cron.EntryID
 	entryTasks       map[cron.EntryID]uint
 	executing        map[uint]bool
@@ -53,6 +54,11 @@ type VideoSimpleScheduler struct {
 // ConversionServiceInterface 转换服务接口
 type ConversionServiceInterface interface {
 	SubmitConversion(taskID uint) error
+}
+
+// VideoFileServiceInterface 视频文件服务接口
+type VideoFileServiceInterface interface {
+	CreateFileFromTask(task *models.VideoRecordingTask, format string) (*models.VideoFile, error)
 }
 
 // TaskServiceInterface 任务服务接口
@@ -77,6 +83,7 @@ func NewVideoSimpleScheduler(
 	coordinator RecorderCoordinatorInterface,
 	connector *video_recording.HuaweiConferenceConnector,
 	conversionService ConversionServiceInterface,
+	videoFileService VideoFileServiceInterface,
 	logger *zap.Logger,
 	cfg *config.Config,
 ) *VideoSimpleScheduler {
@@ -85,18 +92,19 @@ func NewVideoSimpleScheduler(
 	c := cron.New(cron.WithSeconds(), cron.WithLocation(time.UTC))
 
 	scheduler := &VideoSimpleScheduler{
-		cron:             c,
-		taskService:      taskService,
-		coordinator:      coordinator,
-		connector:        connector,
+		cron:              c,
+		taskService:       taskService,
+		coordinator:       coordinator,
+		connector:         connector,
 		conversionService: conversionService,
-		taskEntries:      make(map[uint]cron.EntryID),
-		entryTasks:       make(map[cron.EntryID]uint),
-		executing:        make(map[uint]bool),
-		cancelFuncs:      make(map[uint]context.CancelFunc),
-		logger:           logger,
-		config:           cfg,
-		startTime:        time.Now(),
+		videoFileService:  videoFileService,
+		taskEntries:       make(map[uint]cron.EntryID),
+		entryTasks:        make(map[cron.EntryID]uint),
+		executing:         make(map[uint]bool),
+		cancelFuncs:       make(map[uint]context.CancelFunc),
+		logger:            logger,
+		config:            cfg,
+		startTime:         time.Now(),
 	}
 
 	return scheduler
@@ -460,6 +468,28 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 
 	// 从调度器移除
 	s.RemoveTask(taskID)
+
+	// 创建视频文件记录（如果 videoFileService 可用）
+	if s.videoFileService != nil && task != nil {
+		// 为 MKV 文件创建记录
+		if task.MKVFilePath != "" {
+			if _, err := s.videoFileService.CreateFileFromTask(task, "mkv"); err != nil {
+				s.logger.Error("创建MKV文件记录失败",
+					zap.Uint("task_id", taskID),
+					zap.Error(err),
+				)
+			}
+		}
+		// 如果 MP4 已存在，也为它创建记录
+		if task.MP4FilePath != "" {
+			if _, err := s.videoFileService.CreateFileFromTask(task, "mp4"); err != nil {
+				s.logger.Error("创建MP4文件记录失败",
+					zap.Uint("task_id", taskID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
 
 	// 提交转换任务（如果有转换服务）
 	if s.conversionService != nil && task != nil && task.MKVFilePath != "" {

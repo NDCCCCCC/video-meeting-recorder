@@ -282,11 +282,16 @@ func TestGetOutputPath(t *testing.T) {
 	}
 	coordinator := NewSimpleRecordingCoordinator(logger, cfg)
 
-	outputPath := coordinator.getOutputPath(123, "mp4")
+	task := &models.VideoRecordingTask{
+		Base:            models.Base{ID: 123},
+		Name:            "TestTask",
+		ConferenceNumber: "123456",
+	}
+	outputPath := coordinator.getOutputPath(task, "mp4")
 
 	assert.Contains(t, outputPath, "task_123")
 	assert.Contains(t, outputPath, ".mp4")
-	assert.Contains(t, outputPath, "recording_")
+	assert.Contains(t, outputPath, "TestTask")
 }
 
 // TestRecordingStatus 测试录制状态管理
