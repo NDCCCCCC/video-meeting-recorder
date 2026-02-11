@@ -52,6 +52,8 @@ type AuthConfig struct {
 	AccessTokenDuration  time.Duration `mapstructure:"access_token_duration" json:"access_token_duration" yaml:"access_token_duration"`
 	RefreshTokenDuration time.Duration `mapstructure:"refresh_token_duration" json:"refresh_token_duration" yaml:"refresh_token_duration"`
 	MaxSessionDuration   time.Duration `mapstructure:"max_session_duration" json:"max_session_duration" yaml:"max_session_duration"`
+	HLSTokenSecret       string        `mapstructure:"hls_token_secret" json:"hls_token_secret" yaml:"hls_token_secret"`
+	HLSTokenDuration     time.Duration `mapstructure:"hls_token_duration" json:"hls_token_duration" yaml:"hls_token_duration"`
 }
 
 // LoggingConfig 日志配置
@@ -108,13 +110,21 @@ type RTSPConfig struct {
 
 // FFmpegConfig FFmpeg配置
 type FFmpegConfig struct {
-	Path            string        `mapstructure:"path" json:"path" yaml:"path"`
-	MaxProcesses    int           `mapstructure:"max_processes" json:"max_processes" yaml:"max_processes"`
-	Timeout         time.Duration `mapstructure:"timeout" json:"timeout" yaml:"timeout"`
-	DefaultCodec    string        `mapstructure:"default_codec" json:"default_codec" yaml:"default_codec"`
-	DefaultFormat   string        `mapstructure:"default_format" json:"default_format" yaml:"default_format"`
-	DefaultVideoBitrate string    `mapstructure:"default_video_bitrate" json:"default_video_bitrate" yaml:"default_video_bitrate"`
-	DefaultAudioBitrate string    `mapstructure:"default_audio_bitrate" json:"default_audio_bitrate" yaml:"default_audio_bitrate"`
+	Path              string        `mapstructure:"path" json:"path" yaml:"path"`
+	MaxProcesses      int           `mapstructure:"max_processes" json:"max_processes" yaml:"max_processes"`
+	Timeout           time.Duration `mapstructure:"timeout" json:"timeout" yaml:"timeout"`
+	DefaultCodec      string        `mapstructure:"default_codec" json:"default_codec" yaml:"default_codec"`
+	DefaultFormat     string        `mapstructure:"default_format" json:"default_format" yaml:"default_format"`
+	DefaultVideoBitrate string      `mapstructure:"default_video_bitrate" json:"default_video_bitrate" yaml:"default_video_bitrate"`
+	DefaultAudioBitrate string      `mapstructure:"default_audio_bitrate" json:"default_audio_bitrate" yaml:"default_audio_bitrate"`
+	// DShow 设备配置
+	DShowBufferSize   int    `mapstructure:"dshow_buffer_size" json:"dshow_buffer_size" yaml:"dshow_buffer_size"`   // 实时缓冲区大小（字节）
+	DShowThreadQueueSize int  `mapstructure:"dshow_thread_queue_size" json:"dshow_thread_queue_size" yaml:"dshow_thread_queue_size"` // 线程队列大小
+	// HLS 配置
+	HLSSegmentDuration int    `mapstructure:"hls_segment_duration" json:"hls_segment_duration" yaml:"hls_segment_duration"` // HLS 分片时长（秒）
+	HLSListSize       int    `mapstructure:"hls_list_size" json:"hls_list_size" yaml:"hls_list_size"`                 // HLS 播放列表保留分片数
+	// 录制监控配置
+	MaxRecordingDuration time.Duration `mapstructure:"max_recording_duration" json:"max_recording_duration" yaml:"max_recording_duration"` // 最长录制时长
 }
 
 // expandEnvWithDefault 展开环境变量，支持 ${VAR:default} 格式
@@ -270,6 +280,13 @@ func setDefaults(cfg *Config) {
 	if cfg.Auth.MaxSessionDuration == 0 {
 		cfg.Auth.MaxSessionDuration = 30 * 24 * time.Hour
 	}
+	// HLS Token 默认值：使用与 JWT 相同的密钥，5分钟有效期
+	if cfg.Auth.HLSTokenSecret == "" {
+		cfg.Auth.HLSTokenSecret = cfg.Auth.JWTSecret
+	}
+	if cfg.Auth.HLSTokenDuration == 0 {
+		cfg.Auth.HLSTokenDuration = 5 * time.Minute
+	}
 
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"
@@ -328,6 +345,24 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.FFmpeg.DefaultFormat == "" {
 		cfg.FFmpeg.DefaultFormat = "mp4"
+	}
+	// DShow 设备默认值
+	if cfg.FFmpeg.DShowBufferSize == 0 {
+		cfg.FFmpeg.DShowBufferSize = 104857600 // 100MB
+	}
+	if cfg.FFmpeg.DShowThreadQueueSize == 0 {
+		cfg.FFmpeg.DShowThreadQueueSize = 1024
+	}
+	// HLS 默认值
+	if cfg.FFmpeg.HLSSegmentDuration == 0 {
+		cfg.FFmpeg.HLSSegmentDuration = 10 // 10秒
+	}
+	if cfg.FFmpeg.HLSListSize == 0 {
+		cfg.FFmpeg.HLSListSize = 5 // 保留5个分片
+	}
+	// 录制监控默认值
+	if cfg.FFmpeg.MaxRecordingDuration == 0 {
+		cfg.FFmpeg.MaxRecordingDuration = 24 * time.Hour
 	}
 
 	// Huawei config defaults

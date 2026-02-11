@@ -40,10 +40,10 @@ type SimpleRecordingCoordinator struct {
 // RecordingProcess 录制进程
 type RecordingProcess struct {
 	TaskID     uint
-	Cmd        *exec.Cmd
+	Cmd        *exec.Cmd // 主录制进程 (使用 tee muxer 同时输出 MKV 和 HLS)
 	StartTime  time.Time
-	OutputPath string
-	HLSPath    string // HLS预览路径
+	OutputPath string // MKV文件路径
+	HLSPath    string // HLS预览路径 (m3u8文件)
 	Status     string
 	CancelFunc context.CancelFunc
 	logFile    *os.File
@@ -99,6 +99,8 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	}
 
 	input := c.buildRecordingInput(task, huaweiConfig)
+
+	// 使用 tee muxer 同时生成 MKV 和 HLS
 	args, err := c.buildRecordingCommand(input, mkvPath, hlsPath, task.EndTime.Sub(task.StartTime))
 	if err != nil {
 		return fmt.Errorf("构建录制命令失败: %w", err)
@@ -131,12 +133,15 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	task.MKVFilePath = mkvPath       // 新字段指向 MKV 文件
 	task.HLSPreviewPath = m3u8Path   // HLS 预览路径
 
-	c.logger.Info("录制已启动",
+	c.logger.Info("录制已启动（同时生成 MKV 和 HLS）",
 		zap.Uint("task_id", task.ID),
 		zap.String("input_type", string(input.Type)),
 		zap.String("mkv_path", mkvPath),
 		zap.String("hls_path", m3u8Path),
 	)
+
+	// 启动监控 goroutine，等待进程结束
+	go c.monitorProcess(task.ID, cmd, ctx)
 
 	return nil
 }
@@ -168,41 +173,31 @@ func (c *SimpleRecordingCoordinator) getHLSPath(task *models.VideoRecordingTask)
 
 // sanitizeFilename 清理文件名中的特殊字符
 func sanitizeFilename(name string) string {
-	// 替换不允许在文件名中出现的字符
 	replacements := map[rune]string{
-		' ':  "_",
-		'/':  "_",
-		'\\': "_",
-		':':  "_",
-		'*':  "_",
-		'?':  "_",
-		'"':  "_",
-		'<':  "_",
-		'>':  "_",
-		'|':  "_",
-		'\n': "",
-		'\r': "",
-		'\t': "",
+		' ': "_", '/': "_", '\\': "_", ':': "_",
+		'*': "_", '?': "_", '"': "_", '<': "_",
+		'>': "_", '|': "_",
+		'\n': "", '\r': "", '\t': "",
 	}
 
 	result := make([]rune, 0, len(name))
 	for _, r := range name {
 		if repl, ok := replacements[r]; ok {
 			result = append(result, []rune(repl)...)
-		} else if r < 32 {
-			// 跳过控制字符
-			continue
-		} else {
+		} else if r >= 32 {
 			result = append(result, r)
 		}
 	}
 
-	// 限制文件名长度
 	if len(result) > 100 {
 		result = result[:100]
 	}
-
 	return string(result)
+}
+
+// normalizePathForFFmpeg 将 Windows 路径转换为 FFmpeg 兼容格式（使用正斜杠）
+func normalizePathForFFmpeg(path string) string {
+	return strings.ReplaceAll(path, "\\", "/")
 }
 
 // startFFmpegProcess 启动FFmpeg进程并配置日志
@@ -277,6 +272,7 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 		return fmt.Errorf("未找到录制任务: %d", taskID)
 	}
 
+	// 停止主录制进程（tee muxer 会自动停止所有输出）
 	process.CancelFunc()
 	c.waitForProcess(process, taskID, true) // true 表示是主动停止
 
@@ -317,7 +313,34 @@ func (c *SimpleRecordingCoordinator) waitForProcess(process *RecordingProcess, t
 	}
 }
 
-// buildRecordingCommand 构建录制命令（使用 tee muxer 双输出）
+// monitorProcess 监控录制进程状态
+func (c *SimpleRecordingCoordinator) monitorProcess(taskID uint, cmd *exec.Cmd, ctx context.Context) {
+	err := cmd.Wait()
+
+	c.mu.Lock()
+	process, exists := c.processes[taskID]
+	if exists {
+		process.Status = "stopped"
+	}
+	c.mu.Unlock()
+
+	if err != nil {
+		if ctx.Err() != nil {
+			// Context 被取消，是主动停止
+			c.logger.Debug("录制进程已停止", zap.Uint("task_id", taskID))
+		} else {
+			// 非预期退出
+			c.logger.Error("录制进程异常退出",
+				zap.Uint("task_id", taskID),
+				zap.Error(err),
+			)
+		}
+	} else {
+		c.logger.Info("录制进程正常结束", zap.Uint("task_id", taskID))
+	}
+}
+
+// buildRecordingCommand 构建录制命令（使用 tee muxer 同时输出 MKV 和 HLS）
 func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput, mkvPath string, hlsPath string, duration time.Duration) ([]string, error) {
 	args := []string{"-y"}
 
@@ -346,23 +369,42 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 		args = append(args, "-t", fmt.Sprintf("%.0f", duration.Seconds()))
 	}
 
-	// 使用 tee muxer 进行双输出（MKV + HLS）
-	// 格式: [f=mkv]{mkv_output}|[f=hls:hls_time=10:hls_list_size=0:hls_segment_filename={segment_path}]{hls_output}
-	hlsSegmentPath := filepath.Join(hlsPath, "segment_%03d.ts")
-	teeSpec := fmt.Sprintf("[f=mkv]%s|[f=hls:hls_time=%d:hls_list_size=0:hls_segment_filename=%s]%s",
-		mkvPath,
-		hlsSegmentDuration,
-		hlsSegmentPath,
-		filepath.Join(hlsPath, "index.m3u8"))
+	// 添加 global_header 标志，这是 tee muxer 正常工作的关键
+	// MKV 和 HLS 容器需要全局存储的比特流参数
+	args = append(args, "-flags", "+global_header")
 
-	args = append(args,
-		"-f", "tee",
-		"-map", "0:v",
-	)
+	// 映射流：需要根据输入源类型确定正确的输入索引
+	args = append(args, "-map", "0:v")
 	if input.hasAudio {
-		args = append(args, "-map", "0:a")
+		// 检查是否有独立的音频输入源（USB或Mixed类型）
+		if input.Type == InputSourceUSB || input.Type == InputSourceMixed {
+			// 分离的音频设备，使用第二个输入索引
+			args = append(args, "-map", "1:a")
+		} else {
+			// RTSP等单一输入源，使用第一个输入索引
+			args = append(args, "-map", "0:a")
+		}
 	}
-	args = append(args, teeSpec)
+
+	// 构建 tee muxer 输出规范
+	hlsSegmentPath := filepath.Join(hlsPath, "segment_%03d.ts")
+	hlsM3U8Path := filepath.Join(hlsPath, "index.m3u8")
+
+	// Tee muxer 格式: "mkv_path|[f=hls:hls_time=X:hls_list_size=Y:hls_segment_filename=Z]m3u8_path"
+	teeSpec := fmt.Sprintf("%s|[f=hls:hls_time=%d:hls_list_size=5:hls_segment_filename=%s]%s",
+		normalizePathForFFmpeg(mkvPath),
+		hlsSegmentDuration,
+		normalizePathForFFmpeg(hlsSegmentPath),
+		normalizePathForFFmpeg(hlsM3U8Path),
+	)
+
+	args = append(args, "-f", "tee", teeSpec)
+
+	c.logger.Debug("FFmpeg tee muxer 命令已构建",
+		zap.String("mkv_output", mkvPath),
+		zap.String("hls_output", hlsM3U8Path),
+		zap.Int("hls_segment_duration", hlsSegmentDuration),
+	)
 
 	return args, nil
 }
@@ -428,12 +470,23 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 		}
 	}
 
-	return []string{
+	// 构建 dshow 参数
+	args := []string{
 		"-f", input.CameraBackend,
 		"-video_size", "1920x1080",
 		"-framerate", "30",
-		"-i", deviceParam,
-	}, nil
+	}
+
+	// 为 dshow 增加实时缓冲区和线程队列大小，防止丢帧和阻塞
+	if input.CameraBackend == "dshow" {
+		// rtbufsize 单位是字节，设置为 100MB (104857600)
+		args = append(args, "-rtbufsize", "104857600")
+		// thread_queue_size 增加线程队列大小
+		args = append(args, "-thread_queue_size", "1024")
+	}
+
+	args = append(args, "-i", deviceParam)
+	return args, nil
 }
 
 // buildUSBAudioArgs 构建USB音频输入参数
@@ -460,7 +513,13 @@ func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]
 		}
 	}
 
-	return []string{"-f", input.AudioBackend, "-i", deviceParam}, nil
+	// 为 dshow 增加线程队列大小，防止阻塞
+	args := []string{"-f", input.AudioBackend}
+	if input.AudioBackend == "dshow" {
+		args = append(args, "-thread_queue_size", "1024")
+	}
+	args = append(args, "-i", deviceParam)
+	return args, nil
 }
 
 // buildRTSPArgs 构建RTSP输入参数

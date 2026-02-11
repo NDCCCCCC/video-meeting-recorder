@@ -60,6 +60,7 @@ type TaskServiceInterface interface {
 	GetTask(id uint) (*models.VideoRecordingTask, error)
 	GetPendingTasks() ([]*models.VideoRecordingTask, error)
 	UpdateTaskStatus(id uint, status models.VideoRecordingTaskStatus, errorMsg string) error
+	UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error
 	GetHuaweiConfig(id uint) (*models.HuaweiConfig, error)
 }
 
@@ -295,7 +296,39 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 			zap.Error(err),
 		)
 		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
+
+		// 清理：断开华为会议连接，解锁终端
+		if s.connector != nil {
+			s.logger.Info("录制启动失败，正在清理华为会议连接",
+				zap.Uint("task_id", taskID),
+			)
+			if cleanupErr := s.connector.DisconnectFromConference(context.Background(), task); cleanupErr != nil {
+				s.logger.Error("清理华为会议连接失败",
+					zap.Uint("task_id", taskID),
+					zap.Error(cleanupErr),
+				)
+			}
+		}
 		return
+	}
+
+	// 更新数据库中的文件路径信息
+	// coordinator.StartRecording 会修改 task 对象，设置 MKVFilePath 和 HLSPreviewPath
+	s.logger.Info("准备更新录制文件路径",
+		zap.Uint("task_id", taskID),
+		zap.String("mkv_path", task.MKVFilePath),
+		zap.String("hls_path", task.HLSPreviewPath),
+	)
+	if err := s.taskService.UpdateRecordingPaths(taskID, task.MKVFilePath, task.HLSPreviewPath); err != nil {
+		s.logger.Warn("更新录制文件路径失败",
+			zap.Uint("task_id", taskID),
+			zap.Error(err),
+		)
+		// 不中断录制，只记录警告
+	} else {
+		s.logger.Info("录制文件路径已更新",
+			zap.Uint("task_id", taskID),
+		)
 	}
 
 	// 启动监控（传递context用于取消）

@@ -137,7 +137,7 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 	// 删除物理文件
 	if file.Exists() {
 		if err := file.Delete(); err != nil {
-			s.logger.Warn("Failed to delete physical file",
+			s.logger.Warn("删除物理文件失败",
 				zap.Uint("file_id", id),
 				zap.Error(err),
 			)
@@ -153,7 +153,7 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 		return errors.New("文件不存在")
 	}
 
-	s.logger.Info("Video file deleted", zap.Uint("file_id", id))
+	s.logger.Info("视频文件已删除", zap.Uint("file_id", id))
 
 	return nil
 }
