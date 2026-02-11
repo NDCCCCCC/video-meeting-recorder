@@ -1,21 +1,15 @@
+//go:build ignore
 package main
 
 import (
 	"fmt"
 	"log"
 
+	"github.com/cpic/record_v2/internal/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	_ "modernc.org/sqlite"
 )
-
-// HuaweiConfig 华为配置模型
-type HuaweiConfig struct {
-	ID       uint   `gorm:"primaryKey"`
-	Name     string `gorm:"type:varchar(200)"`
-	IsLocked bool   `gorm:"default:false"`
-	LockedBy *uint  `json:"locked_by,omitempty"`
-}
 
 func main() {
 	// 连接数据库
@@ -25,7 +19,7 @@ func main() {
 	}
 
 	// 查找所有被锁定的配置
-	var configs []HuaweiConfig
+	var configs []models.HuaweiConfig
 	result := db.Where("is_locked = ?", true).Find(&configs)
 	if result.Error != nil {
 		log.Fatal("查询配置失败:", result.Error)
@@ -51,7 +45,7 @@ func main() {
 		"locked_by": nil,
 	}
 
-	result = db.Model(&HuaweiConfig{}).
+	result = db.Model(&models.HuaweiConfig{}).
 		Where("is_locked = ?", true).
 		Updates(updates)
 
