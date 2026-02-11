@@ -99,8 +99,8 @@ func (s *VideoFileService) ListFiles(req *ListFilesRequest) (*ListFilesResponse,
 	}
 
 	var stats StatsResult
-	// 复用 query 变量，继承所有筛选条件
-	statsQuery := query.Select("COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_size")
+	// 必须clone query，否则Select会影响原始query对象
+	statsQuery := query.Session(&gorm.Session{}).Select("COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_size")
 	if err := statsQuery.Scan(&stats).Error; err != nil {
 		return nil, err
 	}
