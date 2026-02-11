@@ -41,31 +41,33 @@ type ConversionTask struct {
 
 // FFmpegConversionService FFmpeg转换服务实现
 type FFmpegConversionService struct {
-	db            *gorm.DB
-	logger        *zap.Logger
-	config        *config.Config
-	taskQueue     chan uint
-	workers       int
-	maxRetries    int
-	cancelFuncs    map[uint]context.CancelFunc
-	mu            sync.RWMutex
-	wg            sync.WaitGroup
-	ctx           context.Context
-	cancel        context.CancelFunc
-	ffmpegPath    string
+	db               *gorm.DB
+	logger           *zap.Logger
+	config           *config.Config
+	taskQueue        chan uint
+	workers          int
+	maxRetries       int
+	cancelFuncs      map[uint]context.CancelFunc
+	mu               sync.RWMutex
+	wg               sync.WaitGroup
+	ctx              context.Context
+	cancel           context.CancelFunc
+	ffmpegPath       string
+	videoFileService *VideoFileService // 视频文件服务
 }
 
 // NewFFmpegConversionService 创建转换服务
-func NewFFmpegConversionService(db *gorm.DB, logger *zap.Logger, cfg *config.Config) ConversionService {
+func NewFFmpegConversionService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, videoFileService *VideoFileService) ConversionService {
 	return &FFmpegConversionService{
-		db:         db,
-		logger:     logger,
-		config:     cfg,
-		taskQueue:  make(chan uint, 100), // 缓冲队列
-		workers:    3,                     // 默认3个worker
-		maxRetries: 3,                     // 最大重试次数
-		cancelFuncs: make(map[uint]context.CancelFunc),
-		ffmpegPath: cfg.FFmpeg.Path,
+		db:               db,
+		logger:           logger,
+		config:           cfg,
+		taskQueue:        make(chan uint, 100), // 缓冲队列
+		workers:          3,                     // 默认3个worker
+		maxRetries:       3,                     // 最大重试次数
+		cancelFuncs:      make(map[uint]context.CancelFunc),
+		ffmpegPath:       cfg.FFmpeg.Path,
+		videoFileService: videoFileService,
 	}
 }
 
@@ -269,6 +271,16 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 		"conversion_error_msg":     "",
 		"mp4_file_path":            outputPath,
 	})
+
+	// 创建 MP4 文件记录
+	if s.videoFileService != nil {
+		if _, err := s.videoFileService.CreateFileFromTask(&task, "mp4"); err != nil {
+			s.logger.Error("创建MP4文件记录失败",
+				zap.Uint("task_id", taskID),
+				zap.Error(err),
+			)
+		}
+	}
 
 	s.logger.Info("转换完成",
 		zap.Uint("task_id", taskID),

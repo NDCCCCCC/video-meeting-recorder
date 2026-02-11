@@ -11,6 +11,23 @@ import (
 	"go.uber.org/zap"
 )
 
+// mockVideoFileService 模拟视频文件服务
+type mockVideoFileService struct{}
+
+func newMockVideoFileService() *mockVideoFileService {
+	return &mockVideoFileService{}
+}
+
+func (m *mockVideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, format string) (*models.VideoFile, error) {
+	// 测试中不需要真正创建文件记录，返回空记录即可
+	return &models.VideoFile{
+		FileName: fmt.Sprintf("test.%s", format),
+		FilePath: fmt.Sprintf("/tmp/test.%s", format),
+		Format:   format,
+		Status:   models.FileStatusReady,
+	}, nil
+}
+
 // mockTaskService 模拟任务服务
 type mockTaskService struct {
 	tasks map[uint]*models.VideoRecordingTask
@@ -64,6 +81,16 @@ func (m *mockTaskService) GetHuaweiConfig(id uint) (*models.HuaweiConfig, error)
 	}, nil
 }
 
+func (m *mockTaskService) UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error {
+	task, ok := m.tasks[id]
+	if !ok {
+		return ErrTaskNotFound
+	}
+	task.MKVFilePath = mkvPath
+	task.HLSPreviewPath = hlsPath
+	return nil
+}
+
 // mockCoordinator 模拟录制协调器
 type mockCoordinator struct{}
 
@@ -105,7 +132,7 @@ func TestNewVideoSimpleScheduler(t *testing.T) {
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
 
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, newMockVideoFileService(), logger, cfg)
 
 	assert.NotNil(t, scheduler)
 	assert.NotNil(t, scheduler.cron)
@@ -119,7 +146,7 @@ func TestNewVideoSimpleScheduler(t *testing.T) {
 func TestCalculateTriggerTime(t *testing.T) {
 	logger := zap.NewNop()
 	cfg := &config.Config{}
-	scheduler := NewVideoSimpleScheduler(newMockTaskService(), newMockCoordinator(), nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(newMockTaskService(), newMockCoordinator(), nil, nil, newMockVideoFileService(), logger, cfg)
 
 	startTime := time.Date(2026, 2, 10, 14, 30, 0, 0, time.UTC)
 	triggerTime := scheduler.calculateTriggerTime(startTime, 5)
@@ -132,7 +159,7 @@ func TestCalculateTriggerTime(t *testing.T) {
 func TestGenerateCronExpression(t *testing.T) {
 	logger := zap.NewNop()
 	cfg := &config.Config{}
-	scheduler := NewVideoSimpleScheduler(newMockTaskService(), newMockCoordinator(), nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(newMockTaskService(), newMockCoordinator(), nil, nil, newMockVideoFileService(), logger, cfg)
 
 	triggerTime := time.Date(2026, 2, 10, 14, 25, 30, 0, time.UTC)
 	cronExpr := scheduler.generateCronExpression(triggerTime)
@@ -147,7 +174,7 @@ func TestAddTask(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, newMockVideoFileService(), logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -173,7 +200,7 @@ func TestAddTask_DuplicateTask(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, newMockVideoFileService(), logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -201,7 +228,7 @@ func TestAddTask_ExpiredTime(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, newMockVideoFileService(), logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -225,7 +252,7 @@ func TestAddTaskWithPastStartTime(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, newMockVideoFileService(), logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -251,7 +278,7 @@ func TestRemoveTask(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, newMockVideoFileService(), logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -279,7 +306,7 @@ func TestGetScheduledTasks(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, newMockVideoFileService(), logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()
@@ -306,7 +333,7 @@ func TestGetStats(t *testing.T) {
 	cfg := &config.Config{}
 	taskSvc := newMockTaskService()
 	coord := newMockCoordinator()
-	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, logger, cfg)
+	scheduler := NewVideoSimpleScheduler(taskSvc, coord, nil, nil, newMockVideoFileService(), logger, cfg)
 
 	// 启动调度器
 	err := scheduler.Start()

@@ -49,6 +49,7 @@ type MinimalApp struct {
 	huaweiManager        *huaweiapi.Manager
 	huaweiConnector      *video_recording.HuaweiConferenceConnector
 	videoTaskService     *services.VideoRecordingTaskService
+	videoFileService     *services.VideoFileService
 	conversionService    services.ConversionService
 }
 
@@ -309,7 +310,7 @@ func (a *MinimalApp) initHandlers() error {
 	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
 	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger)
 	conferenceService := services.NewConferenceRecordService(a.db, a.logger)
-	videoFileService := services.NewVideoFileService(a.db, a.logger)
+	a.videoFileService = services.NewVideoFileService(a.db, a.logger)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
 	fileService := storage.NewFileService(a.db, a.logger, a.config)
 	fileHandler := handlers.NewFileHandler(fileService)
@@ -326,8 +327,8 @@ func (a *MinimalApp) initHandlers() error {
 	notificationHandler := handlers.NewNotificationHandler(notificationService)
 	notificationHandler.SetLogger(a.logger)
 
-	// 转换服务
-	a.conversionService = services.NewFFmpegConversionService(a.db, a.logger, a.config)
+	// 转换服务（需要 videoFileService）
+	a.conversionService = services.NewFFmpegConversionService(a.db, a.logger, a.config, a.videoFileService)
 
 	// 华为管理器（使用数据库配置动态创建客户端）
 	dbAdapter := &huaweiDBAdapter{db: a.db}
@@ -342,7 +343,7 @@ func (a *MinimalApp) initHandlers() error {
 		VideoTask:    handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
 		HuaweiConfig: handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
 		Conference:   handlers.NewConferenceRecordHandler(conferenceService, a.logger),
-		VideoFile:    handlers.NewVideoFileHandler(videoFileService, a.logger),
+		VideoFile:    handlers.NewVideoFileHandler(a.videoFileService, a.logger),
 		File:         fileHandler,
 		Audit:        auditHandler,
 		Notification: notificationHandler,
@@ -520,7 +521,15 @@ func (a *MinimalApp) registerServices() error {
 	// 创建任务调度器
 	// 注意：这里使用一个适配器将VideoRecordingTaskService转换为TaskServiceInterface
 	taskServiceAdapter := &taskServiceAdapter{db: a.db, logger: a.logger}
-	a.scheduler = scheduler.NewVideoSimpleScheduler(taskServiceAdapter, a.coordinator, a.huaweiConnector, a.conversionService, a.logger, a.config)
+	a.scheduler = scheduler.NewVideoSimpleScheduler(
+		taskServiceAdapter,
+		a.coordinator,
+		a.huaweiConnector,
+		a.conversionService,
+		a.videoFileService,
+		a.logger,
+		a.config,
+	)
 	a.logger.Info("调度器已创建")
 
 	// 启动调度器
