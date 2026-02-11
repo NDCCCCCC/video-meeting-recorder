@@ -504,12 +504,7 @@ func (s *VideoFileService) CreateFile(filePath string, conferenceID *uint, recor
 func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 	const recordingsDir = "data/recordings"
 
-	result := &ScanResult{
-		Scanned: 0,
-		Created: 0,
-		Skipped: 0,
-		Errors:  make([]string, 0),
-	}
+	result := &ScanResult{}
 
 	// 检查目录是否存在
 	if _, err := os.Stat(recordingsDir); os.IsNotExist(err) {
@@ -531,7 +526,7 @@ func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 
 	// 处理每个文件
 	for _, filePath := range files {
-		// 检查文件是否已在数据库中
+		// 先检查文件是否已在数据库中
 		var count int64
 		if err := s.db.Model(&models.VideoFile{}).
 			Where("file_path = ?", filePath).
