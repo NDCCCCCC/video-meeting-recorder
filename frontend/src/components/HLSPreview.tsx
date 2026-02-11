@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button, Modal, Alert, Space } from 'antd'
 import { ReloadOutlined, EyeOutlined } from '@ant-design/icons'
-import { getTaskPreview, getHLSStreamUrl } from '../api/task'
+import { getTaskPreview } from '../api/task'
 import type { VideoRecordingTask } from '../types/task'
 import Hls from 'hls.js'
 
@@ -123,7 +123,10 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
   const [hlsUrl, setHlsUrl] = useState<string>()
   const [currentStatus, setCurrentStatus] = useState(status)
   const [isPreparing, setIsPreparing] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const MAX_RETRY_COUNT = 10  // 最大重试次数
 
   // 清理定时器
   useEffect(() => {
@@ -145,6 +148,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
     setError(undefined)
     setHlsUrl(undefined)
     setIsPreparing(false)
+    setRetryCount(0)  // 重置重试计数
 
     // 清理之前的定时器
     if (retryTimerRef.current) {
@@ -159,17 +163,23 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
           // HLS 正在准备中
           setIsPreparing(true)
           setError(response.data.message || 'HLS预览正在准备中，请稍后刷新')
-          // 自动重试：3秒后自动刷新
-          retryTimerRef.current = setTimeout(() => {
-            handleRefresh()
-          }, 3000)
+          // 自动重试：3秒后自动刷新（最多10次）
+          if (retryCount < MAX_RETRY_COUNT) {
+            retryTimerRef.current = setTimeout(() => {
+              setRetryCount(prev => prev + 1)
+              handleRefresh()
+            }, 3000)
+          } else {
+            setError('HLS预览初始化超时，请关闭后重试')
+            setIsPreparing(false)
+          }
         } else if (response.data.playback_url) {
-          // HLS 已就绪
-          const fullUrl = getHLSStreamUrl(taskId, 'index.m3u8')
-          setHlsUrl(fullUrl)
+          // HLS 已就绪，使用 API 返回的带 token 的 URL
+          setHlsUrl(response.data.playback_url)
           setCurrentStatus(response.data.status)
           setIsPreparing(false)
           setError(undefined)
+          setRetryCount(0)  // 成功后重置计数
         }
       }
     } catch (err: any) {

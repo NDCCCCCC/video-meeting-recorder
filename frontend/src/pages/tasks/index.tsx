@@ -87,23 +87,24 @@ export default function TaskManagement() {
   // 定时轮询：自动刷新进行中的任务状态
   useEffect(() => {
     // 检查是否有进行中的任务（待执行、连接中、录制中）
-    const hasActiveTasks = () => {
-      return tasks.some(task =>
-        task.status === 'pending' ||
-        task.status === 'connecting' ||
-        task.status === 'recording'
-      )
+    const hasActiveTasks = tasks.some(task =>
+      task.status === 'pending' ||
+      task.status === 'connecting' ||
+      task.status === 'recording'
+    )
+
+    // 没有活动任务时不启动定时器
+    if (!hasActiveTasks) {
+      return
     }
 
     // 设置定时器，每 5 秒刷新一次
     const interval = setInterval(() => {
-      if (hasActiveTasks()) {
-        loadTasks(false) // 不显示 loading，避免界面闪烁
-      }
+      loadTasks(false) // 不显示 loading，避免界面闪烁
     }, 5000)
 
     return () => clearInterval(interval)
-  }, [tasks])
+  }, [tasks, params]) // 添加 params 依赖，确保查询参数变化时重新评估
 
   // 加载华为配置列表
   const loadHuaweiConfigs = async () => {
