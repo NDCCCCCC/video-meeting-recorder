@@ -33,7 +33,6 @@ export default function BasicLayout() {
     { key: '/', icon: <HomeOutlined />, label: '仪表盘' },
     { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' },
     { key: '/conferences', icon: <FileTextOutlined />, label: '会议记录' },
-    { key: '/recordings', icon: <FolderOutlined />, label: '录制文件' },
     { key: '/files', icon: <FolderOutlined />, label: '文件管理' },
     { key: '/audit', icon: <HistoryOutlined />, label: '审计日志' },
     {
