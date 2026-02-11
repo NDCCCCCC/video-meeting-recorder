@@ -469,6 +469,7 @@ func (a *MinimalApp) registerRoutes() error {
 		files.GET("/:id", a.handlers.VideoFile.GetFile)                // 获取文件详情
 		files.GET("/:id/download", a.handlers.VideoFile.DownloadFile)  // 下载文件
 		files.DELETE("/:id", a.handlers.VideoFile.DeleteFile)          // 删除文件
+		files.POST("/scan", a.handlers.VideoFile.ScanFiles)             // 扫描并导入文件
 	}
 
 	// 文件存储管理
