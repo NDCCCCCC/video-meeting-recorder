@@ -196,21 +196,12 @@ func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
 // @Success 200 {object} response.Response{data=services.ScanResult}
 // @Router /api/v1/files/scan [post]
 func (h *VideoFileHandler) ScanFiles(c *gin.Context) {
-	h.logger.Info("开始扫描录制文件")
-
 	result, err := h.fileService.ScanFiles()
 	if err != nil {
-		h.logger.Error("扫描文件失败", zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "扫描文件失败: "+err.Error())
+		h.logger.Error("Failed to scan files", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "扫描文件失败")
 		return
 	}
-
-	h.logger.Info("文件扫描完成",
-		zap.Int("scanned", result.Scanned),
-		zap.Int("created", result.Created),
-		zap.Int("skipped", result.Skipped),
-		zap.Int("errors", len(result.Errors)),
-	)
 
 	response.GinSuccess(c, result)
 }
