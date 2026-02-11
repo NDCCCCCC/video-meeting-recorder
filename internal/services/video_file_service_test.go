@@ -90,6 +90,32 @@ func createTestTask(t *testing.T, db *gorm.DB, mkvPath, mp4Path string) *models.
 	return task
 }
 
+// createTestConference 创建测试会议记录
+func createTestConference(t *testing.T, db *gorm.DB, title, number string) *models.ConferenceRecord {
+	endTime := time.Now()
+	conference := &models.ConferenceRecord{
+		Title:             title,
+		ConferenceNumber:   number,
+		StartTime:         time.Now().Add(-1 * time.Hour),
+		EndTime:           &endTime,
+		Status:            models.ConferenceStatusCompleted,
+	}
+	err := db.Create(conference).Error
+	require.NoError(t, err)
+	return conference
+}
+
+// assertFileCreated 断言文件创建成功的基本验证
+func assertFileCreated(t *testing.T, file *models.VideoFile, err error, expectedName, expectedPath, expectedFormat string) {
+	assert.NoError(t, err)
+	assert.NotNil(t, file)
+	assert.Equal(t, expectedName, file.FileName)
+	assert.Equal(t, expectedPath, file.FilePath)
+	assert.Equal(t, models.FileStatusReady, file.Status)
+	assert.Equal(t, expectedFormat, file.Format)
+	assert.Greater(t, file.FileSize, int64(0))
+}
+
 // TestCreateFileFromTask 测试从任务创建文件记录
 func TestCreateFileFromTask(t *testing.T) {
 	t.Run("成功创建MKV文件记录", func(t *testing.T) {
@@ -103,13 +129,7 @@ func TestCreateFileFromTask(t *testing.T) {
 		file, err := service.CreateFileFromTask(task, "mkv")
 
 		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, file)
-		assert.Equal(t, "test_video.mkv", file.FileName)
-		assert.Equal(t, mkvPath, file.FilePath)
-		assert.Equal(t, models.FileStatusReady, file.Status)
-		assert.Equal(t, "mkv", file.Format)
-		assert.Greater(t, file.FileSize, int64(0))
+		assertFileCreated(t, file, err, "test_video.mkv", mkvPath, "mkv")
 
 		// 验证数据库中的记录
 		var dbFile models.VideoFile
@@ -129,11 +149,7 @@ func TestCreateFileFromTask(t *testing.T) {
 		file, err := service.CreateFileFromTask(task, "mp4")
 
 		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, file)
-		assert.Equal(t, "test_video.mp4", file.FileName)
-		assert.Equal(t, mp4Path, file.FilePath)
-		assert.Equal(t, "mp4", file.Format)
+		assertFileCreated(t, file, err, "test_video.mp4", mp4Path, "mp4")
 	})
 
 	t.Run("文件不存在时返回错误", func(t *testing.T) {
@@ -220,16 +236,7 @@ func TestCreateFileFromTask(t *testing.T) {
 		service, db, tempDir := setupTestService(t)
 
 		// 创建会议记录
-		endTime := time.Now()
-		conference := &models.ConferenceRecord{
-			Title:             "测试会议",
-			ConferenceNumber:   "conf001",
-			StartTime:         time.Now().Add(-1 * time.Hour),
-			EndTime:           &endTime,
-			Status:            models.ConferenceStatusCompleted,
-		}
-		err := db.Create(conference).Error
-		require.NoError(t, err)
+		conference := createTestConference(t, db, "测试会议", "conf001")
 
 		// 创建测试文件和任务
 		mkvPath := createTestVideoFile(t, tempDir, "test_video.mkv", "fake mkv content")
@@ -280,12 +287,7 @@ func TestCreateFile(t *testing.T) {
 		file, err := service.CreateFile(filePath, nil, nil)
 
 		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, file)
-		assert.Equal(t, "video.mp4", file.FileName)
-		assert.Equal(t, filePath, file.FilePath)
-		assert.Equal(t, models.FileStatusReady, file.Status)
-		assert.Greater(t, file.FileSize, int64(0))
+		assertFileCreated(t, file, err, "video.mp4", filePath, "mp4")
 
 		// 验证数据库中的记录
 		var dbFile models.VideoFile
@@ -345,16 +347,7 @@ func TestCreateFile(t *testing.T) {
 		service, db, tempDir := setupTestService(t)
 
 		// 创建会议记录
-		endTime := time.Now()
-		conference := &models.ConferenceRecord{
-			Title:             "测试会议",
-			ConferenceNumber:   "conf001",
-			StartTime:         time.Now().Add(-1 * time.Hour),
-			EndTime:           &endTime,
-			Status:            models.ConferenceStatusCompleted,
-		}
-		err := db.Create(conference).Error
-		require.NoError(t, err)
+		conference := createTestConference(t, db, "测试会议", "conf001")
 
 		// 创建测试文件
 		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
@@ -626,32 +619,14 @@ func TestListFiles(t *testing.T) {
 		service, db, tempDir := setupTestService(t)
 
 		// 创建会议记录
-		endTime1 := time.Now()
-		conference1 := &models.ConferenceRecord{
-			Title:             "会议1",
-			ConferenceNumber:   "conf001",
-			StartTime:         time.Now().Add(-1 * time.Hour),
-			EndTime:           &endTime1,
-			Status:            models.ConferenceStatusCompleted,
-		}
-		endTime2 := time.Now()
-		conference2 := &models.ConferenceRecord{
-			Title:             "会议2",
-			ConferenceNumber:   "conf002",
-			StartTime:         time.Now().Add(-1 * time.Hour),
-			EndTime:           &endTime2,
-			Status:            models.ConferenceStatusCompleted,
-		}
-		err := db.Create(conference1).Error
-		require.NoError(t, err)
-		err = db.Create(conference2).Error
-		require.NoError(t, err)
+		conference1 := createTestConference(t, db, "会议1", "conf001")
+		conference2 := createTestConference(t, db, "会议2", "conf002")
 
 		// 创建不同会议的文件
 		filePath1 := createTestVideoFile(t, tempDir, "video1.mp4", "content 1")
 		filePath2 := createTestVideoFile(t, tempDir, "video2.mp4", "content 2")
 
-		_, err = service.CreateFile(filePath1, &conference1.ID, nil)
+		_, err := service.CreateFile(filePath1, &conference1.ID, nil)
 		require.NoError(t, err)
 		_, err = service.CreateFile(filePath2, &conference2.ID, nil)
 		require.NoError(t, err)
@@ -813,16 +788,7 @@ func TestGetFilesByConferenceID(t *testing.T) {
 		service, db, tempDir := setupTestService(t)
 
 		// 创建会议记录
-		endTime := time.Now()
-		conference := &models.ConferenceRecord{
-			Title:             "测试会议",
-			ConferenceNumber:   "conf001",
-			StartTime:         time.Now().Add(-1 * time.Hour),
-			EndTime:           &endTime,
-			Status:            models.ConferenceStatusCompleted,
-		}
-		err := db.Create(conference).Error
-		require.NoError(t, err)
+		conference := createTestConference(t, db, "测试会议", "conf001")
 
 		// 创建多个会议文件
 		for i := 1; i <= 3; i++ {
