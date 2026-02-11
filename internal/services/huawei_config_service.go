@@ -164,7 +164,7 @@ func (s *HuaweiConfigService) CreateConfig(req *CreateConfigRequest) (*models.Hu
 		return nil, err
 	}
 
-	s.logger.Info("Huawei config created",
+	s.logger.Info("华为配置已创建",
 		zap.Uint("config_id", config.ID),
 		zap.String("name", config.Name),
 	)
@@ -241,7 +241,7 @@ func (s *HuaweiConfigService) UpdateConfig(id uint, req *UpdateConfigRequest) (*
 
 	s.db.Preload("VideoRecordingTasks").First(&config, id)
 
-	s.logger.Info("Huawei config updated", zap.Uint("config_id", id))
+	s.logger.Info("华为配置已更新", zap.Uint("config_id", id))
 
 	return &config, nil
 }
@@ -275,7 +275,7 @@ func (s *HuaweiConfigService) DeleteConfig(id uint) error {
 		return errors.New("配置不存在")
 	}
 
-	s.logger.Info("Huawei config deleted", zap.Uint("config_id", id))
+	s.logger.Info("华为配置已删除", zap.Uint("config_id", id))
 
 	return nil
 }
@@ -295,7 +295,7 @@ func (s *HuaweiConfigService) LockConfig(id uint, taskID uint) error {
 		return err
 	}
 
-	s.logger.Info("Huawei config locked",
+	s.logger.Info("华为配置已锁定",
 		zap.Uint("config_id", id),
 		zap.Uint("task_id", taskID),
 	)
@@ -318,7 +318,7 @@ func (s *HuaweiConfigService) UnlockConfig(id uint) error {
 		return err
 	}
 
-	s.logger.Info("Huawei config unlocked", zap.Uint("config_id", id))
+	s.logger.Info("华为配置已解锁", zap.Uint("config_id", id))
 
 	return nil
 }

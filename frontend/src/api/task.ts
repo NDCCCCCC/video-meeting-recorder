@@ -90,6 +90,14 @@ export async function deleteTask(id: number): Promise<ApiResponse<void>> {
   })
 }
 
+// 批量删除任务
+export async function batchDeleteTasks(ids: number[]): Promise<ApiResponse<void>> {
+  return request<ApiResponse<void>>('/api/v1/recordings/batch', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  })
+}
+
 // 启动任务
 export async function startTask(id: number): Promise<TaskApiResponse> {
   return request<TaskApiResponse>(`/api/v1/recordings/${id}/start`, {
@@ -119,7 +127,7 @@ export async function retryTask(id: number): Promise<TaskApiResponse> {
 }
 
 // 获取HLS预览信息
-export async function getTaskPreview(id: number): Promise<{ data: { task_id: number; playback_url: string; status: string } }> {
+export async function getTaskPreview(id: number): Promise<{ data: { task_id: number; playback_url: string; status: string; ready?: boolean; message?: string } }> {
   return request(`/api/v1/recordings/${id}/preview`)
 }
 

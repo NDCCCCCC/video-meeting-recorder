@@ -71,7 +71,7 @@ func NewFFmpegConversionService(db *gorm.DB, logger *zap.Logger, cfg *config.Con
 
 // Start 启动转换服务
 func (s *FFmpegConversionService) Start() error {
-	s.logger.Info("Starting FFmpeg conversion service",
+	s.logger.Info("正在启动FFmpeg转换服务",
 		zap.Int("workers", s.workers),
 		zap.Int("max_retries", s.maxRetries),
 	)
@@ -86,16 +86,16 @@ func (s *FFmpegConversionService) Start() error {
 
 	// 加载待转换的任务
 	if err := s.loadPendingTasks(); err != nil {
-		s.logger.Error("Failed to load pending tasks", zap.Error(err))
+		s.logger.Error("加载待转换任务失败", zap.Error(err))
 	}
 
-	s.logger.Info("FFmpeg conversion service started")
+	s.logger.Info("FFmpeg转换服务启动成功")
 	return nil
 }
 
 // Stop 停止转换服务
 func (s *FFmpegConversionService) Stop() {
-	s.logger.Info("Stopping FFmpeg conversion service")
+	s.logger.Info("正在停止FFmpeg转换服务")
 
 	s.cancel()
 
@@ -109,12 +109,12 @@ func (s *FFmpegConversionService) Stop() {
 	s.mu.Lock()
 	for taskID, cancel := range s.cancelFuncs {
 		cancel()
-		s.logger.Debug("Cancelled conversion task", zap.Uint("task_id", taskID))
+		s.logger.Debug("已取消转换任务", zap.Uint("task_id", taskID))
 	}
 	s.cancelFuncs = make(map[uint]context.CancelFunc)
 	s.mu.Unlock()
 
-	s.logger.Info("FFmpeg conversion service stopped")
+	s.logger.Info("FFmpeg转换服务已停止")
 }
 
 // SubmitConversion 提交转换任务
@@ -154,7 +154,7 @@ func (s *FFmpegConversionService) SubmitConversion(taskID uint) error {
 	// 提交到队列
 	select {
 	case s.taskQueue <- taskID:
-		s.logger.Info("Conversion task submitted",
+		s.logger.Info("转换任务已提交",
 			zap.Uint("task_id", taskID),
 			zap.String("mkv_file", task.MKVFilePath),
 		)
@@ -202,19 +202,19 @@ func (s *FFmpegConversionService) RetryConversion(taskID uint) error {
 func (s *FFmpegConversionService) worker(id int) {
 	defer s.wg.Done()
 
-	s.logger.Debug("Conversion worker started", zap.Int("worker_id", id))
+	s.logger.Debug("转换worker已启动", zap.Int("worker_id", id))
 
 	for {
 		select {
 		case taskID, ok := <-s.taskQueue:
 			if !ok {
-				s.logger.Debug("Conversion worker stopping", zap.Int("worker_id", id))
+				s.logger.Debug("转换worker正在停止", zap.Int("worker_id", id))
 				return
 			}
 			s.processTask(taskID)
 
 		case <-s.ctx.Done():
-			s.logger.Debug("Conversion worker stopping", zap.Int("worker_id", id))
+			s.logger.Debug("转换worker停止中", zap.Int("worker_id", id))
 			return
 		}
 	}
@@ -222,12 +222,12 @@ func (s *FFmpegConversionService) worker(id int) {
 
 // processTask 处理单个转换任务
 func (s *FFmpegConversionService) processTask(taskID uint) {
-	s.logger.Info("Processing conversion task", zap.Uint("task_id", taskID))
+	s.logger.Info("正在处理转换任务", zap.Uint("task_id", taskID))
 
 	// 加载任务
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, taskID).Error; err != nil {
-		s.logger.Error("Failed to load task", zap.Uint("task_id", taskID), zap.Error(err))
+		s.logger.Error("加载任务失败", zap.Uint("task_id", taskID), zap.Error(err))
 		return
 	}
 
@@ -270,7 +270,7 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 		"mp4_file_path":            outputPath,
 	})
 
-	s.logger.Info("Conversion completed successfully",
+	s.logger.Info("转换完成",
 		zap.Uint("task_id", taskID),
 		zap.String("mp4_file", outputPath),
 	)
@@ -307,7 +307,7 @@ func (s *FFmpegConversionService) convertMKVToMP4(ctx context.Context, task *mod
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 
-	s.logger.Info("Starting FFmpeg conversion",
+	s.logger.Info("正在执行FFmpeg转换",
 		zap.Uint("task_id", task.ID),
 		zap.String("input", inputPath),
 		zap.String("output", outputPath),
@@ -344,7 +344,7 @@ func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecord
 			"conversion_status":  models.ConversionStatusFailed,
 			"conversion_error_msg": err.Error(),
 		})
-		s.logger.Error("Conversion failed after max retries",
+		s.logger.Error("转换失败，已达最大重试次数",
 			zap.Uint("task_id", task.ID),
 			zap.Int("retry_count", task.ConversionRetryCount),
 			zap.Error(err),
@@ -355,7 +355,7 @@ func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecord
 	// 计算退避时间
 	backoffDuration := s.calculateBackoff(task.ConversionRetryCount)
 
-	s.logger.Warn("Conversion failed, scheduling retry",
+	s.logger.Warn("转换失败，安排重试",
 		zap.Uint("task_id", task.ID),
 		zap.Int("retry_count", task.ConversionRetryCount),
 		zap.Duration("backoff", backoffDuration),
@@ -373,7 +373,7 @@ func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecord
 		case <-time.After(backoffDuration):
 			select {
 			case s.taskQueue <- task.ID:
-				s.logger.Info("Retry scheduled",
+				s.logger.Info("重试已安排",
 					zap.Uint("task_id", task.ID),
 					zap.Int("attempt", task.ConversionRetryCount),
 				)
@@ -419,14 +419,14 @@ func (s *FFmpegConversionService) loadPendingTasks() error {
 		return err
 	}
 
-	s.logger.Info("Found pending conversion tasks", zap.Int("count", len(tasks)))
+	s.logger.Info("发现待转换任务", zap.Int("count", len(tasks)))
 
 	// 提交到队列
 	for _, task := range tasks {
 		select {
 		case s.taskQueue <- task.ID:
 		default:
-			s.logger.Warn("Task queue full, some tasks not loaded")
+			s.logger.Warn("任务队列已满，部分任务未加载")
 			return nil
 		}
 	}

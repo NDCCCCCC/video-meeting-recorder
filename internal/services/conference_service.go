@@ -173,7 +173,7 @@ func (s *ConferenceRecordService) CreateConference(req *CreateConferenceRequest)
 	// 重新加载关联数据
 	s.db.Preload("HuaweiConfig").First(conference, conference.ID)
 
-	s.logger.Info("Conference created",
+	s.logger.Info("会议已创建",
 		zap.Uint("conference_id", conference.ID),
 		zap.String("conference_number", conference.ConferenceNumber),
 	)
@@ -221,7 +221,7 @@ func (s *ConferenceRecordService) UpdateConference(id uint, req *UpdateConferenc
 	// 重新加载数据
 	s.db.Preload("HuaweiConfig").Preload("VideoFiles").First(&conference, id)
 
-	s.logger.Info("Conference updated", zap.Uint("conference_id", id))
+	s.logger.Info("会议已更新", zap.Uint("conference_id", id))
 
 	return &conference, nil
 }
@@ -259,7 +259,7 @@ func (s *ConferenceRecordService) DeleteConference(id uint) error {
 		return errors.New("会议不存在")
 	}
 
-	s.logger.Info("Conference deleted", zap.Uint("conference_id", id))
+	s.logger.Info("会议已删除", zap.Uint("conference_id", id))
 
 	return nil
 }
