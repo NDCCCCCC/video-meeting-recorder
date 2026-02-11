@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -137,7 +138,7 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 	// 设置响应头
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", "attachment; filename=\""+file.FileName+"\"")
-	c.Header("Content-Length", string(rune(fileInfo.Size())))
+	c.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
 
 	// 发送文件
 	http.ServeContent(c.Writer, c.Request, file.FileName, fileInfo.ModTime(), fileHandle)
@@ -185,4 +186,31 @@ func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, stats)
+}
+
+// ScanFiles 扫描并导入未入库的视频文件
+// @Summary 扫描录制目录
+// @Description 扫描 data/recordings/ 目录，自动导入未入库的视频文件
+// @Tags 文件管理
+// @Security Bearer
+// @Success 200 {object} response.Response{data=services.ScanResult}
+// @Router /api/v1/files/scan [post]
+func (h *VideoFileHandler) ScanFiles(c *gin.Context) {
+	h.logger.Info("开始扫描录制文件")
+
+	result, err := h.fileService.ScanFiles()
+	if err != nil {
+		h.logger.Error("扫描文件失败", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "扫描文件失败: "+err.Error())
+		return
+	}
+
+	h.logger.Info("文件扫描完成",
+		zap.Int("scanned", result.Scanned),
+		zap.Int("created", result.Created),
+		zap.Int("skipped", result.Skipped),
+		zap.Int("errors", len(result.Errors)),
+	)
+
+	response.GinSuccess(c, result)
 }
