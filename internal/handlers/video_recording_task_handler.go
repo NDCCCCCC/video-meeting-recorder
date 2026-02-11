@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth/hlstoken"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
@@ -18,13 +21,17 @@ type VideoRecordingTaskHandler struct {
 	taskService      *services.VideoRecordingTaskService
 	conversionService services.ConversionService
 	logger           *zap.Logger
+	config           *config.Config
+	hlsToken         *hlstoken.HLSToken
 }
 
 // NewVideoRecordingTaskHandler 创建视频录制任务处理器
-func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskService, logger *zap.Logger) *VideoRecordingTaskHandler {
+func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskService, logger *zap.Logger, cfg *config.Config) *VideoRecordingTaskHandler {
 	return &VideoRecordingTaskHandler{
 		taskService: taskService,
 		logger:      logger,
+		config:      cfg,
+		hlsToken:    hlstoken.NewHLSToken(cfg.Auth.HLSTokenSecret, cfg.Auth.HLSTokenDuration),
 	}
 }
 
@@ -202,16 +209,33 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	count, err := h.taskService.BatchDeleteTasks(req.IDs, userID)
+	result, err := h.taskService.BatchDeleteTasks(req.IDs, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
 	}
 
-	h.logger.Info("批量删除录制任务成功", zap.Int("count", count), zap.Uint("deleted_by", userID))
+	// 根据结果构造响应消息
+	var message string
+	if result.TotalFailed > 0 {
+		message = fmt.Sprintf("成功删除 %d 个任务，%d 个任务无法删除", result.TotalDeleted, result.TotalFailed)
+	} else {
+		message = fmt.Sprintf("成功删除 %d 个任务", result.TotalDeleted)
+	}
+
+	h.logger.Info("批量删除录制任务成功",
+		zap.Int("deleted", result.TotalDeleted),
+		zap.Int("failed", result.TotalFailed),
+		zap.Uint("deleted_by", userID),
+	)
+
 	response.GinSuccess(c, gin.H{
-		"message": fmt.Sprintf("成功删除 %d 个任务", count),
-		"count":   count,
+		"message":      message,
+		"deleted_ids":  result.DeletedIDs,
+		"failed_ids":   result.FailedIDs,
+		"failed_tasks": result.FailedTasks,
+		"total_deleted": result.TotalDeleted,
+		"total_failed":  result.TotalFailed,
 	})
 }
 
@@ -419,13 +443,18 @@ func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
 	}
 
 	// 根据状态和文件存在性返回不同响应
-	playbackURL := fmt.Sprintf("/api/v1/recordings/%d/preview/stream", id)
+	// 返回完整的 m3u8 播放列表 URL（包含 token）
+	playbackURL := fmt.Sprintf("/api/v1/recordings/%d/preview/stream/index.m3u8", id)
+
+	// 生成访问 token
+	accessToken := h.hlsToken.Generate(id, userID)
+	playbackURLWithToken := fmt.Sprintf("%s?token=%s", playbackURL, accessToken)
 
 	switch {
 	case task.Status == "recording" && !m3u8Exists:
 		response.GinSuccess(c, gin.H{
 			"task_id":      id,
-			"playback_url": playbackURL,
+			"playback_url": playbackURLWithToken,
 			"status":       task.Status,
 			"ready":        false,
 			"message":      "HLS预览正在准备中，请稍后刷新",
@@ -435,7 +464,7 @@ func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
 	default:
 		response.GinSuccess(c, gin.H{
 			"task_id":      id,
-			"playback_url": playbackURL,
+			"playback_url": playbackURLWithToken,
 			"status":       task.Status,
 			"ready":        true,
 		})
@@ -444,11 +473,11 @@ func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
 
 // ServeHLSStream 提供HLS流文件服务
 // @Summary 提供HLS流文件
-// @Description 返回HLS m3u8播放列表或TS分片文件（仅任务创建者可访问）
+// @Description 返回HLS m3u8播放列表或TS分片文件（需要有效的访问 token）
 // @Tags 录制任务
-// @Security Bearer
 // @Param id path int true "任务ID"
 // @Param file path string true "文件名 (index.m3u8 或 segment_xxx.ts)"
+// @Param token query string true "访问 token"
 // @Success 200 {file} file
 // @Router /api/v1/recordings/{id}/preview/stream/{file} [get]
 func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
@@ -471,6 +500,30 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 		return
 	}
 
+	// 获取并验证访问 token
+	token := c.Query("token")
+	if token == "" {
+		response.GinError(c, response.CodeUnauthorized, "缺少访问 token")
+		return
+	}
+
+	// 验证 token
+	claims, err := h.hlsToken.Verify(token)
+	if err != nil {
+		h.logger.Warn("HLS流访问 token 验证失败",
+			zap.Uint("task_id", id),
+			zap.String("error", err.Error()),
+		)
+		response.GinError(c, response.CodeUnauthorized, "无效或已过期的访问 token")
+		return
+	}
+
+	// 验证 token 中的任务 ID 是否匹配
+	if claims.TaskID != id {
+		response.GinError(c, response.CodeForbidden, "Token 与请求的任务不匹配")
+		return
+	}
+
 	// 获取任务信息
 	task, err := h.taskService.GetTaskByID(id)
 	if err != nil {
@@ -478,18 +531,16 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 		return
 	}
 
-	// HLS 流访问权限验证：
-	// 由于浏览器无法在视频请求中携带 JWT token，我们采用宽松的权限策略：
-	// 1. 只检查任务是否存在
-	// 2. 不检查用户权限（任何知道 URL 的人都可以访问）
-	// 3. 安全性依赖：
-	//    - URL 包含任务 ID，不易猜测
-	//    - HLS 文件只在录制期间生成，录制结束后可能被清理
-	//    - 可以添加额外的 token 验证（可选）
-	//
-	// 如果需要更强的安全性，可以考虑：
-	// - 生成临时访问 token
-	// - 或在 URL 中包含签名参数
+	// 验证用户权限：token 中的用户 ID 必须是任务创建者
+	if claims.UserID != task.CreatedBy {
+		h.logger.Warn("HLS流访问权限拒绝：用户不匹配",
+			zap.Uint("task_id", id),
+			zap.Uint("token_user_id", claims.UserID),
+			zap.Uint("task_creator_id", task.CreatedBy),
+		)
+		response.GinError(c, response.CodeForbidden, "无权限访问此预览")
+		return
+	}
 
 	// 构建完整的文件路径
 	hlsDir := filepath.Dir(task.HLSPreviewPath)
@@ -513,12 +564,56 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Access-Control-Allow-Origin", "*")
 
+	// 如果是 m3u8 文件，需要重写内容，在分段 URL 中添加 token
+	if strings.HasSuffix(filePath, ".m3u8") {
+		content, err := os.ReadFile(fullPath)
+		if err != nil {
+			response.GinError(c, response.CodeInternalError, "读取文件失败")
+			return
+		}
+
+		// 重写 m3u8 内容：在分段 URL 中添加 token 参数
+		rewrittenContent := h.rewriteM3U8WithToken(string(content), token, id)
+		c.String(200, rewrittenContent)
+		return
+	}
+
 	// 返回文件内容
 	c.File(fullPath)
 }
 
-// containsPathTraversal 检查文件名是否包含路径遍历字符
+// rewriteM3U8WithToken 重写 m3u8 播放列表，在分段 URL 中添加 token 参数
+func (h *VideoRecordingTaskHandler) rewriteM3U8WithToken(content string, token string, taskID uint) string {
+	lines := strings.Split(content, "\n")
+	var result []string
+
+	tokenParam := fmt.Sprintf("?token=%s", token)
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// 跳过空行和注释行
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			result = append(result, line)
+		} else if strings.HasSuffix(trimmed, ".ts") || strings.HasSuffix(trimmed, ".m3u8") {
+			// 这是分段 URL 或子播放列表，添加 token 参数
+			result = append(result, trimmed+tokenParam)
+		} else {
+			result = append(result, line)
+		}
+	}
+
+	return strings.Join(result, "\n")
+}
+
+// containsPathTraversal 检查文件名是否包含路径遍历字符（包括 URL 编码）
 func containsPathTraversal(filename string) bool {
+	// 先尝试 URL 解码
+	decoded, err := url.PathUnescape(filename)
+	if err == nil {
+		// 检查解码后的路径
+		filename = decoded
+	}
+
 	return strings.Contains(filename, "..") ||
 		strings.Contains(filename, "\\") ||
 		strings.Contains(filename, "\x00") ||

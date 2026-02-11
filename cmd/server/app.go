@@ -339,7 +339,7 @@ func (a *MinimalApp) initHandlers() error {
 		Auth:         handlers.NewAuthHandler(authService, a.logger),
 		User:         handlers.NewUserHandler(userService, a.logger),
 		Role:         handlers.NewRoleHandler(roleService, a.logger),
-		VideoTask:    handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger),
+		VideoTask:    handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
 		HuaweiConfig: handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
 		Conference:   handlers.NewConferenceRecordHandler(conferenceService, a.logger),
 		VideoFile:    handlers.NewVideoFileHandler(videoFileService, a.logger),
@@ -359,6 +359,9 @@ func (a *MinimalApp) registerRoutes() error {
 	// 健康检查端点（无需认证）
 	a.router.GET("/health", a.healthHandler)
 	a.router.GET("/api/v1/system/stats", a.statsHandler)
+
+	// 调度器调试端点（需要认证）
+	a.router.GET("/api/v1/scheduler/debug", a.schedulerDebugHandler)
 
 	// 认证路由
 	auth := a.router.Group("/api/v1/auth")
@@ -590,6 +593,7 @@ func (a *taskServiceAdapter) UpdateTaskStatus(id uint, status models.VideoRecord
 }
 
 // UpdateRecordingPaths 更新录制文件路径
+// 注意：这是适配器方法，将 TaskServiceInterface 接口映射到具体实现
 func (a *taskServiceAdapter) UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error {
 	updates := map[string]interface{}{
 		"recording_file":   mkvPath,
@@ -755,9 +759,83 @@ func (a *MinimalApp) healthHandler(c *gin.Context) {
 
 // statsHandler 系统统计处理器
 func (a *MinimalApp) statsHandler(c *gin.Context) {
-	// TODO: 实现系统统计信息
-	response.GinSuccess(c, map[string]interface{}{
+	stats := map[string]interface{}{
 		"services": len(a.services),
 		"uptime":   time.Since(time.Now()).Seconds(),
-	})
+	}
+
+	// 添加调度器统计信息
+	if a.scheduler != nil {
+		schedulerStats := a.scheduler.GetStats()
+		stats["scheduler"] = schedulerStats
+
+		// 添加已调度的任务列表
+		scheduledTasks := a.scheduler.GetScheduledTasks()
+		stats["scheduled_tasks"] = scheduledTasks
+
+		// 添加正在执行的任务列表
+		executingTasks := a.scheduler.GetExecutingTasks()
+		stats["executing_tasks"] = executingTasks
+	}
+
+	response.GinSuccess(c, stats)
+}
+
+// schedulerDebugHandler 调度器调试处理器（需要认证）
+func (a *MinimalApp) schedulerDebugHandler(c *gin.Context) {
+	if a.scheduler == nil {
+		response.GinError(c, response.CodeInternalError, "调度器未初始化")
+		return
+	}
+
+	// 获取当前时间
+	now := time.Now()
+	nowUTC := time.Now().UTC()
+
+	debugInfo := map[string]interface{}{
+		"current_time_local": now.Format(time.RFC3339),
+		"current_time_utc":   nowUTC.Format(time.RFC3339),
+		"timezone":           nowUTC.Location().String(),
+	}
+
+	// 获取调度器统计信息
+	debugInfo["stats"] = a.scheduler.GetStats()
+
+	// 获取已调度的任务ID
+	scheduledTaskIDs := a.scheduler.GetScheduledTasks()
+	debugInfo["scheduled_task_ids"] = scheduledTaskIDs
+
+	// 获取正在执行的任务ID
+	executingTaskIDs := a.scheduler.GetExecutingTasks()
+	debugInfo["executing_task_ids"] = executingTaskIDs
+
+	// 获取数据库中的待执行任务详情
+	if a.videoTaskService != nil {
+		pendingTasks, err := a.videoTaskService.GetPendingTasks()
+		if err == nil {
+			taskDetails := make([]map[string]interface{}, 0, len(pendingTasks))
+			for _, task := range pendingTasks {
+				triggerTime := task.StartTime.Add(-time.Duration(task.PreJoinMinutes) * time.Minute)
+				taskDetail := map[string]interface{}{
+					"id":                 task.ID,
+					"name":               task.Name,
+					"status":             task.Status,
+					"start_time":         task.StartTime.Format(time.RFC3339),
+					"end_time":           task.EndTime.Format(time.RFC3339),
+					"trigger_time":       triggerTime.Format(time.RFC3339),
+					"pre_join_minutes":   task.PreJoinMinutes,
+					"is_scheduled":       a.scheduler.IsTaskScheduled(task.ID),
+					"is_executing":       a.scheduler.IsTaskExecuting(task.ID),
+					"seconds_until":      int(triggerTime.Sub(nowUTC).Seconds()),
+					"is_past_trigger":    nowUTC.After(triggerTime),
+					"is_past_end":        nowUTC.After(task.EndTime),
+				}
+				taskDetails = append(taskDetails, taskDetail)
+			}
+			debugInfo["pending_tasks"] = taskDetails
+			debugInfo["pending_tasks_count"] = len(pendingTasks)
+		}
+	}
+
+	response.GinSuccess(c, debugInfo)
 }
