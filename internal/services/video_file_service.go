@@ -92,10 +92,21 @@ func (s *VideoFileService) ListFiles(req *ListFilesRequest) (*ListFilesResponse,
 		}
 	}
 
-	// 统计总数
-	if err := query.Count(&total).Error; err != nil {
+	// 统计总数和总大小（使用 SQL 聚合优化性能）
+	type StatsResult struct {
+		Count int64  `gorm:"column:count"`
+		Size  int64  `gorm:"column:total_size"`
+	}
+
+	var stats StatsResult
+	// 复用 query 变量，继承所有筛选条件
+	statsQuery := query.Select("COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_size")
+	if err := statsQuery.Scan(&stats).Error; err != nil {
 		return nil, err
 	}
+
+	total = stats.Count
+	totalSize := stats.Size
 
 	// 分页查询
 	offset := (req.Page - 1) * req.PageSize
@@ -105,12 +116,6 @@ func (s *VideoFileService) ListFiles(req *ListFilesRequest) (*ListFilesResponse,
 		Order("created_at DESC").
 		Find(&files).Error; err != nil {
 		return nil, err
-	}
-
-	// 计算总大小
-	var totalSize int64
-	for _, file := range files {
-		totalSize += file.FileSize
 	}
 
 	return &ListFilesResponse{
@@ -519,23 +524,37 @@ func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 
 	result.Scanned = len(files)
 
+	if len(files) == 0 {
+		s.logger.Info("扫描目录为空", zap.String("directory", recordingsDir))
+		return result, nil
+	}
+
 	s.logger.Info("开始扫描录制文件",
 		zap.Int("total_files", len(files)),
 		zap.String("directory", recordingsDir),
 	)
 
-	// 处理每个文件
-	for _, filePath := range files {
-		// 先检查文件是否已在数据库中
-		var count int64
-		if err := s.db.Model(&models.VideoFile{}).
-			Where("file_path = ?", filePath).
-			Count(&count).Error; err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("检查文件 %s 失败: %v", filePath, err))
-			continue
-		}
+	// 批量查询已存在的文件路径（性能优化）
+	var existingFiles []models.VideoFile
+	if err := s.db.Select("file_path").Find(&existingFiles).Error; err != nil {
+		return result, fmt.Errorf("批量查询现有文件失败: %w", err)
+	}
 
-		if count > 0 {
+	// 构建快速查找 map
+	existingMap := make(map[string]bool, len(existingFiles))
+	for _, f := range existingFiles {
+		existingMap[f.FilePath] = true
+	}
+
+	s.logger.Debug("批量查询完成",
+		zap.Int("existing_count", len(existingFiles)),
+		zap.Int("scan_count", len(files)),
+	)
+
+	// 只处理不存在的文件
+	for _, filePath := range files {
+		if existingMap[filePath] {
+			// 文件已存在，跳过
 			result.Skipped++
 			continue
 		}
