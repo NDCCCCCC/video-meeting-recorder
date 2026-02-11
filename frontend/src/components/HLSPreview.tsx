@@ -1,10 +1,11 @@
 // HLS 实时预览组件
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button, Modal, Alert, Space } from 'antd'
-import { PlayCircleOutlined, ReloadOutlined, EyeOutlined } from '@ant-design/icons'
+import { ReloadOutlined, EyeOutlined } from '@ant-design/icons'
 import { getTaskPreview, getHLSStreamUrl } from '../api/task'
 import type { VideoRecordingTask } from '../types/task'
+import Hls from 'hls.js'
 
 interface HLSPreviewProps {
   taskId: number
@@ -12,77 +13,106 @@ interface HLSPreviewProps {
   status: string
 }
 
-// 简单的 HLS 播放器组件（不依赖外部库）
+// HLS 播放器组件（使用 hls.js 库）
 function HLSPlayer({ src, onError }: { src: string; onError: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
+  // 使用 ref 存储稳定的 onError 回调，避免 useEffect 重复触发
+  const onErrorRef = useRef(onError)
+  onErrorRef.current = onError
 
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
 
+    // 清理函数
+    const cleanup = () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
+        hlsRef.current = null
+      }
+    }
+
     // 加载 HLS
-    const loadHLS = async () => {
+    const loadHLS = () => {
+      cleanup()
+
       try {
-        // 使用原生的 HLS 支持（Safari）或者 fetch MSE
-        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // 检查是否支持 HLS.js
+        if (Hls.isSupported()) {
+          // 使用 hls.js - 直播流优化配置
+          const hls = new Hls({
+            debug: false,
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 30, // 减少后缓冲，降低内存占用
+            maxBufferLength: 30,   // 最大缓冲30秒
+            maxMaxBufferLength: 60,
+            liveSyncDuration: 3,   // 直播同步延迟，尽量接近直播边缘
+            liveMaxLatencyDuration: 10, // 最大延迟10秒
+            liveDurationInfinity: true,  // 直播流模式
+          })
+
+          hlsRef.current = hls
+
+          hls.loadSource(src)
+          hls.attachMedia(video)
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            console.log('HLS manifest parsed, starting playback')
+            video.play().catch(err => {
+              console.warn('Auto-play prevented:', err)
+            })
+          })
+
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.error('HLS network error:', data)
+                  hls.startLoad()
+                  break
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.error('HLS media error:', data)
+                  hls.recoverMediaError()
+                  break
+                default:
+                  console.error('HLS fatal error:', data)
+                  cleanup()
+                  onErrorRef.current()
+                  break
+              }
+            }
+          })
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           // Safari 原生支持
           video.src = src
-        } else {
-          // 其他浏览器，使用 Media Source Extensions
-          const response = await fetch(src)
-          const m3u8 = await response.text()
-
-          // 解析 m3u8 获取 segment 列表
-          const segments = m3u8.split('\n')
-            .filter(line => line.trim() && !line.startsWith('#'))
-            .filter(line => line.endsWith('.ts'))
-
-          if (segments.length === 0) {
-            onError()
-            return
-          }
-
-          // 创建 MediaSource
-          const mediaSource = new MediaSource()
-          video.src = URL.createObjectURL(mediaSource)
-
-          mediaSource.addEventListener('sourceopen', async () => {
-            const sourceBuffer = mediaSource.addSourceBuffer('video/mp2t')
-
-            // 依次加载并添加 segments
-            for (const segment of segments) {
-              const segmentUrl = new URL(segment, src).href
-              const segmentResponse = await fetch(segmentUrl)
-              const segmentData = await segmentResponse.arrayBuffer()
-
-              await new Promise<void>((resolve) => {
-                sourceBuffer.addEventListener('updateend', () => resolve(), { once: true })
-                sourceBuffer.appendBuffer(segmentData)
-              })
-            }
-
-            mediaSource.endOfStream()
+          video.play().catch(err => {
+            console.warn('Auto-play prevented:', err)
           })
+        } else {
+          onErrorRef.current()
         }
       } catch (error) {
         console.error('HLS load error:', error)
-        onError()
+        onErrorRef.current()
       }
     }
 
     loadHLS()
-  }, [src, onError])
+
+    return cleanup
+  }, [src]) // 只依赖 src，避免 onError 变化导致重建
 
   return (
     <video
       ref={videoRef}
-      controls
-      autoPlay
-      style={{ width: '100%', maxHeight: '450px' }}
-      onError={onError}
-    >
-      您的浏览器不支持 HLS 播放
-    </video>
+      // 直播模式不显示控制条（进度条、时间等）
+      muted    // 静音以提高自动播放成功率
+      playsInline // 移动端防止全屏
+      autoPlay  // 自动播放
+      style={{ width: '100%', maxHeight: '450px', backgroundColor: '#000' }}
+    />
   )
 }
 
@@ -92,41 +122,78 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
   const [error, setError] = useState<string>()
   const [hlsUrl, setHlsUrl] = useState<string>()
   const [currentStatus, setCurrentStatus] = useState(status)
+  const [isPreparing, setIsPreparing] = useState(false)
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current)
+      }
+    }
+  }, [])
+
+  // 使用 useCallback 稳定回调函数，避免子组件重建
+  const handlePlayerError = useCallback(() => {
+    setError('直播连接中断，请刷新重试')
+  }, [])
 
   const openPreview = async () => {
     setVisible(true)
     setLoading(true)
     setError(undefined)
+    setHlsUrl(undefined)
+    setIsPreparing(false)
+
+    // 清理之前的定时器
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
 
     try {
       const response = await getTaskPreview(taskId)
-      if (response.data?.playback_url) {
-        // 构建完整的 HLS URL
-        const baseUrl = response.data.playback_url
-        const fullUrl = `${getHLSStreamUrl(taskId, 'index.m3u8').replace('/stream/', '/preview/stream/')}`
-        setHlsUrl(fullUrl)
-        setCurrentStatus(response.data.status)
+      if (response.data) {
+        if (response.data.ready === false) {
+          // HLS 正在准备中
+          setIsPreparing(true)
+          setError(response.data.message || 'HLS预览正在准备中，请稍后刷新')
+          // 自动重试：3秒后自动刷新
+          retryTimerRef.current = setTimeout(() => {
+            handleRefresh()
+          }, 3000)
+        } else if (response.data.playback_url) {
+          // HLS 已就绪
+          const fullUrl = getHLSStreamUrl(taskId, 'index.m3u8')
+          setHlsUrl(fullUrl)
+          setCurrentStatus(response.data.status)
+          setIsPreparing(false)
+          setError(undefined)
+        }
       }
     } catch (err: any) {
-      setError(err.message || '加载预览失败')
+      setError(err.response?.data?.message || err.message || '加载预览失败')
+      setIsPreparing(false)
     } finally {
       setLoading(false)
     }
   }
 
-  const handlePlayerError = () => {
-    setError('直播连接中断，请刷新重试')
-  }
-
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     openPreview()
-  }
+  }, [taskId]) // 只依赖 taskId
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
+    // 清理定时器
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
     setVisible(false)
     setHlsUrl(undefined)
     setError(undefined)
-  }
+  }, [])
 
   return (
     <>
@@ -146,7 +213,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
         onCancel={handleClose}
         footer={null}
         width={800}
-        destroyOnClose
+        // 移除 destroyOnClose，避免重新打开时重建组件
       >
         {loading && (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
@@ -158,7 +225,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
 
         {error && (
           <Alert
-            type="error"
+            type={isPreparing ? "warning" : "error"}
             message={error}
             action={
               <Button size="small" onClick={handleRefresh}>
@@ -176,7 +243,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
               <Space>
                 <span>状态: {currentStatus === 'recording' ? '录制中' : currentStatus}</span>
                 <span>•</span>
-                <span>预览延迟约 3-10 秒</span>
+                <span>预览延迟约 3-5 秒</span>
               </Space>
             </div>
           </>

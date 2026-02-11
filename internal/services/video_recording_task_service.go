@@ -181,7 +181,7 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 	// 重新加载关联数据
 	s.db.Preload("HuaweiConfig").Preload("Creator").First(task, task.ID)
 
-	s.logger.Info("Video recording task created",
+	s.logger.Info("录制任务已创建",
 		zap.Uint("task_id", task.ID),
 		zap.String("name", task.Name),
 		zap.Uint("created_by", createdBy),
@@ -265,7 +265,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		return nil, err
 	}
 
-	s.logger.Info("Video recording task updated",
+	s.logger.Info("录制任务已更新",
 		zap.Uint("task_id", id),
 		zap.Uint("updated_by", userID),
 	)
@@ -298,13 +298,76 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint) error {
 		return errors.New("任务不存在")
 	}
 
-	s.logger.Info("Video recording task deleted",
+	s.logger.Info("录制任务已删除",
 		zap.Uint("task_id", id),
 		zap.Uint("deleted_by", userID),
 		zap.String("task_status", string(task.Status)),
 	)
 
 	return nil
+}
+
+// BatchDeleteTasksRequest 批量删除任务请求
+type BatchDeleteTasksRequest struct {
+	IDs []uint `json:"ids" binding:"required,min=1"`
+}
+
+// canDeleteTask 检查任务是否可删除
+func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask, userID uint) (bool, string) {
+	if task.CreatedBy != userID {
+		return false, "无权限"
+	}
+	if task.Status == models.VideoStatusRecording || task.Status == models.VideoStatusConnecting {
+		return false, "运行中"
+	}
+	return true, ""
+}
+
+// BatchDeleteTasks 批量删除任务
+func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint) (int, error) {
+	if len(ids) == 0 {
+		return 0, errors.New("任务ID列表不能为空")
+	}
+
+	var tasks []models.VideoRecordingTask
+	if err := s.db.Where("id IN ?", ids).Find(&tasks).Error; err != nil {
+		return 0, err
+	}
+
+	if len(tasks) == 0 {
+		return 0, errors.New("任务不存在")
+	}
+
+	var deletableIDs []uint
+	var cannotDeleteTasks []string
+
+	for _, task := range tasks {
+		if canDelete, reason := s.canDeleteTask(task, userID); canDelete {
+			deletableIDs = append(deletableIDs, task.ID)
+		} else {
+			cannotDeleteTasks = append(cannotDeleteTasks, fmt.Sprintf("%s（%s）", task.Name, reason))
+		}
+	}
+
+	if len(deletableIDs) == 0 {
+		return 0, errors.New("没有可删除的任务")
+	}
+
+	result := s.db.Delete(&models.VideoRecordingTask{}, deletableIDs)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+
+	s.logger.Info("批量删除录制任务",
+		zap.Int("count", int(result.RowsAffected)),
+		zap.Uint("deleted_by", userID),
+	)
+
+	if len(cannotDeleteTasks) > 0 {
+		s.logger.Warn("部分任务无法删除", zap.Strings("tasks", cannotDeleteTasks))
+	}
+
+	return int(result.RowsAffected), nil
 }
 
 // StartTask 手动启动任务
@@ -333,7 +396,7 @@ func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.Vid
 		return nil, errors.New("调度器未初始化")
 	}
 
-	s.logger.Info("Video recording task started manually",
+	s.logger.Info("录制任务已手动启动",
 		zap.Uint("task_id", id),
 		zap.Uint("started_by", userID),
 	)
@@ -372,7 +435,7 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint) (*models.Vide
 		return nil, err
 	}
 
-	s.logger.Info("Video recording task stopped manually",
+	s.logger.Info("录制任务已手动停止",
 		zap.Uint("task_id", id),
 		zap.Uint("stopped_by", userID),
 	)
@@ -410,7 +473,7 @@ func (s *VideoRecordingTaskService) CancelTask(id uint, userID uint) error {
 		return err
 	}
 
-	s.logger.Info("Video recording task cancelled",
+	s.logger.Info("录制任务已取消",
 		zap.Uint("task_id", id),
 		zap.Uint("cancelled_by", userID),
 	)
@@ -462,7 +525,7 @@ func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint) (*models.Vid
 		}()
 	}
 
-	s.logger.Info("Video recording task retried",
+	s.logger.Info("录制任务已重试",
 		zap.Uint("task_id", id),
 		zap.Uint("retried_by", userID),
 		zap.Time("new_start_time", task.StartTime),
@@ -520,5 +583,29 @@ func (s *VideoRecordingTaskService) UpdateRecordingInfo(id uint, filePath string
 		return errors.New("任务不存在")
 	}
 
+	return nil
+}
+
+// UpdateRecordingPaths 更新录制文件路径
+func (s *VideoRecordingTaskService) UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error {
+	s.logger.Debug("更新录制文件路径",
+		zap.Uint("task_id", id),
+		zap.String("mkv_path", mkvPath),
+		zap.String("hls_path", hlsPath),
+	)
+
+	updates := map[string]interface{}{
+		"recording_file":   mkvPath,
+		"mkv_file_path":    mkvPath,
+		"hls_preview_path": hlsPath,
+	}
+
+	result := s.db.Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("任务不存在")
+	}
 	return nil
 }

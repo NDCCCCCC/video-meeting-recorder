@@ -101,7 +101,7 @@ func NewMinimalApp(cfg *config.Config, logger *zap.Logger) *MinimalApp {
 
 // Initialize 初始化应用
 func (a *MinimalApp) Initialize() error {
-	a.logger.Info("Initializing application...")
+	a.logger.Info("正在初始化应用...")
 
 	// 初始化数据库
 	if err := a.initDatabase(); err != nil {
@@ -128,13 +128,13 @@ func (a *MinimalApp) Initialize() error {
 		return fmt.Errorf("failed to register services: %w", err)
 	}
 
-	a.logger.Info("Application initialized successfully")
+	a.logger.Info("应用初始化成功")
 	return nil
 }
 
 // initDatabase 初始化数据库
 func (a *MinimalApp) initDatabase() error {
-	a.logger.Info("Initializing database...",
+	a.logger.Info("正在初始化数据库...",
 		zap.String("driver", a.config.Database.Driver),
 		zap.String("path", a.config.Database.Path),
 	)
@@ -173,7 +173,7 @@ func (a *MinimalApp) initDatabase() error {
 	}
 
 	a.db = db
-	a.logger.Info("Database connected successfully")
+	a.logger.Info("数据库连接成功")
 
 	// 自动迁移
 	if err := a.migrateDatabase(); err != nil {
@@ -182,7 +182,7 @@ func (a *MinimalApp) initDatabase() error {
 
 	// 创建种子数据
 	if err := a.seedDatabase(); err != nil {
-		a.logger.Warn("Failed to seed database", zap.Error(err))
+		a.logger.Warn("创建种子数据失败", zap.Error(err))
 	}
 
 	return nil
@@ -190,7 +190,7 @@ func (a *MinimalApp) initDatabase() error {
 
 // migrateDatabase 执行数据库迁移
 func (a *MinimalApp) migrateDatabase() error {
-	a.logger.Info("Running database migrations...")
+	a.logger.Info("正在执行数据库迁移...")
 
 	err := a.db.AutoMigrate(
 		&models.User{},
@@ -215,7 +215,7 @@ func (a *MinimalApp) migrateDatabase() error {
 		return fmt.Errorf("migration failed: %w", err)
 	}
 
-	a.logger.Info("Database migrations completed")
+	a.logger.Info("数据库迁移完成")
 	return nil
 }
 
@@ -419,6 +419,7 @@ func (a *MinimalApp) registerRoutes() error {
 		recordings.POST("", a.handlers.VideoTask.CreateTask)                    // 创建任务
 		recordings.PUT("/:id", a.handlers.VideoTask.UpdateTask)                 // 更新任务
 		recordings.DELETE("/:id", a.handlers.VideoTask.DeleteTask)              // 删除任务
+		recordings.DELETE("/batch", a.handlers.VideoTask.BatchDeleteTasks)      // 批量删除任务
 		recordings.POST("/:id/start", a.handlers.VideoTask.StartTask)           // 启动任务
 		recordings.POST("/:id/stop", a.handlers.VideoTask.StopTask)             // 停止任务
 		recordings.POST("/:id/cancel", a.handlers.VideoTask.CancelTask)         // 取消任务
@@ -428,7 +429,7 @@ func (a *MinimalApp) registerRoutes() error {
 		recordings.POST("/:id/conversion-retry", a.handlers.VideoTask.RetryConversion)     // 重试转换
 		// HLS 预览相关
 		recordings.GET("/:id/preview", a.handlers.VideoTask.GetHLSPreview)      // 获取HLS预览信息
-		recordings.GET("/:id/preview/stream/:file", a.handlers.VideoTask.ServeHLSStream) // 提供HLS流文件
+		// 注意：/:id/preview/stream/:file 路由已移至公开路由（无需JWT认证）
 	}
 
 	// 华为配置管理
@@ -480,6 +481,9 @@ func (a *MinimalApp) registerRoutes() error {
 	a.router.GET("/api/v1/files/download/:token", a.handlers.File.Download)
 	a.router.GET("/api/v1/files/share/:token", a.handlers.File.ShareDownload)
 
+	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
+	a.router.GET("/api/v1/recordings/:id/preview/stream/:file", a.handlers.VideoTask.ServeHLSStream)
+
 	// 审计日志管理
 	auditLog := api.Group("/audit")
 	{
@@ -504,23 +508,23 @@ func (a *MinimalApp) registerRoutes() error {
 
 // registerServices 注册服务
 func (a *MinimalApp) registerServices() error {
-	a.logger.Info("Registering services...")
+	a.logger.Info("正在注册服务...")
 
 	// 创建录制协调器
 	a.coordinator = recorder.NewSimpleRecordingCoordinator(a.logger, a.config)
-	a.logger.Info("Recording coordinator created")
+	a.logger.Info("录制协调器已创建")
 
 	// 创建任务调度器
 	// 注意：这里使用一个适配器将VideoRecordingTaskService转换为TaskServiceInterface
 	taskServiceAdapter := &taskServiceAdapter{db: a.db, logger: a.logger}
 	a.scheduler = scheduler.NewVideoSimpleScheduler(taskServiceAdapter, a.coordinator, a.huaweiConnector, a.conversionService, a.logger, a.config)
-	a.logger.Info("Scheduler created")
+	a.logger.Info("调度器已创建")
 
 	// 启动调度器
 	if err := a.scheduler.Start(); err != nil {
 		return fmt.Errorf("failed to start scheduler: %w", err)
 	}
-	a.logger.Info("Scheduler started successfully")
+	a.logger.Info("调度器启动成功")
 
 	// 设置调度器到任务服务
 	if a.videoTaskService != nil {
@@ -532,10 +536,10 @@ func (a *MinimalApp) registerServices() error {
 		if err := a.conversionService.Start(); err != nil {
 			return fmt.Errorf("failed to start conversion service: %w", err)
 		}
-		a.logger.Info("Conversion service started successfully")
+		a.logger.Info("转换服务启动成功")
 	}
 
-	a.logger.Info("Services registered successfully")
+	a.logger.Info("服务注册完成")
 	return nil
 }
 
@@ -585,6 +589,24 @@ func (a *taskServiceAdapter) UpdateTaskStatus(id uint, status models.VideoRecord
 	return nil
 }
 
+// UpdateRecordingPaths 更新录制文件路径
+func (a *taskServiceAdapter) UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error {
+	updates := map[string]interface{}{
+		"recording_file":   mkvPath,
+		"mkv_file_path":    mkvPath,
+		"hls_preview_path": hlsPath,
+	}
+
+	result := a.db.Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("任务不存在")
+	}
+	return nil
+}
+
 // GetHuaweiConfig 获取华为配置
 func (a *taskServiceAdapter) GetHuaweiConfig(id uint) (*models.HuaweiConfig, error) {
 	var config models.HuaweiConfig
@@ -596,14 +618,14 @@ func (a *taskServiceAdapter) GetHuaweiConfig(id uint) (*models.HuaweiConfig, err
 
 // Start 启动应用
 func (a *MinimalApp) Start() error {
-	a.logger.Info("Starting application...")
+	a.logger.Info("正在启动应用...")
 
 	// 华为管理器无需预先启动，客户端按需创建
-	a.logger.Info("Huawei manager initialized (clients created on demand)")
+	a.logger.Info("华为管理器已初始化（客户端按需创建）")
 
 	// 启动所有服务
 	for name, service := range a.services {
-		a.logger.Info("Starting service", zap.String("name", name))
+		a.logger.Info("正在启动服务", zap.String("name", name))
 		if err := service.Start(); err != nil {
 			return fmt.Errorf("failed to start service %s: %w", name, err)
 		}
@@ -614,7 +636,7 @@ func (a *MinimalApp) Start() error {
 
 	// 检查端口是否可用
 	if err := a.checkPort(addr); err != nil {
-		a.logger.Warn("Primary port busy, trying backup port", zap.Error(err))
+		a.logger.Warn("主端口被占用，尝试使用备用端口", zap.Error(err))
 		// 尝试使用备用端口
 		a.config.Server.Port = 8081
 		addr = fmt.Sprintf("%s:%d", a.config.Server.Host, a.config.Server.Port)
@@ -627,18 +649,18 @@ func (a *MinimalApp) Start() error {
 		WriteTimeout: time.Duration(a.config.Server.WriteTimeout) * time.Second,
 	}
 
-	a.logger.Info("Starting HTTP server", zap.String("address", addr))
+	a.logger.Info("正在启动HTTP服务器", zap.String("address", addr))
 
 	// 在goroutine中启动服务器
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
 		if err := a.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			a.logger.Error("HTTP server error", zap.Error(err))
+			a.logger.Error("HTTP服务器错误", zap.Error(err))
 		}
 	}()
 
-	a.logger.Info("Application started successfully",
+	a.logger.Info("应用启动成功",
 		zap.String("address", addr),
 	)
 
@@ -647,50 +669,50 @@ func (a *MinimalApp) Start() error {
 
 // Stop 停止应用
 func (a *MinimalApp) Stop(ctx context.Context) error {
-	a.logger.Info("Stopping application...")
+	a.logger.Info("正在停止应用...")
 
 	// 停止HTTP服务器
 	if a.httpServer != nil {
-		a.logger.Info("Stopping HTTP server...")
+		a.logger.Info("正在停止HTTP服务器...")
 		shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
 		if err := a.httpServer.Shutdown(shutdownCtx); err != nil {
-			a.logger.Error("HTTP server shutdown error", zap.Error(err))
+			a.logger.Error("HTTP服务器关闭错误", zap.Error(err))
 		}
 	}
 
 	// 停止审计日志服务
 	if a.handlers.Audit != nil {
-		a.logger.Info("Stopping audit log service...")
+		a.logger.Info("正在停止审计日志服务...")
 		a.handlers.Audit.Stop()
 	}
 
 	// 停止通知服务
 	if a.handlers.Notification != nil {
-		a.logger.Info("Stopping notification service...")
+		a.logger.Info("正在停止通知服务...")
 		a.handlers.Notification.Stop()
 	}
 
 	// 停止华为管理器
 	if a.huaweiManager != nil {
-		a.logger.Info("Stopping Huawei manager...")
+		a.logger.Info("正在停止华为管理器...")
 		if err := a.huaweiManager.Close(ctx); err != nil {
-			a.logger.Error("Failed to close Huawei manager", zap.Error(err))
+			a.logger.Error("关闭华为管理器失败", zap.Error(err))
 		}
 	}
 
 	// 停止转换服务
 	if a.conversionService != nil {
-		a.logger.Info("Stopping conversion service...")
+		a.logger.Info("正在停止转换服务...")
 		a.conversionService.Stop()
 	}
 
 	// 停止所有服务
 	for name, service := range a.services {
-		a.logger.Info("Stopping service", zap.String("name", name))
+		a.logger.Info("正在停止服务", zap.String("name", name))
 		if err := service.Stop(); err != nil {
-			a.logger.Error("Failed to stop service",
+			a.logger.Error("停止服务失败",
 				zap.String("name", name),
 				zap.Error(err),
 			)
@@ -708,7 +730,7 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 	// 等待所有goroutine完成
 	a.wg.Wait()
 
-	a.logger.Info("Application stopped")
+	a.logger.Info("应用已停止")
 	return nil
 }
 

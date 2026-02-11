@@ -46,10 +46,10 @@ func (s *USBDeviceScanner) ScanVideoDevices() ([]USBDeviceInfo, error) {
 	}
 
 	if err != nil {
-		s.logger.Error("Failed to scan video devices", zap.Error(err))
+		s.logger.Error("扫描视频设备失败", zap.Error(err))
 	}
 
-	s.logger.Info("Scanned video devices", zap.Int("count", len(devices)))
+	s.logger.Info("已扫描视频设备", zap.Int("count", len(devices)))
 	return devices, nil
 }
 
@@ -70,7 +70,7 @@ func (s *USBDeviceScanner) scanWindowsVideoDevices() ([]USBDeviceInfo, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		s.logger.Warn("PowerShell command failed, trying ffmpeg", zap.Error(err), zap.String("stderr", stderr.String()))
+		s.logger.Warn("PowerShell命令失败，尝试使用ffmpeg", zap.Error(err), zap.String("stderr", stderr.String()))
 		// 如果PowerShell失败，尝试使用ffmpeg
 		return s.scanWindowsVideoDevicesFFmpeg()
 	}
@@ -266,10 +266,10 @@ func (s *USBDeviceScanner) ScanAudioDevices() ([]USBDeviceInfo, error) {
 	}
 
 	if err != nil {
-		s.logger.Error("Failed to scan audio devices", zap.Error(err))
+		s.logger.Error("扫描音频设备失败", zap.Error(err))
 	}
 
-	s.logger.Info("Scanned audio devices", zap.Int("count", len(devices)))
+	s.logger.Info("已扫描音频设备", zap.Int("count", len(devices)))
 	return devices, nil
 }
 
@@ -289,7 +289,7 @@ func (s *USBDeviceScanner) scanWindowsAudioDevices() ([]USBDeviceInfo, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		s.logger.Warn("PowerShell Get-AudioDevice failed, trying ffmpeg", zap.Error(err))
+	s.logger.Warn("PowerShell Get-AudioDevice失败，尝试使用ffmpeg", zap.Error(err))
 		// 如果PowerShell失败，尝试使用ffmpeg
 		return s.scanWindowsAudioDevicesFFmpeg()
 	}

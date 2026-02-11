@@ -1,6 +1,6 @@
 // 录制任务管理页面
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Table,
   Button,
@@ -15,6 +15,7 @@ import {
   DatePicker,
   Tooltip
 } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import {
   PlusOutlined,
   SearchOutlined,
@@ -25,7 +26,6 @@ import {
   CloseCircleOutlined,
   ReloadOutlined
 } from '@ant-design/icons'
-import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import * as taskApi from '../../api/task'
 import * as huaweiConfigApi from '../../api/huawei-config'
@@ -53,6 +53,10 @@ export default function TaskManagement() {
   const [huaweiConfigs, setHuaweiConfigs] = useState<HuaweiConfig[]>([])
   const [configsLoading, setConfigsLoading] = useState(false)
 
+  // 行选择状态
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
+  const [batchDeleteLoading, setBatchDeleteLoading] = useState(false)
+
   // 查询参数
   const [params, setParams] = useState<TaskListParams>({
     page: 1,
@@ -60,8 +64,8 @@ export default function TaskManagement() {
   })
 
   // 加载任务列表
-  const loadTasks = async () => {
-    setLoading(true)
+  const loadTasks = async (showLoading = false) => {
+    if (showLoading) setLoading(true)
     try {
       const response = await taskApi.getTaskList(params)
       if (response.data) {
@@ -71,13 +75,35 @@ export default function TaskManagement() {
     } catch (error) {
       message.error(error instanceof Error ? error.message : '加载任务列表失败')
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }
 
+  // 初始加载
   useEffect(() => {
-    loadTasks()
+    loadTasks(true)
   }, [params])
+
+  // 定时轮询：自动刷新进行中的任务状态
+  useEffect(() => {
+    // 检查是否有进行中的任务（待执行、连接中、录制中）
+    const hasActiveTasks = () => {
+      return tasks.some(task =>
+        task.status === 'pending' ||
+        task.status === 'connecting' ||
+        task.status === 'recording'
+      )
+    }
+
+    // 设置定时器，每 5 秒刷新一次
+    const interval = setInterval(() => {
+      if (hasActiveTasks()) {
+        loadTasks(false) // 不显示 loading，避免界面闪烁
+      }
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [tasks])
 
   // 加载华为配置列表
   const loadHuaweiConfigs = async () => {
@@ -251,6 +277,76 @@ export default function TaskManagement() {
     }
   }
 
+  // 批量删除任务
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的任务')
+      return
+    }
+
+    // 检查选中的任务是否都可以删除（只能删除：待执行、已完成、失败、已取消状态的任务）
+    const cannotDeleteTasks = tasks.filter(task =>
+      selectedRowKeys.includes(task.id) &&
+      task.status !== 'pending' &&
+      task.status !== 'completed' &&
+      task.status !== 'failed' &&
+      task.status !== 'cancelled'
+    )
+
+    if (cannotDeleteTasks.length > 0) {
+      const cannotDeleteNames = cannotDeleteTasks.map(t => t.name).join('、')
+      message.warning(`以下任务无法删除：${cannotDeleteNames}\n只能删除待执行、已完成、失败、已取消状态的任务`)
+      return
+    }
+
+    Modal.confirm({
+      title: '批量删除任务',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个任务吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setBatchDeleteLoading(true)
+        try {
+          await taskApi.batchDeleteTasks(selectedRowKeys as number[])
+          message.success(`成功删除 ${selectedRowKeys.length} 个任务`)
+          setSelectedRowKeys([])
+          loadTasks()
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : '批量删除失败')
+        } finally {
+          setBatchDeleteLoading(false)
+        }
+      },
+    })
+  }
+
+  // 获取可删除的任务 ID 列表（用于行选择禁用状态）
+  const deletableTaskIds = useMemo(() => {
+    return new Set(
+      tasks
+        .filter(task =>
+          task.status === 'pending' ||
+          task.status === 'completed' ||
+          task.status === 'failed' ||
+          task.status === 'cancelled'
+        )
+        .map(task => task.id)
+    )
+  }, [tasks])
+
+  // 行选择配置
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(newSelectedRowKeys)
+    },
+    getCheckboxProps: (record: VideoRecordingTask) => ({
+      disabled: !deletableTaskIds.has(record.id),
+      name: record.name,
+    }),
+  }
+
   // 渲染状态标签
   const renderStatus = (status: VideoRecordingTaskStatus) => {
     const statusMap: Record<VideoRecordingTaskStatus, { color: string; text: string }> = {
@@ -417,9 +513,21 @@ export default function TaskManagement() {
     <div style={{ padding: '20px' }}>
       <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>录制任务管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
-          新建任务
-        </Button>
+        <Space>
+          {selectedRowKeys.length > 0 && (
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              loading={batchDeleteLoading}
+              onClick={handleBatchDelete}
+            >
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
+            新建任务
+          </Button>
+        </Space>
       </div>
 
       <div style={{ marginBottom: '16px' }}>
@@ -448,7 +556,7 @@ export default function TaskManagement() {
             placeholder={['开始日期', '结束日期']}
             onChange={handleDateRangeChange}
           />
-          <Button icon={<ReloadOutlined />} onClick={loadTasks}>
+          <Button icon={<ReloadOutlined />} onClick={() => loadTasks(true)}>
             刷新
           </Button>
         </Space>
@@ -460,6 +568,7 @@ export default function TaskManagement() {
         rowKey="id"
         loading={loading}
         scroll={{ x: 1500 }}
+        rowSelection={rowSelection}
         pagination={{
           current: params.page,
           pageSize: params.page_size,
