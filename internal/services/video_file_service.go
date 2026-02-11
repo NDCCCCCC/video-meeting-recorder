@@ -422,8 +422,21 @@ func (s *VideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, f
 		videoFile.RecordedAt = &task.StartTime
 	}
 
-	// 创建数据库记录
+	// 创建数据库记录（处理并发插入）
 	if err := s.db.Create(videoFile).Error; err != nil {
+		// 检查是否是唯一约束冲突（并发创建相同文件）
+		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "duplicate") {
+			// 并发情况下，另一个请求可能已经创建了记录
+			// 重新查询并返回现有记录
+			s.logger.Debug("并发创建冲突，重新查询现有记录",
+				zap.Uint("task_id", task.ID),
+				zap.String("file_path", filePath),
+			)
+			var existingFile models.VideoFile
+			if err := s.db.Where("file_path = ?", filePath).First(&existingFile).Error; err == nil {
+				return &existingFile, nil
+			}
+		}
 		return nil, fmt.Errorf("创建文件记录失败: %w", err)
 	}
 
@@ -492,8 +505,20 @@ func (s *VideoFileService) CreateFile(filePath string, conferenceID *uint, recor
 		Status:             models.FileStatusReady,
 	}
 
-	// 创建数据库记录
+	// 创建数据库记录（处理并发插入）
 	if err := s.db.Create(videoFile).Error; err != nil {
+		// 检查是否是唯一约束冲突（并发创建相同文件）
+		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "duplicate") {
+			// 并发情况下，另一个请求可能已经创建了记录
+			// 重新查询并返回现有记录
+			s.logger.Debug("并发创建冲突，重新查询现有记录",
+				zap.String("file_path", filePath),
+			)
+			var existingFile models.VideoFile
+			if err := s.db.Where("file_path = ?", filePath).First(&existingFile).Error; err == nil {
+				return &existingFile, nil
+			}
+		}
 		return nil, fmt.Errorf("创建文件记录失败: %w", err)
 	}
 
