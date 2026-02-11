@@ -26,10 +26,6 @@ export default [
         Component: lazy(() => import('../pages/conferences')),
       },
       {
-        path: 'recordings',
-        Component: lazy(() => import('../pages/recordings')),
-      },
-      {
         path: 'files',
         Component: lazy(() => import('../pages/files')),
       },
