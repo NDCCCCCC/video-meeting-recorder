@@ -139,15 +139,39 @@ func (s *VideoRecordingTaskService) GetTaskByID(id uint) (*models.VideoRecording
 
 // CreateTask 创建任务
 func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy uint) (*models.VideoRecordingTask, error) {
-	// 解析时间
-	startTime, err := time.Parse(time.RFC3339, req.StartTime)
+	// 定义北京时间时区（UTC+8）
+	beijingLocation := time.FixedZone("CST", 8*3600)
+
+	// 解析时间 - 输入时间是北京时间，转换为 UTC 存储
+	startTime, err := time.ParseInLocation(time.RFC3339, req.StartTime, beijingLocation)
 	if err != nil {
-		return nil, errors.New("开始时间格式错误")
+		s.logger.Error("开始时间解析失败",
+			zap.String("start_time", req.StartTime),
+			zap.Error(err),
+		)
+		return nil, errors.New("开始时间格式错误，请使用 RFC3339 格式（如：2026-02-11T15:18:01）")
 	}
-	endTime, err := time.Parse(time.RFC3339, req.EndTime)
+	endTime, err := time.ParseInLocation(time.RFC3339, req.EndTime, beijingLocation)
 	if err != nil {
-		return nil, errors.New("结束时间格式错误")
+		s.logger.Error("结束时间解析失败",
+			zap.String("end_time", req.EndTime),
+			zap.Error(err),
+		)
+		return nil, errors.New("结束时间格式错误，请使用 RFC3339 格式（如：2026-02-11T15:20:01）")
 	}
+
+	// startTime 和 endTime 已经是 UTC 时间（因为 ParseInLocation 返回的是指定时区的时间，需要显式转换）
+	startTimeUTC := startTime.UTC()
+	endTimeUTC := endTime.UTC()
+
+	s.logger.Info("解析任务时间",
+		zap.String("input_start_time", req.StartTime),
+		zap.String("input_end_time", req.EndTime),
+		zap.String("parsed_start_beijing", startTime.Format(time.RFC3339)),
+		zap.String("parsed_end_beijing", endTime.Format(time.RFC3339)),
+		zap.String("start_time_utc", startTimeUTC.Format(time.RFC3339)),
+		zap.String("end_time_utc", endTimeUTC.Format(time.RFC3339)),
+	)
 
 	// 验证华为配置存在
 	var config models.HuaweiConfig
@@ -159,8 +183,8 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 	task := &models.VideoRecordingTask{
 		Name:               req.Name,
 		Description:        req.Description,
-		StartTime:          startTime,
-		EndTime:            endTime,
+		StartTime:          startTimeUTC,
+		EndTime:            endTimeUTC,
 		PreJoinMinutes:     req.PreJoinMinutes,
 		RecordDelayMinutes: req.RecordDelayMinutes,
 		ConferenceNumber:   req.ConferenceNumber,
@@ -185,9 +209,11 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 		zap.Uint("task_id", task.ID),
 		zap.String("name", task.Name),
 		zap.Uint("created_by", createdBy),
+		zap.Time("start_time", task.StartTime),
+		zap.Time("end_time", task.EndTime),
 	)
 
-	// 同步任务到调度器
+	// 同步任务到调度器（使用 goroutine 避免阻塞请求）
 	if s.scheduler != nil {
 		go func() {
 			if err := s.scheduler.SyncPendingTasks(); err != nil {
@@ -233,18 +259,22 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		updates["description"] = *req.Description
 	}
 	if req.StartTime != nil {
-		startTime, err := time.Parse(time.RFC3339, *req.StartTime)
+		// 按北京时间解析，转换为 UTC 存储
+		beijingLocation := time.FixedZone("CST", 8*3600)
+		startTime, err := time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
 		if err != nil {
 			return nil, errors.New("开始时间格式错误")
 		}
-		updates["start_time"] = startTime
+		updates["start_time"] = startTime.UTC()
 	}
 	if req.EndTime != nil {
-		endTime, err := time.Parse(time.RFC3339, *req.EndTime)
+		// 按北京时间解析，转换为 UTC 存储
+		beijingLocation := time.FixedZone("CST", 8*3600)
+		endTime, err := time.ParseInLocation(time.RFC3339, *req.EndTime, beijingLocation)
 		if err != nil {
 			return nil, errors.New("结束时间格式错误")
 		}
-		updates["end_time"] = endTime
+		updates["end_time"] = endTime.UTC()
 	}
 	if req.PreJoinMinutes != nil {
 		updates["pre_join_minutes"] = *req.PreJoinMinutes
@@ -290,6 +320,20 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint) error {
 		return errors.New("无权限删除此任务")
 	}
 
+	// 删除前先解锁终端（防止锁遗留）
+	// 如果任务有华为配置ID，尝试解锁该配置
+	if task.HuaweiConfigID > 0 {
+		updates := map[string]interface{}{
+			"is_locked": false,
+			"locked_by": nil,
+		}
+		s.db.Model(&models.HuaweiConfig{}).Where("id = ?", task.HuaweiConfigID).Updates(updates)
+		s.logger.Info("删除任务时解锁终端",
+			zap.Uint("task_id", id),
+			zap.Uint("huawei_config_id", task.HuaweiConfigID),
+		)
+	}
+
 	result := s.db.Delete(&models.VideoRecordingTask{}, id)
 	if result.Error != nil {
 		return result.Error
@@ -312,6 +356,15 @@ type BatchDeleteTasksRequest struct {
 	IDs []uint `json:"ids" binding:"required,min=1"`
 }
 
+// BatchDeleteTasksResult 批量删除任务结果
+type BatchDeleteTasksResult struct {
+	DeletedIDs   []uint  `json:"deleted_ids"`   // 成功删除的任务 ID
+	FailedIDs    []uint  `json:"failed_ids"`    // 删除失败的任务 ID
+	FailedTasks  []string `json:"failed_tasks"` // 删除失败的任务名称及原因
+	TotalDeleted int     `json:"total_deleted"` // 成功删除的总数
+	TotalFailed  int     `json:"total_failed"`  // 删除失败的总数
+}
+
 // canDeleteTask 检查任务是否可删除
 func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask, userID uint) (bool, string) {
 	if task.CreatedBy != userID {
@@ -324,50 +377,73 @@ func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask
 }
 
 // BatchDeleteTasks 批量删除任务
-func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint) (int, error) {
+func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint) (*BatchDeleteTasksResult, error) {
 	if len(ids) == 0 {
-		return 0, errors.New("任务ID列表不能为空")
+		return nil, errors.New("任务ID列表不能为空")
 	}
 
 	var tasks []models.VideoRecordingTask
 	if err := s.db.Where("id IN ?", ids).Find(&tasks).Error; err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if len(tasks) == 0 {
-		return 0, errors.New("任务不存在")
+		return nil, errors.New("任务不存在")
 	}
 
-	var deletableIDs []uint
-	var cannotDeleteTasks []string
+	result := &BatchDeleteTasksResult{
+		DeletedIDs:  make([]uint, 0),
+		FailedIDs:   make([]uint, 0),
+		FailedTasks: make([]string, 0),
+	}
 
 	for _, task := range tasks {
 		if canDelete, reason := s.canDeleteTask(task, userID); canDelete {
-			deletableIDs = append(deletableIDs, task.ID)
+			result.DeletedIDs = append(result.DeletedIDs, task.ID)
 		} else {
-			cannotDeleteTasks = append(cannotDeleteTasks, fmt.Sprintf("%s（%s）", task.Name, reason))
+			result.FailedIDs = append(result.FailedIDs, task.ID)
+			result.FailedTasks = append(result.FailedTasks, fmt.Sprintf("%s（%s）", task.Name, reason))
 		}
 	}
 
-	if len(deletableIDs) == 0 {
-		return 0, errors.New("没有可删除的任务")
+	if len(result.DeletedIDs) == 0 {
+		return result, errors.New("没有可删除的任务")
 	}
 
-	result := s.db.Delete(&models.VideoRecordingTask{}, deletableIDs)
-	if result.Error != nil {
-		return 0, result.Error
+	// 删除前先解锁所有待删除任务的终端（防止锁遗留）
+	for _, task := range tasks {
+		if task.HuaweiConfigID > 0 {
+			updates := map[string]interface{}{
+				"is_locked": false,
+				"locked_by": nil,
+			}
+			s.db.Model(&models.HuaweiConfig{}).Where("id = ?", task.HuaweiConfigID).Updates(updates)
+		}
 	}
+	s.logger.Info("批量删除任务时解锁终端",
+		zap.Int("count", len(result.DeletedIDs)),
+	)
+
+	// 执行删除
+	dbResult := s.db.Delete(&models.VideoRecordingTask{}, result.DeletedIDs)
+	if dbResult.Error != nil {
+		return nil, dbResult.Error
+	}
+
+	result.TotalDeleted = int(dbResult.RowsAffected)
+	result.TotalFailed = len(result.FailedIDs)
 
 	s.logger.Info("批量删除录制任务",
-		zap.Int("count", int(result.RowsAffected)),
+		zap.Int("deleted", result.TotalDeleted),
+		zap.Int("failed", result.TotalFailed),
 		zap.Uint("deleted_by", userID),
 	)
 
-	if len(cannotDeleteTasks) > 0 {
-		s.logger.Warn("部分任务无法删除", zap.Strings("tasks", cannotDeleteTasks))
+	if result.TotalFailed > 0 {
+		s.logger.Warn("部分任务无法删除", zap.Strings("tasks", result.FailedTasks))
 	}
 
-	return int(result.RowsAffected), nil
+	return result, nil
 }
 
 // StartTask 手动启动任务
