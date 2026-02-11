@@ -15,19 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// 录制编码参数常量
-const (
-	videoCodec       = "libx264"
-	videoPreset      = "medium"
-	videoBitrate     = "5M"
-	videoPixelFormat = "yuv420p"
-	audioCodec       = "aac"
-	audioBitrate     = "128k"
-	outputFormat     = "mkv" // 使用 MKV 格式，防止中断时文件损坏
-	// HLS 参数
-	hlsSegmentDuration = 10 // HLS 分片时长（秒）
-)
-
 // SimpleRecordingCoordinator 简单的录制协调器
 type SimpleRecordingCoordinator struct {
 	logger      *zap.Logger
@@ -87,7 +74,7 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	defer c.mu.Unlock()
 
 	// 使用 MKV 格式（MKV 在中断时不易损坏）
-	mkvPath := c.getOutputPath(task, outputFormat)
+	mkvPath := c.getOutputPath(task, "mkv")
 	if err := os.MkdirAll(filepath.Dir(mkvPath), 0755); err != nil {
 		return fmt.Errorf("创建输出目录失败: %w", err)
 	}
@@ -274,7 +261,8 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 
 	// 停止主录制进程（tee muxer 会自动停止所有输出）
 	process.CancelFunc()
-	c.waitForProcess(process, taskID, true) // true 表示是主动停止
+	// 注意：不再调用 waitForProcess，因为 monitorProcess goroutine 已经在等待进程结束
+	// 当进程退出时，monitorProcess 会更新进程状态为 "stopped"
 
 	// 关闭日志文件
 	if process.logFile != nil {
@@ -288,35 +276,12 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 	return nil
 }
 
-// waitForProcess 等待进程结束（带超时）
-// expectedStop: 是否是预期的停止（主动停止录制），如果是则不会记录错误日志
-func (c *SimpleRecordingCoordinator) waitForProcess(process *RecordingProcess, taskID uint, expectedStop bool) {
-	done := make(chan error, 1)
-	go func() { done <- process.Cmd.Wait() }()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			if expectedStop {
-				// 主动停止时，FFmpeg进程被终止是正常行为
-				c.logger.Debug("FFmpeg进程已停止", zap.Uint("task_id", taskID), zap.Error(err))
-			} else {
-				// 非预期退出才记录为错误
-				c.logger.Error("FFmpeg进程退出异常", zap.Uint("task_id", taskID), zap.Error(err))
-			}
-		}
-	case <-time.After(10 * time.Second):
-		if process.Cmd.Process != nil {
-			process.Cmd.Process.Kill()
-		}
-		c.logger.Warn("FFmpeg进程超时，强制终止", zap.Uint("task_id", taskID))
-	}
-}
-
 // monitorProcess 监控录制进程状态
 func (c *SimpleRecordingCoordinator) monitorProcess(taskID uint, cmd *exec.Cmd, ctx context.Context) {
+	// 先等待进程结束，不持有锁
 	err := cmd.Wait()
 
+	// 然后获取锁更新状态
 	c.mu.Lock()
 	process, exists := c.processes[taskID]
 	if exists {
@@ -353,15 +318,15 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 
 	// 添加视频编码参数
 	args = append(args,
-		"-c:v", videoCodec,
-		"-preset", videoPreset,
-		"-b:v", videoBitrate,
-		"-pix_fmt", videoPixelFormat,
+		"-c:v", "libx264",
+		"-preset", "medium",
+		"-b:v", "5M",
+		"-pix_fmt", "yuv420p",
 	)
 
 	// 添加音频编码参数（如果有音频）
 	if input.hasAudio {
-		args = append(args, "-c:a", audioCodec, "-b:a", audioBitrate)
+		args = append(args, "-c:a", "aac", "-b:a", "128k")
 	}
 
 	// 添加时长限制
@@ -390,10 +355,15 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	hlsSegmentPath := filepath.Join(hlsPath, "segment_%03d.ts")
 	hlsM3U8Path := filepath.Join(hlsPath, "index.m3u8")
 
+	// 从配置读取 HLS 参数
+	hlsSegmentDuration := c.config.FFmpeg.HLSSegmentDuration
+	hlsListSize := c.config.FFmpeg.HLSListSize
+
 	// Tee muxer 格式: "mkv_path|[f=hls:hls_time=X:hls_list_size=Y:hls_segment_filename=Z]m3u8_path"
-	teeSpec := fmt.Sprintf("%s|[f=hls:hls_time=%d:hls_list_size=5:hls_segment_filename=%s]%s",
+	teeSpec := fmt.Sprintf("%s|[f=hls:hls_time=%d:hls_list_size=%d:hls_segment_filename=%s]%s",
 		normalizePathForFFmpeg(mkvPath),
 		hlsSegmentDuration,
+		hlsListSize,
 		normalizePathForFFmpeg(hlsSegmentPath),
 		normalizePathForFFmpeg(hlsM3U8Path),
 	)
@@ -404,6 +374,7 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 		zap.String("mkv_output", mkvPath),
 		zap.String("hls_output", hlsM3U8Path),
 		zap.Int("hls_segment_duration", hlsSegmentDuration),
+		zap.Int("hls_list_size", hlsListSize),
 	)
 
 	return args, nil
@@ -479,10 +450,10 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 
 	// 为 dshow 增加实时缓冲区和线程队列大小，防止丢帧和阻塞
 	if input.CameraBackend == "dshow" {
-		// rtbufsize 单位是字节，设置为 100MB (104857600)
-		args = append(args, "-rtbufsize", "104857600")
-		// thread_queue_size 增加线程队列大小
-		args = append(args, "-thread_queue_size", "1024")
+		// rtbufsize 单位是字节，从配置读取
+		args = append(args, "-rtbufsize", fmt.Sprintf("%d", c.config.FFmpeg.DShowBufferSize))
+		// thread_queue_size 增加线程队列大小，从配置读取
+		args = append(args, "-thread_queue_size", fmt.Sprintf("%d", c.config.FFmpeg.DShowThreadQueueSize))
 	}
 
 	args = append(args, "-i", deviceParam)
@@ -516,7 +487,7 @@ func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]
 	// 为 dshow 增加线程队列大小，防止阻塞
 	args := []string{"-f", input.AudioBackend}
 	if input.AudioBackend == "dshow" {
-		args = append(args, "-thread_queue_size", "1024")
+		args = append(args, "-thread_queue_size", fmt.Sprintf("%d", c.config.FFmpeg.DShowThreadQueueSize))
 	}
 	args = append(args, "-i", deviceParam)
 	return args, nil
@@ -552,8 +523,9 @@ func (c *SimpleRecordingCoordinator) HealthCheck() error {
 					zombieCount++
 				}
 			}
-			// 检查是否有运行时间过长的任务（超过24小时）
-			if now.Sub(process.StartTime) > 24*time.Hour {
+			// 检查是否有运行时间过长的任务（超过配置的最长录制时长）
+			maxDuration := c.config.FFmpeg.MaxRecordingDuration
+			if now.Sub(process.StartTime) > maxDuration {
 				c.logger.Warn("发现运行时间过长的录制进程",
 					zap.Uint("task_id", taskID),
 					zap.Duration("runtime", now.Sub(process.StartTime)),
