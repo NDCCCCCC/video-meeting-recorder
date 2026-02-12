@@ -14,7 +14,10 @@ import {
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import type { MenuProps } from 'antd'
+import type { User } from '../types/auth'
 import './BasicLayout.css'
+
+// 菜单权限映射
 
 const { Header, Sider, Content } = Layout
 
@@ -28,13 +31,13 @@ const MENU_PERMISSIONS: Record<string, string> = {
 }
 
 // 检查菜单权限
-function canAccessPath(path: string | undefined, user: ReturnType<typeof useAuthStore>['user'] | null): boolean {
+function canAccessPath(path: string | undefined, user: User | null): boolean {
   if (!path) return true
   const required = MENU_PERMISSIONS[path]
   if (!required) return true
   if (!user) return false
-  if (user as any).is_admin) return true
-  return (user as any).permissions?.includes(required) ?? false
+  if (user.is_admin) return true
+  return user.permissions?.includes(required) ?? false
 }
 
 export default function BasicLayout() {
