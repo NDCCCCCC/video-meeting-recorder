@@ -46,6 +46,11 @@ frontend/.env.local
 frontend/.env.*.local
 *.tsbuildinfo
 frontend/tsconfig.tsbuildinfo
+internal/frontend/dist/
+
+# Build temp directories
+scripts/bin/
+scripts/internal/
 
 # Temporary files
 tmp/
