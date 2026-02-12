@@ -38,7 +38,7 @@ export default function Login() {
           onFinish={onFinish}
           autoComplete="off"
           size="large"
-          initialValues={{ username: 'admin', password: 'admin123' }}
+          initialValues={import.meta.env.DEV ? { username: 'admin', password: 'admin123' } : undefined}
         >
           <Form.Item
             name="username"
@@ -67,9 +67,11 @@ export default function Login() {
           </Form.Item>
         </Form>
 
-        <div className="login-footer">
-          <p>默认账号: admin / admin123</p>
-        </div>
+        {import.meta.env.DEV && (
+          <div className="login-footer">
+            <p>默认账号: admin / admin123</p>
+          </div>
+        )}
       </Card>
     </div>
   )
