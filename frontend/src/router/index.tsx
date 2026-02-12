@@ -1,4 +1,5 @@
 import { lazy } from 'react'
+import { Navigate } from 'react-router-dom'
 import ProtectedLayout from '../components/ProtectedLayout'
 
 // 路由配置
@@ -15,31 +16,31 @@ export default [
     children: [
       {
         index: true,
-        Component: lazy(() => import('../pages/dashboard')),
+        element: <Navigate to="/tasks" replace />,
       },
+      // {
+      //   index: true,
+      //   Component: lazy(() => import('../pages/dashboard')),
+      // },
       {
         path: 'tasks',
         Component: lazy(() => import('../pages/tasks')),
       },
       {
-        path: 'conferences',
-        Component: lazy(() => import('../pages/conferences')),
-      },
-      {
         path: 'files',
         Component: lazy(() => import('../pages/files')),
       },
-      {
-        path: 'audit',
-        Component: lazy(() => import('../pages/audit')),
-      },
+      // {
+      //   path: 'audit',
+      //   Component: lazy(() => import('../pages/audit')),
+      // },
       {
         path: 'system',
         children: [
           { path: 'users', Component: lazy(() => import('../pages/system/users')) },
           { path: 'roles', Component: lazy(() => import('../pages/system/roles')) },
           { path: 'huawei-configs', Component: lazy(() => import('../pages/system/huawei-configs')) },
-          { path: 'settings', Component: lazy(() => import('../pages/system/settings')) },
+          // { path: 'settings', Component: lazy(() => import('../pages/system/settings')) },
         ],
       },
     ],

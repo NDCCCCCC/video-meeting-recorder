@@ -3,14 +3,11 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import { Layout, Menu, Dropdown, Avatar } from 'antd'
 import {
-  HomeOutlined,
   VideoCameraOutlined,
   UserOutlined,
   SettingOutlined,
   LogoutOutlined,
-  FileTextOutlined,
   FolderOutlined,
-  HistoryOutlined,
   CloudServerOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
@@ -30,11 +27,10 @@ export default function BasicLayout() {
   }
 
   const menuItems: MenuProps['items'] = [
-    { key: '/', icon: <HomeOutlined />, label: '仪表盘' },
+    // { key: '/', icon: <HomeOutlined />, label: '仪表盘' },
     { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' },
-    { key: '/conferences', icon: <FileTextOutlined />, label: '会议记录' },
     { key: '/files', icon: <FolderOutlined />, label: '文件管理' },
-    { key: '/audit', icon: <HistoryOutlined />, label: '审计日志' },
+    // { key: '/audit', icon: <HistoryOutlined />, label: '审计日志' },
     {
       key: 'system',
       icon: <SettingOutlined />,
@@ -43,7 +39,7 @@ export default function BasicLayout() {
         { key: '/system/users', label: '用户管理' },
         { key: '/system/roles', label: '角色管理' },
         { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' },
-        { key: '/system/settings', label: '系统设置' },
+        // { key: '/system/settings', label: '系统设置' },
       ],
     },
   ]
