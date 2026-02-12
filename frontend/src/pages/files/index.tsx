@@ -200,6 +200,47 @@ export default function FileManagement() {
     return <Tag color={config.color}>{config.label}</Tag>
   }, [])
 
+  // 渲染操作按钮
+  const renderActions = useCallback((record: VideoFile) => (
+    <Space size="small">
+      <RenderVideoPreview {...record} />
+      <Button
+        type="link"
+        size="small"
+        icon={<EyeOutlined />}
+        onClick={() => viewDetail(record)}
+      >
+        详情
+      </Button>
+      <Button
+        type="link"
+        size="small"
+        icon={<DownloadOutlined />}
+        onClick={() => handleDownload(record.id, record.file_name)}
+        disabled={record.status !== 'ready'}
+      >
+        下载
+      </Button>
+      <PermissionGuard permission={PERMISSIONS.FILE_DELETE}>
+        <Popconfirm
+          title="确定要删除这个文件吗？"
+          onConfirm={() => handleDelete(record.id)}
+          disabled={record.status === 'processing'}
+        >
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            disabled={record.status === 'processing'}
+          >
+            删除
+          </Button>
+        </Popconfirm>
+      </PermissionGuard>
+    </Space>
+  ), [viewDetail, handleDownload, handleDelete])
+
   // 表格列定义
   const columns: ColumnsType<VideoFile> = useMemo(() => [
     {
@@ -258,45 +299,7 @@ export default function FileManagement() {
       key: 'action',
       width: 250,
       fixed: 'right' as const,
-      render: (_: unknown, record: VideoFile) => (
-        <Space size="small">
-          <RenderVideoPreview {...record} />
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => viewDetail(record)}
-          >
-            详情
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<DownloadOutlined />}
-            onClick={() => handleDownload(record.id, record.file_name)}
-            disabled={record.status !== 'ready'}
-          >
-            下载
-          </Button>
-          <PermissionGuard permission={PERMISSIONS.FILE_DELETE}>
-            <Popconfirm
-              title="确定要删除这个文件吗？"
-              onConfirm={() => handleDelete(record.id)}
-              disabled={record.status === 'processing'}
-            >
-              <Button
-                type="link"
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                disabled={record.status === 'processing'}
-              >
-                删除
-              </Button>
-            </Popconfirm>
-          </PermissionGuard>
-        </Space>
-      ),
+      render: renderActions,
     },
   ], [renderStatus, viewDetail, handleDownload, handleDelete])
 

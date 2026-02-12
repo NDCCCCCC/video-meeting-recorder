@@ -83,6 +83,7 @@ func OptionalAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 
 		claims, err := jwtService.ValidateToken(tokenString)
 		if err != nil {
+			// Token 验证失败，允许继续（未认证场景）
 			c.Next()
 			return
 		}
@@ -92,13 +93,21 @@ func OptionalAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 	}
 }
 
+// isVideoDownloadEndpoint 检查是否是视频下载端点
+func isVideoDownloadEndpoint(path string) bool {
+	return strings.Contains(path, "/files/") && strings.Contains(path, "/download")
+}
+
 // extractToken 从多个来源提取token
+// 注意：token 查询参数仅允许用于视频下载端点（用于 <video> 标签播放）
 func extractToken(c *gin.Context) string {
 	// 优先从 Authorization 头获取
 	tokenString := extractTokenFromHeader(c)
 
-	// 如果 Header 没有，尝试从查询参数获取
-	if tokenString == "" {
+	// 如果 Header 没有，且是视频下载端点，才允许从查询参数获取
+	// 警告：通过 URL 传递 token 会被记录在服务器日志和浏览器历史中
+	if tokenString == "" && isVideoDownloadEndpoint(c.Request.URL.Path) {
+		c.Set("token_via_query", true) // 标记使用了查询参数传递 token
 		tokenString = c.Query("token")
 	}
 

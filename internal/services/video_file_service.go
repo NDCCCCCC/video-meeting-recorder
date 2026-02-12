@@ -201,22 +201,45 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 	// 查找同任务下的另一个格式文件
 	counterpartFile := s.findCounterpartFile(&file)
 
-	// 删除当前文件
-	if err := s.deletePhysicalFile(&file); err != nil {
-		s.logger.Warn("删除物理文件失败",
-			zap.Uint("file_id", id),
-			zap.String("file_path", file.FilePath),
-			zap.Error(err),
-		)
+	// 收集需要删除的物理文件
+	var physicalFilesToDelete []*models.VideoFile
+	physicalFilesToDelete = append(physicalFilesToDelete, &file)
+	if counterpartFile != nil {
+		physicalFilesToDelete = append(physicalFilesToDelete, counterpartFile)
 	}
 
-	if err := s.db.Delete(&models.VideoFile{}, id).Error; err != nil {
+	// 使用事务确保数据一致性
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 删除当前文件的数据库记录
+		if err := tx.Delete(&models.VideoFile{}, id).Error; err != nil {
+			return err
+		}
+
+		// 删除对应格式文件的数据库记录
+		if counterpartFile != nil {
+			if err := tx.Delete(&models.VideoFile{}, counterpartFile.ID).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("删除数据库记录失败", zap.Uint("file_id", id), zap.Error(err))
 		return err
 	}
 
-	// 删除对应格式的文件
-	if counterpartFile != nil {
-		s.deleteCounterpartFile(counterpartFile)
+	// 数据库删除成功后，删除物理文件
+	for _, f := range physicalFilesToDelete {
+		if f.Exists() {
+			if err := s.deletePhysicalFile(f); err != nil {
+				s.logger.Warn("删除物理文件失败",
+					zap.Uint("file_id", f.ID),
+					zap.String("file_path", f.FilePath),
+					zap.Error(err),
+				)
+			}
+		}
 	}
 
 	s.logger.Info("视频文件已删除",
