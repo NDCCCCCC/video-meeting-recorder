@@ -36,6 +36,8 @@ export interface User {
   full_name: string
   role_id: number
   role_name?: string
+  is_admin?: boolean
+  permissions?: string[]
   is_active: boolean
 }
 

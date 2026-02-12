@@ -64,6 +64,8 @@ func JWTAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("role_id", claims.RoleID)
+		c.Set("is_admin", claims.IsAdmin)
+		c.Set("permissions", claims.Permissions)
 		c.Set("token", parts[1])
 
 		c.Next()
@@ -89,6 +91,8 @@ func OptionalAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 			c.Set("user_id", claims.UserID)
 			c.Set("username", claims.Username)
 			c.Set("role_id", claims.RoleID)
+			c.Set("is_admin", claims.IsAdmin)
+			c.Set("permissions", claims.Permissions)
 			c.Set("token", parts[1])
 		}
 

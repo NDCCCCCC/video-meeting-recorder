@@ -353,13 +353,12 @@ func (s *USBDeviceScanner) scanWindowsAudioDevicesFFmpeg() ([]USBDeviceInfo, err
 					end := strings.Index(line[start+1:], `"`)
 					if end != -1 {
 						deviceName := line[start+1 : start+1+end]
+						// 过滤掉虚拟音频设备
 						if deviceName != "" && !strings.Contains(strings.ToLower(deviceName), "virtual") {
-							// 生成设备ID
-							deviceID := fmt.Sprintf("audio=%d", len(devices))
 							devices = append(devices, USBDeviceInfo{
 								Type:     "audio",
 								Name:     deviceName,
-								DeviceID: deviceID,
+								DeviceID: deviceName, // 使用实际设备名称作为ID，dshow需要完整名称
 								Status:   "available",
 								Backend:  "dshow",
 							})
