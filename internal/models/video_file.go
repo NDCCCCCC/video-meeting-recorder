@@ -17,9 +17,9 @@ type VideoFile struct {
 	Resolution         string    `gorm:"type:varchar(20)" json:"resolution"` // 1920x1080
 	Bitrate            int       `json:"bitrate"` // kbps
 	Codec              string    `gorm:"type:varchar(50)" json:"codec"`
-	ConferenceRecordID *uint     `gorm:"index" json:"conference_record_id,omitempty"`
-	ConferenceRecord   *ConferenceRecord `gorm:"foreignKey:ConferenceRecordID" json:"conference_record,omitempty"`
-	Status             string    `gorm:"type:varchar(20);default:'ready';index:idx_status_created,priority:1;index:idx_conference_record_id" json:"status"` // ready, processing, error
+	TaskID             *uint     `gorm:"index" json:"task_id,omitempty"`                      // 关联的录制任务ID
+	Task               *VideoRecordingTask `gorm:"foreignKey:TaskID" json:"task,omitempty"`  // 关联的录制任务
+	Status             string    `gorm:"type:varchar(20);default:'ready';index:idx_status_created,priority:1" json:"status"` // ready, processing, error
 	ThumbnailPath      *string   `json:"thumbnail_path,omitempty"`
 	RecordedAt         *time.Time `gorm:"index" json:"recorded_at,omitempty"`
 }

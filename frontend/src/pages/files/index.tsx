@@ -27,6 +27,7 @@ import {
   VideoCameraOutlined,
   CloudDownloadOutlined,
   EyeOutlined,
+  ScanOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -64,6 +65,7 @@ export default function FileManagement() {
   const [stats, setStats] = useState<VideoFileStats | null>(null)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [detailVisible, setDetailVisible] = useState(false)
   const [viewingFile, setViewingFile] = useState<VideoFile | null>(null)
 
@@ -145,6 +147,31 @@ export default function FileManagement() {
   const viewDetail = (file: VideoFile) => {
     setViewingFile(file)
     setDetailVisible(true)
+  }
+
+  const handleScan = async () => {
+    setScanning(true)
+    try {
+      const response = await videoFileApi.scanVideoFiles()
+      if (response.data) {
+        const result: videoFileApi.ScanResult = response.data
+        const { scanned, created, skipped, errors } = result
+        if (created > 0) {
+          message.success(`扫描完成！发现 ${scanned} 个文件，新增 ${created} 条记录，跳过 ${skipped} 个已存在的文件`)
+        } else {
+          message.info(`扫描完成！发现 ${scanned} 个文件，但都是已存在的记录`)
+        }
+        if (errors && errors.length > 0) {
+          console.warn('扫描过程中的错误:', errors)
+        }
+        loadFiles()
+        loadStats()
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '扫描失败')
+    } finally {
+      setScanning(false)
+    }
   }
 
   const columns: ColumnsType<VideoFile> = [
@@ -319,6 +346,14 @@ export default function FileManagement() {
           <Button icon={<ReloadOutlined />} onClick={() => { loadFiles(); loadStats() }}>
             刷新
           </Button>
+          <Button
+            type="primary"
+            icon={<ScanOutlined />}
+            onClick={handleScan}
+            loading={scanning}
+          >
+            扫描导入
+          </Button>
         </Space>
       </div>
 
@@ -416,17 +451,14 @@ export default function FileManagement() {
               </Row>
             </Card>
 
-            {viewingFile.conference_record && (
-              <Card size="small" title="关联会议" style={{ marginTop: 16 }}>
+            {viewingFile.task && (
+              <Card size="small" title="关联任务" style={{ marginTop: 16 }}>
                 <Row gutter={[16, 8]}>
-                  <Col span={8}><strong>会议ID:</strong></Col>
-                  <Col span={16}>{viewingFile.conference_record.id}</Col>
+                  <Col span={8}><strong>任务ID:</strong></Col>
+                  <Col span={16}>{viewingFile.task.id}</Col>
 
-                  <Col span={8}><strong>会议标题:</strong></Col>
-                  <Col span={16}>{viewingFile.conference_record.title}</Col>
-
-                  <Col span={8}><strong>会议号:</strong></Col>
-                  <Col span={16}>{viewingFile.conference_record.conference_number}</Col>
+                  <Col span={8}><strong>任务名称:</strong></Col>
+                  <Col span={16}>{viewingFile.task.name}</Col>
                 </Row>
               </Card>
             )}

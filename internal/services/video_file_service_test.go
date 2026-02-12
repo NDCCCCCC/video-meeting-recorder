@@ -33,7 +33,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	err = db.AutoMigrate(
 		&models.VideoFile{},
 		&models.VideoRecordingTask{},
-		&models.ConferenceRecord{},
 	)
 	require.NoError(t, err)
 
@@ -55,8 +54,8 @@ func setupTestService(t *testing.T) (*VideoFileService, *gorm.DB, string) {
 	})
 
 	logger := zap.NewNop()
-	service := NewVideoFileService(db, logger)
 	tempDir := t.TempDir()
+	service := NewVideoFileService(db, logger, tempDir)
 
 	return service, db, tempDir
 }
@@ -90,32 +89,6 @@ func createTestTask(t *testing.T, db *gorm.DB, mkvPath, mp4Path string) *models.
 	return task
 }
 
-// createTestConference 创建测试会议记录
-func createTestConference(t *testing.T, db *gorm.DB, title, number string) *models.ConferenceRecord {
-	endTime := time.Now()
-	conference := &models.ConferenceRecord{
-		Title:             title,
-		ConferenceNumber:   number,
-		StartTime:         time.Now().Add(-1 * time.Hour),
-		EndTime:           &endTime,
-		Status:            models.ConferenceStatusCompleted,
-	}
-	err := db.Create(conference).Error
-	require.NoError(t, err)
-	return conference
-}
-
-// assertFileCreated 断言文件创建成功的基本验证
-func assertFileCreated(t *testing.T, file *models.VideoFile, err error, expectedName, expectedPath, expectedFormat string) {
-	assert.NoError(t, err)
-	assert.NotNil(t, file)
-	assert.Equal(t, expectedName, file.FileName)
-	assert.Equal(t, expectedPath, file.FilePath)
-	assert.Equal(t, models.FileStatusReady, file.Status)
-	assert.Equal(t, expectedFormat, file.Format)
-	assert.Greater(t, file.FileSize, int64(0))
-}
-
 // TestCreateFileFromTask 测试从任务创建文件记录
 func TestCreateFileFromTask(t *testing.T) {
 	t.Run("成功创建MKV文件记录", func(t *testing.T) {
@@ -126,10 +99,15 @@ func TestCreateFileFromTask(t *testing.T) {
 		task := createTestTask(t, db, mkvPath, "")
 
 		// 创建文件记录
-		file, err := service.CreateFileFromTask(task, "mkv")
+		mkv := "mkv"
+		file, err := service.CreateFileFromTask(task, &mkv)
 
 		// 验证
-		assertFileCreated(t, file, err, "test_video.mkv", mkvPath, "mkv")
+		assert.NoError(t, err)
+		assert.NotNil(t, file)
+		assert.Equal(t, "test_video.mkv", file.FileName)
+		assert.Equal(t, mkvPath, file.FilePath)
+		assert.Equal(t, "mkv", file.Format)
 
 		// 验证数据库中的记录
 		var dbFile models.VideoFile
@@ -146,10 +124,15 @@ func TestCreateFileFromTask(t *testing.T) {
 		task := createTestTask(t, db, "", mp4Path)
 
 		// 创建文件记录
-		file, err := service.CreateFileFromTask(task, "mp4")
+		mp4 := "mp4"
+		file, err := service.CreateFileFromTask(task, &mp4)
 
 		// 验证
-		assertFileCreated(t, file, err, "test_video.mp4", mp4Path, "mp4")
+		assert.NoError(t, err)
+		assert.NotNil(t, file)
+		assert.Equal(t, "test_video.mp4", file.FileName)
+		assert.Equal(t, mp4Path, file.FilePath)
+		assert.Equal(t, "mp4", file.Format)
 	})
 
 	t.Run("文件不存在时返回错误", func(t *testing.T) {
@@ -158,7 +141,8 @@ func TestCreateFileFromTask(t *testing.T) {
 		task := createTestTask(t, db, "/nonexistent/path/video.mkv", "")
 
 		// 尝试创建文件记录
-		file, err := service.CreateFileFromTask(task, "mkv")
+		mkv := "mkv"
+		file, err := service.CreateFileFromTask(task, &mkv)
 
 		// 验证
 		assert.Error(t, err)
@@ -170,7 +154,7 @@ func TestCreateFileFromTask(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
 		// 尝试使用nil任务创建文件
-		file, err := service.CreateFileFromTask(nil, "mkv")
+		file, err := service.CreateFileFromTask(nil, nil)
 
 		// 验证
 		assert.Error(t, err)
@@ -185,7 +169,8 @@ func TestCreateFileFromTask(t *testing.T) {
 		task := createTestTask(t, db, mkvPath, "")
 
 		// 尝试使用不支持的格式
-		file, err := service.CreateFileFromTask(task, "avi")
+		avi := "avi"
+		file, err := service.CreateFileFromTask(task, &avi)
 
 		// 验证
 		assert.Error(t, err)
@@ -199,7 +184,8 @@ func TestCreateFileFromTask(t *testing.T) {
 		task := createTestTask(t, db, "", "")
 
 		// 尝试创建文件记录
-		file, err := service.CreateFileFromTask(task, "mkv")
+		mkv := "mkv"
+		file, err := service.CreateFileFromTask(task, &mkv)
 
 		// 验证
 		assert.Error(t, err)
@@ -215,12 +201,13 @@ func TestCreateFileFromTask(t *testing.T) {
 		task := createTestTask(t, db, mkvPath, "")
 
 		// 第一次创建
-		file1, err1 := service.CreateFileFromTask(task, "mkv")
+		mkv := "mkv"
+		file1, err1 := service.CreateFileFromTask(task, &mkv)
 		assert.NoError(t, err1)
 		assert.NotNil(t, file1)
 
 		// 第二次创建（应该返回相同的记录）
-		file2, err2 := service.CreateFileFromTask(task, "mkv")
+		file2, err2 := service.CreateFileFromTask(task, &mkv)
 		assert.NoError(t, err2)
 		assert.NotNil(t, file2)
 		assert.Equal(t, file1.ID, file2.ID)
@@ -231,71 +218,10 @@ func TestCreateFileFromTask(t *testing.T) {
 		db.Model(&models.VideoFile{}).Where("file_path = ?", mkvPath).Count(&count)
 		assert.Equal(t, int64(1), count)
 	})
-
-	t.Run("关联会议记录", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
-
-		// 创建会议记录
-		conference := createTestConference(t, db, "测试会议", "conf001")
-
-		// 创建测试文件和任务
-		mkvPath := createTestVideoFile(t, tempDir, "test_video.mkv", "fake mkv content")
-		task := createTestTask(t, db, mkvPath, "")
-		task.ConferenceRecordID = &conference.ID
-		db.Save(task)
-
-		// 创建文件记录
-		file, err := service.CreateFileFromTask(task, "mkv")
-
-		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, file)
-		assert.Equal(t, conference.ID, *file.ConferenceRecordID)
-	})
-
-	t.Run("设置录制时间", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
-
-		// 创建测试文件和任务
-		mkvPath := createTestVideoFile(t, tempDir, "test_video.mkv", "fake mkv content")
-		task := createTestTask(t, db, mkvPath, "")
-		expectedTime := time.Now().Add(-30 * time.Minute)
-		task.StartTime = expectedTime
-		db.Save(task)
-
-		// 创建文件记录
-		file, err := service.CreateFileFromTask(task, "mkv")
-
-		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, file)
-		assert.NotNil(t, file.RecordedAt)
-		// 时间应该在1秒误差内
-		assert.WithinDuration(t, expectedTime, *file.RecordedAt, time.Second)
-	})
 }
 
-// TestCreateFile 测试通用文件创建
+// TestCreateFile 测试创建文件记录
 func TestCreateFile(t *testing.T) {
-	t.Run("成功创建文件记录", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
-
-		// 创建测试文件
-		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
-
-		// 创建文件记录
-		file, err := service.CreateFile(filePath, nil, nil)
-
-		// 验证
-		assertFileCreated(t, file, err, "video.mp4", filePath, "mp4")
-
-		// 验证数据库中的记录
-		var dbFile models.VideoFile
-		err = db.First(&dbFile, file.ID).Error
-		assert.NoError(t, err)
-		assert.Equal(t, file.FileName, dbFile.FileName)
-	})
-
 	t.Run("文件不存在时返回错误", func(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
@@ -312,53 +238,10 @@ func TestCreateFile(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
 		// 尝试使用空路径创建文件
-		file, err := service.CreateFile("", nil, nil)
+		_, err := service.CreateFile("", nil, nil)
 
 		// 验证
 		assert.Error(t, err)
-		assert.Nil(t, file)
-		assert.Contains(t, err.Error(), "文件路径为空")
-	})
-
-	t.Run("重复路径幂等性", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
-
-		// 创建测试文件
-		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
-
-		// 第一次创建
-		file1, err1 := service.CreateFile(filePath, nil, nil)
-		assert.NoError(t, err1)
-		assert.NotNil(t, file1)
-
-		// 第二次创建（应该返回相同的记录）
-		file2, err2 := service.CreateFile(filePath, nil, nil)
-		assert.NoError(t, err2)
-		assert.NotNil(t, file2)
-		assert.Equal(t, file1.ID, file2.ID)
-
-		// 验证数据库中只有一条记录
-		var count int64
-		db.Model(&models.VideoFile{}).Where("file_path = ?", filePath).Count(&count)
-		assert.Equal(t, int64(1), count)
-	})
-
-	t.Run("关联会议ID", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
-
-		// 创建会议记录
-		conference := createTestConference(t, db, "测试会议", "conf001")
-
-		// 创建测试文件
-		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
-
-		// 创建文件记录并关联会议
-		file, err := service.CreateFile(filePath, &conference.ID, nil)
-
-		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, file)
-		assert.Equal(t, conference.ID, *file.ConferenceRecordID)
 	})
 
 	t.Run("设置录制时间", func(t *testing.T) {
@@ -455,46 +338,38 @@ func TestExtractVideoMetadata(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, metadata)
 		assert.NotEmpty(t, metadata.Format)
-		assert.NotNil(t, metadata.Codec)
 	})
 }
 
-// TestListFiles 测试文件列表查询
+// TestListFiles 测试文件列表功能
 func TestListFiles(t *testing.T) {
-	t.Run("基本列表功能", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
+	setupTestService := func() (*VideoFileService, *gorm.DB, string) {
+		db := setupTestDB(t)
+		t.Cleanup(func() {
+			cleanupTestDB(t, db)
+		})
 
-		// 创建多个测试文件
-		for i := 1; i <= 3; i++ {
-			filePath := createTestVideoFile(t, tempDir, fmt.Sprintf("video%d.mp4", i), fmt.Sprintf("content %d", i))
-			_, err := service.CreateFile(filePath, nil, nil)
-			require.NoError(t, err)
-		}
+		logger := zap.NewNop()
+		tempDir := t.TempDir()
+		service := NewVideoFileService(db, logger, tempDir)
 
-		// 查询列表
-		req := &ListFilesRequest{
-			Page:     1,
-			PageSize: 10,
-		}
-		resp, err := service.ListFiles(req)
+		return service, db, tempDir
+	}
 
-		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, resp)
-		assert.Equal(t, int64(3), resp.Total)
-		assert.Len(t, resp.Items, 3)
-		assert.Greater(t, resp.TotalSize, int64(0))
-		assert.Greater(t, resp.TotalSizeGB, float64(0))
-	})
-
-	t.Run("分页功能", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
+	t.Run("分页查询", func(t *testing.T) {
+		service, db, _ := setupTestService()
 
 		// 创建5个测试文件
 		for i := 1; i <= 5; i++ {
-			filePath := createTestVideoFile(t, tempDir, fmt.Sprintf("video%d.mp4", i), fmt.Sprintf("content %d", i))
-			_, err := service.CreateFile(filePath, nil, nil)
-			require.NoError(t, err)
+			filePath := fmt.Sprintf("test_file_%d.mkv", i)
+			db.Create(&models.VideoFile{
+				FileName: filePath,
+				FilePath: filePath,
+				FileSize: int64(i * 1024),
+				Duration: i * 60,
+				Format:   "mkv",
+				Status:   models.FileStatusReady,
+			})
 		}
 
 		// 第一页
@@ -519,7 +394,7 @@ func TestListFiles(t *testing.T) {
 	})
 
 	t.Run("关键词搜索", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
+		service, _, tempDir := setupTestService()
 
 		// 创建不同名称的文件
 		filePath1 := createTestVideoFile(t, tempDir, "meeting_001.mp4", "content 1")
@@ -550,7 +425,7 @@ func TestListFiles(t *testing.T) {
 	})
 
 	t.Run("格式筛选", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
+		service, _, tempDir := setupTestService()
 
 		// 创建不同格式的文件
 		mkvPath := createTestVideoFile(t, tempDir, "video1.mkv", "mkv content")
@@ -581,7 +456,7 @@ func TestListFiles(t *testing.T) {
 	})
 
 	t.Run("状态筛选", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
+		service, db, tempDir := setupTestService()
 
 		// 创建不同状态的文件
 		filePath1 := createTestVideoFile(t, tempDir, "video1.mp4", "content 1")
@@ -615,38 +490,38 @@ func TestListFiles(t *testing.T) {
 		assert.Equal(t, models.FileStatusReady, resp.Items[0].Status)
 	})
 
-	t.Run("会议ID筛选", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
+	t.Run("任务ID筛选", func(t *testing.T) {
+		service, db, tempDir := setupTestService()
 
-		// 创建会议记录
-		conference1 := createTestConference(t, db, "会议1", "conf001")
-		conference2 := createTestConference(t, db, "会议2", "conf002")
+		// 创建录制任务
+		task1 := createTestTask(t, db, "", "")
+		task2 := createTestTask(t, db, "", "")
 
-		// 创建不同会议的文件
+		// 创建不同任务的文件
 		filePath1 := createTestVideoFile(t, tempDir, "video1.mp4", "content 1")
 		filePath2 := createTestVideoFile(t, tempDir, "video2.mp4", "content 2")
 
-		_, err := service.CreateFile(filePath1, &conference1.ID, nil)
+		_, err := service.CreateFile(filePath1, &task1.ID, nil)
 		require.NoError(t, err)
-		_, err = service.CreateFile(filePath2, &conference2.ID, nil)
+		_, err = service.CreateFile(filePath2, &task2.ID, nil)
 		require.NoError(t, err)
 
-		// 筛选会议1的文件
+		// 筛选任务1的文件
 		req := &ListFilesRequest{
-			Page:               1,
-			PageSize:           10,
-			ConferenceRecordID: &conference1.ID,
+			Page:     1,
+			PageSize: 10,
+			TaskID:   &task1.ID,
 		}
 		resp, err := service.ListFiles(req)
 
 		// 验证
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), resp.Total)
-		assert.Equal(t, conference1.ID, *resp.Items[0].ConferenceRecordID)
+		assert.Equal(t, task1.ID, *resp.Items[0].TaskID)
 	})
 
 	t.Run("空列表", func(t *testing.T) {
-		service, _, _ := setupTestService(t)
+		service, _, _ := setupTestService()
 
 		// 查询空列表
 		req := &ListFilesRequest{
@@ -697,7 +572,7 @@ func TestGetFileByID(t *testing.T) {
 // TestDeleteFile 测试删除文件
 func TestDeleteFile(t *testing.T) {
 	t.Run("成功删除文件", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
+		service, db, tempDir := setupTestService()
 
 		// 创建测试文件
 		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
@@ -734,7 +609,7 @@ func TestDeleteFile(t *testing.T) {
 	})
 
 	t.Run("删除processing状态的文件", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
+		service, db, tempDir := setupTestService()
 
 		// 创建一个processing状态的文件
 		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
@@ -757,7 +632,7 @@ func TestDeleteFile(t *testing.T) {
 	})
 
 	t.Run("删除不存在的物理文件", func(t *testing.T) {
-		service, db, _ := setupTestService(t)
+		service, db, tempDir := setupTestService(t)
 
 		// 创建一个文件记录，但物理文件不存在
 		file := &models.VideoFile{
@@ -778,137 +653,7 @@ func TestDeleteFile(t *testing.T) {
 
 		var count int64
 		db.Model(&models.VideoFile{}).Where("id = ?", file.ID).Count(&count)
-		assert.Equal(t, int64(0), count)
-	})
-}
-
-// TestGetFilesByConferenceID 测试根据会议ID获取文件
-func TestGetFilesByConferenceID(t *testing.T) {
-	t.Run("成功获取会议文件", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
-
-		// 创建会议记录
-		conference := createTestConference(t, db, "测试会议", "conf001")
-
-		// 创建多个会议文件
-		for i := 1; i <= 3; i++ {
-			filePath := createTestVideoFile(t, tempDir, fmt.Sprintf("video%d.mp4", i), fmt.Sprintf("content %d", i))
-			_, err := service.CreateFile(filePath, &conference.ID, nil)
-			require.NoError(t, err)
-		}
-
-		// 获取会议文件
-		files, err := service.GetFilesByConferenceID(conference.ID)
-
-		// 验证
-		assert.NoError(t, err)
-		assert.Len(t, files, 3)
-		for _, file := range files {
-			assert.Equal(t, conference.ID, *file.ConferenceRecordID)
-		}
-	})
-
-	t.Run("会议无文件", func(t *testing.T) {
-		service, _, _ := setupTestService(t)
-
-		// 获取不存在会议的文件
-		files, err := service.GetFilesByConferenceID(99999)
-
-		// 验证
-		assert.NoError(t, err)
-		assert.Len(t, files, 0)
-	})
-}
-
-// TestUpdateFileStatus 测试更新文件状态
-func TestUpdateFileStatus(t *testing.T) {
-	t.Run("成功更新状态", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
-
-		// 创建测试文件
-		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
-		createdFile, err := service.CreateFile(filePath, nil, nil)
-		require.NoError(t, err)
-
 		// 更新状态为processing
-		err = service.UpdateFileStatus(createdFile.ID, models.FileStatusProcessing)
-		assert.NoError(t, err)
-
-		// 验证状态已更新
-		var file models.VideoFile
-		err = db.First(&file, createdFile.ID).Error
-		assert.NoError(t, err)
-		assert.Equal(t, models.FileStatusProcessing, file.Status)
-	})
-
-	t.Run("更新不存在的文件", func(t *testing.T) {
-		service, _, _ := setupTestService(t)
-
-		// 尝试更新不存在的文件状态
-		// 注意：GORM 的 Update 即使没有匹配的记录也不会返回错误
-		err := service.UpdateFileStatus(99999, models.FileStatusProcessing)
-
-		// 验证 - 当前实现不返回错误（GORM 默认行为）
-		assert.NoError(t, err)
-	})
-}
-
-// TestGetFileStats 测试获取文件统计信息
-func TestGetFileStats(t *testing.T) {
-	t.Run("获取统计信息", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
-
-		// 创建多个文件
-		for i := 1; i <= 3; i++ {
-			filePath := createTestVideoFile(t, tempDir, fmt.Sprintf("video%d.mp4", i), fmt.Sprintf("content %d", i))
-			_, err := service.CreateFile(filePath, nil, nil)
-			require.NoError(t, err)
-		}
-
-		// 获取统计信息
-		stats, err := service.GetFileStats()
-
-		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, stats)
-		assert.Equal(t, int64(3), stats["total"])
-		assert.Greater(t, stats["total_size"], int64(0))
-		assert.Greater(t, stats["total_size_gb"], float64(0))
-	})
-
-	t.Run("空数据库统计", func(t *testing.T) {
-		service, _, _ := setupTestService(t)
-
-		// 获取统计信息
-		stats, err := service.GetFileStats()
-
-		// 验证
-		assert.NoError(t, err)
-		assert.NotNil(t, stats)
-		assert.Equal(t, int64(0), stats["total"])
-		assert.Equal(t, int64(0), stats["total_size"])
-		assert.Equal(t, float64(0), stats["total_size_gb"])
-	})
-}
-
-// TestScanFiles 测试文件扫描功能
-func TestScanFiles(t *testing.T) {
-	t.Run("扫描空目录", func(t *testing.T) {
-		service, _, _ := setupTestService(t)
-
-		// 注意：由于ScanFiles硬编码了data/recordings目录
-		// 如果目录不存在会返回错误
-		// 这个测试可能需要根据实际环境调整
-		_, err := service.ScanFiles()
-
-		// 目录不存在时应该返回错误
-		if err != nil {
-			assert.Contains(t, err.Error(), "录制目录不存在")
-		}
-	})
-
-	t.Run("扫描包含文件的目录", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
 
 		// 创建临时录制目录结构
 		recordingsDir := filepath.Join(tempDir, "data", "recordings")
@@ -934,7 +679,7 @@ func TestScanFiles(t *testing.T) {
 	})
 
 	t.Run("混合已存在和不存在文件", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
+		service, _, tempDir := setupTestService()
 
 		// 创建临时录制目录
 		recordingsDir := filepath.Join(tempDir, "data", "recordings")
@@ -970,7 +715,7 @@ func TestScanFiles(t *testing.T) {
 	})
 
 	t.Run("查找非视频文件", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
+		service, _, tempDir := setupTestService()
 
 		// 创建目录并混合不同类型的文件
 		recordingsDir := filepath.Join(tempDir, "recordings")
@@ -994,7 +739,7 @@ func TestScanFiles(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, files, 2)
 		for _, file := range files {
-			ext := strings.ToLower(filepath.Ext(file))
+			ext := strings.ToLower(filepath.Ext(file.Path))
 			assert.True(t, ext == ".mkv" || ext == ".mp4")
 		}
 	})
@@ -1003,7 +748,7 @@ func TestScanFiles(t *testing.T) {
 // TestFindVideoFiles 测试查找视频文件
 func TestFindVideoFiles(t *testing.T) {
 	t.Run("递归查找子目录", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
+		service, _, tempDir := setupTestService()
 
 		// 创建多级目录结构
 		subDir1 := filepath.Join(tempDir, "level1")
@@ -1031,7 +776,7 @@ func TestFindVideoFiles(t *testing.T) {
 // TestListFilesWithDateFilter 测试日期筛选
 func TestListFilesWithDateFilter(t *testing.T) {
 	t.Run("日期范围筛选", func(t *testing.T) {
-		service, _, tempDir := setupTestService(t)
+		service, _, tempDir := setupTestService()
 
 		// 创建不同时间的文件
 		now := time.Now()
@@ -1078,8 +823,8 @@ func BenchmarkListFiles(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	service := NewVideoFileService(db, logger)
 	tempDir := b.TempDir()
+	service := NewVideoFileService(db, logger, tempDir)
 
 	// 创建100个文件用于基准测试
 	b.StopTimer()

@@ -36,7 +36,7 @@ func NewVideoFileHandler(
 // @Param page query int false "页码" default(1)
 // @Param page_size query int false "每页数量" default(20)
 // @Param keyword query string false "搜索关键词"
-// @Param conference_record_id query int false "会议ID"
+// @Param task_id query int false "任务ID"
 // @Param status query string false "文件状态"
 // @Param format query string false "文件格式"
 // @Param start_date query string false "开始日期"
