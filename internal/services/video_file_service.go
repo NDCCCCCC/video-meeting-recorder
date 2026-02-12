@@ -148,13 +148,13 @@ func (s *VideoFileService) ListFiles(req *ListFilesRequest) (*ListFilesResponse,
 // GetFileByID 根据ID获取文件
 func (s *VideoFileService) GetFileByID(id uint) (*models.VideoFile, error) {
 	var file models.VideoFile
-	if err := s.db.Preload("Task").First(&file, id).Error; err != nil {
+	if err := s.db.Preload("Task").Where("id = ?", id).First(&file).Error; err != nil {
 		return nil, err
 	}
 	return &file, nil
 }
 
-// DeleteFile 删除文件
+// DeleteFile 删除文件（同时删除同任务的 mp4 和 mkv 文件）
 func (s *VideoFileService) DeleteFile(id uint) error {
 	var file models.VideoFile
 	if err := s.db.First(&file, id).Error; err != nil {
@@ -166,17 +166,38 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 		return errors.New("文件正在处理中，无法删除")
 	}
 
-	// 删除物理文件
+	// 查找同任务下的另一个格式文件（mp4 <-> mkv）
+	var counterpartFile *models.VideoFile
+	if file.TaskID != nil {
+		var counterpart models.VideoFile
+		// 查找同任务下不同格式的文件
+		targetFormat := "mp4"
+		if file.Format == "mp4" {
+			targetFormat = "mkv"
+		}
+		if err := s.db.Where("task_id = ? AND format = ? AND id != ?", *file.TaskID, targetFormat, id).First(&counterpart).Error; err == nil {
+			counterpartFile = &counterpart
+		}
+	}
+
+	// 删除当前文件的物理文件
 	if file.Exists() {
 		if err := file.Delete(); err != nil {
 			s.logger.Warn("删除物理文件失败",
 				zap.Uint("file_id", id),
+				zap.String("file_path", file.FilePath),
 				zap.Error(err),
+			)
+		} else {
+			s.logger.Info("已删除物理文件",
+				zap.Uint("file_id", id),
+				zap.String("file_path", file.FilePath),
+				zap.String("format", file.Format),
 			)
 		}
 	}
 
-	// 删除数据库记录
+	// 删除当前文件的数据库记录
 	result := s.db.Delete(&models.VideoFile{}, id)
 	if result.Error != nil {
 		return result.Error
@@ -185,7 +206,52 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 		return errors.New("文件不存在")
 	}
 
-	s.logger.Info("视频文件已删除", zap.Uint("file_id", id))
+	// 如果存在对应格式的文件，也一并删除
+	if counterpartFile != nil {
+		// 检查对应文件的状态
+		if counterpartFile.Status == models.FileStatusProcessing {
+			s.logger.Warn("对应格式文件正在处理中，跳过删除",
+				zap.Uint("counterpart_id", counterpartFile.ID),
+				zap.String("counterpart_format", counterpartFile.Format),
+			)
+		} else {
+			// 删除对应格式的物理文件
+			if counterpartFile.Exists() {
+				if err := counterpartFile.Delete(); err != nil {
+					s.logger.Warn("删除对应格式物理文件失败",
+						zap.Uint("counterpart_id", counterpartFile.ID),
+						zap.String("counterpart_path", counterpartFile.FilePath),
+						zap.Error(err),
+					)
+				} else {
+					s.logger.Info("已删除对应格式物理文件",
+						zap.Uint("counterpart_id", counterpartFile.ID),
+						zap.String("counterpart_path", counterpartFile.FilePath),
+						zap.String("counterpart_format", counterpartFile.Format),
+					)
+				}
+			}
+
+			// 删除对应格式的数据库记录
+			if err := s.db.Delete(&models.VideoFile{}, counterpartFile.ID).Error; err != nil {
+				s.logger.Warn("删除对应格式数据库记录失败",
+					zap.Uint("counterpart_id", counterpartFile.ID),
+					zap.Error(err),
+				)
+			} else {
+				s.logger.Info("已删除对应格式数据库记录",
+					zap.Uint("counterpart_id", counterpartFile.ID),
+					zap.String("counterpart_format", counterpartFile.Format),
+				)
+			}
+		}
+	}
+
+	s.logger.Info("视频文件已删除",
+		zap.Uint("file_id", id),
+		zap.String("format", file.Format),
+		zap.Bool("has_counterpart", counterpartFile != nil),
+	)
 
 	return nil
 }
