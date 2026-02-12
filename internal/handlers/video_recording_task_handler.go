@@ -69,6 +69,11 @@ func (h *VideoRecordingTaskHandler) ListTasks(c *gin.Context) {
 		req.PageSize = 20
 	}
 
+	// 设置数据范围过滤参数
+	req.UserID = middleware.GetUserID(c)
+	req.IsAdmin = middleware.GetIsAdmin(c)
+	req.ApplyDataScope = true
+
 	result, err := h.taskService.ListTasks(&req)
 	if err != nil {
 		h.logger.Error("获取录制任务列表失败", zap.Error(err))

@@ -19,6 +19,8 @@ type VideoFile struct {
 	Codec              string    `gorm:"type:varchar(50)" json:"codec"`
 	TaskID             *uint     `gorm:"index" json:"task_id,omitempty"`                      // 关联的录制任务ID
 	Task               *VideoRecordingTask `gorm:"foreignKey:TaskID" json:"task,omitempty"`  // 关联的录制任务
+	CreatedBy          uint      `gorm:"not null" json:"created_by"`                       // 创建者ID
+	Creator            *User     `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`       // 创建者
 	Status             string    `gorm:"type:varchar(20);default:'ready';index:idx_status_created,priority:1" json:"status"` // ready, processing, error
 	ThumbnailPath      *string   `json:"thumbnail_path,omitempty"`
 	RecordedAt         *time.Time `gorm:"index" json:"recorded_at,omitempty"`

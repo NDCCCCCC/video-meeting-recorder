@@ -178,8 +178,14 @@ func (s *RoleService) AssignPermissions(roleID uint, req *AssignPermissionsReque
 		return errors.New("部分权限不存在")
 	}
 
-	// 替换角色权限
-	if err := s.db.Model(&role).Association("Permissions").Replace(permissions); err != nil {
+	// 使用 Clear + Append 方式来避免 Replace 的潜在问题
+	// 先清除现有权限关联
+	if err := s.db.Model(&role).Association("Permissions").Clear(); err != nil {
+		return err
+	}
+
+	// 再添加新的权限关联
+	if err := s.db.Model(&role).Association("Permissions").Append(permissions); err != nil {
 		return err
 	}
 

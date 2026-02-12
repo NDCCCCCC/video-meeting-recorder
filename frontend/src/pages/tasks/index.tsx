@@ -30,6 +30,8 @@ import dayjs from 'dayjs'
 import * as taskApi from '../../api/task'
 import * as huaweiConfigApi from '../../api/huawei-config'
 import { HLSPreview } from '../../components/HLSPreview'
+import { PermissionGuard } from '../../components/PermissionGuard'
+import { PERMISSIONS } from '../../utils/permissions'
 import type {
   VideoRecordingTask,
   TaskListParams,
@@ -377,70 +379,82 @@ export default function TaskManagement() {
         {canPreview && (
           <HLSPreview taskId={record.id} taskName={record.name} status={record.status} />
         )}
-        {canStart && (
-          <Tooltip title="启动任务">
-            <Button
-              type="link"
-              size="small"
-              icon={<PlayCircleOutlined />}
-              onClick={() => handleStart(record.id)}
-            />
-          </Tooltip>
-        )}
-        {canStop && (
-          <Tooltip title="停止任务">
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<StopOutlined />}
-              onClick={() => handleStop(record.id)}
-            />
-          </Tooltip>
-        )}
-        {canCancel && (
-          <Tooltip title="取消任务">
-            <Button
-              type="link"
-              size="small"
-              icon={<CloseCircleOutlined />}
-              onClick={() => handleCancel(record.id)}
-            />
-          </Tooltip>
-        )}
-        {canRetry && (
-          <Tooltip title="重试任务">
-            <Button
-              type="link"
-              size="small"
-              icon={<ReloadOutlined />}
-              onClick={() => handleRetry(record.id)}
-            />
-          </Tooltip>
-        )}
-        {canEdit && (
-          <Tooltip title="编辑任务">
-            <Button
-              type="link"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => openModal(record)}
-            />
-          </Tooltip>
-        )}
-        {canDelete && (
-          <Popconfirm
-            title="确定要删除这个任务吗？"
-            onConfirm={() => handleDelete(record.id)}
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-            />
-          </Popconfirm>
-        )}
+        <PermissionGuard permission={PERMISSIONS.TASK_START}>
+          {canStart && (
+            <Tooltip title="启动任务">
+              <Button
+                type="link"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                onClick={() => handleStart(record.id)}
+              />
+            </Tooltip>
+          )}
+        </PermissionGuard>
+        <PermissionGuard permission={PERMISSIONS.TASK_STOP}>
+          {canStop && (
+            <Tooltip title="停止任务">
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<StopOutlined />}
+                onClick={() => handleStop(record.id)}
+              />
+            </Tooltip>
+          )}
+        </PermissionGuard>
+        <PermissionGuard permission={PERMISSIONS.TASK_STOP}>
+          {canCancel && (
+            <Tooltip title="取消任务">
+              <Button
+                type="link"
+                size="small"
+                icon={<CloseCircleOutlined />}
+                onClick={() => handleCancel(record.id)}
+              />
+            </Tooltip>
+          )}
+        </PermissionGuard>
+        <PermissionGuard permission={PERMISSIONS.TASK_START}>
+          {canRetry && (
+            <Tooltip title="重试任务">
+              <Button
+                type="link"
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={() => handleRetry(record.id)}
+              />
+            </Tooltip>
+          )}
+        </PermissionGuard>
+        <PermissionGuard permission={PERMISSIONS.TASK_EDIT}>
+          {canEdit && (
+            <Tooltip title="编辑任务">
+              <Button
+                type="link"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => openModal(record)}
+              />
+            </Tooltip>
+          )}
+        </PermissionGuard>
+        <PermissionGuard permission={PERMISSIONS.TASK_DELETE}>
+          {canDelete && (
+            <Popconfirm
+              title="确定要删除这个任务吗？"
+              onConfirm={() => handleDelete(record.id)}
+            >
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+              />
+            </Popconfirm>
+          )}
+        </PermissionGuard>
       </Space>
     )
   }
@@ -515,19 +529,23 @@ export default function TaskManagement() {
       <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>录制任务管理</h2>
         <Space>
-          {selectedRowKeys.length > 0 && (
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              loading={batchDeleteLoading}
-              onClick={handleBatchDelete}
-            >
-              批量删除 ({selectedRowKeys.length})
+          <PermissionGuard permission={PERMISSIONS.TASK_DELETE}>
+            {selectedRowKeys.length > 0 && (
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                loading={batchDeleteLoading}
+                onClick={handleBatchDelete}
+              >
+                批量删除 ({selectedRowKeys.length})
+              </Button>
+            )}
+          </PermissionGuard>
+          <PermissionGuard permission={PERMISSIONS.TASK_CREATE}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
+              新建任务
             </Button>
-          )}
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
-            新建任务
-          </Button>
+          </PermissionGuard>
         </Space>
       </div>
 
