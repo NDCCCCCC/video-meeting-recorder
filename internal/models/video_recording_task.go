@@ -33,8 +33,6 @@ type VideoRecordingTask struct {
 	ConversionRetryCount   int              `gorm:"default:0" json:"conversion_retry_count"`           // 转换重试次数
 	CreatedBy              uint             `gorm:"not null" json:"created_by"`
 	Creator            *User                     `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
-	ConferenceRecord   *ConferenceRecord         `gorm:"foreignKey:ConferenceRecordID" json:"conference_record,omitempty"`
-	ConferenceRecordID *uint                     `json:"conference_record_id,omitempty"`
 }
 
 // VideoRecordingTaskStatus 任务状态枚举
