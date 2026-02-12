@@ -9,6 +9,8 @@ import {
   LogoutOutlined,
   FolderOutlined,
   CloudServerOutlined,
+  TeamOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import type { MenuProps } from 'antd'
@@ -54,8 +56,8 @@ export default function BasicLayout() {
       icon: <SettingOutlined />,
       label: '系统管理',
       children: [
-        canAccessPath('/system/users') ? { key: '/system/users', label: '用户管理' } : null,
-        canAccessPath('/system/roles') ? { key: '/system/roles', label: '角色管理' } : null,
+        canAccessPath('/system/users') ? { key: '/system/users', icon: <TeamOutlined />, label: '用户管理' } : null,
+        canAccessPath('/system/roles') ? { key: '/system/roles', icon: <SafetyOutlined />, label: '角色管理' } : null,
         canAccessPath('/system/huawei-configs') ? { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' } : null,
         // { key: '/system/settings', label: '系统设置' },
       ].filter((item): item is NonNullable<typeof item> => item !== null),
