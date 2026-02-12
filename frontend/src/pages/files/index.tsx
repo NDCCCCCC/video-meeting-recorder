@@ -34,6 +34,7 @@ import dayjs from 'dayjs'
 import * as videoFileApi from '../../api/video-file'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
+import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
 import type {
   VideoFile,
   VideoFileListParams,
@@ -74,6 +75,7 @@ export default function FileManagement() {
   const [params, setParams] = useState<VideoFileListParams>({
     page: 1,
     page_size: 20,
+    format: 'mp4', // 默认只显示 mp4 文件
   })
 
   const loadFiles = async () => {
@@ -237,10 +239,11 @@ export default function FileManagement() {
     {
       title: '操作',
       key: 'action',
-      width: 180,
+      width: 250,
       fixed: 'right' as const,
       render: (_, record) => (
         <Space size="small">
+          <RenderVideoPreview {...record} />
           <Button
             type="link"
             size="small"
