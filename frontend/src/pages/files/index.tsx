@@ -1,6 +1,6 @@
 // 文件管理页面
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Table,
   Button,
@@ -25,7 +25,6 @@ import {
   FileOutlined,
   FolderOpenOutlined,
   VideoCameraOutlined,
-  CloudDownloadOutlined,
   EyeOutlined,
   ScanOutlined,
 } from '@ant-design/icons'
@@ -42,26 +41,37 @@ import type {
   VideoFileStatus,
 } from '../../types/video-file'
 
-const statusOptions = [
-  { label: '就绪', value: 'ready' },
-  { label: '处理中', value: 'processing' },
-  { label: '错误', value: 'error' },
-  { label: '删除中', value: 'deleting' },
-]
-
-const statusColors: Record<VideoFileStatus, string> = {
-  ready: 'success',
-  processing: 'processing',
-  error: 'error',
-  deleting: 'default',
+// 状态配置
+const STATUS_CONFIG: Record<VideoFileStatus, { label: string; color: string }> = {
+  ready: { label: '就绪', color: 'success' },
+  processing: { label: '处理中', color: 'processing' },
+  error: { label: '错误', color: 'error' },
+  deleting: { label: '删除中', color: 'default' },
 }
 
-const statusLabels: Record<VideoFileStatus, string> = {
-  ready: '就绪',
-  processing: '处理中',
-  error: '错误',
-  deleting: '删除中',
+const STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([value, { label }]) => ({
+  label,
+  value,
+}))
+
+// 默认分页大小
+const DEFAULT_PAGE_SIZE = 20
+// 默认文件格式筛选
+const DEFAULT_FORMAT = 'mp4'
+
+// 格式化文件大小
+const formatFileSize = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(2)} MB`
+
+// 格式化时长
+const formatDuration = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
 }
+
+// 格式化时间
+const formatDateTime = (time: string | null): string =>
+  time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-'
 
 export default function FileManagement() {
   const [files, setFiles] = useState<VideoFile[]>([])
@@ -74,11 +84,12 @@ export default function FileManagement() {
 
   const [params, setParams] = useState<VideoFileListParams>({
     page: 1,
-    page_size: 20,
-    format: 'mp4', // 默认只显示 mp4 文件
+    page_size: DEFAULT_PAGE_SIZE,
+    format: DEFAULT_FORMAT,
   })
 
-  const loadFiles = async () => {
+  // 加载文件列表
+  const loadFiles = useCallback(async () => {
     setLoading(true)
     try {
       const response = await videoFileApi.getVideoFileList(params)
@@ -91,53 +102,60 @@ export default function FileManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params])
 
-  const loadStats = async () => {
+  // 加载统计信息
+  const loadStats = useCallback(async () => {
     try {
       const response = await videoFileApi.getVideoFileStats()
       if (response.data) {
         setStats(response.data)
       }
     } catch (error) {
-      console.error('Failed to load file stats:', error)
+      console.error('加载统计信息失败:', error)
     }
-  }
+  }, [])
 
+  // 初始加载和参数变化时刷新
   useEffect(() => {
     loadFiles()
-  }, [params])
+  }, [loadFiles])
 
   useEffect(() => {
     loadStats()
+  }, [loadStats])
+
+  // 搜索处理
+  const handleSearch = useCallback((value: string) => {
+    setParams(prev => ({ ...prev, keyword: value, page: 1 }))
   }, [])
 
-  const handleSearch = (value: string) => {
-    setParams({ ...params, keyword: value, page: 1 })
-  }
+  // 状态筛选
+  const handleStatusFilter = useCallback((status: VideoFileStatus | undefined) => {
+    setParams(prev => ({ ...prev, status, page: 1 }))
+  }, [])
 
-  const handleStatusFilter = (status: VideoFileStatus | undefined) => {
-    setParams({ ...params, status, page: 1 })
-  }
-
-  const handleTableChange = (pagination: any) => {
-    setParams({
-      ...params,
+  // 分页变化
+  const handleTableChange = useCallback((pagination: any) => {
+    setParams(prev => ({
+      ...prev,
       page: pagination.current,
       page_size: pagination.pageSize,
-    })
-  }
+    }))
+  }, [])
 
-  const handleDownload = async (id: number, fileName: string) => {
+  // 下载文件
+  const handleDownload = useCallback(async (id: number, fileName: string) => {
     try {
       await videoFileApi.downloadVideoFile(id)
       message.success(`下载 ${fileName} 成功`)
     } catch (error) {
       message.error(error instanceof Error ? error.message : '下载失败')
     }
-  }
+  }, [])
 
-  const handleDelete = async (id: number) => {
+  // 删除文件
+  const handleDelete = useCallback(async (id: number) => {
     try {
       await videoFileApi.deleteVideoFile(id)
       message.success('删除成功')
@@ -146,27 +164,25 @@ export default function FileManagement() {
     } catch (error) {
       message.error(error instanceof Error ? error.message : '删除失败')
     }
-  }
+  }, [loadFiles, loadStats])
 
-  const viewDetail = (file: VideoFile) => {
+  // 查看详情
+  const viewDetail = useCallback((file: VideoFile) => {
     setViewingFile(file)
     setDetailVisible(true)
-  }
+  }, [])
 
-  const handleScan = async () => {
+  // 扫描导入
+  const handleScan = useCallback(async () => {
     setScanning(true)
     try {
       const response = await videoFileApi.scanVideoFiles()
       if (response.data) {
-        const result: videoFileApi.ScanResult = response.data
-        const { scanned, created, skipped, errors } = result
+        const { scanned, created, skipped } = response.data
         if (created > 0) {
-          message.success(`扫描完成！发现 ${scanned} 个文件，新增 ${created} 条记录，跳过 ${skipped} 个已存在的文件`)
+          message.success(`扫描完成！发现 ${scanned} 个文件，新增 ${created} 条记录，跳过 ${skipped} 个`)
         } else {
           message.info(`扫描完成！发现 ${scanned} 个文件，但都是已存在的记录`)
-        }
-        if (errors && errors.length > 0) {
-          console.warn('扫描过程中的错误:', errors)
         }
         loadFiles()
         loadStats()
@@ -176,9 +192,16 @@ export default function FileManagement() {
     } finally {
       setScanning(false)
     }
-  }
+  }, [loadFiles, loadStats])
 
-  const columns: ColumnsType<VideoFile> = [
+  // 渲染状态标签
+  const renderStatus = useCallback((status: VideoFileStatus) => {
+    const config = STATUS_CONFIG[status]
+    return <Tag color={config.color}>{config.label}</Tag>
+  }, [])
+
+  // 表格列定义
+  const columns: ColumnsType<VideoFile> = useMemo(() => [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -189,7 +212,7 @@ export default function FileManagement() {
       dataIndex: 'file_name',
       width: 250,
       ellipsis: true,
-      render: (name) => (
+      render: (name: string) => (
         <Space>
           <VideoCameraOutlined />
           <Tooltip title={name}>{name}</Tooltip>
@@ -200,17 +223,13 @@ export default function FileManagement() {
       title: '大小',
       dataIndex: 'file_size',
       width: 100,
-      render: (size) => `${(size / 1024 / 1024).toFixed(2)} MB`,
+      render: formatFileSize,
     },
     {
       title: '时长',
       dataIndex: 'duration',
       width: 100,
-      render: (duration) => {
-        const minutes = Math.floor(duration / 60)
-        const seconds = duration % 60
-        return `${minutes}:${seconds.toString().padStart(2, '0')}`
-      },
+      render: formatDuration,
     },
     {
       title: '格式',
@@ -226,22 +245,20 @@ export default function FileManagement() {
       title: '状态',
       dataIndex: 'status',
       width: 100,
-      render: (status: VideoFileStatus) => (
-        <Tag color={statusColors[status]}>{statusLabels[status]}</Tag>
-      ),
+      render: renderStatus,
     },
     {
       title: '录制时间',
       dataIndex: 'recorded_at',
       width: 160,
-      render: (time) => (time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-'),
+      render: formatDateTime,
     },
     {
       title: '操作',
       key: 'action',
       width: 250,
       fixed: 'right' as const,
-      render: (_, record) => (
+      render: (_: unknown, record: VideoFile) => (
         <Space size="small">
           <RenderVideoPreview {...record} />
           <Button
@@ -281,7 +298,9 @@ export default function FileManagement() {
         </Space>
       ),
     },
-  ]
+  ], [renderStatus, viewDetail, handleDownload, handleDelete])
+
+  const isReady = viewingFile?.status === 'ready'
 
   return (
     <div style={{ padding: '20px' }}>
@@ -295,11 +314,7 @@ export default function FileManagement() {
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={6}>
               <Card>
-                <Statistic
-                  title="文件总数"
-                  value={stats.total}
-                  prefix={<FileOutlined />}
-                />
+                <Statistic title="文件总数" value={stats.total} prefix={<FileOutlined />} />
               </Card>
             </Col>
             <Col span={6}>
@@ -308,7 +323,6 @@ export default function FileManagement() {
                   title="总大小"
                   value={stats.total_size_gb.toFixed(2)}
                   suffix="GB"
-                  prefix={<CloudDownloadOutlined />}
                 />
               </Card>
             </Col>
@@ -323,11 +337,7 @@ export default function FileManagement() {
             </Col>
             <Col span={6}>
               <Card>
-                <Statistic
-                  title="当前页"
-                  value={files.length}
-                  suffix="/ 条"
-                />
+                <Statistic title="当前页" value={files.length} suffix="/ 条" />
               </Card>
             </Col>
           </Row>
@@ -348,7 +358,7 @@ export default function FileManagement() {
             allowClear
             style={{ width: 120 }}
             onChange={handleStatusFilter}
-            options={statusOptions}
+            options={STATUS_OPTIONS}
           />
           <Button icon={<ReloadOutlined />} onClick={() => { loadFiles(); loadStats() }}>
             刷新
@@ -391,16 +401,12 @@ export default function FileManagement() {
           <Button key="close" onClick={() => setDetailVisible(false)}>
             关闭
           </Button>,
-          viewingFile && viewingFile.status === 'ready' && (
+          isReady && (
             <Button
               key="download"
               type="primary"
               icon={<DownloadOutlined />}
-              onClick={() => {
-                if (viewingFile) {
-                  handleDownload(viewingFile.id, viewingFile.file_name)
-                }
-              }}
+              onClick={() => viewingFile && handleDownload(viewingFile.id, viewingFile.file_name)}
             >
               下载
             </Button>
@@ -413,13 +419,10 @@ export default function FileManagement() {
             <Card size="small" style={{ marginBottom: 16 }}>
               <Row gutter={16}>
                 <Col span={12}>
-                  <Statistic title="文件大小" value={(viewingFile.file_size / 1024 / 1024).toFixed(2)} suffix="MB" />
+                  <Statistic title="文件大小" value={formatFileSize(viewingFile.file_size)} />
                 </Col>
                 <Col span={12}>
-                  <Statistic
-                    title="时长"
-                    value={`${Math.floor(viewingFile.duration / 60)}:${(viewingFile.duration % 60).toString().padStart(2, '0')}`}
-                  />
+                  <Statistic title="时长" value={formatDuration(viewingFile.duration)} />
                 </Col>
               </Row>
             </Card>
@@ -448,12 +451,10 @@ export default function FileManagement() {
                 <Col span={16}>{viewingFile.codec}</Col>
 
                 <Col span={8}><strong>状态:</strong></Col>
-                <Col span={16}>
-                  <Tag color={statusColors[viewingFile.status]}>{statusLabels[viewingFile.status]}</Tag>
-                </Col>
+                <Col span={16}>{renderStatus(viewingFile.status)}</Col>
 
                 <Col span={8}><strong>录制时间:</strong></Col>
-                <Col span={16}>{viewingFile.recorded_at ? dayjs(viewingFile.recorded_at).format('YYYY-MM-DD HH:mm:ss') : '-'}</Col>
+                <Col span={16}>{formatDateTime(viewingFile.recorded_at)}</Col>
 
                 <Col span={8}><strong>创建时间:</strong></Col>
                 <Col span={16}>{dayjs(viewingFile.created_at).format('YYYY-MM-DD HH:mm:ss')}</Col>
