@@ -34,26 +34,39 @@ func GetRoleID(c *gin.Context) uint {
 }
 
 // JWTAuth JWT认证中间件
+// 支持 Authorization 头和 token 查询参数（用于视频播放等场景）
 func JWTAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. 从Header获取token
+		// 1. 尝试从多个来源获取token
+		var tokenString string
+
+		// 优先从 Authorization 头获取
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString = parts[1]
+			} else {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "未授权：无效的认证格式"})
+				c.Abort()
+				return
+			}
+		}
+
+		// 如果 Header 没有，尝试从查询参数获取（用于视频播放）
+		if tokenString == "" {
+			tokenString = c.Query("token")
+		}
+
+		// 2. 检查是否获取到token
+		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "未授权：缺少认证令牌"})
 			c.Abort()
 			return
 		}
 
-		// 2. 解析Bearer token
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "未授权：无效的认证格式"})
-			c.Abort()
-			return
-		}
-
 		// 3. 验证token
-		claims, err := jwtService.ValidateToken(parts[1])
+		claims, err := jwtService.ValidateToken(tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeInvalidToken, "message": "Token无效或已过期"})
 			c.Abort()
@@ -66,7 +79,7 @@ func JWTAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 		c.Set("role_id", claims.RoleID)
 		c.Set("is_admin", claims.IsAdmin)
 		c.Set("permissions", claims.Permissions)
-		c.Set("token", parts[1])
+		c.Set("token", tokenString)
 
 		c.Next()
 	}

@@ -100,10 +100,11 @@ func (h *VideoFileHandler) GetFile(c *gin.Context) {
 
 // DownloadFile 下载文件
 // @Summary 下载视频文件
-// @Description 下载指定的视频文件
+// @Description 下载指定的视频文件（支持 Authorization 头或 token 查询参数）
 // @Tags 文件管理
 // @Security Bearer
 // @Param id path int true "文件ID"
+// @Param token query string false "访问令牌（可选，用于视频播放等场景）
 // @Success 200 {file} binary
 // @Router /api/v1/files/{id}/download [get]
 func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
@@ -112,6 +113,8 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 		response.GinError(c, response.CodeInvalidRequest, "无效的文件ID")
 		return
 	}
+
+	// 注意：token 验证由 JWTAuth 中间件处理（支持 Authorization 头和 token 查询参数）
 
 	file, err := h.fileService.GetFileByID(id)
 	if err != nil {
@@ -141,15 +144,31 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 		return
 	}
 
-	// 设置响应头
-	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Disposition", "attachment; filename=\""+file.FileName+"\"")
+	// 根据文件格式设置 Content-Type
+	contentType := "application/octet-stream"
+	switch file.Format {
+	case "mp4":
+		contentType = "video/mp4"
+	case "mkv":
+		contentType = "video/x-matroska"
+	}
+
+	// 设置响应头（内联播放，支持进度拖动）
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", "inline; filename=\""+file.FileName+"\"")
 	c.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+	c.Header("Accept-Ranges", "bytes") // 支持视频进度拖动
+
+	// 设置视频流所需的 CORS 头
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+	c.Header("Access-Control-Allow-Headers", "Range, Content-Type, Authorization")
+	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
 
 	// 发送文件
 	http.ServeContent(c.Writer, c.Request, file.FileName, fileInfo.ModTime(), fileHandle)
 
-	h.logger.Info("File downloaded", zap.Uint("file_id", id), zap.String("file_name", file.FileName))
+	h.logger.Info("File streamed", zap.Uint("file_id", id), zap.String("file_name", file.FileName))
 }
 
 // DeleteFile 删除文件
