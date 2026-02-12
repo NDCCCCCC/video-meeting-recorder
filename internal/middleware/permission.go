@@ -167,11 +167,3 @@ func GetDataScopeFilter(c *gin.Context) (string, uint, bool) {
 func SetUserAuthContext(c *gin.Context, claims interface{}) {
 	c.Set("user_claims", claims)
 }
-
-// GetIsAdmin 从 context 获取是否管理员
-func GetIsAdmin(c *gin.Context) bool {
-	if isAdmin, exists := c.Get("is_admin"); exists {
-		return isAdmin.(bool)
-	}
-	return false
-}
