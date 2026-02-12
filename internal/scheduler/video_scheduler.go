@@ -58,7 +58,7 @@ type ConversionServiceInterface interface {
 
 // VideoFileServiceInterface 视频文件服务接口
 type VideoFileServiceInterface interface {
-	CreateFileFromTask(task *models.VideoRecordingTask, format string) (*models.VideoFile, error)
+	CreateFileFromTask(task *models.VideoRecordingTask, format *string) (*models.VideoFile, error)
 }
 
 // TaskServiceInterface 任务服务接口
@@ -473,7 +473,8 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 	if s.videoFileService != nil && task != nil {
 		// 为 MKV 文件创建记录
 		if task.MKVFilePath != "" {
-			if _, err := s.videoFileService.CreateFileFromTask(task, "mkv"); err != nil {
+			mkv := "mkv"
+			if _, err := s.videoFileService.CreateFileFromTask(task, &mkv); err != nil {
 				s.logger.Error("创建MKV文件记录失败",
 					zap.Uint("task_id", taskID),
 					zap.Error(err),
@@ -482,7 +483,8 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 		}
 		// 如果 MP4 已存在，也为它创建记录
 		if task.MP4FilePath != "" {
-			if _, err := s.videoFileService.CreateFileFromTask(task, "mp4"); err != nil {
+			mp4 := "mp4"
+			if _, err := s.videoFileService.CreateFileFromTask(task, &mp4); err != nil {
 				s.logger.Error("创建MP4文件记录失败",
 					zap.Uint("task_id", taskID),
 					zap.Error(err),

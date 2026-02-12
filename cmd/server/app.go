@@ -60,7 +60,6 @@ type Handlers struct {
 	Role         *handlers.RoleHandler
 	VideoTask    *handlers.VideoRecordingTaskHandler
 	HuaweiConfig *handlers.HuaweiConfigHandler
-	Conference   *handlers.ConferenceRecordHandler
 	VideoFile    *handlers.VideoFileHandler
 	File         *handlers.FileHandler
 	Audit        *handlers.AuditHandler
@@ -201,7 +200,6 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.Session{},
 		&models.HuaweiConfig{},
 		&models.VideoRecordingTask{},
-		&models.ConferenceRecord{},
 		&models.VideoFile{},
 		&models.PPTFile{},
 		&models.UploadedFile{},
@@ -307,10 +305,9 @@ func (a *MinimalApp) initHandlers() error {
 	authService := auth.NewService(a.config, a.db, a.logger)
 	userService := services.NewUserService(a.db, a.logger)
 	roleService := services.NewRoleService(a.db, a.logger)
-	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
 	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger)
-	conferenceService := services.NewConferenceRecordService(a.db, a.logger)
-	a.videoFileService = services.NewVideoFileService(a.db, a.logger)
+	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
+	a.videoFileService = services.NewVideoFileService(a.db, a.logger, a.config.Storage.RecordingsPath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
 	fileService := storage.NewFileService(a.db, a.logger, a.config)
 	fileHandler := handlers.NewFileHandler(fileService)
@@ -335,22 +332,18 @@ func (a *MinimalApp) initHandlers() error {
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
 	a.huaweiConnector = video_recording.NewHuaweiConferenceConnector(a.db, a.huaweiManager, a.logger)
 
-	// 创建handlers（先创建不设置conversion service）
+	// 创建handlers
 	a.handlers = &Handlers{
 		Auth:         handlers.NewAuthHandler(authService, a.logger),
 		User:         handlers.NewUserHandler(userService, a.logger),
 		Role:         handlers.NewRoleHandler(roleService, a.logger),
 		VideoTask:    handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
 		HuaweiConfig: handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
-		Conference:   handlers.NewConferenceRecordHandler(conferenceService, a.logger),
 		VideoFile:    handlers.NewVideoFileHandler(a.videoFileService, a.logger),
 		File:         fileHandler,
 		Audit:        auditHandler,
 		Notification: notificationHandler,
 	}
-
-	// 设置转换服务到 VideoTask handler
-	a.handlers.VideoTask.SetConversionService(a.conversionService)
 
 	return nil
 }
@@ -449,29 +442,6 @@ func (a *MinimalApp) registerRoutes() error {
 		huaweiConfigs.DELETE("/:id", a.handlers.HuaweiConfig.DeleteConfig)     // 删除配置
 	}
 
-	// 会议管理
-	conferences := api.Group("/conferences")
-	{
-		conferences.GET("", a.handlers.Conference.ListConferences)                         // 获取会议列表
-		conferences.GET("/by-status", a.handlers.Conference.GetConferencesByStatus)       // 按状态获取会议
-		conferences.GET("/:id", a.handlers.Conference.GetConference)                      // 获取会议详情
-		conferences.POST("", a.handlers.Conference.CreateConference)                      // 创建会议
-		conferences.PUT("/:id", a.handlers.Conference.UpdateConference)                   // 更新会议
-		conferences.DELETE("/:id", a.handlers.Conference.DeleteConference)                // 删除会议
-		conferences.POST("/batch-delete", a.handlers.Conference.BatchDeleteConferences)    // 批量删除会议
-	}
-
-	// 文件管理
-	files := api.Group("/files")
-	{
-		files.GET("/stats", a.handlers.VideoFile.GetFileStats)          // 获取文件统计（必须在 /:id 之前）
-		files.GET("", a.handlers.VideoFile.ListFiles)                  // 获取文件列表
-		files.GET("/:id", a.handlers.VideoFile.GetFile)                // 获取文件详情
-		files.GET("/:id/download", a.handlers.VideoFile.DownloadFile)  // 下载文件
-		files.DELETE("/:id", a.handlers.VideoFile.DeleteFile)          // 删除文件
-		files.POST("/scan", a.handlers.VideoFile.ScanFiles)             // 扫描并导入文件
-	}
-
 	// 文件存储管理
 	storage := api.Group("/storage")
 	{
@@ -480,6 +450,16 @@ func (a *MinimalApp) registerRoutes() error {
 		storage.GET("", a.handlers.File.List)                          // 获取文件列表
 		storage.DELETE("/:id", a.handlers.File.Delete)                 // 删除文件
 		storage.POST("/:id/share", a.handlers.File.Share)              // 生成分享链接
+	}
+
+	// 视频文件管理
+	files := api.Group("/files")
+	{
+		files.GET("", a.handlers.VideoFile.ListFiles)                    // 获取文件列表
+		files.GET("/stats", a.handlers.VideoFile.GetFileStats)            // 获取文件统计
+		files.GET("/:id", a.handlers.VideoFile.GetFile)               // 获取文件详情
+		files.DELETE("/:id", a.handlers.VideoFile.DeleteFile)            // 删除文件
+		files.POST("/scan", a.handlers.VideoFile.ScanFiles)             // 扫描并导入文件
 	}
 
 	// 公开文件访问（无需认证）
@@ -513,10 +493,6 @@ func (a *MinimalApp) registerRoutes() error {
 
 // registerServices 注册服务
 func (a *MinimalApp) registerServices() error {
-	a.logger.Info("正在注册服务...")
-
-	// 创建录制协调器
-	a.coordinator = recorder.NewSimpleRecordingCoordinator(a.logger, a.config)
 	a.logger.Info("录制协调器已创建")
 
 	// 创建任务调度器

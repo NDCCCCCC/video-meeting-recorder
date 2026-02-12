@@ -131,7 +131,7 @@ func (s *VideoRecordingTaskService) ListTasks(req *ListTasksRequest) (*ListTasks
 // GetTaskByID 根据ID获取任务
 func (s *VideoRecordingTaskService) GetTaskByID(id uint) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.Preload("HuaweiConfig").Preload("Creator").Preload("ConferenceRecord").First(&task, id).Error; err != nil {
+	if err := s.db.Preload("HuaweiConfig").Preload("Creator").First(&task, id).Error; err != nil {
 		return nil, err
 	}
 	return &task, nil
