@@ -104,10 +104,8 @@ export default function HuaweiConfigManagement() {
         conference_number: config.conference_number,
         usb_camera_name: config.usb_camera_name,
         usb_camera_device: config.usb_camera_device,
-        usb_camera_path: config.usb_camera_path,
         usb_audio_name: config.usb_audio_name,
         usb_audio_device: config.usb_audio_device,
-        usb_audio_path: config.usb_audio_path,
         record_directory: config.record_directory,
         output_format: config.output_format,
       })
@@ -140,10 +138,8 @@ export default function HuaweiConfigManagement() {
           conference_number: values.conference_number,
           usb_camera_name: values.usb_camera_name,
           usb_camera_device: values.usb_camera_device,
-          usb_camera_path: values.usb_camera_path,
           usb_audio_name: values.usb_audio_name || '',
           usb_audio_device: values.usb_audio_device,
-          usb_audio_path: values.usb_audio_path,
           record_directory: values.record_directory,
           output_format: values.output_format,
         }
@@ -166,10 +162,8 @@ export default function HuaweiConfigManagement() {
           conference_number: values.conference_number,
           usb_camera_name: values.usb_camera_name,
           usb_camera_device: values.usb_camera_device,
-          usb_camera_path: values.usb_camera_path,
           usb_audio_name: values.usb_audio_name || '',
           usb_audio_device: values.usb_audio_device,
-          usb_audio_path: values.usb_audio_path,
           record_directory: values.record_directory,
           output_format: values.output_format,
         }
@@ -242,7 +236,6 @@ export default function HuaweiConfigManagement() {
     form.setFieldsValue({
       usb_camera_name: device.name,
       usb_camera_device: deviceIndex,  // 只存储索引，不包含前缀
-      usb_camera_path: device.backend === 'v4l2' ? `/sys/class/video4linux/${device.device_id.replace('/dev/', '')}` : device.device_id,
     })
     message.info(`已选择摄像头: ${device.name}`)
   }
@@ -265,7 +258,6 @@ export default function HuaweiConfigManagement() {
     form.setFieldsValue({
       usb_audio_name: device.name,      // 实际设备名称
       usb_audio_device: deviceIndex,     // 设备索引
-      usb_audio_path: device.backend === 'alsa' ? `/proc/asound/${device.device_id}` : device.device_id,
     })
     message.info(`已选择音频设备: ${device.name}`)
   }
@@ -544,10 +536,6 @@ export default function HuaweiConfigManagement() {
                       <Input placeholder="例如: /dev/video0" />
                     </Form.Item>
 
-                    <Form.Item name="usb_camera_path" label="摄像头路径">
-                      <Input placeholder="请输入摄像头路径" />
-                    </Form.Item>
-
                     <Divider>音频设备</Divider>
 
                     {detectedAudios.length > 0 && (
@@ -578,10 +566,6 @@ export default function HuaweiConfigManagement() {
 
                     <Form.Item name="usb_audio_device" label="音频设备">
                       <Input placeholder="例如: hw:1,0" addonBefore={<AudioOutlined />} />
-                    </Form.Item>
-
-                    <Form.Item name="usb_audio_path" label="音频路径">
-                      <Input placeholder="请输入音频路径" />
                     </Form.Item>
                   </>
                 ),
