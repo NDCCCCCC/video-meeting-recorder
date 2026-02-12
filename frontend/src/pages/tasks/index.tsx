@@ -502,11 +502,20 @@ export default function TaskManagement() {
       align: 'center',
     },
     {
-      title: '录制时长(秒)',
+      title: '录制时长',
       dataIndex: 'recording_duration',
       width: 120,
       align: 'center',
-      render: (duration) => duration || '-',
+      render: (duration) => {
+        if (!duration) return '-'
+        const hours = Math.floor(duration / 3600)
+        const minutes = Math.floor((duration % 3600) / 60)
+        const seconds = duration % 60
+        if (hours > 0) {
+          return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+        }
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`
+      },
     },
     {
       title: '错误信息',
@@ -682,7 +691,7 @@ export default function TaskManagement() {
               rules={[
                 { type: 'number', min: 0, max: 60, message: '提前进入时间必须在0-60分钟之间' },
               ]}
-              initialValue={5}
+              initialValue={30}
             >
               <Input type="number" style={{ width: 120 }} />
             </Form.Item>
