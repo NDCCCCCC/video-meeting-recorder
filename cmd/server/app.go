@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/cpic/record_v2/internal/auth"
 	"github.com/cpic/record_v2/internal/common"
 	"github.com/cpic/record_v2/internal/config"
+	"github.com/cpic/record_v2/internal/frontend"
 	"github.com/cpic/record_v2/internal/handlers"
 	huaweiapi "github.com/cpic/record_v2/internal/huawei"
 	"github.com/cpic/record_v2/internal/middleware"
@@ -584,6 +586,9 @@ func (a *MinimalApp) registerRoutes() error {
 		notifications.PUT("/settings", a.handlers.Notification.UpdateUserSetting)        // 更新通知配置
 	}
 
+	// 前端静态文件服务 (SPA 路由回退)
+	a.registerFrontendRoutes()
+
 	return nil
 }
 
@@ -922,4 +927,127 @@ func (a *MinimalApp) schedulerDebugHandler(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, debugInfo)
+}
+
+// registerFrontendRoutes 注册前端静态文件服务
+func (a *MinimalApp) registerFrontendRoutes() {
+	// 检查是否存在前端构建文件
+	if !frontend.HasFiles() {
+		a.logger.Warn("前端静态文件未找到，跳过前端路由注册。请先运行 'npm run build' 构建前端")
+		return
+	}
+
+	a.logger.Info("注册前端静态文件服务")
+
+	// 创建静态文件服务器
+	staticFS := frontend.FS()
+
+	// 注册根路由处理前端请求
+	a.router.GET("/", func(c *gin.Context) {
+		serveFile(c, staticFS, "index.html")
+	})
+
+	// 注册静态资源路由
+	a.router.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		// 如果请求路径是 API 路径或 WebSocket 路径，返回 404
+		if len(path) >= 4 && path[:4] == "/api" || len(path) >= 3 && path[:3] == "/ws" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+			return
+		}
+
+		// 去掉前导斜杠
+		filePath := path[1:]
+		if filePath == "" {
+			filePath = "index.html"
+		}
+
+		// 尝试打开文件
+		file, err := staticFS.Open(filePath)
+		if err != nil {
+			// 文件不存在，对于 SPA 返回 index.html
+			serveFile(c, staticFS, "index.html")
+			return
+		}
+		defer file.Close()
+
+		// 检查是否是目录
+		stat, err := file.Stat()
+		if err != nil || stat.IsDir() {
+			// 是目录或出错，返回 index.html
+			serveFile(c, staticFS, "index.html")
+			return
+		}
+
+		// 文件存在，直接服务
+		serveFile(c, staticFS, filePath)
+	})
+
+	a.logger.Info("前端静态文件服务已注册")
+}
+
+// serveFile 服务文件到 HTTP 响应
+func serveFile(c *gin.Context, fs http.FileSystem, name string) {
+	file, err := fs.Open(name)
+	if err != nil {
+		c.String(http.StatusNotFound, "File not found")
+		return
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Stat error")
+		return
+	}
+
+	// 设置 Content-Type
+	contentType := getContentType(name)
+	c.Header("Content-Type", contentType)
+
+	// 设置缓存头
+	c.Header("Cache-Control", "public, max-age=3600")
+
+	// 使用 http.ServeContent 服务文件
+	http.ServeContent(c.Writer, c.Request, name, stat.ModTime(), file)
+}
+
+// getContentType 根据文件名获取 Content-Type
+func getContentType(filename string) string {
+	ext := filename
+	if idx := strings.LastIndex(filename, "."); idx > 0 {
+		ext = filename[idx:]
+	}
+
+	switch strings.ToLower(ext) {
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".js":
+		return "application/javascript; charset=utf-8"
+	case ".json":
+		return "application/json; charset=utf-8"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
+	case ".ico":
+		return "image/x-icon"
+	case ".woff":
+		return "font/woff"
+	case ".woff2":
+		return "font/woff2"
+	case ".ttf":
+		return "font/ttf"
+	case ".eot":
+		return "application/vnd.ms-fontobject"
+	default:
+		return "application/octet-stream"
+	}
 }

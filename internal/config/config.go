@@ -190,7 +190,18 @@ func Load() (*Config, error) {
 
 	// 读取配置文件
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
+		// 配置文件不存在时，创建默认配置文件
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			if err := createDefaultConfigFile(); err != nil {
+				return nil, fmt.Errorf("failed to create default config: %w", err)
+			}
+			// 重新读取配置文件
+			if err := v.ReadInConfig(); err != nil {
+				return nil, fmt.Errorf("failed to read config after creation: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to read config: %w", err)
+		}
 	}
 
 	// 获取原始配置
@@ -425,6 +436,110 @@ func ensureDirectories(cfg *Config) error {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
+	}
+
+	return nil
+}
+
+// createDefaultConfigFile 创建默认配置文件
+func createDefaultConfigFile() error {
+	// 优先使用 ./configs 目录
+	configPath := "./configs/config.yaml"
+	configDir := "./configs"
+
+	// 如果无法创建 configs 目录，则使用当前目录
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		configPath = "./config.yaml"
+		configDir = "."
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+	}
+
+	// 默认配置内容
+	defaultConfig := `# 视频会议录制系统 V2.0 配置文件
+# 配置文件不存在时自动生成
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  environment: "production"
+  read_timeout: 30
+  write_timeout: 30
+
+database:
+  driver: "sqlite"
+  path: "./data/record.db"
+  journal_mode: "WAL"
+  synchronous: "NORMAL"
+  cache_size: 2000
+  busy_timeout: 5000
+  max_open_conns: 1
+  max_idle_conns: 1
+  conn_max_lifetime: 3600
+
+auth:
+  jwt_secret: "change-me-in-production-please-set-a-secure-random-key"
+  access_token_duration: "2h"
+  refresh_token_duration: "168h"  # 7 days
+  max_session_duration: "720h"   # 30 days
+  hls_token_secret: "change-me-in-production"
+  hls_token_duration: "5m"
+
+logging:
+  level: "info"
+  format: "json"
+  output: "logs"
+  max_size: 100
+  max_backups: 10
+  max_age: 30
+  compress: true
+
+storage:
+  recordings_path: "./data/recordings"
+  hls_path: "./data/hls"
+  temp_path: "./data/temp"
+  max_disk_usage: 90
+  local:
+    base_path: "./data/files"
+    base_url: "http://localhost:8080/files"
+  max_file_size: 5368709120  # 5GB
+  allowed_extensions: [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".ppt", ".pptx", ".pdf", ".doc", ".docx"]
+
+huawei:
+  conference_server: ""
+  conference_port: 80
+  username: ""
+  password: ""
+  https: true
+  insecure_skip_verify: false
+  api_timeout: "30s"
+  session_timeout: "3600s"
+  keep_alive_interval: "300s"
+  min_tls_version: "1.0"
+
+ffmpeg:
+  path: "ffmpeg"
+  max_processes: 5
+  timeout: "5m"
+  default_codec: "h264"
+  default_format: "mp4"
+  dshow_buffer_size: 104857600
+  dshow_thread_queue_size: 1024
+  hls_segment_duration: 10
+  hls_list_size: 5
+  max_recording_duration: "24h"
+
+rtsp:
+  enabled: false
+  max_streams: 10
+  reconnect_timeout: "30s"
+  buffer_size: 1048576
+`
+
+	// 写入配置文件
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	return nil
