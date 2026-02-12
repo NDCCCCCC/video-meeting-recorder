@@ -21,6 +21,7 @@ go.work.sum
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data
 
 # Logs
 logs/
