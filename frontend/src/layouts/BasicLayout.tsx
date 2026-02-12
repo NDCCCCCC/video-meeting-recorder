@@ -26,23 +26,41 @@ export default function BasicLayout() {
     navigate('/auth/login')
   }
 
+  // 检查菜单权限的辅助函数
+  const canAccessPath = (path: string | undefined): boolean => {
+    if (!path) return true
+    const MENU_PERMISSIONS: Record<string, string> = {
+      '/tasks': 'tasks:view',
+      '/files': 'files:view',
+      '/system/users': 'users:view',
+      '/system/roles': 'roles:view',
+      '/system/huawei-configs': 'configs:view',
+    }
+    const required = MENU_PERMISSIONS[path]
+    if (!required) return true
+    if (!user) return false
+    if (user.is_admin) return true
+    return user.permissions?.includes(required) ?? false
+  }
+
+  // 构建过滤后的菜单项
   const menuItems: MenuProps['items'] = [
     // { key: '/', icon: <HomeOutlined />, label: '仪表盘' },
-    { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' },
-    { key: '/files', icon: <FolderOutlined />, label: '文件管理' },
+    canAccessPath('/tasks') ? { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' } : null,
+    canAccessPath('/files') ? { key: '/files', icon: <FolderOutlined />, label: '文件管理' } : null,
     // { key: '/audit', icon: <HistoryOutlined />, label: '审计日志' },
-    {
+    canAccessPath('/system/users') || canAccessPath('/system/roles') || canAccessPath('/system/huawei-configs') ? {
       key: 'system',
       icon: <SettingOutlined />,
       label: '系统管理',
       children: [
-        { key: '/system/users', label: '用户管理' },
-        { key: '/system/roles', label: '角色管理' },
-        { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' },
+        canAccessPath('/system/users') ? { key: '/system/users', label: '用户管理' } : null,
+        canAccessPath('/system/roles') ? { key: '/system/roles', label: '角色管理' } : null,
+        canAccessPath('/system/huawei-configs') ? { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' } : null,
         // { key: '/system/settings', label: '系统设置' },
-      ],
-    },
-  ]
+      ].filter((item): item is NonNullable<typeof item> => item !== null),
+    } : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null)
 
   const userMenuItems: MenuProps['items'] = [
     { key: 'profile', icon: <UserOutlined />, label: '个人信息' },

@@ -55,13 +55,15 @@ type RefreshTokenResponse struct {
 
 // UserDTO 用户DTO
 type UserDTO struct {
-	ID       uint   `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	FullName string `json:"full_name"`
-	RoleID   uint   `json:"role_id"`
-	RoleName string `json:"role_name,omitempty"`
-	IsActive bool   `json:"is_active"`
+	ID          uint     `json:"id"`
+	Username    string   `json:"username"`
+	Email       string   `json:"email"`
+	FullName    string   `json:"full_name"`
+	RoleID      uint     `json:"role_id"`
+	RoleName    string   `json:"role_name,omitempty"`
+	IsAdmin     bool     `json:"is_admin"`
+	Permissions []string `json:"permissions"`
+	IsActive    bool     `json:"is_active"`
 }
 
 // NewService 创建认证服务
@@ -79,9 +81,9 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 
 // Login 用户登录
 func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
-	// 1. 查找用户
+	// 1. 查找用户（预加载角色和权限）
 	var user models.User
-	err := s.db.Preload("Role").Where("username = ?", req.Username).First(&user).Error
+	err := s.db.Preload("Role.Permissions").Where("username = ?", req.Username).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("用户名或密码错误")
@@ -187,7 +189,7 @@ func (s *Service) ValidatePassword(password string) *ValidationResult {
 // GetUserByID 根据ID获取用户
 func (s *Service) GetUserByID(userID uint) (*UserDTO, error) {
 	var user models.User
-	if err := s.db.Preload("Role").First(&user, userID).Error; err != nil {
+	if err := s.db.Preload("Role.Permissions").First(&user, userID).Error; err != nil {
 		return nil, err
 	}
 	return s.toUserDTO(&user), nil
@@ -205,6 +207,12 @@ func (s *Service) toUserDTO(user *models.User) *UserDTO {
 	}
 	if user.Role != nil {
 		dto.RoleName = user.Role.Name
+		dto.IsAdmin = user.Role.Name == models.RoleAdmin
+		// 构造权限列表: resource:action
+		for _, perm := range user.Role.Permissions {
+			permStr := perm.Resource + ":" + perm.Action
+			dto.Permissions = append(dto.Permissions, permStr)
+		}
 	}
 	return dto
 }

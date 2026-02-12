@@ -395,7 +395,12 @@ func (c *SimpleRecordingCoordinator) buildInputArgs(input RecordingInput) ([]str
 			if e != nil {
 				return nil, e
 			}
-			args = append(args, audioArgs...)
+			// 如果音频参数为空（无效设备），跳过音频
+			if len(audioArgs) == 0 {
+				c.logger.Warn("音频设备无效，跳过音频输入", zap.String("audio_device", input.AudioDevice))
+			} else {
+				args = append(args, audioArgs...)
+			}
 		}
 
 	case InputSourceRTSP:
@@ -408,7 +413,12 @@ func (c *SimpleRecordingCoordinator) buildInputArgs(input RecordingInput) ([]str
 			if e != nil {
 				return nil, e
 			}
-			args = append(args, audioArgs...)
+			// 如果音频参数为空（无效设备），跳过音频
+			if len(audioArgs) == 0 {
+				c.logger.Warn("音频设备无效，跳过音频输入", zap.String("audio_device", input.AudioDevice))
+			} else {
+				args = append(args, audioArgs...)
+			}
 		}
 
 	default:
@@ -428,6 +438,17 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 
 	if !validBackends[input.CameraBackend] {
 		return nil, fmt.Errorf("不支持的摄像头后端: %s", input.CameraBackend)
+	}
+
+	// 检查视频设备是否有效
+	if input.CameraDevice == "" {
+		c.logger.Warn("摄像头设备为空，跳过视频输入")
+		return nil, fmt.Errorf("摄像头设备不能为空")
+	}
+
+	// 如果设备名称为空但设备值看起来像数字索引，警告但继续（某些系统可能使用数字索引）
+	if input.CameraName == "" && isNumericString(input.CameraDevice) {
+		c.logger.Warn("摄像头设备名称为空且设备值是数字，可能无法正常工作", zap.String("device", input.CameraDevice))
 	}
 
 	deviceParam := input.CameraDevice
@@ -473,6 +494,18 @@ func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]
 		return nil, fmt.Errorf("不支持的音频后端: %s", input.AudioBackend)
 	}
 
+	// 检查音频设备是否有效
+	if input.AudioDevice == "" {
+		c.logger.Warn("音频设备为空，跳过音频输入")
+		return []string{}, nil
+	}
+
+	// 如果设备名称为空但设备值看起来像数字索引，也跳过
+	if input.AudioName == "" && isNumericString(input.AudioDevice) {
+		c.logger.Warn("音频设备名称为空且设备值是数字，跳过音频输入", zap.String("device", input.AudioDevice))
+		return []string{}, nil
+	}
+
 	deviceParam := input.AudioDevice
 	if input.AudioBackend == "dshow" {
 		// dshow 需要使用实际设备名称
@@ -491,6 +524,16 @@ func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]
 	}
 	args = append(args, "-i", deviceParam)
 	return args, nil
+}
+
+// isNumericString 检查字符串是否只包含数字
+func isNumericString(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // buildRTSPArgs 构建RTSP输入参数

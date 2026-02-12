@@ -40,6 +40,10 @@ type ListTasksRequest struct {
 	CreatedBy    uint                           `form:"created_by"`
 	StartDate    string                         `form:"start_date"`
 	EndDate      string                         `form:"end_date"`
+	// 数据范围过滤字段
+	UserID       uint   `form:"-"` // 当前用户ID（不从query读取，由handler设置）
+	IsAdmin      bool   `form:"-"` // 是否管理员（不从query读取，由handler设置）
+	ApplyDataScope bool   `form:"-"` // 是否应用数据范围过滤
 }
 
 // ListTasksResponse 任务列表响应
@@ -88,9 +92,14 @@ func (s *VideoRecordingTaskService) ListTasks(req *ListTasksRequest) (*ListTasks
 		query = query.Where("status = ?", req.Status)
 	}
 
-	// 创建者筛选
+	// 创建者筛选（手动指定的创建者）
 	if req.CreatedBy > 0 {
 		query = query.Where("created_by = ?", req.CreatedBy)
+	}
+
+	// 数据范围过滤：非管理员只能看自己创建的任务
+	if req.ApplyDataScope && !req.IsAdmin && req.UserID > 0 {
+		query = query.Where("created_by = ?", req.UserID)
 	}
 
 	// 日期范围筛选

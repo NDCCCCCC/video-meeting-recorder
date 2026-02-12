@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -57,6 +58,11 @@ func (h *VideoFileHandler) ListFiles(c *gin.Context) {
 	if req.PageSize == 0 {
 		req.PageSize = 20
 	}
+
+	// 设置数据范围过滤参数
+	req.UserID = middleware.GetUserID(c)
+	req.IsAdmin = middleware.GetIsAdmin(c)
+	req.ApplyDataScope = true
 
 	result, err := h.fileService.ListFiles(&req)
 	if err != nil {

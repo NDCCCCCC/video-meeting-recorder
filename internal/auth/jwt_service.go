@@ -27,10 +27,12 @@ type JWTService struct {
 
 // Claims JWT声明
 type Claims struct {
-	UserID    uint   `json:"user_id"`
-	Username  string `json:"username"`
-	RoleID    uint   `json:"role_id"`
-	TokenType string `json:"token_type"` // access | refresh
+	UserID      uint     `json:"user_id"`
+	Username    string   `json:"username"`
+	RoleID      uint     `json:"role_id"`
+	Permissions []string `json:"permissions"` // 用户权限列表
+	IsAdmin     bool     `json:"is_admin"`    // 是否是管理员
+	TokenType   string   `json:"token_type"` // access | refresh
 	jwt.RegisteredClaims
 }
 
@@ -82,11 +84,26 @@ func (s *JWTService) GenerateTokenPair(user *models.User) (*TokenPair, error) {
 func (s *JWTService) generateToken(user *models.User, tokenType string, duration time.Duration) (string, error) {
 	now := time.Now()
 
+	// 加载用户权限
+	var permissions []string
+	isAdmin := false
+
+	if user.Role != nil {
+		isAdmin = user.Role.Name == models.RoleAdmin
+		for _, perm := range user.Role.Permissions {
+			// 构造权限字符串: resource:action
+			permStr := perm.Resource + ":" + perm.Action
+			permissions = append(permissions, permStr)
+		}
+	}
+
 	claims := &Claims{
-		UserID:    user.ID,
-		Username:  user.Username,
-		RoleID:    user.RoleID,
-		TokenType: tokenType,
+		UserID:      user.ID,
+		Username:    user.Username,
+		RoleID:      user.RoleID,
+		Permissions: permissions,
+		IsAdmin:     isAdmin,
+		TokenType:   tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
 			Subject:   user.Username,
@@ -162,9 +179,9 @@ func (s *JWTService) RefreshAccessToken(refreshToken string) (*TokenPair, error)
 		return nil, err
 	}
 
-	// 加载用户信息
+	// 加载用户信息（预加载权限）
 	var user models.User
-	if err := s.db.Preload("Role").First(&user, claims.UserID).Error; err != nil {
+	if err := s.db.Preload("Role.Permissions").First(&user, claims.UserID).Error; err != nil {
 		return nil, errors.New("user not found")
 	}
 

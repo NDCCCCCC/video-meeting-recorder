@@ -51,6 +51,10 @@ type ListFilesRequest struct {
 	Format      string  `form:"format"`
 	StartDate   string  `form:"start_date"`
 	EndDate     string  `form:"end_date"`
+	// 数据范围过滤字段
+	UserID       uint   `form:"-"` // 当前用户ID（不从query读取，由handler设置）
+	IsAdmin      bool   `form:"-"` // 是否管理员（不从query读取，由handler设置）
+	ApplyDataScope bool   `form:"-"` // 是否应用数据范围过滤
 }
 
 // ListFilesResponse 文件列表响应
@@ -87,6 +91,11 @@ func (s *VideoFileService) ListFiles(req *ListFilesRequest) (*ListFilesResponse,
 	// 格式筛选
 	if req.Format != "" {
 		query = query.Where("format = ?", req.Format)
+	}
+
+	// 数据范围过滤：非管理员只能看自己创建的文件
+	if req.ApplyDataScope && !req.IsAdmin && req.UserID > 0 {
+		query = query.Where("created_by = ?", req.UserID)
 	}
 
 	// 日期范围筛选
@@ -516,6 +525,7 @@ func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt 
 		Bitrate:            metadata.Bitrate,
 		Codec:              metadata.Codec,
 		TaskID:            taskID,  // 直接关联任务ID
+		CreatedBy:          1,       // 设置默认创建者ID为1（admin用户）
 		RecordedAt:         recordedAt,
 		Status:             models.FileStatusReady,
 	}

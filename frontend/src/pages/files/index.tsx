@@ -32,6 +32,8 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import * as videoFileApi from '../../api/video-file'
+import { PermissionGuard } from '../../components/PermissionGuard'
+import { PERMISSIONS } from '../../utils/permissions'
 import type {
   VideoFile,
   VideoFileListParams,
@@ -256,21 +258,23 @@ export default function FileManagement() {
           >
             下载
           </Button>
-          <Popconfirm
-            title="确定要删除这个文件吗？"
-            onConfirm={() => handleDelete(record.id)}
-            disabled={record.status === 'processing'}
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
+          <PermissionGuard permission={PERMISSIONS.FILE_DELETE}>
+            <Popconfirm
+              title="确定要删除这个文件吗？"
+              onConfirm={() => handleDelete(record.id)}
               disabled={record.status === 'processing'}
             >
-              删除
-            </Button>
-          </Popconfirm>
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                disabled={record.status === 'processing'}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          </PermissionGuard>
         </Space>
       ),
     },
@@ -346,14 +350,16 @@ export default function FileManagement() {
           <Button icon={<ReloadOutlined />} onClick={() => { loadFiles(); loadStats() }}>
             刷新
           </Button>
-          <Button
-            type="primary"
-            icon={<ScanOutlined />}
-            onClick={handleScan}
-            loading={scanning}
-          >
-            扫描导入
-          </Button>
+          <PermissionGuard permission={PERMISSIONS.FILE_SCAN}>
+            <Button
+              type="primary"
+              icon={<ScanOutlined />}
+              onClick={handleScan}
+              loading={scanning}
+            >
+              扫描导入
+            </Button>
+          </PermissionGuard>
         </Space>
       </div>
 

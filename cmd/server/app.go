@@ -251,7 +251,7 @@ func (a *MinimalApp) seedDatabase() error {
 			Email:    "admin@example.com",
 			FullName: "系统管理员",
 			RoleID:   adminRole.ID,
-			IsActive:  true,
+			IsActive: true,
 		}
 		if err := admin.SetPassword("admin123"); err != nil {
 			return fmt.Errorf("failed to set admin password: %w", err)
@@ -265,6 +265,101 @@ func (a *MinimalApp) seedDatabase() error {
 		)
 	}
 
+	// 创建默认权限
+	if err := a.seedPermissions(); err != nil {
+		return fmt.Errorf("failed to seed permissions: %w", err)
+	}
+
+	return nil
+}
+
+// seedPermissions 创建权限数据
+func (a *MinimalApp) seedPermissions() error {
+	a.logger.Info("正在创建权限数据...")
+
+	// 权限中文描述映射
+	permissionDescriptions := map[string]string{
+		models.ResourceTaskView:   "查看录制任务",
+		models.ResourceTaskCreate:  "创建录制任务",
+		models.ResourceTaskEdit:    "编辑录制任务",
+		models.ResourceTaskDelete:  "删除录制任务",
+		models.ResourceTaskStart:   "启动录制任务",
+		models.ResourceTaskStop:    "停止录制任务",
+		models.ResourceFileView:    "查看视频文件",
+		models.ResourceFileDelete:  "删除视频文件",
+		models.ResourceFileScan:    "扫描视频文件",
+		models.ResourceUserView:    "查看用户",
+		models.ResourceUserCreate:  "创建用户",
+		models.ResourceUserEdit:    "编辑用户",
+		models.ResourceUserDelete:  "删除用户",
+		models.ResourceRoleView:    "查看角色",
+		models.ResourceRoleCreate:  "创建角色",
+		models.ResourceRoleEdit:    "编辑角色",
+		models.ResourceRoleDelete:  "删除角色",
+		models.ResourceConfigView:  "查看华为配置",
+		models.ResourceConfigEdit:  "编辑华为配置",
+	}
+
+	// 遍历所有权限常量
+	for _, permCode := range models.AllPermissions {
+		// 解析权限代码（格式：resource:action）
+		resource := permCode
+		action := ""
+		for i, r := range permCode {
+			if r == ':' {
+				resource = permCode[:i]
+				action = permCode[i+1:]
+				break
+			}
+		}
+
+		// 检查权限是否已存在
+		var existing models.Permission
+		if err := a.db.Where("resource = ? AND action = ?", resource, action).First(&existing).Error; err == gorm.ErrRecordNotFound {
+			permission := &models.Permission{
+				Resource:    resource,
+				Action:      action,
+				Description: permissionDescriptions[permCode],
+			}
+			if err := a.db.Create(permission).Error; err != nil {
+				return fmt.Errorf("failed to create permission %s: %w", permCode, err)
+			}
+			a.logger.Info("Created permission", zap.String("permission", permCode))
+		} else if existing.Description == "" {
+			// 如果权限已存在但没有描述，更新描述
+			if err := a.db.Model(&existing).Update("description", permissionDescriptions[permCode]).Error; err != nil {
+				a.logger.Warn("Failed to update permission description", zap.String("permission", permCode), zap.Error(err))
+			}
+		}
+	}
+
+	// 为管理员角色分配所有权限
+	var adminRole models.Role
+	if err := a.db.Where("name = ?", models.RoleAdmin).First(&adminRole).Error; err != nil {
+		return fmt.Errorf("failed to find admin role: %w", err)
+	}
+
+	// 获取所有权限
+	var allPermissions []models.Permission
+	if err := a.db.Find(&allPermissions).Error; err != nil {
+		return fmt.Errorf("failed to get permissions: %w", err)
+	}
+
+	// 检查是否需要关联权限（需要先预加载权限）
+	var existingRole models.Role
+	if err := a.db.Preload("Permissions").Where("name = ?", models.RoleAdmin).First(&existingRole).Error; err != nil {
+		return fmt.Errorf("failed to find admin role with permissions: %w", err)
+	}
+
+	// 如果管理员权限数量与总权限不同，则重新分配
+	if len(existingRole.Permissions) != len(allPermissions) {
+		if err := a.db.Model(&existingRole).Association("Permissions").Replace(&allPermissions); err != nil {
+			return fmt.Errorf("failed to assign permissions to admin role: %w", err)
+		}
+		a.logger.Info("Assigned all permissions to admin role", zap.Int("count", len(allPermissions)))
+	}
+
+	a.logger.Info("权限数据创建完成", zap.Int("total", len(allPermissions)))
 	return nil
 }
 
@@ -493,6 +588,8 @@ func (a *MinimalApp) registerRoutes() error {
 
 // registerServices 注册服务
 func (a *MinimalApp) registerServices() error {
+	// 创建录制协调器
+	a.coordinator = recorder.NewSimpleRecordingCoordinator(a.logger, a.config)
 	a.logger.Info("录制协调器已创建")
 
 	// 创建任务调度器
