@@ -307,14 +307,35 @@ func setDefaults(cfg *Config) {
 		cfg.Logging.MaxAge = 30
 	}
 
+	// 将相对路径转换为绝对路径，避免工作目录问题
 	if cfg.Storage.RecordingsPath == "" {
 		cfg.Storage.RecordingsPath = "./data/recordings"
 	}
+	if !filepath.IsAbs(cfg.Storage.RecordingsPath) {
+		absPath, err := filepath.Abs(cfg.Storage.RecordingsPath)
+		if err == nil {
+			cfg.Storage.RecordingsPath = absPath
+		}
+	}
+
 	if cfg.Storage.HLSPath == "" {
 		cfg.Storage.HLSPath = "./data/hls"
 	}
+	if !filepath.IsAbs(cfg.Storage.HLSPath) {
+		absPath, err := filepath.Abs(cfg.Storage.HLSPath)
+		if err == nil {
+			cfg.Storage.HLSPath = absPath
+		}
+	}
+
 	if cfg.Storage.TempPath == "" {
 		cfg.Storage.TempPath = "./data/temp"
+	}
+	if !filepath.IsAbs(cfg.Storage.TempPath) {
+		absPath, err := filepath.Abs(cfg.Storage.TempPath)
+		if err == nil {
+			cfg.Storage.TempPath = absPath
+		}
 	}
 	if cfg.Storage.MaxDiskUsage == 0 {
 		cfg.Storage.MaxDiskUsage = 90 // 90%
@@ -323,6 +344,12 @@ func setDefaults(cfg *Config) {
 	// 文件存储默认值
 	if cfg.Storage.Local.BasePath == "" {
 		cfg.Storage.Local.BasePath = "./data/files"
+	}
+	if !filepath.IsAbs(cfg.Storage.Local.BasePath) {
+		absPath, err := filepath.Abs(cfg.Storage.Local.BasePath)
+		if err == nil {
+			cfg.Storage.Local.BasePath = absPath
+		}
 	}
 	if cfg.Storage.Local.BaseURL == "" {
 		cfg.Storage.Local.BaseURL = fmt.Sprintf("http://%s:%d/files", cfg.Server.Host, cfg.Server.Port)

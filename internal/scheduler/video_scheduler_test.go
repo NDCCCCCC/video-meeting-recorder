@@ -18,12 +18,17 @@ func newMockVideoFileService() *mockVideoFileService {
 	return &mockVideoFileService{}
 }
 
-func (m *mockVideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, format string) (*models.VideoFile, error) {
+func (m *mockVideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, format *string) (*models.VideoFile, error) {
+	// 处理 format 参数：如果为 nil 或空字符串，使用默认值 "mp4"
+	formatStr := "mp4"
+	if format != nil && *format != "" {
+		formatStr = *format
+	}
 	// 测试中不需要真正创建文件记录，返回空记录即可
 	return &models.VideoFile{
-		FileName: fmt.Sprintf("test.%s", format),
-		FilePath: fmt.Sprintf("/tmp/test.%s", format),
-		Format:   format,
+		FileName: fmt.Sprintf("test.%s", formatStr),
+		FilePath: fmt.Sprintf("/tmp/test.%s", formatStr),
+		Format:   formatStr,
 		Status:   models.FileStatusReady,
 	}, nil
 }

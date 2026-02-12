@@ -274,7 +274,8 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 
 	// 创建 MP4 文件记录
 	if s.videoFileService != nil {
-		if _, err := s.videoFileService.CreateFileFromTask(&task, "mp4"); err != nil {
+		mp4 := "mp4"
+		if _, err := s.videoFileService.CreateFileFromTask(&task, &mp4); err != nil {
 			s.logger.Error("创建MP4文件记录失败",
 				zap.Uint("task_id", taskID),
 				zap.Error(err),
