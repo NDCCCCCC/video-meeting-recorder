@@ -80,9 +80,10 @@ export async function deleteVideoFile(id: number): Promise<ApiResponse<void>> {
   })
 }
 
-// 获取文件统计
-export async function getVideoFileStats(): Promise<ApiResponse<VideoFileStats>> {
-  return apiRequest<VideoFileStats>('/api/v1/files/stats')
+// 获取文件统计（可指定格式，默认只统计 mp4）
+export async function getVideoFileStats(format: string = 'mp4'): Promise<ApiResponse<VideoFileStats>> {
+  const params = format ? `?format=${format}` : ''
+  return apiRequest<VideoFileStats>(`/api/v1/files/stats${params}`)
 }
 
 // 扫描并导入文件
