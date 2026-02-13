@@ -336,39 +336,50 @@ func (s *USBDeviceScanner) scanWindowsAudioDevicesFFmpeg() ([]USBDeviceInfo, err
 	_ = cmd.Run() // ffmpeg会返回错误码，但设备列表仍然在stderr中
 
 	output := stderr.String()
-	lines := strings.Split(output, "\n")
+	s.logger.Info("FFmpeg音频扫描原始输出", zap.String("output", output))
 
-	inAudioDevices := false
+	// 先清理 \r 字符，处理 Windows 换行符
+	output = strings.ReplaceAll(output, "\r\n", "\n")
+
+	lines := strings.Split(output, "\n")
+	s.logger.Info("分割后的行数", zap.Int("count", len(lines)))
+
+	// 直接扫描所有包含 (audio) 的行，不依赖 "DirectShow audio devices" 标记
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.Contains(line, "DirectShow audio devices") {
-			inAudioDevices = true
-			continue
-		}
-		if inAudioDevices && strings.HasPrefix(line, "[dshow") {
+		trimmedLine := strings.TrimSpace(line)
+
+		// 检查是否是包含 audio 标记的设备行
+		if strings.Contains(trimmedLine, "(audio)") && strings.Contains(trimmedLine, "[dshow") {
+			s.logger.Info(">>>找到音频设备行", zap.String("line", trimmedLine))
 			// 解析设备名称
-			if strings.Contains(line, `"`) {
-				start := strings.Index(line, `"`)
-				if start != -1 {
-					end := strings.Index(line[start+1:], `"`)
-					if end != -1 {
-						deviceName := line[start+1 : start+1+end]
-						// 过滤掉虚拟音频设备
-						if deviceName != "" && !strings.Contains(strings.ToLower(deviceName), "virtual") {
-							devices = append(devices, USBDeviceInfo{
-								Type:     "audio",
-								Name:     deviceName,
-								DeviceID: deviceName, // 使用实际设备名称作为ID，dshow需要完整名称
-								Status:   "available",
-								Backend:  "dshow",
-							})
-						}
+			start := strings.Index(trimmedLine, `"`)
+			if start != -1 {
+				end := strings.Index(trimmedLine[start+1:], `"`)
+				if end != -1 {
+					deviceName := trimmedLine[start+1 : start+1+end]
+					// 过滤掉虚拟音频设备
+					if deviceName != "" && !strings.Contains(strings.ToLower(deviceName), "virtual") {
+						s.logger.Info(">>>发现音频设备", zap.String("name", deviceName))
+						devices = append(devices, USBDeviceInfo{
+							Type:     "audio",
+							Name:     deviceName,
+							DeviceID: deviceName, // 使用实际设备名称作为ID，dshow需要完整名称
+							Status:   "available",
+							Backend:  "dshow",
+						})
 					}
 				}
 			}
 		}
+
+		// 如果遇到 (video) 且已经找到音频设备，停止解析
+		if len(devices) > 0 && strings.Contains(trimmedLine, "(video)") && strings.Contains(trimmedLine, "[dshow") {
+			s.logger.Info(">>>遇到video标记，停止解析")
+			break
+		}
 	}
 
+	s.logger.Info("FFmpeg音频扫描完成", zap.Int("count", len(devices)))
 	return devices, nil
 }
 
