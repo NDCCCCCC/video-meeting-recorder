@@ -2,6 +2,9 @@ package models
 
 // 权限资源常量
 const (
+	// 仪表盘
+	ResourceDashboardView = "dashboard:view"
+
 	// 录制任务
 	ResourceTaskView   = "tasks:view"
 	ResourceTaskCreate = "tasks:create"
@@ -14,6 +17,9 @@ const (
 	ResourceFileView   = "files:view"
 	ResourceFileDelete = "files:delete"
 	ResourceFileScan   = "files:scan"
+
+	// 审计日志
+	ResourceAuditView = "audit:view"
 
 	// 系统管理
 	ResourceUserView   = "users:view"
@@ -28,19 +34,26 @@ const (
 
 	ResourceConfigView = "configs:view"
 	ResourceConfigEdit = "configs:edit"
+
+	// 系统设置
+	ResourceSystemSettings = "system:settings"
 )
 
 // MenuPermissionMap 菜单权限映射
 var MenuPermissionMap = map[string]string{
+	"/dashboard":            ResourceDashboardView,
 	"/tasks":               ResourceTaskView,
 	"/files":               ResourceFileView,
+	"/audit":               ResourceAuditView,
 	"/system/users":        ResourceUserView,
 	"/system/roles":        ResourceRoleView,
 	"/system/huawei-configs": ResourceConfigView,
+	"/system/settings":      ResourceSystemSettings,
 }
 
 // AllPermissions 所有权限列表（用于权限分配）
 var AllPermissions = []string{
+	ResourceDashboardView,
 	ResourceTaskView,
 	ResourceTaskCreate,
 	ResourceTaskEdit,
@@ -50,6 +63,7 @@ var AllPermissions = []string{
 	ResourceFileView,
 	ResourceFileDelete,
 	ResourceFileScan,
+	ResourceAuditView,
 	ResourceUserView,
 	ResourceUserCreate,
 	ResourceUserEdit,
@@ -60,4 +74,5 @@ var AllPermissions = []string{
 	ResourceRoleDelete,
 	ResourceConfigView,
 	ResourceConfigEdit,
+	ResourceSystemSettings,
 }
