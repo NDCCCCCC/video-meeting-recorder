@@ -111,6 +111,7 @@ type RTSPConfig struct {
 // FFmpegConfig FFmpeg配置
 type FFmpegConfig struct {
 	Path              string        `mapstructure:"path" json:"path" yaml:"path"`
+	FFProbePath       string        `mapstructure:"ffprobe_path" json:"ffprobe_path" yaml:"ffprobe_path"`
 	MaxProcesses      int           `mapstructure:"max_processes" json:"max_processes" yaml:"max_processes"`
 	Timeout           time.Duration `mapstructure:"timeout" json:"timeout" yaml:"timeout"`
 	DefaultCodec      string        `mapstructure:"default_codec" json:"default_codec" yaml:"default_codec"`
@@ -178,10 +179,9 @@ func expandConfig(cfg interface{}) interface{} {
 func Load() (*Config, error) {
 	v := viper.New()
 
-	// 设置配置文件
+	// 设置配置文件（仅在项目根目录）
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
-	v.AddConfigPath("./configs")
 	v.AddConfigPath(".")
 
 	// 环境变量支持
@@ -318,35 +318,15 @@ func setDefaults(cfg *Config) {
 		cfg.Logging.MaxAge = 30
 	}
 
-	// 将相对路径转换为绝对路径，避免工作目录问题
+	// 设置默认值（保持相对路径，避免 Windows 盘符转义问题）
 	if cfg.Storage.RecordingsPath == "" {
 		cfg.Storage.RecordingsPath = "./data/recordings"
 	}
-	if !filepath.IsAbs(cfg.Storage.RecordingsPath) {
-		absPath, err := filepath.Abs(cfg.Storage.RecordingsPath)
-		if err == nil {
-			cfg.Storage.RecordingsPath = absPath
-		}
-	}
-
 	if cfg.Storage.HLSPath == "" {
 		cfg.Storage.HLSPath = "./data/hls"
 	}
-	if !filepath.IsAbs(cfg.Storage.HLSPath) {
-		absPath, err := filepath.Abs(cfg.Storage.HLSPath)
-		if err == nil {
-			cfg.Storage.HLSPath = absPath
-		}
-	}
-
 	if cfg.Storage.TempPath == "" {
 		cfg.Storage.TempPath = "./data/temp"
-	}
-	if !filepath.IsAbs(cfg.Storage.TempPath) {
-		absPath, err := filepath.Abs(cfg.Storage.TempPath)
-		if err == nil {
-			cfg.Storage.TempPath = absPath
-		}
 	}
 	if cfg.Storage.MaxDiskUsage == 0 {
 		cfg.Storage.MaxDiskUsage = 90 // 90%
@@ -370,7 +350,10 @@ func setDefaults(cfg *Config) {
 	}
 
 	if cfg.FFmpeg.Path == "" {
-		cfg.FFmpeg.Path = "ffmpeg"
+		cfg.FFmpeg.Path = "./bin/ffmpeg"  // 默认使用项目内置的 ffmpeg
+	}
+	if cfg.FFmpeg.FFProbePath == "" {
+		cfg.FFmpeg.FFProbePath = "./bin/ffprobe"  // 默认使用项目内置的 ffprobe
 	}
 	if cfg.FFmpeg.MaxProcesses == 0 {
 		cfg.FFmpeg.MaxProcesses = 5
@@ -443,18 +426,8 @@ func ensureDirectories(cfg *Config) error {
 
 // createDefaultConfigFile 创建默认配置文件
 func createDefaultConfigFile() error {
-	// 优先使用 ./configs 目录
-	configPath := "./configs/config.yaml"
-	configDir := "./configs"
-
-	// 如果无法创建 configs 目录，则使用当前目录
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		configPath = "./config.yaml"
-		configDir = "."
-		if err := os.MkdirAll(configDir, 0755); err != nil {
-			return fmt.Errorf("failed to create config directory: %w", err)
-		}
-	}
+	// 在项目根目录创建配置文件
+	configPath := "./config.yaml"
 
 	// 默认配置内容
 	defaultConfig := `# 视频会议录制系统 V2.0 配置文件
@@ -519,16 +492,22 @@ huawei:
   min_tls_version: "1.0"
 
 ffmpeg:
-  path: "ffmpeg"
+  path: "./bin/ffmpeg"  # 使用项目内置的 ffmpeg
+  ffprobe_path: "./bin/ffprobe"  # 使用项目内置的 ffprobe
   max_processes: 5
   timeout: "5m"
   default_codec: "h264"
   default_format: "mp4"
-  dshow_buffer_size: 104857600
-  dshow_thread_queue_size: 1024
-  hls_segment_duration: 10
-  hls_list_size: 5
-  max_recording_duration: "24h"
+  default_video_bitrate: "2000"
+  default_audio_bitrate: "128"
+  # DShow 设备配置
+  dshow_buffer_size: 2097152      # 2MB 实时缓冲区
+  dshow_thread_queue_size: 8      # 线程队列大小
+  # HLS 配置
+  hls_segment_duration: 10        # HLS 分片时长（秒）
+  hls_list_size: 5                # HLS 播放列表保留分片数
+  # 录制监控配置
+  max_recording_duration: "24h"   # 最长录制时长
 
 rtsp:
   enabled: false

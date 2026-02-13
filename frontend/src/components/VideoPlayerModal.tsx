@@ -1,4 +1,4 @@
-// 视频播放器模态框组件（统一版本）
+// 视频播放器模态框组件
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Modal, Button, Space, Alert, message, Slider } from 'antd'
@@ -14,20 +14,74 @@ import {
 import type { VideoFile } from '../types/video-file'
 import { getToken } from '../api/apiClient'
 
-interface VideoPlayerModalProps {
-  file: VideoFile
-  visible: boolean
-  onClose: () => void
-}
+// ==================== 常量 ====================
+const PLAYBACK_RATES: readonly number[] = [0.5, 1, 1.25, 1.5, 2]
+const SKIP_SECONDS = 10
 
-// 播放速度选项
-const PLAYBACK_RATES = [0.5, 1, 1.25, 1.5, 2]
+// 样式常量
+const STYLES = {
+  container: {
+    position: 'relative',
+    backgroundColor: '#000',
+    borderRadius: '8px',
+    overflow: 'hidden',
+  } as const,
+  loadingOverlay: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+    zIndex: 1,
+  } as const,
+  errorOverlay: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  } as const,
+  video: {
+    width: '100%',
+    maxHeight: '500px',
+    display: 'block',
+  } as const,
+  controlBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+    padding: '12px 16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  } as const,
+  fileInfo: {
+    marginTop: 16,
+    padding: '12px',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '4px',
+  } as const,
+  controlBtn: {
+    color: '#fff',
+  } as const,
+} as const
+
+// ==================== 工具函数 ====================
 
 // 格式化时间（秒 -> MM:SS 或 HH:MM:SS）
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = Math.floor(seconds % 60)
+type TimeValue = number | undefined | null
+
+function formatTime(seconds: TimeValue): string {
+  if (!seconds || !Number.isFinite(seconds)) return '0:00'
+
+  const s = Math.floor(seconds)
+  const hours = Math.floor(s / 3600)
+  const minutes = Math.floor((s % 3600) / 60)
+  const secs = s % 60
 
   if (hours > 0) {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
@@ -54,14 +108,24 @@ function ControlButton({
       onClick={onClick}
       title={title}
       disabled={disabled}
-      style={{ color: '#fff' }}
+      style={STYLES.controlBtn}
     />
   )
 }
 
+// ==================== 主组件 ====================
+
+interface VideoPlayerModalProps {
+  file: VideoFile
+  visible: boolean
+  onClose: () => void
+}
+
 export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalProps) {
+  // ==================== 状态 ====================
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -70,19 +134,18 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(true)
 
-  // 构建视频 URL（使用查询参数传递 token）
+  // ==================== 计算值 ====================
   const videoUrl = useMemo(() => {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const API_BASE_URL = import.meta.env.VITE_API_URL || ''
     const token = getToken()
     return token
       ? `${API_BASE_URL}/api/v1/files/${file.id}/download?token=${token}`
       : `${API_BASE_URL}/api/v1/files/${file.id}/download`
   }, [file.id])
 
-  // 检查是否支持浏览器原生播放
   const isNativelySupported = useMemo(() => file.format === 'mp4', [file.format])
 
-  // 播放/暂停
+  // ==================== 播放控制 ====================
   const handlePlayPause = useCallback(() => {
     const video = videoRef.current
     if (!video) return
@@ -96,27 +159,24 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     }
   }, [isPlaying])
 
-  // 快进/快退
   const handleSkip = useCallback((seconds: number) => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || !duration) return
     video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
   }, [duration])
 
-  // 跳转到指定位置
   const handleSeek = useCallback((value: number) => {
     const video = videoRef.current
     if (!video) return
     video.currentTime = value
   }, [])
 
-  // 调整播放速度
   const handlePlaybackRate = useCallback(() => {
     const currentIndex = PLAYBACK_RATES.indexOf(playbackRate)
     const nextIndex = (currentIndex + 1) % PLAYBACK_RATES.length
     const nextRate = PLAYBACK_RATES[nextIndex]
-    setPlaybackRate(nextRate)
 
+    setPlaybackRate(nextRate)
     const video = videoRef.current
     if (video) {
       video.playbackRate = nextRate
@@ -124,16 +184,13 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     }
   }, [playbackRate])
 
-  // 调整音量
   const handleVolumeChange = useCallback((value: number) => {
     setVolume(value)
     const video = videoRef.current
-    if (video) {
-      video.volume = value
-    }
+    if (video) video.volume = value
   }, [])
 
-  // 全屏切换
+  // ==================== 全屏控制 ====================
   const handleFullscreen = useCallback(() => {
     const container = containerRef.current
     if (!container) return
@@ -147,7 +204,7 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     }
   }, [])
 
-  // 下载文件
+  // ==================== 下载 ====================
   const handleDownload = useCallback(() => {
     const link = document.createElement('a')
     link.href = videoUrl
@@ -158,7 +215,7 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     message.success('开始下载')
   }, [videoUrl, file.file_name])
 
-  // 关闭模态框
+  // ==================== 关闭模态框 ====================
   const handleClose = useCallback(() => {
     const video = videoRef.current
     if (video) {
@@ -168,11 +225,10 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     setIsPlaying(false)
     setCurrentTime(0)
     setError(undefined)
-    setLoading(false)
     onClose()
   }, [onClose])
 
-  // 视频事件处理
+  // ==================== 视频事件处理 ====================
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
@@ -182,9 +238,6 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
       setDuration(video.duration)
       setLoading(false)
     }
-    const handlePlay = () => setIsPlaying(true)
-    const handlePause = () => setIsPlaying(false)
-    const handleEnded = () => setIsPlaying(false)
     const handleError = () => {
       setError('视频加载失败，请检查文件是否存在或稍后重试')
       setLoading(false)
@@ -192,22 +245,16 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
 
     video.addEventListener('timeupdate', handleTimeUpdate)
     video.addEventListener('loadedmetadata', handleLoadedMetadata)
-    video.addEventListener('play', handlePlay)
-    video.addEventListener('pause', handlePause)
-    video.addEventListener('ended', handleEnded)
     video.addEventListener('error', handleError)
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate)
       video.removeEventListener('loadedmetadata', handleLoadedMetadata)
-      video.removeEventListener('play', handlePlay)
-      video.removeEventListener('pause', handlePause)
-      video.removeEventListener('ended', handleEnded)
       video.removeEventListener('error', handleError)
     }
-  }, [])
+  }, [visible, videoUrl])
 
-  // 当 visible 变化时重置状态
+  // ==================== 状态重置 ====================
   useEffect(() => {
     if (visible) {
       setIsPlaying(false)
@@ -218,41 +265,28 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     }
   }, [visible])
 
-  // 不支持格式的内容
+  // ==================== 不支持格式的内容 ====================
   const unsupportedContent = (
-    <div style={{
-      padding: '60px 20px',
-      textAlign: 'center',
-      backgroundColor: '#000',
-      color: '#fff',
-    }}>
+    <div style={{ padding: '60px 20px', textAlign: 'center', backgroundColor: '#000', color: '#fff' }}>
       <Alert
         type="warning"
         message="浏览器不支持直接播放此格式"
         description={
           <div>
-            <p>
-              <strong>{file.format.toUpperCase()}</strong> 格式在浏览器中无法直接播放
-            </p>
-            <p style={{ marginTop: 16 }}>
-              请下载后使用本地播放器（如 VLC、PotPlayer）观看
-            </p>
+            <p><strong>{file.format?.toUpperCase()}</strong> 格式在浏览器中无法直接播放</p>
+            <p style={{ marginTop: 16 }}>请下载后使用本地播放器（如 VLC、PotPlayer）观看</p>
           </div>
         }
         showIcon
         style={{ marginBottom: 24, textAlign: 'left' }}
       />
-      <Button
-        type="primary"
-        icon={<DownloadOutlined />}
-        onClick={handleDownload}
-        size="large"
-      >
+      <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownload} size="large">
         下载文件
       </Button>
     </div>
   )
 
+  // ==================== 渲染 ====================
   return (
     <Modal
       title={`${file.file_name} - 视频预览`}
@@ -261,107 +295,45 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
       footer={null}
       width={900}
       centered
-      destroyOnClose
     >
-      <div
-        ref={containerRef}
-        style={{
-          position: 'relative',
-          backgroundColor: '#000',
-          borderRadius: '8px',
-          overflow: 'hidden',
-        }}
-      >
+      <div ref={containerRef} style={STYLES.container}>
         {!isNativelySupported ? unsupportedContent : (
           <>
             {loading && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#000',
-                  zIndex: 1,
-                }}
-              >
+              <div style={STYLES.loadingOverlay}>
                 <div style={{ color: '#fff' }}>加载中...</div>
               </div>
             )}
 
             {error && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  zIndex: 1,
-                }}
-              >
-                <Alert
-                  type="error"
-                  message={error}
-                  showIcon
-                  style={{ margin: 20 }}
-                />
+              <div style={STYLES.errorOverlay}>
+                <Alert type="error" message={error} showIcon style={{ margin: 20 }} />
               </div>
             )}
 
             <video
+              key={videoUrl}
               ref={videoRef}
               src={videoUrl}
-              crossOrigin="anonymous"
-              style={{
-                width: '100%',
-                maxHeight: '500px',
-                display: 'block',
-              }}
+              style={STYLES.video}
               preload="metadata"
             />
 
             {/* 自定义控制条 */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
-                padding: '12px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
+            <div style={STYLES.controlBar}>
               {/* 进度条 */}
               <Slider
                 min={0}
                 max={duration || 100}
                 value={currentTime}
                 onChange={handleSeek}
-                tooltip={{ formatter: (value) => formatTime(value || 0) }}
                 trackStyle={{ backgroundColor: '#1890ff' }}
                 handleStyle={{ borderColor: '#1890ff', backgroundColor: '#1890ff' }}
                 disabled={!duration}
               />
 
               {/* 控制按钮行 */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Space>
                   <ControlButton
                     icon={isPlaying ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
@@ -370,30 +342,30 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
                   />
                   <ControlButton
                     icon={<StepBackwardOutlined />}
-                    onClick={() => handleSkip(-10)}
-                    title="快退10秒"
+                    onClick={() => handleSkip(-SKIP_SECONDS)}
+                    title={`快退${SKIP_SECONDS}秒`}
                   />
                   <ControlButton
                     icon={<StepForwardOutlined />}
-                    onClick={() => handleSkip(10)}
-                    title="快进10秒"
+                    onClick={() => handleSkip(SKIP_SECONDS)}
+                    title={`快进${SKIP_SECONDS}秒`}
                   />
                   <Button
                     type="text"
                     onClick={handlePlaybackRate}
                     title="播放速度"
-                    style={{ color: '#fff', fontSize: '12px', minWidth: 'auto' }}
+                    style={STYLES.controlBtn}
                   >
                     {playbackRate}x
                   </Button>
-                  <span style={{ color: '#fff', fontSize: '12px' }}>
+                  <span style={STYLES.controlBtn}>
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
                 </Space>
 
                 <Space>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <SoundOutlined style={{ color: '#fff' }} />
+                    <SoundOutlined style={STYLES.controlBtn} />
                     <Slider
                       min={0}
                       max={1}
@@ -421,7 +393,7 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
       </div>
 
       {/* 文件信息 */}
-      <div style={{ marginTop: 16, padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+      <div style={STYLES.fileInfo}>
         <Space size="large">
           <span><strong>格式:</strong> {file.format?.toUpperCase()}</span>
           <span><strong>大小:</strong> {(file.file_size / 1024 / 1024).toFixed(2)} MB</span>

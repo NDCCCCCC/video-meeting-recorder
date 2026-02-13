@@ -88,7 +88,7 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	input := c.buildRecordingInput(task, huaweiConfig)
 
 	// 使用 tee muxer 同时生成 MKV 和 HLS
-	args, err := c.buildRecordingCommand(input, mkvPath, hlsPath, task.EndTime.Sub(task.StartTime))
+	args, err := c.buildRecordingCommand(input, mkvPath, hlsPath, task.EndTime.Sub(task.StartTime), task.ID)
 	if err != nil {
 		return fmt.Errorf("构建录制命令失败: %w", err)
 	}
@@ -187,6 +187,55 @@ func normalizePathForFFmpeg(path string) string {
 	return strings.ReplaceAll(path, "\\", "/")
 }
 
+// escapePathForTeeMuxer 转义 tee muxer 输出路径中的特殊字符
+// 这用于方括号外的路径（第一个MKV路径和最后的m3u8路径）
+// 注意：m3u8路径在方括号之后，冒号也需要转义（除了盘符）
+func escapePathForTeeMuxer(path string) string {
+	// 对于方括号外的路径，也需要转义冒号
+	// 因为它在 tee spec 的方括号之后，FFmpeg可能会误解析
+	// 使用与 escapePathForTeeMuxerOptions 相同的逻辑
+	return escapePathForTeeMuxerOptions(path)
+}
+
+// escapePathForTeeMuxerOptions 转义 tee muxer 选项值中的路径特殊字符
+// 这用于 [f=hls:hls_segment_filename=...] 选项内部的路径
+// 选项值中的冒号需要转义，但盘符冒号（如 D:/）需要保留
+func escapePathForTeeMuxerOptions(path string) string {
+	// 先转换为正斜杠（Windows路径必须使用正斜杠）
+	normalized := normalizePathForFFmpeg(path)
+
+	// 检查是否有 Windows 盘符（如 D:/）
+	hasDriveLetter := len(normalized) >= 2 && normalized[1] == ':'
+
+	// 如果有盘符，分别处理盘符和剩余部分
+	if hasDriveLetter {
+		drive := normalized[:2]   // 如 "D:"
+		rest := normalized[2:]    // 如 "/Record_V2/..."
+
+		// 转义剩余部分中的冒号（不包括盘符）
+		// Windows FFmpeg tee muxer 需要使用双反斜杠转义冒号
+		restEscaped := strings.ReplaceAll(rest, ":", "\\\\:")
+		// 转义空格
+		restEscaped = strings.ReplaceAll(restEscaped, " ", "\\ ")
+		// 转义方括号
+		restEscaped = strings.ReplaceAll(restEscaped, "[", "\\[")
+		restEscaped = strings.ReplaceAll(restEscaped, "]", "\\]")
+		// 转义单引号
+		restEscaped = strings.ReplaceAll(restEscaped, "'", "\\'")
+
+		return drive + restEscaped
+	}
+
+	// 没有盘符，全部转义
+	escaped := strings.ReplaceAll(normalized, ":", "\\:")
+	escaped = strings.ReplaceAll(escaped, " ", "\\ ")
+	escaped = strings.ReplaceAll(escaped, "[", "\\[")
+	escaped = strings.ReplaceAll(escaped, "]", "\\]")
+	escaped = strings.ReplaceAll(escaped, "'", "\\'")
+
+	return escaped
+}
+
 // startFFmpegProcess 启动FFmpeg进程并配置日志
 func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPath string) (*os.File, error) {
 	logPath := filepath.Join(filepath.Dir(outputPath), "ffmpeg.log")
@@ -197,6 +246,23 @@ func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPat
 
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+
+	// 打印完整的 FFmpeg 命令行用于调试
+	// Args[0] 是程序名，Args[1:] 是参数
+	commandLine := cmd.Path
+	if len(cmd.Args) > 0 {
+		for _, arg := range cmd.Args[1:] {
+			if strings.Contains(arg, " ") || strings.Contains(arg, "\t") {
+				commandLine += " \"" + arg + "\""
+			} else {
+				commandLine += " " + arg
+			}
+		}
+	}
+	c.logger.Info("FFmpeg 命令行（可手动运行测试）",
+		zap.String("command", commandLine),
+		zap.String("log_file", logPath),
+	)
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
@@ -306,7 +372,7 @@ func (c *SimpleRecordingCoordinator) monitorProcess(taskID uint, cmd *exec.Cmd, 
 }
 
 // buildRecordingCommand 构建录制命令（使用 tee muxer 同时输出 MKV 和 HLS）
-func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput, mkvPath string, hlsPath string, duration time.Duration) ([]string, error) {
+func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput, mkvPath string, hlsPath string, duration time.Duration, taskID uint) ([]string, error) {
 	args := []string{"-y"}
 
 	// 添加输入源
@@ -359,22 +425,58 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	hlsSegmentDuration := c.config.FFmpeg.HLSSegmentDuration
 	hlsListSize := c.config.FFmpeg.HLSListSize
 
-	// Tee muxer 格式: "mkv_path|[f=hls:hls_time=X:hls_list_size=Y:hls_segment_filename=Z]m3u8_path"
+	// 使用相对路径，避免 Windows 盘符转义问题
+	// 配置中的路径本身就是相对路径（如 ./data/recordings），直接使用即可
+	// 标准化路径：将反斜杠转换为正斜杠，去除开头的 ./
+	normalizePath := func(p string) string {
+		// 转换为正斜杠（FFmpeg 需要）
+		normalized := filepath.ToSlash(p)
+		// 去除开头的 ./
+		for strings.HasPrefix(normalized, "./") {
+			normalized = normalized[2:]
+		}
+		// 去除开头的 /（如果转换后产生）
+		if strings.HasPrefix(normalized, "/") {
+			normalized = normalized[1:]
+		}
+		return normalized
+	}
+
+	mkvRelPath := normalizePath(mkvPath)
+	hlsSegmentRelPath := normalizePath(hlsSegmentPath)
+	hlsM3U8RelPath := normalizePath(hlsM3U8Path)
+
+	// 简单转义：空格、单引号、方括号
+	escapeSimple := func(p string) string {
+		p = strings.ReplaceAll(p, " ", "\\ ")
+		p = strings.ReplaceAll(p, "'", "\\'")
+		p = strings.ReplaceAll(p, "[", "\\[")
+		p = strings.ReplaceAll(p, "]", "\\]")
+		return p
+	}
+
+	mkvPathEscaped := escapeSimple(mkvRelPath)
+	hlsSegmentPathEscaped := escapeSimple(hlsSegmentRelPath)
+	hlsM3U8PathEscaped := escapeSimple(hlsM3U8RelPath)
+
+	// 使用相对路径构建 tee spec
 	teeSpec := fmt.Sprintf("%s|[f=hls:hls_time=%d:hls_list_size=%d:hls_segment_filename=%s]%s",
-		normalizePathForFFmpeg(mkvPath),
+		mkvPathEscaped,
 		hlsSegmentDuration,
 		hlsListSize,
-		normalizePathForFFmpeg(hlsSegmentPath),
-		normalizePathForFFmpeg(hlsM3U8Path),
+		hlsSegmentPathEscaped,
+		hlsM3U8PathEscaped,
 	)
 
 	args = append(args, "-f", "tee", teeSpec)
 
-	c.logger.Debug("FFmpeg tee muxer 命令已构建",
+	c.logger.Info("FFmpeg tee muxer 命令已构建",
 		zap.String("mkv_output", mkvPath),
 		zap.String("hls_output", hlsM3U8Path),
+		zap.String("hls_segment_path", hlsSegmentPath),
 		zap.Int("hls_segment_duration", hlsSegmentDuration),
 		zap.Int("hls_list_size", hlsListSize),
+		zap.String("tee_spec", teeSpec),  // 打印完整的 tee spec 以便调试
 	)
 
 	return args, nil
