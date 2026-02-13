@@ -969,29 +969,8 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 		zap.Uint("task_id", taskID),
 	)
 
-	// 加载任务信息用于解锁终端
+	// 加载任务信息用于解锁终端和提交转换
 	task, err := s.taskService.GetTask(taskID)
-	if err == nil {
-		// 先断开华为会议连接，解锁终端
-		if s.connector != nil {
-			s.logger.Info("取消任务时断开华为会议连接",
-				zap.Uint("task_id", taskID),
-			)
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if disconnectErr := s.connector.DisconnectFromConference(ctx, task); disconnectErr != nil {
-				s.logger.Warn("断开华为会议连接失败",
-					zap.Uint("task_id", taskID),
-					zap.Error(disconnectErr),
-				)
-				// 继续执行，不阻止取消操作
-			} else {
-				s.logger.Info("华为会议连接已断开",
-					zap.Uint("task_id", taskID),
-				)
-			}
-		}
-	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -999,10 +978,53 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 	// 检查是否有取消函数
 	cancel, hasCancel := s.cancelFuncs[taskID]
 	if hasCancel {
+		// 先停止录制，确保 ffmpeg 正常退出并完成 MKV 文件写入
+		if stopErr := s.coordinator.StopRecording(taskID); stopErr != nil {
+			s.logger.Warn("停止录制失败",
+				zap.Uint("task_id", taskID),
+				zap.Error(stopErr),
+			)
+		}
+
+		// 取消监控任务
 		cancel()
 		s.logger.Info("任务执行已取消",
 			zap.Uint("task_id", taskID),
 		)
+
+		// 断开华为会议连接，解锁终端
+		if err == nil && s.connector != nil {
+			s.logger.Info("取消任务时断开华为会议连接",
+				zap.Uint("task_id", taskID),
+			)
+			ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancelCtx()
+			if disconnectErr := s.connector.DisconnectFromConference(ctx, task); disconnectErr != nil {
+				s.logger.Warn("断开华为会议连接失败",
+					zap.Uint("task_id", taskID),
+					zap.Error(disconnectErr),
+				)
+			} else {
+				s.logger.Info("华为会议连接已断开",
+					zap.Uint("task_id", taskID),
+				)
+			}
+		}
+
+		// 如果有 MKV 文件，提交转换任务
+		if err == nil && s.conversionService != nil && task.MKVFilePath != "" {
+			s.logger.Info("提交已取消任务的转换任务",
+				zap.Uint("task_id", taskID),
+				zap.String("mkv_file", task.MKVFilePath),
+			)
+			if convertErr := s.conversionService.SubmitConversion(taskID); convertErr != nil {
+				s.logger.Warn("提交转换任务失败",
+					zap.Uint("task_id", taskID),
+					zap.Error(convertErr),
+				)
+			}
+		}
+
 		return nil
 	}
 
