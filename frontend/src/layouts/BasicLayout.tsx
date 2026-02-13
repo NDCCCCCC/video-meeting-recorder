@@ -3,6 +3,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Dropdown, Avatar } from 'antd'
 import {
+  DashboardOutlined,
   VideoCameraOutlined,
   UserOutlined,
   SettingOutlined,
@@ -11,6 +12,7 @@ import {
   CloudServerOutlined,
   TeamOutlined,
   SafetyOutlined,
+  AuditOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import type { MenuProps } from 'antd'
@@ -20,8 +22,10 @@ const { Header, Sider, Content } = Layout
 
 // 菜单权限映射
 const MENU_PERMISSIONS: Record<string, string> = {
+  '/dashboard': 'dashboard:view',
   '/tasks': 'tasks:view',
   '/files': 'files:view',
+  '/audit': 'audit:view',
   '/system/users': 'users:view',
   '/system/roles': 'roles:view',
   '/system/huawei-configs': 'configs:view',
@@ -51,8 +55,10 @@ export default function BasicLayout() {
 
   // 构建过滤后的菜单项
   const menuItems: MenuProps['items'] = [
+    canAccessPath('/dashboard', user) ? { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' } : null,
     canAccessPath('/tasks', user) ? { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' } : null,
     canAccessPath('/files', user) ? { key: '/files', icon: <FolderOutlined />, label: '文件管理' } : null,
+    canAccessPath('/audit', user) ? { key: '/audit', icon: <AuditOutlined />, label: '审计日志' } : null,
     canAccessPath('/system/users', user) || canAccessPath('/system/roles', user) || canAccessPath('/system/huawei-configs', user) || canAccessPath('/system/settings', user) ? {
       key: 'system',
       icon: <SettingOutlined />,
