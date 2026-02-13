@@ -385,6 +385,14 @@ func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask
 	recording := strings.ToLower(string(models.VideoStatusRecording))
 	connecting := strings.ToLower(string(models.VideoStatusConnecting))
 
+	// 添加详细日志
+	s.logger.Info("删除权限检查",
+		zap.Uint("task_id", task.ID),
+		zap.String("status", string(task.Status)),
+		zap.String("status_lower", status),
+		zap.Bool("can_delete", status != recording && status != connecting),
+	)
+
 	if status == recording || status == connecting {
 		return false, "运行中"
 	}
