@@ -409,11 +409,12 @@ func (a *MinimalApp) initHandlers() error {
 	ffprobePath := a.config.FFmpeg.FFProbePath
 	if ffprobePath == "" {
 		// 从 ffmpeg 路径推导 ffprobe 路径
-		ffprobePath = "./bin/ffprobe"
 		if a.config.FFmpeg.Path != "" {
 			// 将 ffmpeg 路径中的 ffmpeg 替换为 ffprobe
 			ffmpegDir := filepath.Dir(a.config.FFmpeg.Path)
 			ffprobePath = filepath.Join(ffmpegDir, "ffprobe")
+		} else {
+			ffprobePath = "./bin/ffprobe"
 		}
 	}
 	a.videoFileService = services.NewVideoFileService(a.db, a.logger, a.config.Storage.RecordingsPath, ffprobePath)
