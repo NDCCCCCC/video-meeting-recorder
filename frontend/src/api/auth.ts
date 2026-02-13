@@ -11,7 +11,7 @@ import {
 import { apiRequest, clearToken as apiClearToken } from './apiClient'
 
 // API 基础 URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 // 保存 Token 到 localStorage（用于登录时）
 const saveToken = (accessToken: string, refreshToken: string): void => {

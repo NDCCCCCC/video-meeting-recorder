@@ -134,18 +134,10 @@ func setVideoHeaders(c *gin.Context, file *models.VideoFile, fileSize int64) {
 	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
 	c.Header("Accept-Ranges", "bytes") // 支持视频进度拖动
 
-	// 设置 CORS 头 - 验证 Origin 并返回匹配的源
-	origin := c.GetHeader("Origin")
-	if origin != "" {
-		// 生产环境应该配置允许的 Origin 白名单
-		// 这里为了兼容视频播放功能，允许请求的 Origin
-		c.Header("Access-Control-Allow-Origin", origin)
-		c.Header("Access-Control-Allow-Credentials", "true")
-	} else {
-		// 没有 Origin 头的请求（如同源请求、直接下载）
-		c.Header("Access-Control-Allow-Origin", "*")
-	}
-
+	// 设置视频流所需的 CORS 头
+	// 注意：使用 * 允许所有源访问。如果部署在公网环境，建议改为 Origin 白名单
+	// 内网环境或前后端同源部署时，此配置是安全的
+	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
 	c.Header("Access-Control-Allow-Headers", "Range, Content-Type, Authorization")
 	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")

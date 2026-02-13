@@ -9,7 +9,7 @@ import type {
 import type { ApiResponse } from '../types/auth'
 import { apiRequest, getToken } from './apiClient'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 // 获取文件列表
 export async function getVideoFileList(

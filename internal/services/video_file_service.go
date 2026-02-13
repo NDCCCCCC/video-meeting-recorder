@@ -31,14 +31,19 @@ type VideoFileService struct {
 	db             *gorm.DB
 	logger         *zap.Logger
 	recordingsPath string
+	ffprobePath    string // ffprobe 可执行文件路径
 }
 
 // NewVideoFileService 创建视频文件服务
-func NewVideoFileService(db *gorm.DB, logger *zap.Logger, recordingsPath string) *VideoFileService {
+func NewVideoFileService(db *gorm.DB, logger *zap.Logger, recordingsPath string, ffprobePath string) *VideoFileService {
+	if ffprobePath == "" {
+		ffprobePath = "./bin/ffprobe" // 默认使用项目内置的 ffprobe
+	}
 	return &VideoFileService{
 		db:             db,
 		logger:         logger,
 		recordingsPath: recordingsPath,
+		ffprobePath:    ffprobePath,
 	}
 }
 
@@ -368,16 +373,28 @@ func (s *VideoFileService) extractVideoMetadata(filePath string) (*videoMetadata
 	// 从文件扩展名推断格式
 	metadata.Format = s.inferFormat(filePath)
 
-	ffprobePath, err := exec.LookPath("ffprobe")
-	if err != nil {
-		s.logger.Warn("ffprobe 不可用，使用默认元数据",
+	// 检查 ffprobe 是否存在（支持无扩展名和 .exe 扩展名）
+	ffprobeExists := false
+	actualFFprobePath := s.ffprobePath
+	ffprobePaths := []string{s.ffprobePath, s.ffprobePath + ".exe"}
+	for _, path := range ffprobePaths {
+		if _, err := os.Stat(path); err == nil {
+			ffprobeExists = true
+			actualFFprobePath = path
+			break
+		}
+	}
+
+	if !ffprobeExists {
+		s.logger.Warn("ffprobe 不存在，使用默认元数据",
+			zap.String("ffprobe", s.ffprobePath),
+			zap.String("searched_paths", strings.Join(ffprobePaths, ", ")),
 			zap.String("file", filePath),
-			zap.Error(err),
 		)
 		return metadata, nil
 	}
 
-	detailedMetadata, err := s.probeVideoMetadata(ffprobePath, filePath)
+	detailedMetadata, err := s.probeVideoMetadata(actualFFprobePath, filePath)
 	if err != nil {
 		s.logger.Warn("ffprobe 执行失败，使用默认元数据",
 			zap.String("file", filePath),
@@ -513,7 +530,7 @@ func (s *VideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, f
 	}
 
 	// 创建新文件记录
-	return s.createNewFile(filePath, &task.ID, nil, formatStr)
+	return s.createNewFile(filePath, &task.ID, nil, formatStr, task.CreatedBy)
 }
 
 // getTaskFilePath 获取任务文件路径
@@ -555,7 +572,7 @@ func (s *VideoFileService) findExistingFile(filePath string) (*models.VideoFile,
 }
 
 // createNewFile 创建新的文件记录
-func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recordedAt *time.Time, format string) (*models.VideoFile, error) {
+func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recordedAt *time.Time, format string, createdBy uint) (*models.VideoFile, error) {
 	// 提取元数据
 	metadata, err := s.extractVideoMetadata(filePath)
 	if err != nil {
@@ -579,6 +596,14 @@ func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recorded
 		fileSize = fileInfo.Size()
 	}
 
+	// 调试日志：记录 taskID 值
+	if taskID != nil {
+		s.logger.Debug("准备创建文件记录",
+			zap.Uint("task_id", *taskID),
+			zap.String("file_path", filePath),
+		)
+	}
+
 	// 创建文件记录
 	videoFile := &models.VideoFile{
 		FileName:   filepath.Base(filePath),
@@ -591,10 +616,26 @@ func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recorded
 		Codec:      metadata.Codec,
 		Status:     models.FileStatusReady,
 		TaskID:     taskID,
+		CreatedBy:  createdBy,
 		RecordedAt:  recordedAt,
 	}
 
 	if err := s.createWithDuplicateCheck(videoFile); err != nil {
+		// 如果是外键约束失败，尝试验证任务是否存在
+		if strings.Contains(err.Error(), "FOREIGN KEY") && taskID != nil {
+			var taskExists models.VideoRecordingTask
+			if checkErr := s.db.Select("id").First(&taskExists, *taskID).Error; checkErr != nil {
+				s.logger.Error("外键约束失败：任务不存在",
+					zap.Uint("task_id", *taskID),
+					zap.Error(checkErr),
+				)
+			} else {
+				s.logger.Error("外键约束失败：任务存在但仍创建失败",
+					zap.Uint("task_id", *taskID),
+					zap.Error(err),
+				)
+			}
+		}
 		return nil, err
 	}
 
@@ -646,7 +687,17 @@ func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt 
 	}
 
 	format := s.inferFormat(filePath)
-	return s.createNewFile(filePath, taskID, recordedAt, format)
+
+	// 获取 createdBy：如果有 taskID，从任务中获取
+	var createdBy uint = 1 // 默认系统用户
+	if taskID != nil {
+		var task models.VideoRecordingTask
+		if err := s.db.Select("created_by").First(&task, *taskID).Error; err == nil {
+			createdBy = task.CreatedBy
+		}
+	}
+
+	return s.createNewFile(filePath, taskID, recordedAt, format, createdBy)
 }
 
 // fileInfoWithPath 包含文件路径和推断的任务ID

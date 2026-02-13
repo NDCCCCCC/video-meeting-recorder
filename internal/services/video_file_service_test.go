@@ -55,7 +55,8 @@ func setupTestService(t *testing.T) (*VideoFileService, *gorm.DB, string) {
 
 	logger := zap.NewNop()
 	tempDir := t.TempDir()
-	service := NewVideoFileService(db, logger, tempDir)
+	// 测试中不需要实际的 ffprobe，传空字符串使用默认值
+	service := NewVideoFileService(db, logger, tempDir, "")
 
 	return service, db, tempDir
 }
@@ -351,7 +352,7 @@ func TestListFiles(t *testing.T) {
 
 		logger := zap.NewNop()
 		tempDir := t.TempDir()
-		service := NewVideoFileService(db, logger, tempDir)
+		service := NewVideoFileService(db, logger, tempDir, "")
 
 		return service, db, tempDir
 	}
@@ -824,7 +825,7 @@ func BenchmarkListFiles(b *testing.B) {
 	}
 
 	tempDir := b.TempDir()
-	service := NewVideoFileService(db, logger, tempDir)
+	service := NewVideoFileService(db, logger, tempDir, "")
 
 	// 创建100个文件用于基准测试
 	b.StopTimer()
