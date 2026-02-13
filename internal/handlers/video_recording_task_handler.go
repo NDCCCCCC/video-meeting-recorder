@@ -187,7 +187,8 @@ func (h *VideoRecordingTaskHandler) DeleteTask(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	if err := h.taskService.DeleteTask(id, userID); err != nil {
+	isAdmin := middleware.GetIsAdmin(c)
+	if err := h.taskService.DeleteTask(id, userID, isAdmin); err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
 	}
@@ -214,7 +215,8 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	result, err := h.taskService.BatchDeleteTasks(req.IDs, userID)
+	isAdmin := middleware.GetIsAdmin(c)
+	result, err := h.taskService.BatchDeleteTasks(req.IDs, userID, isAdmin)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
