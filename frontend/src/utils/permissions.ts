@@ -1,5 +1,8 @@
 // 权限常量
 export const PERMISSIONS = {
+  // 仪表盘
+  DASHBOARD_VIEW: 'dashboard:view',
+
   // 录制任务
   TASK_VIEW: 'tasks:view',
   TASK_CREATE: 'tasks:create',
@@ -12,6 +15,9 @@ export const PERMISSIONS = {
   FILE_VIEW: 'files:view',
   FILE_DELETE: 'files:delete',
   FILE_SCAN: 'files:scan',
+
+  // 审计日志
+  AUDIT_VIEW: 'audit:view',
 
   // 系统管理
   USER_VIEW: 'users:view',
@@ -26,22 +32,29 @@ export const PERMISSIONS = {
 
   CONFIG_VIEW: 'configs:view',
   CONFIG_EDIT: 'configs:edit',
+
+  // 系统设置
+  SYSTEM_SETTINGS: 'system:settings',
 } as const
 
 // 菜单权限映射
-const MENU_PERMISSIONS: Record<string, string> = {
+export const MENU_PERMISSIONS: Record<string, string> = {
+  '/dashboard': PERMISSIONS.DASHBOARD_VIEW,
   '/tasks': PERMISSIONS.TASK_VIEW,
   '/files': PERMISSIONS.FILE_VIEW,
+  '/audit': PERMISSIONS.AUDIT_VIEW,
   '/system/users': PERMISSIONS.USER_VIEW,
   '/system/roles': PERMISSIONS.ROLE_VIEW,
   '/system/huawei-configs': PERMISSIONS.CONFIG_VIEW,
+  '/system/settings': PERMISSIONS.SYSTEM_SETTINGS,
 }
 
 // 菜单子项权限映射
-const SUBMENU_PERMISSIONS: Record<string, string> = {
+export const SUBMENU_PERMISSIONS: Record<string, string> = {
   '/system/users': PERMISSIONS.USER_VIEW,
   '/system/roles': PERMISSIONS.ROLE_VIEW,
   '/system/huawei-configs': PERMISSIONS.CONFIG_VIEW,
+  '/system/settings': PERMISSIONS.SYSTEM_SETTINGS,
 }
 
 import type { User } from '../types/auth'
