@@ -832,7 +832,8 @@ func (s *VideoFileService) findVideoFiles(dir string) ([]fileInfoWithPath, error
 		}
 
 		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".mkv" || ext == ".mp4" {
+		// 只扫描 MP4 文件，忽略 MKV（MKV 是中间格式，MP4 是最终格式）
+		if ext == ".mp4" {
 			files = append(files, fileInfoWithPath{
 				filePath: path,
 				taskID:   s.extractTaskIDFromPath(path),

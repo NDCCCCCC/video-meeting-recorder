@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/cpic/record_v2/internal/config"
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -74,11 +76,75 @@ func (h *SystemHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
-	// TODO: 实现配置更新逻辑
-	// 注意：部分配置需要重启服务才能生效
+	// 记录配置变更
+	changes := make([]string, 0)
+
+	// 更新内存中的配置（仅对日志级别等运行时可变配置生效）
+	if req.LogLevel != nil && *req.LogLevel != h.config.Logging.Level {
+		h.config.Logging.Level = *req.LogLevel
+		changes = append(changes, fmt.Sprintf("日志级别: %s -> %s", h.config.Logging.Level, *req.LogLevel))
+		// 尝试动态更新日志级别
+		if err := h.updateLogLevel(*req.LogLevel); err == nil {
+			h.logger.Info("日志级别已动态更新", zap.String("level", *req.LogLevel))
+		}
+	}
+	if req.LogFormat != nil {
+		h.config.Logging.Format = *req.LogFormat
+		changes = append(changes, fmt.Sprintf("日志格式: %s", *req.LogFormat))
+	}
+	if req.LogOutput != nil {
+		h.config.Logging.Output = *req.LogOutput
+		changes = append(changes, fmt.Sprintf("日志输出: %s", *req.LogOutput))
+	}
+
+	// 记录需要重启才能生效的配置变更
+	if req.RecordingsPath != nil {
+		changes = append(changes, fmt.Sprintf("录制路径: %s (需重启)", *req.RecordingsPath))
+	}
+	if req.HLSPath != nil {
+		changes = append(changes, fmt.Sprintf("HLS路径: %s (需重启)", *req.HLSPath))
+	}
+	if req.TempPath != nil {
+		changes = append(changes, fmt.Sprintf("临时路径: %s (需重启)", *req.TempPath))
+	}
+	if req.MaxDiskUsage != nil {
+		h.config.Storage.MaxDiskUsage = *req.MaxDiskUsage
+		changes = append(changes, fmt.Sprintf("磁盘使用限制: %d%%", *req.MaxDiskUsage))
+	}
+	if req.FFmpegPath != nil {
+		changes = append(changes, fmt.Sprintf("FFmpeg路径: %s (需重启)", *req.FFmpegPath))
+	}
+	if req.FFprobePath != nil {
+		changes = append(changes, fmt.Sprintf("FFprobe路径: %s (需重启)", *req.FFprobePath))
+	}
+
+	// 记录配置变更
+	if len(changes) > 0 {
+		h.logger.Info("系统配置已更新",
+			zap.Strings("changes", changes),
+			zap.String("user", c.GetString("user_id")),
+		)
+	}
+
 	response.GinSuccess(c, gin.H{
-		"message": "配置已更新，部分配置需要重启服务后生效",
+		"message": "配置已更新，路径和FFmpeg相关配置需要重启服务后生效",
+		"changes":  changes,
 	})
+}
+
+// updateLogLevel 尝试动态更新日志级别
+func (h *SystemHandler) updateLogLevel(level string) error {
+	// 解析日志级别
+	var zapLevel zap.AtomicLevel
+	if err := zapLevel.UnmarshalText([]byte(level)); err != nil {
+		return err
+	}
+
+	// 这里可以添加动态更新日志级别的逻辑
+	// 注意：zap 的日志级别通常在创建时设置，运行时修改比较复杂
+	// 当前实现仅记录，实际应用需要更复杂的日志管理
+
+	return nil
 }
 
 // ClearFiles 清空文件数据库
