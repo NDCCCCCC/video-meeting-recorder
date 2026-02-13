@@ -174,7 +174,10 @@ func (h *VideoFileHandler) DeleteFile(c *gin.Context) {
 
 // GetFileStats 获取文件统计信息
 func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
-	stats, err := h.fileService.GetFileStats()
+	// 获取格式参数，默认只统计 mp4
+	format := c.DefaultQuery("format", "mp4")
+
+	stats, err := h.fileService.GetFileStats(format)
 	if err != nil {
 		h.logger.Error("获取统计信息失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取统计信息失败")
