@@ -31,6 +31,7 @@ type VideoFileService struct {
 	db             *gorm.DB
 	logger         *zap.Logger
 	recordingsPath string
+	hlsPath        string // HLS 预览文件存储路径
 	ffprobePath    string // ffprobe 可执行文件路径
 }
 
@@ -43,8 +44,14 @@ func NewVideoFileService(db *gorm.DB, logger *zap.Logger, recordingsPath string,
 		db:             db,
 		logger:         logger,
 		recordingsPath: recordingsPath,
+		hlsPath:        "", // 需要通过 SetHLSPath 设置
 		ffprobePath:    ffprobePath,
 	}
+}
+
+// SetHLSPath 设置 HLS 路径
+func (s *VideoFileService) SetHLSPath(hlsPath string) {
+	s.hlsPath = hlsPath
 }
 
 // ListFilesRequest 文件列表请求
@@ -192,7 +199,7 @@ func (s *VideoFileService) GetFileByID(id uint) (*models.VideoFile, error) {
 	return &file, nil
 }
 
-// DeleteFile 删除文件（同时删除同任务的 mp4 和 mkv 文件）
+// DeleteFile 删除文件（同时删除整个任务目录和任务记录）
 func (s *VideoFileService) DeleteFile(id uint) error {
 	var file models.VideoFile
 	if err := s.db.First(&file, id).Error; err != nil {
@@ -203,28 +210,21 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 		return errors.New("文件正在处理中，无法删除")
 	}
 
-	// 查找同任务下的另一个格式文件
-	counterpartFile := s.findCounterpartFile(&file)
-
-	// 收集需要删除的物理文件
-	var physicalFilesToDelete []*models.VideoFile
-	physicalFilesToDelete = append(physicalFilesToDelete, &file)
-	if counterpartFile != nil {
-		physicalFilesToDelete = append(physicalFilesToDelete, counterpartFile)
+	// 获取任务ID
+	taskID := file.TaskID
+	if taskID == nil {
+		return errors.New("文件没有关联任务，无法删除")
 	}
 
-	// 使用事务确保数据一致性
+	// 使用事务删除数据库记录
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// 删除当前文件的数据库记录
-		if err := tx.Delete(&models.VideoFile{}, id).Error; err != nil {
+		// 删除任务的所有视频文件记录
+		if err := tx.Where("task_id = ?", *taskID).Delete(&models.VideoFile{}).Error; err != nil {
 			return err
 		}
-
-		// 删除对应格式文件的数据库记录
-		if counterpartFile != nil {
-			if err := tx.Delete(&models.VideoFile{}, counterpartFile.ID).Error; err != nil {
-				return err
-			}
+		// 删除任务记录
+		if err := tx.Delete(&models.VideoRecordingTask{}, *taskID).Error; err != nil {
+			return err
 		}
 		return nil
 	})
@@ -234,23 +234,32 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 		return err
 	}
 
-	// 数据库删除成功后，删除物理文件
-	for _, f := range physicalFilesToDelete {
-		if f.Exists() {
-			if err := s.deletePhysicalFile(f); err != nil {
-				s.logger.Warn("删除物理文件失败",
-					zap.Uint("file_id", f.ID),
-					zap.String("file_path", f.FilePath),
-					zap.Error(err),
-				)
-			}
+	// 数据库删除成功后，删除物理目录
+	taskDirName := fmt.Sprintf("task_%d", *taskID)
+
+	// 删除 recordings 目录
+	recordingsDir := filepath.Join(s.recordingsPath, taskDirName)
+	if err := os.RemoveAll(recordingsDir); err != nil {
+		s.logger.Warn("删除 recordings 目录失败",
+			zap.String("dir", recordingsDir),
+			zap.Error(err),
+		)
+	}
+
+	// 删除 HLS 目录
+	if s.hlsPath != "" {
+		hlsDir := filepath.Join(s.hlsPath, taskDirName)
+		if err := os.RemoveAll(hlsDir); err != nil {
+			s.logger.Warn("删除 HLS 目录失败",
+				zap.String("dir", hlsDir),
+				zap.Error(err),
+			)
 		}
 	}
 
-	s.logger.Info("视频文件已删除",
+	s.logger.Info("任务已完全删除",
 		zap.Uint("file_id", id),
-		zap.String("format", file.Format),
-		zap.Bool("has_counterpart", counterpartFile != nil),
+		zap.Uint("task_id", *taskID),
 	)
 
 	return nil
@@ -344,16 +353,23 @@ func (s *VideoFileService) UpdateFileStatus(id uint, status string) error {
 		Update("status", status).Error
 }
 
-// GetFileStats 获取文件统计信息
-func (s *VideoFileService) GetFileStats() (map[string]interface{}, error) {
+// GetFileStats 获取文件统计信息（可按格式筛选）
+func (s *VideoFileService) GetFileStats(format string) (map[string]interface{}, error) {
+	query := s.db.Model(&models.VideoFile{})
+
+	// 按格式筛选（默认只统计 mp4）
+	if format != "" {
+		query = query.Where("format = ?", format)
+	}
+
 	var total int64
 	var totalSize int64
 
-	if err := s.db.Model(&models.VideoFile{}).Count(&total).Error; err != nil {
+	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
 
-	if err := s.db.Model(&models.VideoFile{}).
+	if err := query.
 		Select("COALESCE(SUM(file_size), 0)").
 		Scan(&totalSize).Error; err != nil {
 		return nil, err

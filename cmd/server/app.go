@@ -67,6 +67,7 @@ type Handlers struct {
 	File         *handlers.FileHandler
 	Audit        *handlers.AuditHandler
 	Notification *handlers.NotificationHandler
+	System        *handlers.SystemHandler
 }
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
@@ -418,6 +419,7 @@ func (a *MinimalApp) initHandlers() error {
 		}
 	}
 	a.videoFileService = services.NewVideoFileService(a.db, a.logger, a.config.Storage.RecordingsPath, ffprobePath)
+	a.videoFileService.SetHLSPath(a.config.Storage.HLSPath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
 	fileService := storage.NewFileService(a.db, a.logger, a.config)
 	fileHandler := handlers.NewFileHandler(fileService)
@@ -453,6 +455,7 @@ func (a *MinimalApp) initHandlers() error {
 		File:         fileHandler,
 		Audit:        auditHandler,
 		Notification: notificationHandler,
+		System:       handlers.NewSystemHandler(a.db, a.logger, a.config),
 	}
 
 	return nil
@@ -597,6 +600,14 @@ func (a *MinimalApp) registerRoutes() error {
 		notifications.PUT("/read-all", a.handlers.Notification.MarkAllAsRead)             // 全部标记为已读
 		notifications.GET("/settings", a.handlers.Notification.GetUserSetting)           // 获取通知配置
 		notifications.PUT("/settings", a.handlers.Notification.UpdateUserSetting)        // 更新通知配置
+	}
+
+	// 系统管理（需要 admin 权限）
+	system := api.Group("/system")
+	{
+		system.GET("/config", a.handlers.System.GetConfig)                  // 获取系统配置
+		system.PUT("/config", a.handlers.System.UpdateConfig)               // 更新系统配置
+		system.POST("/clear-files", a.handlers.System.ClearFiles)           // 清空文件数据库
 	}
 
 	// 前端静态文件服务 (SPA 路由回退)
