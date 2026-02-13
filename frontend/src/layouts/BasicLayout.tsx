@@ -16,21 +16,10 @@ import {
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import type { MenuProps } from 'antd'
+import { MENU_PERMISSIONS } from '../utils/permissions'
 import './BasicLayout.css'
 
 const { Header, Sider, Content } = Layout
-
-// 菜单权限映射
-const MENU_PERMISSIONS: Record<string, string> = {
-  '/dashboard': 'dashboard:view',
-  '/tasks': 'tasks:view',
-  '/files': 'files:view',
-  '/audit': 'audit:view',
-  '/system/users': 'users:view',
-  '/system/roles': 'roles:view',
-  '/system/huawei-configs': 'configs:view',
-  '/system/settings': 'system:settings',
-}
 
 // 检查菜单权限
 function canAccessPath(path: string | undefined, user: any): boolean {
