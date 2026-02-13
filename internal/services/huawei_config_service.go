@@ -139,6 +139,7 @@ func (s *HuaweiConfigService) CreateConfig(req *CreateConfigRequest) (*models.Hu
 		AudioBackend:     req.AudioBackend,
 		USBCameraName:    req.USBCameraName,
 		USBCameraDevice:  req.USBCameraDevice,
+		USBAudioName:     req.USBAudioName,
 		USBAudioDevice:   req.USBAudioDevice,
 		OutputFormat:     req.OutputFormat,
 		IsActive:         true,
