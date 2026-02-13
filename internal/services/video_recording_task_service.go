@@ -314,7 +314,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 }
 
 // DeleteTask 删除任务
-func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint) error {
+func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin bool) error {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
 		return errors.New("任务不存在")
@@ -325,8 +325,8 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint) error {
 		return errors.New("运行中的任务无法删除，请先停止任务")
 	}
 
-	// 检查权限
-	if task.CreatedBy != userID {
+	// 检查权限（管理员可以删除任何任务）
+	if !isAdmin && task.CreatedBy != userID {
 		return errors.New("无权限删除此任务")
 	}
 
@@ -376,8 +376,9 @@ type BatchDeleteTasksResult struct {
 }
 
 // canDeleteTask 检查任务是否可删除
-func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask, userID uint) (bool, string) {
-	if task.CreatedBy != userID {
+func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask, userID uint, isAdmin bool) (bool, string) {
+	// 检查权限（管理员可以删除任何任务）
+	if !isAdmin && task.CreatedBy != userID {
 		return false, "无权限"
 	}
 	// 转换为小写进行比较，忽略大小写差异
@@ -400,7 +401,7 @@ func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask
 }
 
 // BatchDeleteTasks 批量删除任务
-func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint) (*BatchDeleteTasksResult, error) {
+func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, isAdmin bool) (*BatchDeleteTasksResult, error) {
 	if len(ids) == 0 {
 		return nil, errors.New("任务ID列表不能为空")
 	}
@@ -421,7 +422,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint) (*
 	}
 
 	for _, task := range tasks {
-		if canDelete, reason := s.canDeleteTask(task, userID); canDelete {
+		if canDelete, reason := s.canDeleteTask(task, userID, isAdmin); canDelete {
 			result.DeletedIDs = append(result.DeletedIDs, task.ID)
 		} else {
 			result.FailedIDs = append(result.FailedIDs, task.ID)

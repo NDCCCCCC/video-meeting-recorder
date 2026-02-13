@@ -265,6 +265,177 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 	return nil
 }
 
+// BatchDeleteFilesRequest 批量删除文件请求
+type BatchDeleteFilesRequest struct {
+	IDs []uint `json:"ids"`
+}
+
+// BatchDeleteFilesResult 批量删除文件结果
+type BatchDeleteFilesResult struct {
+	Success int      `json:"success"`
+	Failed  int      `json:"failed"`
+	Errors  []string `json:"errors"`
+}
+
+// BatchDeleteFiles 批量删除文件（按任务分组删除，避免重复删除）
+// 返回的 success/failed 计数是删除的文件数，而非任务数
+func (s *VideoFileService) BatchDeleteFiles(ids []uint) (*BatchDeleteFilesResult, error) {
+	result := &BatchDeleteFilesResult{}
+
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	// 查询所有要删除的文件
+	var files []models.VideoFile
+	if err := s.db.Where("id IN ?", ids).Find(&files).Error; err != nil {
+		return result, err
+	}
+
+	// 按文件状态和任务关联分类
+	var filesWithTask []models.VideoFile      // 有关联任务的文件
+	var orphanFiles []models.VideoFile        // 孤立文件（TaskID 为 nil）
+	var processingFileIDs []uint              // 处理中的文件 ID
+
+	for _, file := range files {
+		if file.Status == models.FileStatusProcessing {
+			processingFileIDs = append(processingFileIDs, file.ID)
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("文件 %d 正在处理中，无法删除", file.ID))
+		} else if file.TaskID == nil {
+			orphanFiles = append(orphanFiles, file)
+		} else {
+			filesWithTask = append(filesWithTask, file)
+		}
+	}
+
+	// 记录处理中的文件
+	if len(processingFileIDs) > 0 {
+		s.logger.Info("批量删除跳过处理中的文件",
+			zap.Int("count", len(processingFileIDs)),
+			zap.Uint("ids", processingFileIDs[0]),
+		)
+	}
+
+	// 处理孤立文件
+	for _, file := range orphanFiles {
+		if err := s.deleteOrphanFile(&file); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("删除孤立文件 %d 失败: %v", file.ID, err))
+		} else {
+			result.Success++
+		}
+	}
+
+	// 按任务 ID 分组（一个任务可能有两个文件：mp4 和 mkv）
+	taskIDToFileCount := make(map[uint]int)  // 任务 ID -> 文件数量
+	taskIDs := make(map[uint]bool)
+	for _, file := range filesWithTask {
+		if file.TaskID != nil {
+			taskIDs[*file.TaskID] = true
+			taskIDToFileCount[*file.TaskID]++
+		}
+	}
+
+	// 按任务删除
+	for taskID := range taskIDs {
+		fileCount := taskIDToFileCount[taskID]
+		if err := s.deleteByTaskID(taskID); err != nil {
+			result.Failed += fileCount
+			result.Errors = append(result.Errors, fmt.Sprintf("删除任务 %d（含 %d 个文件）失败: %v", taskID, fileCount, err))
+		} else {
+			result.Success += fileCount
+		}
+	}
+
+	s.logger.Info("批量删除文件完成",
+		zap.Int("requested", len(ids)),
+		zap.Int("success", result.Success),
+		zap.Int("failed", result.Failed),
+		zap.Int("processing_skipped", len(processingFileIDs)),
+		zap.Int("orphan_deleted", len(orphanFiles)),
+	)
+
+	return result, nil
+}
+
+// deleteOrphanFile 删除孤立文件（没有关联任务的文件）
+func (s *VideoFileService) deleteOrphanFile(file *models.VideoFile) error {
+	// 使用事务删除数据库记录
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&models.VideoFile{}, file.ID).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("删除孤立文件数据库记录失败", zap.Uint("file_id", file.ID), zap.Error(err))
+		return err
+	}
+
+	// 数据库删除成功后，删除物理文件
+	if err := os.Remove(file.FilePath); err != nil && !os.IsNotExist(err) {
+		s.logger.Warn("删除孤立文件物理文件失败",
+			zap.Uint("file_id", file.ID),
+			zap.String("file_path", file.FilePath),
+			zap.Error(err),
+		)
+	}
+
+	s.logger.Info("孤立文件已删除", zap.Uint("file_id", file.ID), zap.String("file_path", file.FilePath))
+
+	return nil
+}
+
+// deleteByTaskID 按任务 ID 删除（删除整个任务目录）
+func (s *VideoFileService) deleteByTaskID(taskID uint) error {
+	// 使用事务删除数据库记录
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 删除任务的所有视频文件记录
+		if err := tx.Where("task_id = ?", taskID).Delete(&models.VideoFile{}).Error; err != nil {
+			return err
+		}
+		// 删除任务记录
+		if err := tx.Delete(&models.VideoRecordingTask{}, taskID).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("删除数据库记录失败", zap.Uint("task_id", taskID), zap.Error(err))
+		return err
+	}
+
+	// 数据库删除成功后，删除物理目录
+	taskDirName := fmt.Sprintf("task_%d", taskID)
+
+	// 删除 recordings 目录
+	recordingsDir := filepath.Join(s.recordingsPath, taskDirName)
+	if err := os.RemoveAll(recordingsDir); err != nil {
+		s.logger.Warn("删除 recordings 目录失败",
+			zap.String("dir", recordingsDir),
+			zap.Error(err),
+		)
+	}
+
+	// 删除 HLS 目录
+	if s.hlsPath != "" {
+		hlsDir := filepath.Join(s.hlsPath, taskDirName)
+		if err := os.RemoveAll(hlsDir); err != nil {
+			s.logger.Warn("删除 HLS 目录失败",
+				zap.String("dir", hlsDir),
+				zap.Error(err),
+			)
+		}
+	}
+
+	s.logger.Info("任务已完全删除", zap.Uint("task_id", taskID))
+
+	return nil
+}
+
 // findCounterpartFile 查找对应格式的文件
 func (s *VideoFileService) findCounterpartFile(file *models.VideoFile) *models.VideoFile {
 	if file.TaskID == nil {
@@ -357,10 +528,12 @@ func (s *VideoFileService) UpdateFileStatus(id uint, status string) error {
 func (s *VideoFileService) GetFileStats(format string) (map[string]interface{}, error) {
 	query := s.db.Model(&models.VideoFile{})
 
-	// 按格式筛选（默认只统计 mp4）
-	if format != "" {
-		query = query.Where("format = ?", format)
+	// 按格式筛选（默认只统计 mp4，忽略 mkv）
+	// 如果 format 为空，则默认只统计 mp4
+	if format == "" {
+		format = "mp4"
 	}
+	query = query.Where("format = ?", format)
 
 	var total int64
 	var totalSize int64

@@ -100,3 +100,25 @@ export interface ScanResult {
   skipped: number    // 跳过的文件数（已存在）
   errors: string[]   // 错误信息列表
 }
+
+// 批量删除请求
+export interface BatchDeleteFilesRequest {
+  ids: number[]
+}
+
+// 批量删除结果
+export interface BatchDeleteFilesResult {
+  success: number
+  failed: number
+  errors: string[]
+}
+
+// 批量删除文件
+export async function batchDeleteFiles(
+  ids: number[]
+): Promise<ApiResponse<BatchDeleteFilesResult>> {
+  return apiRequest<BatchDeleteFilesResult>('/api/v1/files/batch', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  })
+}

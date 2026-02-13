@@ -81,6 +81,8 @@ export default function FileManagement() {
   const [scanning, setScanning] = useState(false)
   const [detailVisible, setDetailVisible] = useState(false)
   const [viewingFile, setViewingFile] = useState<VideoFile | null>(null)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
+  const [batchDeleting, setBatchDeleting] = useState(false)
 
   const [params, setParams] = useState<VideoFileListParams>({
     page: 1,
@@ -165,6 +167,38 @@ export default function FileManagement() {
       message.error(error instanceof Error ? error.message : '删除失败')
     }
   }, [loadFiles, loadStats])
+
+  // 批量删除文件
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的文件')
+      return
+    }
+
+    setBatchDeleting(true)
+    try {
+      const response = await videoFileApi.batchDeleteFiles(selectedRowKeys as number[])
+      if (response.data) {
+        const { success, failed, errors } = response.data
+        if (failed > 0) {
+          // 合并错误消息，避免弹出多个 message
+          const errorSummary = errors.length > 0
+            ? `。错误详情：${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`
+            : ''
+          message.warning(`删除完成：成功 ${success} 个，失败 ${failed} 个${errorSummary}`)
+        } else {
+          message.success(`成功删除 ${success} 个文件`)
+        }
+        setSelectedRowKeys([])
+        loadFiles()
+        loadStats()
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '批量删除失败')
+    } finally {
+      setBatchDeleting(false)
+    }
+  }, [selectedRowKeys, loadFiles, loadStats])
 
   // 查看详情
   const viewDetail = useCallback((file: VideoFile) => {
@@ -366,6 +400,25 @@ export default function FileManagement() {
           <Button icon={<ReloadOutlined />} onClick={() => { loadFiles(); loadStats() }}>
             刷新
           </Button>
+          {selectedRowKeys.length > 0 && (
+            <PermissionGuard permission={PERMISSIONS.FILE_DELETE}>
+              <Popconfirm
+                title={`确定要删除选中的 ${selectedRowKeys.length} 个文件吗？`}
+                onConfirm={handleBatchDelete}
+                okText="确定"
+                cancelText="取消"
+                okType="danger"
+              >
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  loading={batchDeleting}
+                >
+                  批量删除 ({selectedRowKeys.length})
+                </Button>
+              </Popconfirm>
+            </PermissionGuard>
+          )}
           <PermissionGuard permission={PERMISSIONS.FILE_SCAN}>
             <Button
               type="primary"
@@ -385,6 +438,13 @@ export default function FileManagement() {
         rowKey="id"
         loading={loading}
         scroll={{ x: 1400 }}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys),
+          getCheckboxProps: (record: VideoFile) => ({
+            disabled: record.status === 'processing',
+          }),
+        }}
         pagination={{
           current: params.page,
           pageSize: params.page_size,

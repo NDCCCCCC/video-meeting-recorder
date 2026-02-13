@@ -172,6 +172,35 @@ func (h *VideoFileHandler) DeleteFile(c *gin.Context) {
 	response.GinSuccess(c, gin.H{"message": "删除成功"})
 }
 
+// BatchDeleteFilesRequest 批量删除请求
+type BatchDeleteFilesRequest struct {
+	IDs []uint `json:"ids" binding:"required,min=1"`
+}
+
+// BatchDeleteFiles 批量删除文件
+func (h *VideoFileHandler) BatchDeleteFiles(c *gin.Context) {
+	var req BatchDeleteFilesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "参数错误")
+		return
+	}
+
+	result, err := h.fileService.BatchDeleteFiles(req.IDs)
+	if err != nil {
+		h.logger.Error("批量删除文件失败", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "批量删除失败")
+		return
+	}
+
+	h.logger.Info("批量删除文件成功",
+		zap.Int("total", len(req.IDs)),
+		zap.Int("success", result.Success),
+		zap.Int("failed", result.Failed),
+	)
+
+	response.GinSuccess(c, result)
+}
+
 // GetFileStats 获取文件统计信息
 func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
 	// 获取格式参数，默认只统计 mp4
