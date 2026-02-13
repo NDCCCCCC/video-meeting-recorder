@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -385,7 +386,7 @@ func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-API-Key, Authorization")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-API-Key, Authorization, Range")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -404,7 +405,18 @@ func (a *MinimalApp) initHandlers() error {
 	roleService := services.NewRoleService(a.db, a.logger)
 	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger)
 	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
-	a.videoFileService = services.NewVideoFileService(a.db, a.logger, a.config.Storage.RecordingsPath)
+	// 优先使用配置中的 ffprobe_path，否则从 ffmpeg 路径推导
+	ffprobePath := a.config.FFmpeg.FFProbePath
+	if ffprobePath == "" {
+		// 从 ffmpeg 路径推导 ffprobe 路径
+		ffprobePath = "./bin/ffprobe"
+		if a.config.FFmpeg.Path != "" {
+			// 将 ffmpeg 路径中的 ffmpeg 替换为 ffprobe
+			ffmpegDir := filepath.Dir(a.config.FFmpeg.Path)
+			ffprobePath = filepath.Join(ffmpegDir, "ffprobe")
+		}
+	}
+	a.videoFileService = services.NewVideoFileService(a.db, a.logger, a.config.Storage.RecordingsPath, ffprobePath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
 	fileService := storage.NewFileService(a.db, a.logger, a.config)
 	fileHandler := handlers.NewFileHandler(fileService)

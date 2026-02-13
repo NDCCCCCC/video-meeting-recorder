@@ -1,0 +1,2 @@
+# This directory stores ffmpeg and ffprobe binaries
+# DO NOT commit the actual binaries to git

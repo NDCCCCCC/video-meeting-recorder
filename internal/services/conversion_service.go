@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -315,10 +316,17 @@ func (s *FFmpegConversionService) convertMKVToMP4(ctx context.Context, task *mod
 		outputPath,
 	}
 
-	// 执行转换
+	s.logger.Debug("FFmpeg转换命令",
+		zap.Uint("task_id", task.ID),
+		zap.String("ffmpeg", s.ffmpegPath),
+		zap.Any("args", args),
+	)
+
+	// 执行转换，捕获输出用于错误诊断
 	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
 	s.logger.Info("正在执行FFmpeg转换",
 		zap.Uint("task_id", task.ID),
@@ -327,7 +335,16 @@ func (s *FFmpegConversionService) convertMKVToMP4(ctx context.Context, task *mod
 	)
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("FFmpeg转换失败: %w", err)
+		// 记录详细的错误信息
+		s.logger.Error("FFmpeg转换失败",
+			zap.Uint("task_id", task.ID),
+			zap.String("input", inputPath),
+			zap.String("output", outputPath),
+			zap.Error(err),
+			zap.String("stderr", stderr.String()),
+			zap.String("stdout", stdout.String()),
+		)
+		return "", fmt.Errorf("FFmpeg转换失败: %w, stderr: %s", err, stderr.String())
 	}
 
 	// 验证输出文件

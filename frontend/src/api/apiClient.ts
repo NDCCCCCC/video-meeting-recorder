@@ -3,7 +3,7 @@
 
 import type { ApiResponse } from '../types/auth'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 // 正在刷新 token 的标志，防止并发刷新
 let isRefreshing = false
