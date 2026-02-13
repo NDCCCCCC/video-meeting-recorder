@@ -114,6 +114,8 @@ export default function HuaweiConfigManagement() {
       form.setFieldsValue({ port: 22, output_format: 'mp4' })
     }
     setModalVisible(true)
+    // 自动扫描 USB 设备，以便用户选择
+    handleScanDevices()
   }
 
   const closeModal = () => {
