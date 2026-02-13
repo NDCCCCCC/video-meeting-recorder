@@ -19,7 +19,7 @@ export default [
         element: <Navigate to="/tasks" replace />,
       },
       {
-        index: true,
+        path: 'dashboard',
         Component: lazy(() => import('../pages/dashboard')),
       },
       {
