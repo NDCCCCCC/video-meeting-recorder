@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cpic/record_v2/internal/models"
@@ -379,7 +380,12 @@ func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask
 	if task.CreatedBy != userID {
 		return false, "无权限"
 	}
-	if task.Status == models.VideoStatusRecording || task.Status == models.VideoStatusConnecting {
+	// 转换为小写进行比较，忽略大小写差异
+	status := strings.ToLower(string(task.Status))
+	recording := strings.ToLower(string(models.VideoStatusRecording))
+	connecting := strings.ToLower(string(models.VideoStatusConnecting))
+
+	if status == recording || status == connecting {
 		return false, "运行中"
 	}
 	return true, ""
