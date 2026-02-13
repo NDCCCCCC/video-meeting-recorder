@@ -18,10 +18,10 @@ export default [
         index: true,
         element: <Navigate to="/tasks" replace />,
       },
-      // {
-      //   index: true,
-      //   Component: lazy(() => import('../pages/dashboard')),
-      // },
+      {
+        index: true,
+        Component: lazy(() => import('../pages/dashboard')),
+      },
       {
         path: 'tasks',
         Component: lazy(() => import('../pages/tasks')),
@@ -30,10 +30,10 @@ export default [
         path: 'files',
         Component: lazy(() => import('../pages/files')),
       },
-      // {
-      //   path: 'audit',
-      //   Component: lazy(() => import('../pages/audit')),
-      // },
+      {
+        path: 'audit',
+        Component: lazy(() => import('../pages/audit')),
+      },
       {
         path: 'system',
         children: [
