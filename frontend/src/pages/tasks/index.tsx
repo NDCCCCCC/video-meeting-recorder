@@ -73,6 +73,31 @@ export default function TaskManagement() {
   const [huaweiConfigs, setHuaweiConfigs] = useState<HuaweiConfig[]>([])
   const [configsLoading, setConfigsLoading] = useState(false)
 
+  // 配置类型检测辅助函数
+  const getConfigType = (config: HuaweiConfig): 'usb' | 'stream' | 'none' => {
+    // 检查是否有USB设备配置
+    const hasUSB = config.usb_camera_device || config.usb_audio_device
+    // 检查是否启用了流媒体
+    const hasStream = config.stream_enabled && config.stream_url
+
+    if (hasUSB) return 'usb'
+    if (hasStream) return 'stream'
+    return 'none'
+  }
+
+  // 获取配置类型标签
+  const getConfigTypeTag = (config: HuaweiConfig) => {
+    const type = getConfigType(config)
+    switch (type) {
+      case 'usb':
+        return <Tag color="blue">USB</Tag>
+      case 'stream':
+        return <Tag color="green">流媒体({config.stream_protocol?.toUpperCase()})</Tag>
+      default:
+        return <Tag color="default">未配置</Tag>
+    }
+  }
+
   // 行选择状态
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [batchDeleteLoading, setBatchDeleteLoading] = useState(false)
@@ -186,7 +211,7 @@ export default function TaskManagement() {
         pre_join_minutes: task.pre_join_minutes,
         record_delay_minutes: task.record_delay_minutes,
         conference_number: task.conference_number,
-        huawei_config_id: task.huawei_config_id,
+        huawei_config_id: task.huawei_config_id, // 编辑时保持单选兼容
       })
     } else {
       form.resetFields()
@@ -206,8 +231,32 @@ export default function TaskManagement() {
     try {
       const values = await form.validateFields()
 
+      // 处理华为配置：支持单选和多选
+      let configIds: number[] = []
+      if (Array.isArray(values.huawei_config_id)) {
+        configIds = values.huawei_config_id
+      } else if (values.huawei_config_id) {
+        configIds = [values.huawei_config_id]
+      }
+
+      // 验证配置类型限制
+      const selectedConfigs = huaweiConfigs.filter(c => configIds.includes(c.id))
+      const usbCount = selectedConfigs.filter(c => getConfigType(c) === 'usb').length
+      const streamCount = selectedConfigs.filter(c => getConfigType(c) === 'stream').length
+
+      if (usbCount > 1) {
+        message.error('最多只能选择1个USB配置')
+        return
+      }
+      if (streamCount > 1) {
+        message.error('最多只能选择1个流媒体配置')
+        return
+      }
+
       const requestData = {
         ...values,
+        huawei_config_id: Array.isArray(values.huawei_config_id) ? values.huawei_config_id[0] : values.huawei_config_id,
+        huawei_config_ids: Array.isArray(values.huawei_config_id) ? values.huawei_config_id : (values.huawei_config_id ? [values.huawei_config_id] : []),
         start_time: values.start_time.toISOString(),
         end_time: values.end_time.toISOString(),
       }
@@ -238,10 +287,17 @@ export default function TaskManagement() {
 
       closeModal()
       loadTasks()
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '操作失败')
+    } catch (error: any) {
+      if (error?.errorFields) {
+        const firstError = error.errorFields[0]
+        const fieldName = firstError?.name?.[0] || '字段'
+        const errorMessage = firstError?.errors?.[0] || '验证失败'
+        message.error(`${fieldName}: ${errorMessage}`)
+      } else {
+        message.error(error instanceof Error ? error.message : '操作失败')
+      }
     }
-  }, [editingTask, form, closeModal, loadTasks])
+  }, [editingTask, form, closeModal, loadTasks, huaweiConfigs])
 
   // 删除任务
   const handleDelete = useCallback(async (id: number) => {
@@ -613,21 +669,68 @@ export default function TaskManagement() {
 
           <Form.Item
             name="huawei_config_id"
-            label="华为配置"
-            rules={[{ required: !editingTask || canEditAllFields(editingTask.status), message: '请选择华为配置' }]}
+            label="华为配置（最多选一路USB和一路流媒体）"
+            rules={[
+              {
+                validator: async (_, value) => {
+                  if (!value || (Array.isArray(value) && value.length === 0) || (!Array.isArray(value) && !value)) {
+                    throw new Error('请选择华为配置')
+                  }
+                  // 验证配置类型
+                  const ids = Array.isArray(value) ? value : [value]
+                  const selectedConfigs = huaweiConfigs.filter(c => ids.includes(c.id))
+                  const usbCount = selectedConfigs.filter(c => getConfigType(c) === 'usb').length
+                  const streamCount = selectedConfigs.filter(c => getConfigType(c) === 'stream').length
+
+                  if (usbCount > 1) {
+                    throw new Error('最多只能选择1个USB配置')
+                  }
+                  if (streamCount > 1) {
+                    throw new Error('最多只能选择1个流媒体配置')
+                  }
+
+                  // 检查是否有未配置设备或流媒体的配置
+                  const invalidConfigs = selectedConfigs.filter(c => getConfigType(c) === 'none')
+                  if (invalidConfigs.length > 0) {
+                    throw new Error(`配置"${invalidConfigs[0].name}"未配置USB设备或流媒体`)
+                  }
+                }
+              }
+            ]}
           >
             <Select
-              placeholder="请选择华为配置"
+              mode="multiple"
+              placeholder="请选择华为配置（最多选一路USB和一路流媒体）"
               loading={configsLoading}
               showSearch
               optionFilterProp="label"
-              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
+              tagRender={(props) => {
+                const { label, value, onClose } = props
+                const config = huaweiConfigs.find(c => c.id === value)
+                const configType = config ? getConfigType(config) : 'none'
+
+                return (
+                  <Tag
+                    color={configType === 'usb' ? 'blue' : configType === 'stream' ? 'green' : 'default'}
+                    closable
+                    onClose={onClose}
+                    style={{ marginRight: 3 }}
+                  >
+                    {label} {configType === 'stream' && `(${config?.stream_protocol?.toUpperCase()})`}
+                  </Tag>
+                )
+              }}
             >
-              {huaweiConfigs.map((config) => (
-                <Select.Option key={config.id} value={config.id}>
-                  {config.name} ({config.server}:{config.port})
-                </Select.Option>
-              ))}
+              {huaweiConfigs.map((config) => {
+                return (
+                  <Select.Option key={config.id} value={config.id}>
+                    <Space>
+                      {config.name} ({config.server}:{config.port})
+                      {getConfigTypeTag(config)}
+                    </Space>
+                  </Select.Option>
+                )
+              })}
             </Select>
           </Form.Item>
 
