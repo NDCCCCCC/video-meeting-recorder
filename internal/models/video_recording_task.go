@@ -15,7 +15,7 @@ type VideoRecordingTask struct {
 	PreJoinMinutes     int                      `gorm:"default:5" json:"pre_join_minutes"`
 	RecordDelayMinutes int                      `gorm:"default:0" json:"record_delay_minutes"`
 	ConferenceNumber   string                   `gorm:"type:varchar(50);not null;index" json:"conference_number"`
-	HuaweiConfigID     uint                     `gorm:"not null;index" json:"huawei_config_id"`
+	HuaweiConfigID     *uint                    `gorm:"index" json:"huawei_config_id,omitempty"` // 华为配置ID（可选，用于向后兼容），新版本应使用 TaskHuaweiConfigs 关联表
 	HuaweiConfig       *HuaweiConfig            `gorm:"foreignKey:HuaweiConfigID" json:"huawei_config,omitempty"`
 	RTSPStreamURL      string                   `gorm:"type:varchar(500)" json:"rtsp_stream_url"` // RTSP流地址（可选，与USB设备同级）
 	Status             VideoRecordingTaskStatus `gorm:"type:varchar(20);index" json:"status"`
@@ -33,6 +33,9 @@ type VideoRecordingTask struct {
 	ConversionRetryCount  int              `gorm:"default:0" json:"conversion_retry_count"`                     // 转换重试次数
 	CreatedBy             uint             `gorm:"not null" json:"created_by"`
 	Creator               *User            `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+
+	// TaskHuaweiConfigs 任务关联的华为配置列表（多配置支持）
+	TaskHuaweiConfigs []TaskHuaweiConfig `gorm:"foreignKey:TaskID" json:"task_huawei_configs,omitempty"`
 }
 
 // VideoRecordingTaskStatus 任务状态枚举
@@ -85,7 +88,7 @@ func (t *VideoRecordingTask) IsValid() error {
 	if t.ConferenceNumber == "" {
 		return errors.New("会议号不能为空")
 	}
-	if t.HuaweiConfigID == 0 {
+	if t.HuaweiConfigID == nil || *t.HuaweiConfigID == 0 {
 		return errors.New("必须指定华为配置")
 	}
 	return nil
@@ -98,9 +101,9 @@ func (t *VideoRecordingTask) CanTransitionTo(newStatus VideoRecordingTaskStatus)
 		VideoStatusConnecting: {VideoStatusRecording, VideoStatusFailed, VideoStatusCancelled},  // 连接中可以转为录制、失败或取消
 		VideoStatusRecording:  {VideoStatusConverting, VideoStatusFailed, VideoStatusCancelled}, // 录制中可以转为转换中、失败或取消
 		VideoStatusConverting: {VideoStatusCompleted, VideoStatusFailed},                        // 转换中可以转为完成或失败
-		VideoStatusCompleted:  {},                    // 终态
-		VideoStatusFailed:     {VideoStatusPending},  // 可重试
-		VideoStatusCancelled:  {},                    // 终态
+		VideoStatusCompleted:  {},                                                               // 终态
+		VideoStatusFailed:     {VideoStatusPending},                                             // 可重试
+		VideoStatusCancelled:  {},                                                               // 终态
 	}
 
 	allowed, ok := validTransitions[t.Status]
