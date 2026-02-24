@@ -38,6 +38,13 @@ type HuaweiConfig struct {
 	// 录制配置
 	OutputFormat string `gorm:"type:varchar(20);default:'mp4'" json:"output_format"` // mp4, mkv, avi
 
+	// 流媒体配置
+	StreamProtocol string `gorm:"type:varchar(20)" json:"stream_protocol"` // rtmp, rtsp, srt, hls
+	StreamURL      string `gorm:"type:varchar(500)" json:"stream_url"`
+	StreamUsername string `gorm:"type:varchar(100)" json:"stream_username"`
+	StreamPassword string `gorm:"type:varchar(100)" json:"-"` // 不输出到JSON
+	StreamEnabled  bool   `gorm:"default:false" json:"stream_enabled"`
+
 	IsActive bool       `gorm:"default:true" json:"is_active"`
 	IsLocked bool       `gorm:"default:false" json:"is_locked"` // 终端锁定标志
 	LockedBy *uint      `json:"locked_by,omitempty"`            // 锁定者任务ID
