@@ -18,6 +18,7 @@ import (
 	"github.com/cpic/record_v2/internal/handlers"
 	huaweiapi "github.com/cpic/record_v2/internal/huawei"
 	"github.com/cpic/record_v2/internal/middleware"
+	"github.com/cpic/record_v2/internal/migrations"
 	"github.com/cpic/record_v2/internal/models"
 	"github.com/cpic/record_v2/internal/recorder"
 	"github.com/cpic/record_v2/internal/scheduler"
@@ -196,6 +197,11 @@ func (a *MinimalApp) initDatabase() error {
 func (a *MinimalApp) migrateDatabase() error {
 	a.logger.Info("正在执行数据库迁移...")
 
+	// 执行自定义迁移（在 AutoMigrate 之前）
+	if err := a.runCustomMigrations(); err != nil {
+		return err
+	}
+
 	err := a.db.AutoMigrate(
 		&models.User{},
 		&models.Role{},
@@ -212,6 +218,7 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.AuditLog{},
 		&models.NotificationMessage{},
 		&models.UserNotificationSetting{},
+		&models.TaskHuaweiConfig{}, // 添加任务配置关联表
 	)
 
 	if err != nil {
@@ -219,6 +226,37 @@ func (a *MinimalApp) migrateDatabase() error {
 	}
 
 	a.logger.Info("数据库迁移完成")
+	return nil
+}
+
+// runCustomMigrations 执行自定义迁移（SQL迁移）
+func (a *MinimalApp) runCustomMigrations() error {
+	a.logger.Info("正在执行自定义数据库迁移...")
+
+	// 获取注册的迁移
+	migrations := migrations.GetRegisteredMigrations()
+
+	// 执行每个迁移的 Up 方法
+	for _, m := range migrations {
+		migrationName := ""
+		if mi, ok := m.(interface{ Name() string }); ok {
+			migrationName = mi.Name()
+		}
+
+		a.logger.Info("执行迁移", zap.String("migration", migrationName))
+
+		if mu, ok := m.(interface{ Up(*gorm.DB) error }); ok {
+			if err := mu.Up(a.db); err != nil {
+				a.logger.Error("迁移失败",
+					zap.String("migration", migrationName),
+					zap.Error(err),
+				)
+				return fmt.Errorf("migration %s failed: %w", migrationName, err)
+			}
+			a.logger.Info("迁移成功", zap.String("migration", migrationName))
+		}
+	}
+
 	return nil
 }
 
@@ -549,6 +587,7 @@ func (a *MinimalApp) registerRoutes() error {
 		huaweiConfigs.GET("/active", a.handlers.HuaweiConfig.GetActiveConfigs)                 // 获取可用配置
 		huaweiConfigs.GET("/:id", a.handlers.HuaweiConfig.GetConfig)                           // 获取配置详情
 		huaweiConfigs.POST("", a.handlers.HuaweiConfig.CreateConfig)                           // 创建配置
+		huaweiConfigs.POST("/test-stream", a.handlers.HuaweiConfig.TestStream)                 // 测试流媒体连接
 		huaweiConfigs.PUT("/:id", a.handlers.HuaweiConfig.UpdateConfig)                        // 更新配置
 		huaweiConfigs.DELETE("/:id", a.handlers.HuaweiConfig.DeleteConfig)                     // 删除配置
 	}
@@ -730,6 +769,11 @@ func (a *taskServiceAdapter) GetHuaweiConfig(id uint) (*models.HuaweiConfig, err
 		return nil, err
 	}
 	return &config, nil
+}
+
+// GetDB 获取数据库连接
+func (a *taskServiceAdapter) GetDB() *gorm.DB {
+	return a.db
 }
 
 // Start 启动应用

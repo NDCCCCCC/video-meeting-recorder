@@ -230,3 +230,28 @@ func (h *HuaweiConfigHandler) GetRecommendedDevice(c *gin.Context) {
 
 	response.GinSuccess(c, device)
 }
+
+// TestStream 测试流媒体连接
+// @Summary 测试流媒体连接
+// @Description 测试指定流媒体地址的连接是否可用
+// @Tags 华为配置
+// @Security Bearer
+// @Accept json
+// @Produce json
+// @Param request body services.TestStreamRequest true "测试流媒体连接请求"
+// @Success 200 {object} response.Response
+// @Router /api/v1/huawei-configs/test-stream [post]
+func (h *HuaweiConfigHandler) TestStream(c *gin.Context) {
+	var req services.TestStreamRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	if err := h.configService.TestStreamConnection(&req); err != nil {
+		response.GinError(c, response.CodeInternalError, err.Error())
+		return
+	}
+
+	response.GinSuccess(c, gin.H{"message": "连接测试成功"})
+}
