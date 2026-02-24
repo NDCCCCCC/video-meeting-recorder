@@ -2,14 +2,14 @@
 
 **日期**: 2026-02-10
 **作者**: Claude Code
-**状态**: 实施中
+**状态**: 已完成
 
 ## 实施状态
 
-- [x] **Phase 1**: 数据库迁移 + MKV 录制 (已完成)
-- [x] **Phase 2**: 转换服务 (已完成)
-- [x] **Phase 3**: HLS 预览服务 (已完成)
-- [x] **Phase 4**: 前端预览组件 (已完成)
+- ✅ **Phase 1**: 数据库迁移 + MKV 录制 (已完成)
+- ✅ **Phase 2**: 转换服务 (已完成)
+- ✅ **Phase 3**: HLS 预览服务 (已完成)
+- ✅ **Phase 4**: 前端预览组件 (已完成)
 
 ## 概述
 
@@ -155,35 +155,78 @@ type ConversionService interface {
 ### 5.1 路由设计
 
 ```
-GET /api/v1/tasks/:id/preview
-  - 返回 HLS m3u8 文件
+GET /api/v1/recordings/:id/preview
+  - 返回 HLS m3u8 文件信息和带token的播放地址
   - 需要认证 (JWT token)
   - 仅任务创建者可访问
 
-GET /api/v1/tasks/:id/preview/segments/:segment
-  - 返回 TS 分片文件
-  - 需要认证
+GET /api/v1/recordings/:id/preview/stream/:file
+  - 返回 TS 分片文件或 m3u8 播放列表
+  - 需要认证 (HLS token)
   - 仅任务创建者可访问
 ```
 
 ### 5.2 权限验证
 
 ```go
-func (h *TaskHandler) GetHLSPreview(c *gin.Context) {
-    taskID := c.Param("id")
-
-    // 获取任务
-    task, err := h.service.GetTask(taskID)
-
-    // 验证权限
-    claims := jwt.GetClaims(c)
-    if task.CreatedBy != claims.UserID {
-        c.JSON(403, gin.H{"error": "无权限访问此预览"})
+func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
+    id, err := parseUintParam(c, "id")
+    if err != nil {
+        response.GinError(c, response.CodeInvalidRequest, "无效的任务ID")
         return
     }
 
-    // 返回 m3u8 内容
-    c.File(task.HLSPreviewPath)
+    // 获取任务信息
+    task, err := h.taskService.GetTaskByID(id)
+    if err != nil {
+        response.GinError(c, response.CodeNotFound, "任务不存在")
+        return
+    }
+
+    // 检查HLS预览路径是否存在
+    if task.HLSPreviewPath == "" {
+        response.GinError(c, response.CodeNotFound, "该任务没有HLS预览")
+        return
+    }
+
+    // 检查 m3u8 文件是否存在
+    _, m3u8Err := os.Stat(task.HLSPreviewPath)
+    m3u8Exists := m3u8Err == nil
+
+    // 验证权限：只有任务创建者可以访问
+    userID := middleware.GetUserID(c)
+    if task.CreatedBy != userID {
+        response.GinError(c, response.CodeForbidden, "无权限访问此预览")
+        return
+    }
+
+    // 根据状态和文件存在性返回不同响应
+    // 返回完整的 m3u8 播放列表 URL（包含 token）
+    playbackURL := fmt.Sprintf("/api/v1/recordings/%d/preview/stream/index.m3u8", id)
+
+    // 生成访问 token
+    accessToken := h.hlsToken.Generate(id, userID)
+    playbackURLWithToken := fmt.Sprintf("%s?token=%s", playbackURL, accessToken)
+
+    switch {
+    case task.Status == "recording" && !m3u8Exists:
+        response.GinSuccess(c, gin.H{
+            "task_id":      id,
+            "playback_url": playbackURLWithToken,
+            "status":       task.Status,
+            "ready":        false,
+            "message":      "HLS预览正在准备中，请稍后刷新",
+        })
+    case !m3u8Exists:
+        response.GinError(c, response.CodeNotFound, "HLS预览文件不存在")
+    default:
+        response.GinSuccess(c, gin.H{
+            "task_id":      id,
+            "playback_url": playbackURLWithToken,
+            "status":       task.Status,
+            "ready":        true,
+        })
+    }
 }
 ```
 
@@ -192,96 +235,286 @@ func (h *TaskHandler) GetHLSPreview(c *gin.Context) {
 ### 6.1 依赖
 
 ```bash
-npm install react-hls-player
+npm install hls.js
 ```
 
 ### 6.2 组件代码
 
 ```tsx
-import React, { useState, useEffect } from 'react'
-import HlsPlayer from 'react-hls-player'
-import { Button, Modal, Alert } from 'antd'
-import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
-import axios from 'axios'
+// HLS 实时预览组件
+
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Button, Modal, Alert, Space } from 'antd'
+import { ReloadOutlined, EyeOutlined } from '@ant-design/icons'
+import { getTaskPreview } from '../api/task'
+import type { VideoRecordingTask } from '../types/task'
+import Hls from 'hls.js'
 
 interface HLSPreviewProps {
   taskId: number
   taskName: string
+  status: string
 }
 
-export const HLSPreview: React.FC<HLSPreviewProps> = ({ taskId, taskName }) => {
+// HLS 播放器组件（使用 hls.js 库）
+function HLSPlayer({ src, onError }: { src: string; onError: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
+  // 使用 ref 存储稳定的 onError 回调，避免 useEffect 重复触发
+  const onErrorRef = useRef(onError)
+  onErrorRef.current = onError
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    // 清理函数
+    const cleanup = () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
+        hlsRef.current = null
+      }
+    }
+
+    // 加载 HLS
+    const loadHLS = () => {
+      cleanup()
+
+      try {
+        // 检查是否支持 HLS.js
+        if (Hls.isSupported()) {
+          // 使用 hls.js - 直播流优化配置
+          const hls = new Hls({
+            debug: false,
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 30, // 减少后缓冲，降低内存占用
+            maxBufferLength: 30,   // 最大缓冲30秒
+            maxMaxBufferLength: 60,
+            liveSyncDuration: 3,   // 直播同步延迟，尽量接近直播边缘
+            liveMaxLatencyDuration: 10, // 最大延迟10秒
+          })
+
+          hlsRef.current = hls
+
+          hls.loadSource(src)
+          hls.attachMedia(video)
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            console.log('HLS manifest parsed, starting playback')
+            video.play().catch(err => {
+              console.warn('Auto-play prevented:', err)
+            })
+          })
+
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.error('HLS network error:', data)
+                  hls.startLoad()
+                  break
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.error('HLS media error:', data)
+                  hls.recoverMediaError()
+                  break
+                default:
+                  console.error('HLS fatal error:', data)
+                  cleanup()
+                  onErrorRef.current()
+                  break
+              }
+            }
+          })
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari 原生支持
+          video.src = src
+          video.play().catch(err => {
+            console.warn('Auto-play prevented:', err)
+          })
+        } else {
+          onErrorRef.current()
+        }
+      } catch (error) {
+        console.error('HLS load error:', error)
+        onErrorRef.current()
+      }
+    }
+
+    loadHLS()
+
+    return cleanup
+  }, [src]) // 只依赖 src，避免 onError 变化导致重建
+
+  return (
+    <video
+      ref={videoRef}
+      // 直播模式不显示控制条（进度条、时间等）
+      muted    // 静音以提高自动播放成功率
+      playsInline // 移动端防止全屏
+      autoPlay  // 自动播放
+      style={{ width: '100%', maxHeight: '450px', backgroundColor: '#000' }}
+    />
+  )
+}
+
+export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
   const [visible, setVisible] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const [hlsUrl, setHlsUrl] = useState<string>()
+  const [currentStatus, setCurrentStatus] = useState(status)
+  const [isPreparing, setIsPreparing] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const MAX_RETRY_COUNT = 10  // 最大重试次数
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current)
+      }
+    }
+  }, [])
+
+  // 使用 useCallback 稳定回调函数，避免子组件重建
+  const handlePlayerError = useCallback(() => {
+    setError('直播连接中断，请刷新重试')
+  }, [])
 
   const openPreview = async () => {
     setVisible(true)
     setLoading(true)
     setError(undefined)
+    setHlsUrl(undefined)
+    setIsPreparing(false)
+    setRetryCount(0)  // 重置重试计数
+
+    // 清理之前的定时器
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
 
     try {
-      const res = await axios.get(`/api/v1/tasks/${taskId}/preview`)
-      setHlsUrl(res.data.playback_url)
+      const response = await getTaskPreview(taskId)
+      if (response.data) {
+        if (response.data.ready === false) {
+          // HLS 正在准备中
+          setIsPreparing(true)
+          setError(response.data.message || 'HLS预览正在准备中，请稍后刷新')
+          // 自动重试：3秒后自动刷新（最多10次）
+          if (retryCount < MAX_RETRY_COUNT) {
+            retryTimerRef.current = setTimeout(() => {
+              setRetryCount(prev => prev + 1)
+              handleRefresh()
+            }, 3000)
+          } else {
+            setError('HLS预览初始化超时，请关闭后重试')
+            setIsPreparing(false)
+          }
+        } else if (response.data.playback_url) {
+          // HLS 已就绪，使用 API 返回的带 token 的 URL
+          setHlsUrl(response.data.playback_url)
+          setCurrentStatus(response.data.status)
+          setIsPreparing(false)
+          setError(undefined)
+          setRetryCount(0)  // 成功后重置计数
+        }
+      }
     } catch (err: any) {
-      setError(err.response?.data?.error || '加载预览失败')
+      setError(err.response?.data?.message || err.message || '加载预览失败')
+      setIsPreparing(false)
     } finally {
       setLoading(false)
     }
   }
 
-  const handlePlayerError = () => {
-    setError('直播连接中断，请刷新重试')
-  }
+  const handleRefresh = useCallback(() => {
+    openPreview()
+  }, [taskId])
+
+  const handleClose = useCallback(() => {
+    // 清理定时器
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+    setVisible(false)
+    setHlsUrl(undefined)
+    setError(undefined)
+  }, [])
 
   return (
     <>
       <Button
-        icon={<PlayCircleOutlined />}
+        icon={<EyeOutlined />}
         onClick={openPreview}
         size="small"
+        disabled={status !== 'recording'}
+        title={status === 'recording' ? '实时预览' : '仅录制中可预览'}
       >
-        实时预览
+        预览
       </Button>
 
       <Modal
         title={`${taskName} - 实时预览`}
         open={visible}
-        onCancel={() => setVisible(false)}
+        onCancel={handleClose}
         footer={null}
         width={800}
       >
-        {loading && <div className="text-center py-8">加载中...</div>}
+        {loading && (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Space direction="vertical">
+              <div>加载中...</div>
+            </Space>
+          </div>
+        )}
 
         {error && (
           <Alert
-            type="error"
+            type={isPreparing ? "warning" : "error"}
             message={error}
             action={
-              <Button size="small" onClick={openPreview}>
+              <Button size="small" onClick={handleRefresh}>
                 <ReloadOutlined /> 刷新
               </Button>
             }
+            style={{ marginBottom: 16 }}
           />
         )}
 
         {hlsUrl && !error && (
-          <HlsPlayer
-            src={hlsUrl}
-            autoPlay
-            controls
-            width="100%"
-            height={450}
-            onError={handlePlayerError}
-          />
+          <>
+            <HLSPlayer src={hlsUrl} onError={handlePlayerError} />
+            <div style={{ marginTop: 16, color: '#999', fontSize: 12 }}>
+              <Space>
+                <span>状态: {currentStatus === 'recording' ? '录制中' : currentStatus}</span>
+                <span>•</span>
+                <span>预览延迟约 3-5 秒</span>
+              </Space>
+            </div>
+          </>
         )}
 
-        <div className="text-gray-500 text-sm mt-2">
-          预览延迟约 3-10 秒
-        </div>
+        {!loading && !error && !hlsUrl && (
+          <Alert
+            type="warning"
+            message="暂无预览可用"
+            description="该任务暂无可用的 HLS 预览流"
+          />
+        )}
       </Modal>
     </>
   )
+}
+
+// 用于在表格中渲染的包装组件
+export function RenderTaskPreview(task: VideoRecordingTask) {
+  return <HLSPreview taskId={task.id} taskName={task.name} status={task.status} />
 }
 ```
 
@@ -366,7 +599,7 @@ require (
 ```json
 {
   "dependencies": {
-    "react-hls-player": "^3.0.7"
+    "hls.js": "^1.4.12"
   }
 }
 ```
@@ -375,31 +608,45 @@ require (
 
 ```yaml
 # config.yaml
-recording:
-  format: "mkv"
-  enable_hls: true
-  hls_segment_duration: 10
-
-conversion:
-  max_workers: 3
-  max_retries: 3
-
 storage:
   recordings_path: "./data/recordings"
   hls_path: "./data/hls"
-  cleanup_days: 30
+  temp_path: "./data/temp"
+  max_disk_usage: 90
+
+ffmpeg:
+  path: "./bin/ffmpeg"
+  ffprobe_path: "./bin/ffprobe"
+  max_processes: 5
+  timeout: "5m"
+  default_codec: "h264"
+  default_format: "mp4"
+  default_video_bitrate: "2000"
+  default_audio_bitrate: "128"
+  # DShow 设备配置
+  dshow_buffer_size: 2097152      # 2MB 实时缓冲区
+  dshow_thread_queue_size: 8      # 线程队列大小
+  # HLS 配置
+  hls_segment_duration: 10        # HLS 分片时长（秒）
+  hls_list_size: 5                # HLS 播放列表保留分片数
+  # 录制监控配置
+  max_recording_duration: "24h"   # 最长录制时长
+
+auth:
+  hls_token_secret: "change-me-in-production"
+  hls_token_duration: "5m"
 ```
 
 ### 数据库迁移
 
 在 `internal/migrations/` 创建新迁移文件，执行上述 SQL 变更。
 
-## 10. 实施顺序
+## 实施顺序
 
 1. **Phase 1**: 数据库迁移 + MKV 录制 ✅
-2. **Phase 2**: 转换服务 (进行中)
-3. **Phase 3**: HLS 预览服务
-4. **Phase 4**: 前端预览组件
+2. **Phase 2**: 转换服务 ✅
+3. **Phase 3**: HLS 预览服务 ✅
+4. **Phase 4**: 前端预览组件 ✅
 
 ## 11. Phase 1 实施记录 ✅
 
@@ -492,22 +739,26 @@ POST /api/v1/recordings/:id/conversion-retry - 重试转换
    - 添加 `getHLSPath` 函数生成 HLS 目录路径
    - 修改 `buildRecordingCommand` 使用 tee muxer 双输出
    - 修改 `StartRecording` 同时设置 MKV 和 HLS 路径
-   - Tee muxer 格式: `[f=mkv]{mkv}|[f=hls:hls_time=10:hls_list_size=0:hls_segment_filename={segment}]{m3u8}]`
+   - Tee muxer 格式: 优化的 Windows 路径处理，使用相对路径避免转义问题
 
 3. **`internal/handlers/video_recording_task_handler.go`**
-   - 添加 `GetHLSPreview` 端点
-   - 添加 `ServeHLSStream` 端点
+   - 添加 `GetHLSPreview` 端点（返回带token的播放地址）
+   - 添加 `ServeHLSStream` 端点（支持 m3u8 重写和分段访问）
    - 添加路径遍历安全检查函数
    - 权限验证：仅任务创建者可访问
+   - HLS token 验证机制
 
 4. **`cmd/server/app.go`**
    - 注册 HLS 预览相关路由
 
+5. **`internal/auth/hlstoken/hls_token.go`** (新建)
+   - HLS 预览访问 token 生成和验证
+
 ### API 端点
 
 ```
-GET /api/v1/recordings/:id/preview - 获取HLS预览信息
-GET /api/v1/recordings/:id/preview/stream/:file - 提供HLS流文件
+GET /api/v1/recordings/:id/preview - 获取HLS预览信息和带token的播放地址
+GET /api/v1/recordings/:id/preview/stream/:file - 提供HLS流文件（需要token）
 ```
 
 ### HLS 文件结构
@@ -532,9 +783,11 @@ data/hls/
 
 2. **`frontend/src/components/HLSPreview.tsx`** (新建)
    - 创建 `HLSPreview` 组件
-   - 使用原生 Media Source Extensions API 播放 HLS
-   - 支持错误处理和刷新功能
+   - 使用 `hls.js` 库实现 HLS 播放
+   - 优化直播流配置（低延迟模式）
+   - 支持自动重试机制（HLS准备中状态）
    - 模态对话框显示预览播放器
+   - 错误处理和用户友好提示
 
 3. **`frontend/src/pages/tasks/index.tsx`**
    - 导入 `HLSPreview` 组件
@@ -543,11 +796,13 @@ data/hls/
 
 ### 功能特性
 
-- 原生 HLS 播放（无需外部库）
+- 使用 `hls.js` 库实现高质量 HLS 播放
 - 仅录制中任务可预览
 - 权限验证（仅任务创建者）
-- 错误处理和重试
-- 预览延迟约 3-10 秒
+- 错误处理和自动重试
+- 预览延迟约 3-5 秒（优化的低延迟配置）
+- 响应式设计，支持不同屏幕尺寸
+- 自动检测 HLS 准备状态并提示用户
 
 ## 附录：相关文件
 
