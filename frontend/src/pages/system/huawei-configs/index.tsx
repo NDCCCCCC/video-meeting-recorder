@@ -28,6 +28,7 @@ import {
   ScanOutlined,
   VideoCameraOutlined,
   AudioOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import * as huaweiConfigApi from '../../../api/huawei-config'
@@ -37,6 +38,7 @@ import type {
   CreateHuaweiConfigRequest,
   UpdateHuaweiConfigRequest,
   USBDeviceInfo,
+  TestStreamRequest,
 } from '../../../types/huawei-config'
 
 export default function HuaweiConfigManagement() {
@@ -108,10 +110,17 @@ export default function HuaweiConfigManagement() {
         usb_audio_device: config.usb_audio_device,
         record_directory: config.record_directory,
         output_format: config.output_format,
+        camera_backend: config.camera_backend,
+        audio_backend: config.audio_backend,
+        // 流媒体配置
+        stream_protocol: config.stream_protocol,
+        stream_url: config.stream_url,
+        stream_username: config.stream_username,
+        stream_enabled: config.stream_enabled || false,
       })
     } else {
       form.resetFields()
-      form.setFieldsValue({ port: 22, output_format: 'mp4' })
+      form.setFieldsValue({ port: 22, output_format: 'mp4', stream_enabled: false })
     }
     setModalVisible(true)
     // 自动扫描 USB 设备，以便用户选择
@@ -144,6 +153,14 @@ export default function HuaweiConfigManagement() {
           usb_audio_device: values.usb_audio_device,
           record_directory: values.record_directory,
           output_format: values.output_format,
+          camera_backend: values.camera_backend,
+          audio_backend: values.audio_backend,
+          // 流媒体配置
+          stream_protocol: values.stream_protocol,
+          stream_url: values.stream_url,
+          stream_username: values.stream_username,
+          stream_password: values.stream_password,
+          stream_enabled: values.stream_enabled,
         }
         // 只有在密码字段有值时才更新密码
         if (values.password && values.password.trim() !== '') {
@@ -168,6 +185,14 @@ export default function HuaweiConfigManagement() {
           usb_audio_device: values.usb_audio_device,
           record_directory: values.record_directory,
           output_format: values.output_format,
+          camera_backend: values.camera_backend,
+          audio_backend: values.audio_backend,
+          // 流媒体配置
+          stream_protocol: values.stream_protocol,
+          stream_url: values.stream_url,
+          stream_username: values.stream_username,
+          stream_password: values.stream_password,
+          stream_enabled: values.stream_enabled,
         }
         await huaweiConfigApi.createHuaweiConfig(req)
         message.success('创建成功')
@@ -263,6 +288,27 @@ export default function HuaweiConfigManagement() {
       usb_audio_device: deviceIndex,     // 设备索引
     })
     message.info(`已选择音频设备: ${device.name}`)
+  }
+
+  // 测试流媒体连接
+  const handleTestStream = async () => {
+    try {
+      const values = await form.validateFields(['stream_protocol', 'stream_url'])
+      const req: TestStreamRequest = {
+        protocol: values.stream_protocol,
+        url: values.stream_url,
+        username: values.stream_username,
+        password: values.stream_password,
+      }
+      await huaweiConfigApi.testStream(req)
+      message.success('流媒体连接测试成功')
+    } catch (error: any) {
+      if (error?.errorFields) {
+        message.error('请先填写协议和URL')
+      } else {
+        message.error(error instanceof Error ? error.message : '连接测试失败')
+      }
+    }
   }
 
   const columns: ColumnsType<HuaweiConfig> = [
@@ -569,6 +615,81 @@ export default function HuaweiConfigManagement() {
 
                     <Form.Item name="usb_audio_device" label="音频设备">
                       <Input placeholder="例如: hw:1,0" addonBefore={<AudioOutlined />} />
+                    </Form.Item>
+                  </>
+                ),
+              },
+              {
+                key: 'stream',
+                label: '流媒体配置',
+                children: (
+                  <>
+                    <Form.Item
+                      name="stream_enabled"
+                      label="启用流媒体录制"
+                      valuePropName="checked"
+                    >
+                      <Select
+                        options={[
+                          { label: '禁用', value: false },
+                          { label: '启用', value: true },
+                        ]}
+                      />
+                    </Form.Item>
+
+                    <Form.Item noStyle shouldUpdate={(prev, curr) => prev.stream_enabled !== curr.stream_enabled}>
+                      {({ getFieldValue }) =>
+                        getFieldValue('stream_enabled') ? (
+                          <>
+                            <Form.Item
+                              name="stream_protocol"
+                              label="流媒体协议"
+                              rules={[{ required: true, message: '请选择流媒体协议' }]}
+                            >
+                              <Select
+                                placeholder="请选择协议类型"
+                                options={[
+                                  { label: 'RTMP', value: 'rtmp' },
+                                  { label: 'RTSP', value: 'rtsp' },
+                                  { label: 'SRT', value: 'srt' },
+                                  { label: 'HLS', value: 'hls' },
+                                ]}
+                              />
+                            </Form.Item>
+
+                            <Form.Item
+                              name="stream_url"
+                              label="流媒体URL"
+                              rules={[
+                                { required: true, message: '请输入流媒体URL' },
+                                { type: 'url', message: '请输入有效的URL' },
+                              ]}
+                            >
+                              <Input placeholder="例如: rtmp://example.com/live/stream" />
+                            </Form.Item>
+
+                            <Space size="large" style={{ width: '100%' }}>
+                              <Form.Item name="stream_username" label="用户名（可选）">
+                                <Input placeholder="请输入用户名" />
+                              </Form.Item>
+
+                              <Form.Item name="stream_password" label="密码（可选）">
+                                <Input.Password placeholder="请输入密码" />
+                              </Form.Item>
+                            </Space>
+
+                            <Form.Item label="连接测试">
+                              <Button
+                                type="default"
+                                icon={<PlayCircleOutlined />}
+                                onClick={handleTestStream}
+                              >
+                                测试连接
+                              </Button>
+                            </Form.Item>
+                          </>
+                        ) : null
+                      }
                     </Form.Item>
                   </>
                 ),
