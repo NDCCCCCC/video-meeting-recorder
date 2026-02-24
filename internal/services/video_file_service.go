@@ -81,7 +81,7 @@ type ListFilesResponse struct {
 type ScanResult struct {
 	Scanned int      `json:"scanned"`
 	Created int      `json:"created"`
-	Updated int      `json:"updated"`  // 更新的文件数量
+	Updated int      `json:"updated"` // 更新的文件数量
 	Skipped int      `json:"skipped"`
 	Errors  []string `json:"errors"`
 }
@@ -988,8 +988,8 @@ func (s *VideoFileService) handleExistingFile(file fileInfoWithPath, result *Sca
 	// 如果有任务ID，检查转换状态
 	if taskID > 0 {
 		var task models.VideoRecordingTask
-		if err := s.db.Select("id, " +
-			"conversion_status, " +
+		if err := s.db.Select("id, "+
+			"conversion_status, "+
 			"status").First(&task, taskID).Error; err == nil {
 
 			// 如果任务还在转换中或转换失败，跳过元数据更新
