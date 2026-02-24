@@ -8,6 +8,7 @@ import type {
   UpdateHuaweiConfigRequest,
   USBDevicesScanResult,
   USBDeviceInfo,
+  TestStreamRequest,
 } from '../types/huawei-config'
 import type { ApiResponse } from '../types/auth'
 import { apiRequest } from './apiClient'
@@ -76,4 +77,14 @@ export async function scanUSBDevices(): Promise<ApiResponse<USBDevicesScanResult
 // 获取推荐设备
 export async function getRecommendedDevice(type: 'camera' | 'audio'): Promise<ApiResponse<USBDeviceInfo | null>> {
   return apiRequest(`/api/v1/huawei-configs/recommended-device?type=${type}`)
+}
+
+// 测试流媒体连接
+export async function testStream(
+  req: TestStreamRequest
+): Promise<ApiResponse<void>> {
+  return apiRequest('/api/v1/huawei-configs/test-stream', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
 }
