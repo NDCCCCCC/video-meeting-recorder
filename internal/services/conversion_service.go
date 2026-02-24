@@ -382,7 +382,7 @@ func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecord
 			"conversion_status":    models.ConversionStatusFailed,
 			"conversion_error_msg": err.Error(),
 			// 同时更新任务状态为失败
-			"status": models.VideoStatusFailed,
+			"status":    models.VideoStatusFailed,
 			"error_msg": fmt.Sprintf("转换失败: %s", err.Error()),
 		})
 		s.logger.Error("转换失败，已达最大重试次数，任务已标记为失败",
