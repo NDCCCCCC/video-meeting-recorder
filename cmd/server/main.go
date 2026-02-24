@@ -21,7 +21,7 @@ func main() {
 	}
 
 	// 初始化日志
-	logger, err := logging.New(cfg.Logging)
+	logger, err := logging.New(cfg.Logging, cfg.Server.Environment)
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
