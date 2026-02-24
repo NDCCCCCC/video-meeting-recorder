@@ -54,6 +54,12 @@ type CreateConfigRequest struct {
 	USBAudioName     string `json:"usb_audio_name" binding:"omitempty,max=100"`
 	USBAudioDevice   string `json:"usb_audio_device" binding:"omitempty,max=100"`
 	OutputFormat     string `json:"output_format" binding:"omitempty,max=20"`
+	// 流媒体配置字段
+	StreamProtocol string `json:"stream_protocol" binding:"omitempty,oneof=rtmp rtsp srt hls"`
+	StreamURL      string `json:"stream_url" binding:"omitempty,max=500,url"`
+	StreamUsername string `json:"stream_username" binding:"omitempty,max=100"`
+	StreamPassword string `json:"stream_password" binding:"omitempty,max=100"`
+	StreamEnabled  bool   `json:"stream_enabled"`
 }
 
 // UpdateConfigRequest 更新配置请求
@@ -74,6 +80,20 @@ type UpdateConfigRequest struct {
 	USBAudioDevice   *string `json:"usb_audio_device" binding:"omitempty,max=100"`
 	OutputFormat     *string `json:"output_format" binding:"omitempty,max=20"`
 	IsActive         *bool   `json:"is_active"`
+	// 流媒体配置字段
+	StreamProtocol *string `json:"stream_protocol" binding:"omitempty,oneof=rtmp rtsp srt hls"`
+	StreamURL      *string `json:"stream_url" binding:"omitempty,max=500,url"`
+	StreamUsername *string `json:"stream_username" binding:"omitempty,max=100"`
+	StreamPassword *string `json:"stream_password" binding:"omitempty,max=100"`
+	StreamEnabled  *bool   `json:"stream_enabled"`
+}
+
+// TestStreamRequest 测试流媒体连接请求
+type TestStreamRequest struct {
+	Protocol string `json:"protocol" binding:"required,oneof=rtmp rtsp srt hls"`
+	URL      string `json:"url" binding:"required,max=500,url"`
+	Username string `json:"username" binding:"omitempty,max=100"`
+	Password string `json:"password" binding:"omitempty,max=100"`
 }
 
 // ListConfigs 获取配置列表
@@ -142,6 +162,11 @@ func (s *HuaweiConfigService) CreateConfig(req *CreateConfigRequest) (*models.Hu
 		USBAudioName:     req.USBAudioName,
 		USBAudioDevice:   req.USBAudioDevice,
 		OutputFormat:     req.OutputFormat,
+		StreamProtocol:   req.StreamProtocol,
+		StreamURL:        req.StreamURL,
+		StreamUsername:   req.StreamUsername,
+		StreamPassword:   req.StreamPassword,
+		StreamEnabled:    req.StreamEnabled,
 		IsActive:         true,
 	}
 
@@ -234,6 +259,21 @@ func (s *HuaweiConfigService) UpdateConfig(id uint, req *UpdateConfigRequest) (*
 	}
 	if req.IsActive != nil {
 		updates["is_active"] = *req.IsActive
+	}
+	if req.StreamProtocol != nil {
+		updates["stream_protocol"] = *req.StreamProtocol
+	}
+	if req.StreamURL != nil {
+		updates["stream_url"] = *req.StreamURL
+	}
+	if req.StreamUsername != nil {
+		updates["stream_username"] = *req.StreamUsername
+	}
+	if req.StreamPassword != nil {
+		updates["stream_password"] = *req.StreamPassword
+	}
+	if req.StreamEnabled != nil {
+		updates["stream_enabled"] = *req.StreamEnabled
 	}
 
 	if err := s.db.Model(&config).Updates(updates).Error; err != nil {
@@ -362,5 +402,18 @@ func (s *HuaweiConfigService) validateBackendConfig(config *models.HuaweiConfig)
 		return fmt.Errorf("无效的输出格式: %s，支持的格式: mp4, mkv, avi", config.OutputFormat)
 	}
 
+	return nil
+}
+
+// TestStreamConnection 测试流媒体连接
+func (s *HuaweiConfigService) TestStreamConnection(req *TestStreamRequest) error {
+	// TODO: 使用 FFprobe 或 FFmpeg 测试连接
+	// 构建测试命令，设置10秒超时
+	// 返回连接是否成功
+	s.logger.Info("测试流媒体连接",
+		zap.String("protocol", req.Protocol),
+		zap.String("url", req.URL),
+	)
+	// 暂时返回成功，后续实现实际的连接测试
 	return nil
 }
