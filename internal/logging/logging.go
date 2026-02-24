@@ -11,7 +11,7 @@ import (
 )
 
 // New 创建日志器
-func New(cfg config.LoggingConfig) (*zap.Logger, error) {
+func New(cfg config.LoggingConfig, environment string) (*zap.Logger, error) {
 	// 解析日志级别
 	level, err := zapcore.ParseLevel(cfg.Level)
 	if err != nil {
@@ -33,14 +33,13 @@ func New(cfg config.LoggingConfig) (*zap.Logger, error) {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
-	// 根据格式选择编码器
-	var encoder zapcore.Encoder
-	if cfg.Format == "console" {
-		encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
-	} else {
-		encoder = zapcore.NewJSONEncoder(encoderConfig)
-	}
+	// 创建控制台编码器（彩色，人类可读）
+	consoleEncoderConfig := encoderConfig
+	consoleEncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
+
+	// 创建文件编码器（JSON，结构化）
+	fileEncoder := zapcore.NewJSONEncoder(encoderConfig)
 
 	// 日志轮转
 	writer := &lumberjack.Logger{
@@ -51,14 +50,23 @@ func New(cfg config.LoggingConfig) (*zap.Logger, error) {
 		Compress:   cfg.Compress,
 	}
 
-	// 同时输出到控制台和文件
+	// 同时输出到控制台和文件，使用不同的格式
 	core := zapcore.NewTee(
-		zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), level),
-		zapcore.NewCore(encoder, zapcore.AddSync(writer), level),
+		zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), level),
+		zapcore.NewCore(fileEncoder, zapcore.AddSync(writer), level),
 	)
 
 	// 创建logger
 	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+
+	// 记录日志初始化信息
+	logger.Info("Logger initialized",
+		zap.String("environment", environment),
+		zap.String("level", cfg.Level),
+		zap.String("console_format", "console"),
+		zap.String("file_format", "json"),
+		zap.String("output_dir", cfg.Output),
+	)
 
 	return logger, nil
 }
