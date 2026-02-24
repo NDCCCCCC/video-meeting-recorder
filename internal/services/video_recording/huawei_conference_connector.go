@@ -59,15 +59,21 @@ func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huawei.HuaweiConfigDB
 // ConnectToConference 连接到华为会议
 // 执行流程：1. 加载配置 2. 锁定终端 3. 呼叫会议 4. 等待连接确认
 func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, task *models.VideoRecordingTask) error {
+	// 获取配置ID
+	configID, err := getConfigID(task)
+	if err != nil {
+		return err
+	}
+
 	c.logger.Info("开始连接华为会议",
 		zap.Uint("task_id", task.ID),
 		zap.String("task_name", task.Name),
-		zap.Uint("huawei_config_id", task.HuaweiConfigID),
+		zap.Uint("huawei_config_id", configID),
 		zap.String("conference_number", task.ConferenceNumber),
 	)
 
 	// 1. 加载华为配置
-	config, err := c.getHuaweiConfig(task.HuaweiConfigID)
+	config, err := c.getHuaweiConfig(configID)
 	if err != nil {
 		return fmt.Errorf("加载华为配置失败: %w", err)
 	}
@@ -90,14 +96,14 @@ func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, tas
 		Subject:          fmt.Sprintf("录制任务: %s", task.Name),
 	}
 
-	if err := c.manager.SafeCallConference(ctx, task.HuaweiConfigID, callReq); err != nil {
+	if err := c.manager.SafeCallConference(ctx, configID, callReq); err != nil {
 		c.unlockTerminal(config.ID) // 释放锁
 		return fmt.Errorf("呼叫会议失败: %w", err)
 	}
 
 	// 5. 等待连接确认
 	waitTimeout := 30 * time.Second
-	if err := c.manager.WaitForConnection(ctx, task.HuaweiConfigID, task.ConferenceNumber, config.TerminalNumber, waitTimeout); err != nil {
+	if err := c.manager.WaitForConnection(ctx, configID, task.ConferenceNumber, config.TerminalNumber, waitTimeout); err != nil {
 		c.unlockTerminal(config.ID)
 		return fmt.Errorf("等待连接失败: %w", err)
 	}
@@ -113,13 +119,19 @@ func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, tas
 
 // DisconnectFromConference 断开华为会议连接
 func (c *HuaweiConferenceConnector) DisconnectFromConference(ctx context.Context, task *models.VideoRecordingTask) error {
+	// 获取配置ID
+	configID, err := getConfigID(task)
+	if err != nil {
+		return err
+	}
+
 	c.logger.Info("断开华为会议",
 		zap.Uint("task_id", task.ID),
 		zap.String("conference_number", task.ConferenceNumber),
 	)
 
 	// 1. 加载华为配置
-	config, err := c.getHuaweiConfig(task.HuaweiConfigID)
+	config, err := c.getHuaweiConfig(configID)
 	if err != nil {
 		return fmt.Errorf("加载华为配置失败: %w", err)
 	}
@@ -129,7 +141,7 @@ func (c *HuaweiConferenceConnector) DisconnectFromConference(ctx context.Context
 		TerminalNumber: config.TerminalNumber,
 	}
 
-	if err := c.manager.HangupConference(ctx, task.HuaweiConfigID, hangupReq); err != nil {
+	if err := c.manager.HangupConference(ctx, configID, hangupReq); err != nil {
 		c.logger.Warn("挂断会议失败", zap.Error(err))
 		// 继续执行解锁操作
 	}
@@ -149,12 +161,18 @@ func (c *HuaweiConferenceConnector) DisconnectFromConference(ctx context.Context
 
 // GetRTSPStreams 获取会议的RTSP流地址
 func (c *HuaweiConferenceConnector) GetRTSPStreams(ctx context.Context, task *models.VideoRecordingTask) ([]huawei.RTSPStream, error) {
+	// 获取配置ID
+	configID, err := getConfigID(task)
+	if err != nil {
+		return nil, err
+	}
+
 	c.logger.Info("获取RTSP流",
 		zap.Uint("task_id", task.ID),
 		zap.String("conference_number", task.ConferenceNumber),
 	)
 
-	streams, err := c.manager.GetRTSPStreams(ctx, task.HuaweiConfigID, task.ConferenceNumber)
+	streams, err := c.manager.GetRTSPStreams(ctx, configID, task.ConferenceNumber)
 	if err != nil {
 		return nil, fmt.Errorf("获取RTSP流失败: %w", err)
 	}
@@ -177,7 +195,11 @@ func (c *HuaweiConferenceConnector) GetRTSPStreams(ctx context.Context, task *mo
 
 // GetConferenceInfo 获取会议信息
 func (c *HuaweiConferenceConnector) GetConferenceInfo(ctx context.Context, task *models.VideoRecordingTask) (*huawei.ConferenceInfo, error) {
-	return c.manager.GetConferenceInfo(ctx, task.HuaweiConfigID, task.ConferenceNumber)
+	configID, err := getConfigID(task)
+	if err != nil {
+		return nil, err
+	}
+	return c.manager.GetConferenceInfo(ctx, configID, task.ConferenceNumber)
 }
 
 // GetTerminalStatus 获取终端状态
@@ -448,4 +470,12 @@ func (c *HuaweiConferenceConnector) GetActiveTerminals(ctx context.Context) ([]m
 	}
 
 	return available, nil
+}
+
+// getConfigID 从任务获取华为配置ID（支持指针类型）
+func getConfigID(task *models.VideoRecordingTask) (uint, error) {
+	if task.HuaweiConfigID == nil {
+		return 0, fmt.Errorf("华为配置ID未设置")
+	}
+	return *task.HuaweiConfigID, nil
 }
