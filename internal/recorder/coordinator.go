@@ -19,8 +19,8 @@ import (
 type SimpleRecordingCoordinator struct {
 	logger      *zap.Logger
 	config      *config.Config
-	processes   map[uint]*RecordingProcess
-	cancelFuncs map[uint]context.CancelFunc
+	processes   map[string]*RecordingProcess // 使用字符串键支持多配置 (taskID_configType)
+	cancelFuncs map[string]context.CancelFunc
 	mu          sync.RWMutex
 }
 
@@ -40,22 +40,28 @@ type RecordingProcess struct {
 type InputSourceType string
 
 const (
-	InputSourceUSB   InputSourceType = "usb"   // USB设备
-	InputSourceRTSP  InputSourceType = "rtsp"  // RTSP流
-	InputSourceMixed InputSourceType = "mixed" // 混合输入
+	InputSourceUSB    InputSourceType = "usb"    // USB设备
+	InputSourceRTSP   InputSourceType = "rtsp"   // RTSP流
+	InputSourceRTMP   InputSourceType = "rtmp"   // RTMP流
+	InputSourceStream InputSourceType = "stream" // 通用流媒体
+	InputSourceMixed  InputSourceType = "mixed"  // 混合输入
 )
 
 // RecordingInput 录制输入配置
 type RecordingInput struct {
-	Type          InputSourceType `json:"type"`
-	RTSPURL       string          `json:"rtsp_url,omitempty"`
-	CameraBackend string          `json:"camera_backend"`
-	AudioBackend  string          `json:"audio_backend"`
-	CameraDevice  string          `json:"camera_device,omitempty"`
-	AudioDevice   string          `json:"audio_device,omitempty"`
-	CameraName    string          `json:"camera_name,omitempty"` // 实际设备名称
-	AudioName     string          `json:"audio_name,omitempty"`  // 实际设备名称
-	hasAudio      bool            // 内部标记是否有音频
+	Type           InputSourceType `json:"type"`
+	RTSPURL        string          `json:"rtsp_url,omitempty"`
+	StreamProtocol string          `json:"stream_protocol,omitempty"` // rtmp, rtsp, srt, hls
+	StreamURL      string          `json:"stream_url,omitempty"`
+	StreamUsername string          `json:"stream_username,omitempty"`
+	StreamPassword string          `json:"stream_password,omitempty"`
+	CameraBackend  string          `json:"camera_backend"`
+	AudioBackend   string          `json:"audio_backend"`
+	CameraDevice   string          `json:"camera_device,omitempty"`
+	AudioDevice    string          `json:"audio_device,omitempty"`
+	CameraName     string          `json:"camera_name,omitempty"` // 实际设备名称
+	AudioName      string          `json:"audio_name,omitempty"`  // 实际设备名称
+	hasAudio       bool            // 内部标记是否有音频
 }
 
 // NewSimpleRecordingCoordinator 创建录制协调器
@@ -63,24 +69,30 @@ func NewSimpleRecordingCoordinator(logger *zap.Logger, cfg *config.Config) *Simp
 	return &SimpleRecordingCoordinator{
 		logger:      logger,
 		config:      cfg,
-		processes:   make(map[uint]*RecordingProcess),
-		cancelFuncs: make(map[uint]context.CancelFunc),
+		processes:   make(map[string]*RecordingProcess),
+		cancelFuncs: make(map[string]context.CancelFunc),
 	}
 }
 
 // StartRecording 启动录制
 func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig) error {
+	// 默认使用 USB 类型
+	return c.StartRecordingWithConfig(task, huaweiConfig, "usb")
+}
+
+// StartRecordingWithConfig 启动指定配置类型的录制
+func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig, configType string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// 使用 MKV 格式（MKV 在中断时不易损坏）
-	mkvPath := c.getOutputPath(task, "mkv")
+	// 根据配置类型生成输出路径
+	mkvPath := c.getOutputPathWithType(task, configType, "mkv")
 	if err := os.MkdirAll(filepath.Dir(mkvPath), 0755); err != nil {
 		return fmt.Errorf("创建输出目录失败: %w", err)
 	}
 
 	// 生成 HLS 输出路径
-	hlsPath := c.getHLSPath(task)
+	hlsPath := c.getHLSPathWithType(task, configType)
 	if err := os.MkdirAll(hlsPath, 0755); err != nil {
 		return fmt.Errorf("创建HLS目录失败: %w", err)
 	}
@@ -105,7 +117,9 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 	// HLS m3u8 文件路径
 	m3u8Path := filepath.Join(hlsPath, "index.m3u8")
 
-	c.processes[task.ID] = &RecordingProcess{
+	// 使用带配置类型的键存储进程
+	processKey := c.getProcessKey(task.ID, configType)
+	c.processes[processKey] = &RecordingProcess{
 		TaskID:     task.ID,
 		Cmd:        cmd,
 		StartTime:  time.Now(),
@@ -115,22 +129,95 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 		CancelFunc: cancel,
 		logFile:    logFile,
 	}
-	c.cancelFuncs[task.ID] = cancel
-	task.RecordingFile = mkvPath   // 兼容旧字段
-	task.MKVFilePath = mkvPath     // 新字段指向 MKV 文件
-	task.HLSPreviewPath = m3u8Path // HLS 预览路径
+	c.cancelFuncs[processKey] = cancel
+
+	// 对于主配置（USB或第一个配置），更新任务的主要路径
+	if configType == "usb" || task.MKVFilePath == "" {
+		task.RecordingFile = mkvPath
+		task.MKVFilePath = mkvPath
+		task.HLSPreviewPath = m3u8Path
+	}
 
 	c.logger.Info("录制已启动（同时生成 MKV 和 HLS）",
 		zap.Uint("task_id", task.ID),
+		zap.String("config_type", configType),
 		zap.String("input_type", string(input.Type)),
 		zap.String("mkv_path", mkvPath),
 		zap.String("hls_path", m3u8Path),
 	)
 
 	// 启动监控 goroutine，等待进程结束
-	go c.monitorProcess(task.ID, cmd, ctx)
+	go c.monitorProcessWithKey(processKey, cmd, ctx)
 
 	return nil
+}
+
+// getProcessKey 获取进程键
+func (c *SimpleRecordingCoordinator) getProcessKey(taskID uint, configType string) string {
+	return fmt.Sprintf("%d_%s", taskID, configType)
+}
+
+// getOutputPathWithType 生成带配置类型的输出文件路径
+func (c *SimpleRecordingCoordinator) getOutputPathWithType(task *models.VideoRecordingTask, configType string, format string) string {
+	safeName := sanitizeFilename(task.Name)
+	conferenceNumber := task.ConferenceNumber
+	timestamp := time.Now().Format("20060102150405")
+
+	// 流媒体类型添加 stream 后缀
+	suffix := ""
+	if configType == "stream" {
+		suffix = "_stream"
+	}
+
+	filename := fmt.Sprintf("%s_%s_%s%s.%s", safeName, conferenceNumber, timestamp, suffix, format)
+	outputDir := filepath.Join(c.config.Storage.RecordingsPath, fmt.Sprintf("task_%d", task.ID))
+	return filepath.Join(outputDir, filename)
+}
+
+// getHLSPathWithType 生成带配置类型的 HLS 输出目录路径
+func (c *SimpleRecordingCoordinator) getHLSPathWithType(task *models.VideoRecordingTask, configType string) string {
+	safeName := sanitizeFilename(task.Name)
+	conferenceNumber := task.ConferenceNumber
+	timestamp := time.Now().Format("20060102150405")
+
+	// 流媒体类型添加 stream 后缀
+	suffix := ""
+	if configType == "stream" {
+		suffix = "_stream"
+	}
+
+	dirname := fmt.Sprintf("%s_%s_%s%s", safeName, conferenceNumber, timestamp, suffix)
+	hlsDir := filepath.Join(c.config.Storage.HLSPath, fmt.Sprintf("task_%d", task.ID), dirname)
+	return hlsDir
+}
+
+// monitorProcessWithKey 监控录制进程状态（带配置类型键）
+func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cmd *exec.Cmd, ctx context.Context) {
+	// 先等待进程结束，不持有锁
+	err := cmd.Wait()
+
+	// 然后获取锁更新状态
+	c.mu.Lock()
+	process, exists := c.processes[processKey]
+	if exists {
+		process.Status = "stopped"
+	}
+	c.mu.Unlock()
+
+	if err != nil {
+		if ctx.Err() != nil {
+			// Context 被取消，是主动停止
+			c.logger.Debug("录制进程已停止", zap.String("process_key", processKey))
+		} else {
+			// 非预期退出
+			c.logger.Error("录制进程异常退出",
+				zap.String("process_key", processKey),
+				zap.Error(err),
+			)
+		}
+	} else {
+		c.logger.Info("录制进程正常结束", zap.String("process_key", processKey))
+	}
 }
 
 // getOutputPath 生成输出文件路径
@@ -294,21 +381,46 @@ func (c *SimpleRecordingCoordinator) buildRecordingInput(task *models.VideoRecor
 		zap.String("audio_device", input.AudioDevice),
 	)
 
-	// 检查任务配置的RTSP流
+	// 检查任务配置的RTSP流（向后兼容）
 	if task.RTSPStreamURL != "" {
 		input.Type = InputSourceRTSP
 		input.RTSPURL = task.RTSPStreamURL
-		input.hasAudio = true // RTSP流通常包含音频
+		input.hasAudio = true
+	}
+
+	// 检查华为配置的流媒体设置
+	hasStream := huaweiConfig.StreamEnabled && huaweiConfig.StreamURL != ""
+	if hasStream {
+		input.StreamProtocol = huaweiConfig.StreamProtocol
+		input.StreamURL = huaweiConfig.StreamURL
+		input.StreamUsername = huaweiConfig.StreamUsername
+		input.StreamPassword = huaweiConfig.StreamPassword
+
+		switch huaweiConfig.StreamProtocol {
+		case "rtmp":
+			if input.Type == InputSourceRTSP {
+				input.Type = InputSourceMixed
+			} else {
+				input.Type = InputSourceRTMP
+			}
+		default: // rtsp, srt, hls
+			if input.Type == InputSourceRTSP || input.Type == InputSourceRTMP {
+				input.Type = InputSourceMixed
+			} else {
+				input.Type = InputSourceStream
+			}
+		}
+		input.hasAudio = true
 	}
 
 	// 检查USB设备配置
 	hasUSB := huaweiConfig.USBCameraDevice != "" || huaweiConfig.USBAudioDevice != ""
 	if hasUSB {
 		input.hasAudio = input.hasAudio || huaweiConfig.USBAudioDevice != ""
-		if input.Type == InputSourceRTSP {
-			input.Type = InputSourceMixed
-		} else {
+		if input.Type == "" {
 			input.Type = InputSourceUSB
+		} else {
+			input.Type = InputSourceMixed
 		}
 	}
 
@@ -320,25 +432,32 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	process, ok := c.processes[taskID]
-	if !ok {
-		return fmt.Errorf("未找到录制任务: %d", taskID)
+	// 停止所有相关配置的录制进程
+	// 查找所有以 taskID_ 开头的进程键
+	stoppedCount := 0
+	for key := range c.processes {
+		if strings.HasPrefix(key, fmt.Sprintf("%d_", taskID)) {
+			process := c.processes[key]
+			if process != nil && process.Status == "running" {
+				process.CancelFunc()
+				if process.logFile != nil {
+					process.logFile.Close()
+				}
+				stoppedCount++
+			}
+		}
 	}
 
-	// 停止主录制进程（tee muxer 会自动停止所有输出）
-	process.CancelFunc()
-	// 注意：不再调用 waitForProcess，因为 monitorProcess goroutine 已经在等待进程结束
-	// 当进程退出时，monitorProcess 会更新进程状态为 "stopped"
-
-	// 关闭日志文件
-	if process.logFile != nil {
-		process.logFile.Close()
+	// 也检查旧的单键格式（向后兼容）
+	if process, ok := c.processes[fmt.Sprintf("%d", taskID)]; ok && process.Status == "running" {
+		process.CancelFunc()
+		if process.logFile != nil {
+			process.logFile.Close()
+		}
+		stoppedCount++
 	}
 
-	delete(c.processes, taskID)
-	delete(c.cancelFuncs, taskID)
-
-	c.logger.Info("录制已停止", zap.Uint("task_id", taskID))
+	c.logger.Info("录制已停止", zap.Uint("task_id", taskID), zap.Int("stopped_count", stoppedCount))
 	return nil
 }
 
@@ -349,7 +468,14 @@ func (c *SimpleRecordingCoordinator) monitorProcess(taskID uint, cmd *exec.Cmd, 
 
 	// 然后获取锁更新状态
 	c.mu.Lock()
-	process, exists := c.processes[taskID]
+	// 尝试新格式（带配置类型）和旧格式（不带配置类型）
+	processKey := fmt.Sprintf("%d", taskID)
+	process, exists := c.processes[processKey]
+	if !exists {
+		// 尝试 USB 类型
+		processKey = fmt.Sprintf("%d_usb", taskID)
+		process, exists = c.processes[processKey]
+	}
 	if exists {
 		process.Status = "stopped"
 	}
@@ -515,8 +641,19 @@ func (c *SimpleRecordingCoordinator) buildInputArgs(input RecordingInput) ([]str
 	case InputSourceRTSP:
 		args, err = c.buildRTSPArgs(input)
 
+	case InputSourceRTMP:
+		args, err = c.buildStreamArgs(input)
+
+	case InputSourceStream:
+		args, err = c.buildStreamArgs(input)
+
 	case InputSourceMixed:
-		args, err = c.buildRTSPArgs(input)
+		// 混合输入：优先处理流媒体，然后添加USB音频
+		if input.RTSPURL != "" {
+			args, err = c.buildRTSPArgs(input)
+		} else if input.StreamURL != "" {
+			args, err = c.buildStreamArgs(input)
+		}
 		if err == nil && input.AudioDevice != "" {
 			audioArgs, e := c.buildUSBAudioArgs(input)
 			if e != nil {
@@ -653,6 +790,35 @@ func (c *SimpleRecordingCoordinator) buildRTSPArgs(input RecordingInput) ([]stri
 	return []string{"-rtsp_transport", "tcp", "-i", input.RTSPURL}, nil
 }
 
+// buildStreamArgs 构建流媒体输入参数
+func (c *SimpleRecordingCoordinator) buildStreamArgs(input RecordingInput) ([]string, error) {
+	if input.StreamURL == "" {
+		return nil, fmt.Errorf("流媒体URL不能为空")
+	}
+
+	protocol := input.StreamProtocol
+	if protocol == "" {
+		// 默认使用 RTSP
+		protocol = "rtsp"
+	}
+
+	var args []string
+	switch protocol {
+	case "rtmp":
+		args = []string{"-i", input.StreamURL}
+	case "rtsp":
+		args = []string{"-rtsp_transport", "tcp", "-i", input.StreamURL}
+	case "srt":
+		args = []string{"-i", input.StreamURL}
+	case "hls":
+		args = []string{"-i", input.StreamURL}
+	default:
+		return nil, fmt.Errorf("不支持的流媒体协议: %s", protocol)
+	}
+
+	return args, nil
+}
+
 // HealthCheck 健康检查
 func (c *SimpleRecordingCoordinator) HealthCheck() error {
 	c.mu.RLock()
@@ -663,14 +829,17 @@ func (c *SimpleRecordingCoordinator) HealthCheck() error {
 	zombieCount := 0
 	longRunningCount := 0
 
-	for taskID, process := range c.processes {
+	for taskKey, process := range c.processes {
 		if process.Status == "running" {
+			// 从键中解析实际的 taskID
+			actualTaskID := process.TaskID
 			// 检查进程是否还在运行（通过检查进程状态）
 			if process.Cmd.Process != nil {
 				// 检查进程是否已退出
 				if process.Cmd.ProcessState != nil && process.Cmd.ProcessState.Exited() {
 					c.logger.Warn("发现僵尸录制进程",
-						zap.Uint("task_id", taskID),
+						zap.Uint("task_id", actualTaskID),
+						zap.String("process_key", taskKey),
 					)
 					zombieCount++
 				}
@@ -679,7 +848,8 @@ func (c *SimpleRecordingCoordinator) HealthCheck() error {
 			maxDuration := c.config.FFmpeg.MaxRecordingDuration
 			if now.Sub(process.StartTime) > maxDuration {
 				c.logger.Warn("发现运行时间过长的录制进程",
-					zap.Uint("task_id", taskID),
+					zap.Uint("task_id", actualTaskID),
+					zap.String("process_key", taskKey),
 					zap.Duration("runtime", now.Sub(process.StartTime)),
 				)
 				longRunningCount++
@@ -699,9 +869,34 @@ func (c *SimpleRecordingCoordinator) GetRecordingStatus(taskID uint) (string, er
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	process, ok := c.processes[taskID]
-	if !ok {
+	// 检查所有相关配置的录制进程
+	runningCount := 0
+	totalCount := 0
+
+	// 检查带配置类型的键
+	for key := range c.processes {
+		if strings.HasPrefix(key, fmt.Sprintf("%d_", taskID)) {
+			totalCount++
+			if c.processes[key].Status == "running" {
+				runningCount++
+			}
+		}
+	}
+
+	// 向后兼容：检查旧的单键格式
+	if process, ok := c.processes[fmt.Sprintf("%d", taskID)]; ok {
+		totalCount++
+		if process.Status == "running" {
+			runningCount++
+		}
+	}
+
+	if totalCount == 0 {
 		return "", fmt.Errorf("未找到录制任务: %d", taskID)
 	}
-	return process.Status, nil
+
+	if runningCount > 0 {
+		return "running", nil
+	}
+	return "stopped", nil
 }
