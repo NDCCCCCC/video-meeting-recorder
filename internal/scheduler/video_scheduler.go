@@ -12,6 +12,7 @@ import (
 	"github.com/cpic/record_v2/internal/services/video_recording"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // 调度器常量
@@ -71,11 +72,13 @@ type TaskServiceInterface interface {
 	UpdateTaskStatus(id uint, status models.VideoRecordingTaskStatus, errorMsg string) error
 	UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error
 	GetHuaweiConfig(id uint) (*models.HuaweiConfig, error)
+	GetDB() *gorm.DB
 }
 
 // RecorderCoordinatorInterface 录制协调器接口
 type RecorderCoordinatorInterface interface {
 	StartRecording(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig) error
+	StartRecordingWithConfig(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig, configType string) error
 	StopRecording(taskID uint) error
 	HealthCheck() error
 }
@@ -331,13 +334,56 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		time.Sleep(time.Duration(task.RecordDelayMinutes) * time.Minute)
 	}
 
-	// 加载华为配置
-	huaweiConfig, err := s.taskService.GetHuaweiConfig(task.HuaweiConfigID)
-	if err != nil {
-		s.logger.Error("加载华为配置失败", zap.Error(err))
+	// 加载华为配置（用于连接华为会议）
+	if task.HuaweiConfigID == nil {
+		s.logger.Error("华为配置ID未设置")
+		s.updateTaskStatus(taskID, models.VideoStatusFailed, "华为配置ID未设置")
+		return
+	}
+
+	// 加载任务关联的所有华为配置
+	var taskConfigs []models.TaskHuaweiConfig
+	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs).Error; err != nil {
+		s.logger.Error("加载任务关联配置失败", zap.Error(err))
 		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
 		return
 	}
+
+	// 如果没有关联配置，使用主配置创建一个
+	if len(taskConfigs) == 0 {
+		taskConfigs = []models.TaskHuaweiConfig{
+			{
+				TaskID:         taskID,
+				HuaweiConfigID: *task.HuaweiConfigID,
+				ConfigType:     "usb", // 默认为USB类型
+			},
+		}
+	}
+
+	// 加载所有关联的华为配置
+	var huaweiConfigs []models.HuaweiConfig
+	for _, tc := range taskConfigs {
+		var config models.HuaweiConfig
+		if err := s.taskService.GetDB().First(&config, tc.HuaweiConfigID).Error; err != nil {
+			s.logger.Error("加载华为配置失败",
+				zap.Uint("config_id", tc.HuaweiConfigID),
+				zap.Error(err),
+			)
+			continue
+		}
+		huaweiConfigs = append(huaweiConfigs, config)
+	}
+
+	if len(huaweiConfigs) == 0 {
+		s.logger.Error("没有可用的华为配置")
+		s.updateTaskStatus(taskID, models.VideoStatusFailed, "没有可用的华为配置")
+		return
+	}
+
+	s.logger.Info("任务关联的华为配置",
+		zap.Uint("task_id", taskID),
+		zap.Int("config_count", len(huaweiConfigs)),
+	)
 
 	// 更新状态为录制中
 	if err := s.updateTaskStatus(taskID, models.VideoStatusRecording, ""); err != nil {
@@ -345,35 +391,51 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		return
 	}
 
-	// 启动录制
-	if err := s.coordinator.StartRecording(task, huaweiConfig); err != nil {
-		s.logger.Error("启动录制失败",
-			zap.Uint("task_id", taskID),
-			zap.Error(err),
-		)
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
+	// 启动多路录制
+	var recordingErrors []error
+	for _, config := range huaweiConfigs {
+		configType := "usb"
+		if config.StreamEnabled && config.StreamURL != "" {
+			configType = "stream"
+		}
 
+		s.logger.Info("启动录制",
+			zap.Uint("task_id", taskID),
+			zap.Uint("config_id", config.ID),
+			zap.String("config_type", configType),
+		)
+
+		if err := s.coordinator.StartRecordingWithConfig(task, &config, configType); err != nil {
+			s.logger.Error("启动录制失败",
+				zap.Uint("task_id", taskID),
+				zap.Uint("config_id", config.ID),
+				zap.Error(err),
+			)
+			recordingErrors = append(recordingErrors, err)
+		}
+	}
+
+	// 如果所有录制都失败，则返回错误
+	if len(recordingErrors) == len(huaweiConfigs) {
+		s.updateTaskStatus(taskID, models.VideoStatusFailed, "所有录制启动失败")
 		// 清理：断开华为会议连接，解锁终端
 		if s.connector != nil {
-			s.logger.Info("录制启动失败，正在清理华为会议连接",
-				zap.Uint("task_id", taskID),
-			)
-			// 使用带超时的 context，避免清理操作无限等待
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			if cleanupErr := s.connector.DisconnectFromConference(cleanupCtx, task); cleanupErr != nil {
-				s.logger.Error("清理华为会议连接失败",
-					zap.Uint("task_id", taskID),
-					zap.Error(cleanupErr),
-				)
+			// 重新加载主配置用于清理
+			mainConfig, err := s.taskService.GetHuaweiConfig(*task.HuaweiConfigID)
+			if err == nil {
+				// 创建临时任务对象用于清理
+				cleanupTask := *task
+				cleanupTask.HuaweiConfig = mainConfig
+				_ = s.connector.DisconnectFromConference(cleanupCtx, &cleanupTask)
 			}
 		}
 		return
 	}
 
 	// 更新数据库中的文件路径信息
-	// coordinator.StartRecording 会修改 task 对象，设置 MKVFilePath 和 HLSPreviewPath
 	s.logger.Info("准备更新录制文件路径",
 		zap.Uint("task_id", taskID),
 		zap.String("mkv_path", task.MKVFilePath),
@@ -384,7 +446,6 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 			zap.Uint("task_id", taskID),
 			zap.Error(err),
 		)
-		// 不中断录制，只记录警告
 	} else {
 		s.logger.Info("录制文件路径已更新",
 			zap.Uint("task_id", taskID),
@@ -1202,6 +1263,12 @@ func (s *VideoSimpleScheduler) cleanupStaleTerminalLocks() {
 
 	if err := s.connector.ClearStaleTerminalLocks(); err != nil {
 		s.logger.Error("清理过期终端锁失败", zap.Error(err))
+	// 收集所有待执行任务的华为配置 ID
+	pendingConfigIDs := make(map[uint]bool)
+	for _, task := range tasks {
+		if task.HuaweiConfigID != nil {
+			pendingConfigIDs[*task.HuaweiConfigID] = true
+		}
 	}
 }
 
