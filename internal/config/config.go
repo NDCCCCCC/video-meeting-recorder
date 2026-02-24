@@ -119,10 +119,10 @@ type FFmpegConfig struct {
 	DefaultVideoBitrate string        `mapstructure:"default_video_bitrate" json:"default_video_bitrate" yaml:"default_video_bitrate"`
 	DefaultAudioBitrate string        `mapstructure:"default_audio_bitrate" json:"default_audio_bitrate" yaml:"default_audio_bitrate"`
 	// 视频编码质量控制
-	CRF                 int    `mapstructure:"crf" json:"crf" yaml:"crf"`                                           // CRF质量值（0-51，值越小质量越高，推荐23）
-	Preset              string `mapstructure:"preset" json:"preset" yaml:"preset"`                                   // 编码速度预设（ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow）
-	MaxVideoBitrate     string `mapstructure:"max_video_bitrate" json:"max_video_bitrate" yaml:"max_video_bitrate"` // 最大视频码率（配合CRF使用）
-	VideoBufSize        string `mapstructure:"video_bufsize" json:"video_bufsize" yaml:"video_bufsize"`              // 视频缓冲区大小（通常是maxrate的2倍）
+	CRF             int    `mapstructure:"crf" json:"crf" yaml:"crf"`                                           // CRF质量值（0-51，值越小质量越高，推荐23）
+	Preset          string `mapstructure:"preset" json:"preset" yaml:"preset"`                                  // 编码速度预设（ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow）
+	MaxVideoBitrate string `mapstructure:"max_video_bitrate" json:"max_video_bitrate" yaml:"max_video_bitrate"` // 最大视频码率（配合CRF使用）
+	VideoBufSize    string `mapstructure:"video_bufsize" json:"video_bufsize" yaml:"video_bufsize"`             // 视频缓冲区大小（通常是maxrate的2倍）
 	// DShow 设备配置
 	DShowBufferSize      int `mapstructure:"dshow_buffer_size" json:"dshow_buffer_size" yaml:"dshow_buffer_size"`                   // 实时缓冲区大小（字节）
 	DShowThreadQueueSize int `mapstructure:"dshow_thread_queue_size" json:"dshow_thread_queue_size" yaml:"dshow_thread_queue_size"` // 线程队列大小
