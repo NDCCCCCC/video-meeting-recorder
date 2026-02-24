@@ -31,6 +31,13 @@ export interface HuaweiConfig {
   usb_audio_device: string | null
   record_directory: string | null
   output_format: string
+  // 流媒体配置
+  stream_protocol?: 'rtmp' | 'rtsp' | 'srt' | 'hls'
+  stream_url?: string
+  stream_username?: string
+  stream_enabled?: boolean
+  camera_backend?: string
+  audio_backend?: string
   is_active: boolean
   is_locked: boolean
   locked_by_task_id: number | null
@@ -70,6 +77,14 @@ export interface CreateHuaweiConfigRequest {
   usb_audio_device?: string
   record_directory?: string
   output_format?: string
+  camera_backend?: string
+  audio_backend?: string
+  // 流媒体配置
+  stream_protocol?: 'rtmp' | 'rtsp' | 'srt' | 'hls'
+  stream_url?: string
+  stream_username?: string
+  stream_password?: string
+  stream_enabled?: boolean
 }
 
 export interface UpdateHuaweiConfigRequest {
@@ -87,5 +102,20 @@ export interface UpdateHuaweiConfigRequest {
   usb_audio_device?: string
   record_directory?: string
   output_format?: string
+  camera_backend?: string
+  audio_backend?: string
   is_active?: boolean
+  // 流媒体配置
+  stream_protocol?: 'rtmp' | 'rtsp' | 'srt' | 'hls'
+  stream_url?: string
+  stream_username?: string
+  stream_password?: string
+  stream_enabled?: boolean
+}
+
+export interface TestStreamRequest {
+  protocol: 'rtmp' | 'rtsp' | 'srt' | 'hls'
+  url: string
+  username?: string
+  password?: string
 }
