@@ -7,6 +7,7 @@ export const STATUS_CONFIG: Record<VideoRecordingTaskStatus, { label: string; co
   pending: { label: '待执行', color: 'default' },
   connecting: { label: '连接中', color: 'processing' },
   recording: { label: '录制中', color: 'blue' },
+  converting: { label: '转换中', color: 'warning' },
   completed: { label: '已完成', color: 'success' },
   failed: { label: '失败', color: 'error' },
   cancelled: { label: '已取消', color: 'default' },
@@ -25,11 +26,11 @@ export const STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([value, { label
   label,
 }))
 
-// 进行中的状态（用于触发轮询）
-export const ACTIVE_STATUSES: VideoRecordingTaskStatus[] = ['pending', 'connecting', 'recording']
+// 进行中的状态（用于触发轮询）- 包含转换中状态
+export const ACTIVE_STATUSES: VideoRecordingTaskStatus[] = ['pending', 'connecting', 'recording', 'converting']
 
-// 可编辑的状态
-export const EDITABLE_STATUS: VideoRecordingTaskStatus = 'pending'
+// 可编辑的状态（待执行状态可编辑全部字段，录制中状态可编辑结束时间）
+export const EDITABLE_STATUSES: VideoRecordingTaskStatus[] = ['pending', 'recording']
 
 // 可删除的状态
 const DELETABLE_STATUS_SET = new Set(DELETABLE_STATUSES)
@@ -61,3 +62,14 @@ export function canRetryTask(status: VideoRecordingTaskStatus): boolean {
 export function canPreviewTask(status: VideoRecordingTaskStatus): boolean {
   return status === 'recording'
 }
+
+// 可编辑全部字段的状态（仅待执行状态）
+export function canEditAllFields(status: VideoRecordingTaskStatus): boolean {
+  return status === 'pending'
+}
+
+// 可编辑结束时间的状态（待执行和录制中状态）
+export function canEditEndTime(status: VideoRecordingTaskStatus): boolean {
+  return status === 'pending' || status === 'recording'
+}
+

@@ -249,34 +249,48 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		return nil, errors.New("任务不存在")
 	}
 
-	// 只能更新待执行状态的任务
-	if task.Status != models.VideoStatusPending {
-		return nil, errors.New("只能更新待执行状态的任务")
-	}
-
 	// 检查权限
 	if task.CreatedBy != userID {
 		return nil, errors.New("无权限修改此任务")
 	}
 
+	// 待执行状态：可以更新所有字段
+	// 录制中状态：只能更新结束时间
+	isRecording := task.Status == models.VideoStatusRecording
+
+	if !isRecording && task.Status != models.VideoStatusPending {
+		return nil, errors.New("只能更新待执行状态或录制中状态的任务")
+	}
+
 	// 更新字段
 	updates := make(map[string]interface{})
 
-	if req.Name != nil {
-		updates["name"] = *req.Name
-	}
-	if req.Description != nil {
-		updates["description"] = *req.Description
-	}
-	if req.StartTime != nil {
-		// 按北京时间解析，转换为 UTC 存储
-		beijingLocation := time.FixedZone("CST", 8*3600)
-		startTime, err := time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
-		if err != nil {
-			return nil, errors.New("开始时间格式错误")
+	if !isRecording {
+		// 非录制状态可以更新所有字段
+		if req.Name != nil {
+			updates["name"] = *req.Name
 		}
-		updates["start_time"] = startTime.UTC()
+		if req.Description != nil {
+			updates["description"] = *req.Description
+		}
+		if req.StartTime != nil {
+			// 按北京时间解析，转换为 UTC 存储
+			beijingLocation := time.FixedZone("CST", 8*3600)
+			startTime, err := time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
+			if err != nil {
+				return nil, errors.New("开始时间格式错误")
+			}
+			updates["start_time"] = startTime.UTC()
+		}
+		if req.PreJoinMinutes != nil {
+			updates["pre_join_minutes"] = *req.PreJoinMinutes
+		}
+		if req.RecordDelayMinutes != nil {
+			updates["record_delay_minutes"] = *req.RecordDelayMinutes
+		}
 	}
+
+	// 录制中和待执行状态都可以更新结束时间
 	if req.EndTime != nil {
 		// 按北京时间解析，转换为 UTC 存储
 		beijingLocation := time.FixedZone("CST", 8*3600)
@@ -284,13 +298,32 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		if err != nil {
 			return nil, errors.New("结束时间格式错误")
 		}
+
+		// 验证结束时间必须在开始时间之后
+		var newStartTime time.Time
+		if req.StartTime != nil {
+			beijingLocation := time.FixedZone("CST", 8*3600)
+			newStartTime, _ = time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
+		} else {
+			newStartTime = task.StartTime
+		}
+
+		if endTime.Before(newStartTime) {
+			return nil, errors.New("结束时间不能早于开始时间")
+		}
+
 		updates["end_time"] = endTime.UTC()
-	}
-	if req.PreJoinMinutes != nil {
-		updates["pre_join_minutes"] = *req.PreJoinMinutes
-	}
-	if req.RecordDelayMinutes != nil {
-		updates["record_delay_minutes"] = *req.RecordDelayMinutes
+
+		// 如果是录制中的任务，需要通知调度器更新监控定时器
+		if isRecording && s.scheduler != nil {
+			if err := s.scheduler.UpdateTaskEndTime(id, endTime.UTC()); err != nil {
+				s.logger.Warn("更新调度器任务结束时间失败",
+					zap.Uint("task_id", id),
+					zap.Error(err),
+				)
+				// 不阻止更新继续执行
+			}
+		}
 	}
 
 	if err := s.db.Model(&task).Updates(updates).Error; err != nil {
@@ -307,6 +340,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 
 	s.logger.Info("录制任务已更新",
 		zap.Uint("task_id", id),
+		zap.String("status", string(task.Status)),
 		zap.Uint("updated_by", userID),
 	)
 
@@ -521,7 +555,10 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint) (*models.Vide
 		return nil, errors.New("只能停止录制中或连接中的任务")
 	}
 
-	// 取消任务执行
+	// 记录原始状态，用于后续判断
+	wasRecording := task.Status == models.VideoStatusRecording
+
+	// 取消任务执行（这会停止录制并创建文件记录、提交转换任务）
 	if s.scheduler != nil {
 		if err := s.scheduler.CancelTaskExecution(id); err != nil {
 			s.logger.Warn("取消任务执行失败", zap.Error(err))
@@ -529,16 +566,34 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint) (*models.Vide
 		}
 	}
 
-	// 更新状态为已取消
-	task.Status = models.VideoStatusCancelled
-	if err := s.db.Save(&task).Error; err != nil {
+	// 重新加载任务以获取最新状态（因为 CancelTaskExecution 可能创建了 MKV 文件）
+	if err := s.db.First(&task, id).Error; err != nil {
 		return nil, err
 	}
 
-	s.logger.Info("录制任务已手动停止",
-		zap.Uint("task_id", id),
-		zap.Uint("stopped_by", userID),
-	)
+	// 根据是否有录制文件来决定最终状态
+	// 如果已经有 MKV 文件，说明已经开始了录制，应该进入转换状态
+	// 如果没有 MKV 文件且原状态不是 recording，说明还没开始录制，状态为已取消
+	if task.MKVFilePath != "" || wasRecording {
+		// 已经开始录制，进入转换状态
+		task.Status = models.VideoStatusConverting
+		s.logger.Info("录制任务已手动停止，进入转换状态",
+			zap.Uint("task_id", id),
+			zap.Uint("stopped_by", userID),
+			zap.String("mkv_file", task.MKVFilePath),
+		)
+	} else {
+		// 还没开始录制，直接取消
+		task.Status = models.VideoStatusCancelled
+		s.logger.Info("录制任务已取消（未开始录制）",
+			zap.Uint("task_id", id),
+			zap.Uint("cancelled_by", userID),
+		)
+	}
+
+	if err := s.db.Save(&task).Error; err != nil {
+		return nil, err
+	}
 
 	return &task, nil
 }
