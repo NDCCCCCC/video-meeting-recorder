@@ -325,6 +325,79 @@ func (c *HuaweiConferenceConnector) UnlockTerminalByTaskID(taskID uint) error {
 	return nil
 }
 
+// ClearStaleTerminalLocks 清理过期的终端锁
+// 服务异常退出可能导致终端锁没有释放，启动时检查并清理
+func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
+	c.logger.Info("开始清理过期的终端锁")
+
+	// 查询所有被锁定的华为配置
+	var lockedConfigs []models.HuaweiConfig
+	if err := c.db.Where("is_locked = ?", true).Find(&lockedConfigs).Error; err != nil {
+		return fmt.Errorf("查询被锁定的华为配置失败: %w", err)
+	}
+
+	cleanedCount := 0
+	for _, config := range lockedConfigs {
+		if config.LockedBy == nil {
+			// 没有锁定者ID，直接解锁
+			c.logger.Info("清理无锁定者ID的终端锁",
+				zap.Uint("config_id", config.ID),
+				zap.String("terminal_number", config.TerminalNumber),
+			)
+			if err := c.db.Model(&config).Updates(map[string]interface{}{
+				"is_locked": false,
+				"locked_by": nil,
+				"locked_at": nil,
+			}).Error; err == nil {
+				cleanedCount++
+			}
+			continue
+		}
+
+		// 检查锁定任务的状态
+		var task models.VideoRecordingTask
+		err := c.db.First(&task, *config.LockedBy).Error
+		if err != nil {
+			// 任务不存在，解锁
+			c.logger.Info("清理不存在任务的终端锁",
+				zap.Uint("config_id", config.ID),
+				zap.Uint("locked_by_task_id", *config.LockedBy),
+			)
+			if err := c.db.Model(&config).Updates(map[string]interface{}{
+				"is_locked": false,
+				"locked_by": nil,
+				"locked_at": nil,
+			}).Error; err == nil {
+				cleanedCount++
+			}
+			continue
+		}
+
+		// 任务存在但状态不是 recording 或 connecting，解锁
+		if task.Status != models.VideoStatusRecording && task.Status != models.VideoStatusConnecting {
+			c.logger.Info("清理已完成/取消任务的终端锁",
+				zap.Uint("config_id", config.ID),
+				zap.Uint("locked_by_task_id", *config.LockedBy),
+				zap.String("task_status", string(task.Status)),
+			)
+			if err := c.db.Model(&config).Updates(map[string]interface{}{
+				"is_locked": false,
+				"locked_by": nil,
+				"locked_at": nil,
+			}).Error; err == nil {
+				cleanedCount++
+			}
+		}
+	}
+
+	c.logger.Info("终端锁清理完成",
+		zap.Int("total_locked", len(lockedConfigs)),
+		zap.Int("cleaned_configs", cleanedCount),
+	)
+
+	return nil
+}
+
 // getHuaweiConfig 获取华为配置
 func (c *HuaweiConferenceConnector) getHuaweiConfig(configID uint) (*models.HuaweiConfig, error) {
 	var config models.HuaweiConfig

@@ -31,6 +31,7 @@ type SchedulerInterface interface {
 	IsTaskExecuting(taskID uint) bool
 	ExecuteTask(taskID uint) error
 	CancelTaskExecution(taskID uint) error
+	UpdateTaskEndTime(taskID uint, newEndTime time.Time) error
 }
 
 // VideoSimpleScheduler 视频录制任务调度器
@@ -45,6 +46,8 @@ type VideoSimpleScheduler struct {
 	entryTasks        map[cron.EntryID]uint
 	executing         map[uint]bool
 	cancelFuncs       map[uint]context.CancelFunc // 任务取消函数
+	taskEndTimes      map[uint]time.Time          // 任务结束时间（用于动态更新）
+	taskUpdateChans   map[uint]chan time.Time     // 任务结束时间更新通道
 	logger            *zap.Logger
 	config            *config.Config
 	mu                sync.RWMutex
@@ -102,6 +105,8 @@ func NewVideoSimpleScheduler(
 		entryTasks:        make(map[cron.EntryID]uint),
 		executing:         make(map[uint]bool),
 		cancelFuncs:       make(map[uint]context.CancelFunc),
+		taskEndTimes:      make(map[uint]time.Time),
+		taskUpdateChans:   make(map[uint]chan time.Time),
 		logger:            logger,
 		config:            cfg,
 		startTime:         time.Now(),
@@ -397,31 +402,68 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 // monitorTask 监控任务直到结束
 func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.VideoRecordingTask) {
-	// 计算剩余时间
-	remaining := time.Until(task.EndTime)
-	if remaining < 0 {
-		remaining = 0
-	}
+	s.mu.Lock()
+	// 创建更新通道
+	updateChan := make(chan time.Time, 1)
+	s.taskUpdateChans[task.ID] = updateChan
+	s.taskEndTimes[task.ID] = task.EndTime
+	s.mu.Unlock()
 
-	s.logger.Info("开始监控任务",
-		zap.Uint("task_id", task.ID),
-		zap.Duration("remaining", remaining),
-	)
+	// 清理函数
+	defer func() {
+		s.mu.Lock()
+		delete(s.taskUpdateChans, task.ID)
+		delete(s.taskEndTimes, task.ID)
+		s.mu.Unlock()
+	}()
 
-	// 等待会议结束或取消
-	timer := time.NewTimer(remaining)
-	defer timer.Stop()
+	endTime := task.EndTime
 
-	select {
-	case <-timer.C:
-		// 正常结束
-		s.completeTask(task.ID)
-	case <-ctx.Done():
-		// 任务被取消
-		s.logger.Info("任务监控被取消",
+	for {
+		// 计算剩余时间
+		remaining := time.Until(endTime)
+		if remaining < 0 {
+			remaining = 0
+		}
+
+		s.logger.Info("监控任务中",
 			zap.Uint("task_id", task.ID),
+			zap.Duration("remaining", remaining),
+			zap.Time("end_time", endTime),
 		)
-		return
+
+		// 创建定时器
+		timer := time.NewTimer(remaining)
+
+		select {
+		case <-timer.C:
+			timer.Stop()
+			// 正常结束
+			s.completeTask(task.ID)
+			return
+
+		case <-ctx.Done():
+			timer.Stop()
+			// 任务被取消
+			s.logger.Info("任务监控被取消",
+				zap.Uint("task_id", task.ID),
+			)
+			return
+
+		case newEndTime, ok := <-updateChan:
+			timer.Stop()
+			if !ok {
+				// 通道关闭，退出
+				return
+			}
+			// 更新结束时间，继续监控
+			endTime = newEndTime
+			s.logger.Info("任务结束时间已更新",
+				zap.Uint("task_id", task.ID),
+				zap.Time("old_end_time", task.EndTime),
+				zap.Time("new_end_time", newEndTime),
+			)
+		}
 	}
 }
 
@@ -461,8 +503,8 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 		)
 	}
 
-	// 更新任务状态
-	if err := s.updateTaskStatus(taskID, models.VideoStatusCompleted, ""); err != nil {
+	// 更新任务状态为转换中（而不是直接完成）
+	if err := s.updateTaskStatus(taskID, models.VideoStatusConverting, ""); err != nil {
 		s.logger.Error("更新任务状态失败", zap.Error(err))
 	}
 
@@ -504,10 +546,12 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 				zap.Uint("task_id", taskID),
 				zap.Error(err),
 			)
+			// 转换提交失败，将任务状态改为失败
+			s.updateTaskStatus(taskID, models.VideoStatusFailed, "提交转换任务失败")
 		}
 	}
 
-	s.logger.Info("任务已完成",
+	s.logger.Info("录制完成，进入转换状态",
 		zap.Uint("task_id", taskID),
 	)
 }
@@ -970,7 +1014,6 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 	)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	// 检查是否有取消函数
 	cancel, hasCancel := s.cancelFuncs[taskID]
@@ -984,28 +1027,78 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 		}
 
 		// 取消监控任务
+		delete(s.cancelFuncs, taskID)
+		delete(s.executing, taskID)
 		cancel()
 		s.logger.Info("任务执行已取消",
 			zap.Uint("task_id", taskID),
 		)
 
-		// 断开华为会议连接，解锁终端
-		// 注意：这里在锁外获取任务信息，避免在持有锁时进行数据库查询
-		if s.connector != nil {
-			s.mu.Unlock()
-			s.releaseHuaweiDevice(taskID)
-			s.mu.Lock()
-		}
+		// 从调度器移除任务
+		s.RemoveTask(taskID)
+	}
 
+	// 无论是否有 cancelFunc，都需要尝试清理资源
+	// 断开华为会议连接，解锁终端，创建文件记录，提交转换任务
+	// 注意：这里在锁外获取任务信息，避免在持有锁时进行数据库查询
+	if s.connector != nil {
+		s.mu.Unlock()
+		s.releaseHuaweiDevice(taskID)
 		return nil
 	}
 
-	// 如果没有取消函数，检查是否在执行中
-	if s.executing[taskID] {
-		return fmt.Errorf("任务正在执行中，但无法取消")
+	s.mu.Unlock()
+
+	// 如果没有 connector，至少尝试停止录制
+	if !hasCancel {
+		if stopErr := s.coordinator.StopRecording(taskID); stopErr != nil {
+			s.logger.Warn("停止录制失败",
+				zap.Uint("task_id", taskID),
+				zap.Error(stopErr),
+			)
+		}
+		s.RemoveTask(taskID)
 	}
 
-	return fmt.Errorf("任务未在执行中")
+	return nil
+}
+
+// UpdateTaskEndTime 更新录制任务的结束时间
+func (s *VideoSimpleScheduler) UpdateTaskEndTime(taskID uint, newEndTime time.Time) error {
+	s.logger.Info("更新任务结束时间",
+		zap.Uint("task_id", taskID),
+		zap.Time("new_end_time", newEndTime),
+	)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 检查任务是否正在执行
+	if !s.executing[taskID] {
+		return fmt.Errorf("任务未在执行中")
+	}
+
+	// 检查是否有更新通道
+	updateChan, hasChan := s.taskUpdateChans[taskID]
+	if !hasChan {
+		return fmt.Errorf("任务监控通道不存在")
+	}
+
+	// 更新存储的结束时间
+	s.taskEndTimes[taskID] = newEndTime
+
+	// 通过通道发送新的结束时间（非阻塞）
+	select {
+	case updateChan <- newEndTime:
+		s.logger.Info("任务结束时间更新已发送",
+			zap.Uint("task_id", taskID),
+			zap.Time("new_end_time", newEndTime),
+		)
+	default:
+		return fmt.Errorf("更新通道繁忙，请稍后重试")
+	}
+
+	return nil
 }
 
 // releaseHuaweiDevice 释放华为设备（在取消任务时调用）
@@ -1102,28 +1195,14 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 func (s *VideoSimpleScheduler) cleanupStaleTerminalLocks() {
 	s.logger.Info("开始清理过期的终端锁")
 
-	// 获取所有待执行任务
-	tasks, err := s.taskService.GetPendingTasks()
-	if err != nil {
-		s.logger.Error("获取待执行任务失败", zap.Error(err))
+	if s.connector == nil {
+		s.logger.Warn("华为连接器未初始化，跳过终端锁清理")
 		return
 	}
 
-	// 收集所有待执行任务的华为配置 ID
-	pendingConfigIDs := make(map[uint]bool)
-	for _, task := range tasks {
-		pendingConfigIDs[task.HuaweiConfigID] = true
+	if err := s.connector.ClearStaleTerminalLocks(); err != nil {
+		s.logger.Error("清理过期终端锁失败", zap.Error(err))
 	}
-
-	// 通过 TaskService 获取华为配置来检查锁定状态
-	// 由于接口限制，我们使用一个 workaround：检查所有待执行任务使用的配置
-	// 对于不在待执行列表中的配置，我们假设它们应该被解锁
-
-	// 记录待执行的配置数量
-	s.logger.Info("终端锁清理完成",
-		zap.Int("pending_configs", len(pendingConfigIDs)),
-		zap.Int("cleaned_configs", 0),
-	)
 }
 
 // logTaskTimeInfo 记录任务时间信息（用于调试时区问题）

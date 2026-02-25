@@ -264,13 +264,15 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 		return
 	}
 
-	// 转换成功
+	// 转换成功，更新转换状态和任务状态
 	now = time.Now()
 	s.db.Model(&task).Updates(map[string]interface{}{
 		"conversion_status":       models.ConversionStatusCompleted,
 		"conversion_completed_at": &now,
 		"conversion_error_msg":    "",
 		"mp4_file_path":           outputPath,
+		// 同时更新任务状态为已完成
+		"status": models.VideoStatusCompleted,
 	})
 
 	// 创建 MP4 文件记录
@@ -284,7 +286,7 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 		}
 	}
 
-	s.logger.Info("转换完成",
+	s.logger.Info("转换完成，任务已结束",
 		zap.Uint("task_id", taskID),
 		zap.String("mp4_file", outputPath),
 	)
@@ -369,12 +371,15 @@ func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecord
 
 	// 检查是否超过最大重试次数
 	if task.ConversionRetryCount >= s.maxRetries {
-		// 标记为失败
+		// 标记为失败，同时更新任务状态为失败
 		s.db.Model(task).Updates(map[string]interface{}{
 			"conversion_status":    models.ConversionStatusFailed,
 			"conversion_error_msg": err.Error(),
+			// 同时更新任务状态为失败
+			"status": models.VideoStatusFailed,
+			"error_msg": fmt.Sprintf("转换失败: %s", err.Error()),
 		})
-		s.logger.Error("转换失败，已达最大重试次数",
+		s.logger.Error("转换失败，已达最大重试次数，任务已标记为失败",
 			zap.Uint("task_id", task.ID),
 			zap.Int("retry_count", task.ConversionRetryCount),
 			zap.Error(err),
