@@ -118,14 +118,10 @@ export default function FileManagement() {
     }
   }, [])
 
-  // 初始加载和参数变化时刷新
+  // 初始加载 - 并行执行 loadFiles 和 loadStats (async-parallel 优化)
   useEffect(() => {
-    loadFiles()
-  }, [loadFiles])
-
-  useEffect(() => {
-    loadStats()
-  }, [loadStats])
+    Promise.all([loadFiles(), loadStats()])
+  }, [loadFiles, loadStats])
 
   // 搜索处理
   const handleSearch = useCallback((value: string) => {
@@ -149,8 +145,8 @@ export default function FileManagement() {
   // 下载文件
   const handleDownload = useCallback(async (id: number, fileName: string) => {
     try {
-      await videoFileApi.downloadVideoFile(id)
-      message.success(`下载 ${fileName} 成功`)
+      await videoFileApi.downloadVideoFile(id, fileName)
+      message.success(`开始下载 ${fileName}`)
     } catch (error) {
       message.error(error instanceof Error ? error.message : '下载失败')
     }

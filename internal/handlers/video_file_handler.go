@@ -125,14 +125,14 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 }
 
 // setVideoHeaders 设置视频流响应头
+// 注意：http.ServeContent 会自动设置 Content-Length、Content-Range 和 Accept-Ranges
+// 因此这里只需要设置 Content-Type、Content-Disposition 和 CORS 头
 func setVideoHeaders(c *gin.Context, file *models.VideoFile, fileSize int64) {
 	// 根据文件格式设置 Content-Type
 	contentType := getContentType(file.Format)
 
 	c.Header("Content-Type", contentType)
 	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", file.FileName))
-	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
-	c.Header("Accept-Ranges", "bytes") // 支持视频进度拖动
 
 	// 设置视频流所需的 CORS 头
 	// 注意：使用 * 允许所有源访问。如果部署在公网环境，建议改为 Origin 白名单
