@@ -34,22 +34,22 @@ func (s *VideoRecordingTaskService) SetScheduler(scheduler scheduler.SchedulerIn
 
 // ListTasksRequest 任务列表请求
 type ListTasksRequest struct {
-	Page         int                            `form:"page"`
-	PageSize     int                            `form:"page_size" binding:"max=100"`
-	Keyword      string                         `form:"keyword"`
-	Status       models.VideoRecordingTaskStatus `form:"status"`
-	CreatedBy    uint                           `form:"created_by"`
-	StartDate    string                         `form:"start_date"`
-	EndDate      string                         `form:"end_date"`
+	Page      int                             `form:"page"`
+	PageSize  int                             `form:"page_size" binding:"max=100"`
+	Keyword   string                          `form:"keyword"`
+	Status    models.VideoRecordingTaskStatus `form:"status"`
+	CreatedBy uint                            `form:"created_by"`
+	StartDate string                          `form:"start_date"`
+	EndDate   string                          `form:"end_date"`
 	// 数据范围过滤字段
-	UserID       uint   `form:"-"` // 当前用户ID（不从query读取，由handler设置）
-	IsAdmin      bool   `form:"-"` // 是否管理员（不从query读取，由handler设置）
-	ApplyDataScope bool   `form:"-"` // 是否应用数据范围过滤
+	UserID         uint `form:"-"` // 当前用户ID（不从query读取，由handler设置）
+	IsAdmin        bool `form:"-"` // 是否管理员（不从query读取，由handler设置）
+	ApplyDataScope bool `form:"-"` // 是否应用数据范围过滤
 }
 
 // ListTasksResponse 任务列表响应
 type ListTasksResponse struct {
-	Total int64                      `json:"total"`
+	Total int64                       `json:"total"`
 	Items []models.VideoRecordingTask `json:"items"`
 }
 
@@ -368,11 +368,11 @@ type BatchDeleteTasksRequest struct {
 
 // BatchDeleteTasksResult 批量删除任务结果
 type BatchDeleteTasksResult struct {
-	DeletedIDs   []uint  `json:"deleted_ids"`   // 成功删除的任务 ID
-	FailedIDs    []uint  `json:"failed_ids"`    // 删除失败的任务 ID
-	FailedTasks  []string `json:"failed_tasks"` // 删除失败的任务名称及原因
-	TotalDeleted int     `json:"total_deleted"` // 成功删除的总数
-	TotalFailed  int     `json:"total_failed"`  // 删除失败的总数
+	DeletedIDs   []uint   `json:"deleted_ids"`   // 成功删除的任务 ID
+	FailedIDs    []uint   `json:"failed_ids"`    // 删除失败的任务 ID
+	FailedTasks  []string `json:"failed_tasks"`  // 删除失败的任务名称及原因
+	TotalDeleted int      `json:"total_deleted"` // 成功删除的总数
+	TotalFailed  int      `json:"total_failed"`  // 删除失败的总数
 }
 
 // canDeleteTask 检查任务是否可删除

@@ -4,16 +4,16 @@ package huawei
 
 const (
 	// 认证错误 (1xxx)
-	ErrCodeAuthFailed    = 1001 // 认证失败
+	ErrCodeAuthFailed     = 1001 // 认证失败
 	ErrCodeSessionExpired = 1002 // 会话过期
 	ErrCodeSessionInvalid = 1003 // 会话无效
 
 	// 会议控制错误 (2xxx)
-	ErrCodeConferenceNotFound = 2001 // 会议不存在
-	ErrCodeConferenceFull     = 2002 // 会议已满
-	ErrCodeConferencePassword = 2003 // 会议密码错误
-	ErrConferenceCallFailed   = 2004 // 呼叫会议失败
-	ErrConferenceHangupFailed = 2005 // 挂断会议失败
+	ErrCodeConferenceNotFound   = 2001 // 会议不存在
+	ErrCodeConferenceFull       = 2002 // 会议已满
+	ErrCodeConferencePassword   = 2003 // 会议密码错误
+	ErrConferenceCallFailed     = 2004 // 呼叫会议失败
+	ErrConferenceHangupFailed   = 2005 // 挂断会议失败
 	ErrCodeConferenceInProgress = 2006 // 会议进行中
 
 	// 终端错误 (3xxx)
@@ -29,33 +29,33 @@ const (
 	ErrCodeDeviceError    = 4003 // 设备错误
 
 	// 网络错误 (5xxx)
-	ErrCodeNetworkTimeout = 5001 // 网络超时
-	ErrCodeNetworkError   = 5002 // 网络错误
+	ErrCodeNetworkTimeout    = 5001 // 网络超时
+	ErrCodeNetworkError      = 5002 // 网络错误
 	ErrCodeConnectionRefused = 5003 // 连接被拒绝
 )
 
 // ErrorMessages 错误码对应的中文消息
 var ErrorMessages = map[int]string{
-	ErrCodeAuthFailed:         "认证失败，请检查用户名和密码",
-	ErrCodeSessionExpired:     "会话已过期，请重新登录",
-	ErrCodeSessionInvalid:     "会话无效",
-	ErrCodeConferenceNotFound: "会议不存在",
-	ErrCodeConferenceFull:     "会议已满，无法加入",
-	ErrCodeConferencePassword: "会议密码错误",
-	ErrConferenceCallFailed:   "呼叫会议失败",
-	ErrConferenceHangupFailed: "挂断会议失败",
+	ErrCodeAuthFailed:           "认证失败，请检查用户名和密码",
+	ErrCodeSessionExpired:       "会话已过期，请重新登录",
+	ErrCodeSessionInvalid:       "会话无效",
+	ErrCodeConferenceNotFound:   "会议不存在",
+	ErrCodeConferenceFull:       "会议已满，无法加入",
+	ErrCodeConferencePassword:   "会议密码错误",
+	ErrConferenceCallFailed:     "呼叫会议失败",
+	ErrConferenceHangupFailed:   "挂断会议失败",
 	ErrCodeConferenceInProgress: "会议正在进行中",
-	ErrCodeTerminalNotFound:   "终端不存在",
-	ErrCodeTerminalOffline:    "终端离线",
-	ErrCodeTerminalBusy:       "终端忙碌",
-	ErrCodeTerminalLocked:     "终端已被其他任务占用",
-	ErrCodeTerminalInCall:     "终端正在通话中",
-	ErrCodeDeviceNotFound:     "USB设备未找到",
-	ErrCodeDeviceBusy:         "USB设备正在使用中",
-	ErrCodeDeviceError:        "USB设备错误",
-	ErrCodeNetworkTimeout:     "网络连接超时",
-	ErrCodeNetworkError:       "网络连接错误",
-	ErrCodeConnectionRefused:  "连接被拒绝，请检查服务器地址",
+	ErrCodeTerminalNotFound:     "终端不存在",
+	ErrCodeTerminalOffline:      "终端离线",
+	ErrCodeTerminalBusy:         "终端忙碌",
+	ErrCodeTerminalLocked:       "终端已被其他任务占用",
+	ErrCodeTerminalInCall:       "终端正在通话中",
+	ErrCodeDeviceNotFound:       "USB设备未找到",
+	ErrCodeDeviceBusy:           "USB设备正在使用中",
+	ErrCodeDeviceError:          "USB设备错误",
+	ErrCodeNetworkTimeout:       "网络连接超时",
+	ErrCodeNetworkError:         "网络连接错误",
+	ErrCodeConnectionRefused:    "连接被拒绝，请检查服务器地址",
 }
 
 // GetErrorMessage 获取错误消息

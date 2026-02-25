@@ -138,11 +138,11 @@ export default function FileManagement() {
   }, [])
 
   // 分页变化
-  const handleTableChange = useCallback((pagination: any) => {
+  const handleTableChange = useCallback((pagination: { current?: number; pageSize?: number }) => {
     setParams(prev => ({
       ...prev,
-      page: pagination.current,
-      page_size: pagination.pageSize,
+      page: pagination.current ?? 1,
+      page_size: pagination.pageSize ?? 20,
     }))
   }, [])
 

@@ -14,10 +14,10 @@ type HuaweiConfig struct {
 	Description      string `gorm:"type:text" json:"description"`
 	Server           string `gorm:"type:varchar(100);not null" json:"server"`         // 华为终端服务器地址
 	Port             int    `gorm:"default:80" json:"port"`                           // 华为终端端口
-	Username         string `gorm:"type:varchar(50);not null" json:"username"`       // 登录用户名
+	Username         string `gorm:"type:varchar(50);not null" json:"username"`        // 登录用户名
 	Password         string `gorm:"type:varchar(100);not null" json:"-"`              // 登录密码（不输出到JSON）
 	TerminalNumber   string `gorm:"type:varchar(50);not null" json:"terminal_number"` // 终端号码
-	ConferenceNumber string `gorm:"type:varchar(50)" json:"conference_number"`         // 会议号
+	ConferenceNumber string `gorm:"type:varchar(50)" json:"conference_number"`        // 会议号
 
 	// USB摄像头后端配置
 	CameraBackend string `gorm:"type:varchar(20);default:'dshow'" json:"camera_backend"` // dshow (Windows) | v4l2 (Linux) | avfoundation (macOS)

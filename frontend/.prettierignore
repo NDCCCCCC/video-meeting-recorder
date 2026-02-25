@@ -1,0 +1,13 @@
+# Dependencies
+node_modules
+
+# Production
+dist
+
+# Build files
+*.config.js
+*.config.ts
+
+# Cache
+.eslintcache
+*.tsbuildinfo

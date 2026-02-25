@@ -48,7 +48,7 @@ func JWTAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 		tokenString := extractToken(c)
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"code": response.CodeUnauthorized,
+				"code":    response.CodeUnauthorized,
 				"message": "未授权：缺少认证令牌",
 			})
 			c.Abort()
@@ -59,7 +59,7 @@ func JWTAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 		claims, err := jwtService.ValidateToken(tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"code": response.CodeInvalidToken,
+				"code":    response.CodeInvalidToken,
 				"message": "Token无效或已过期",
 			})
 			c.Abort()

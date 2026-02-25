@@ -12,17 +12,17 @@ import (
 
 // SystemHandler 系统设置处理器
 type SystemHandler struct {
-	db      *gorm.DB
-	logger  *zap.Logger
-	config  *config.Config
+	db     *gorm.DB
+	logger *zap.Logger
+	config *config.Config
 }
 
 // NewSystemHandler 创建系统设置处理器
 func NewSystemHandler(db *gorm.DB, logger *zap.Logger, cfg *config.Config) *SystemHandler {
 	return &SystemHandler{
 		db:     db,
-		logger:  logger,
-		config:  cfg,
+		logger: logger,
+		config: cfg,
 	}
 }
 
@@ -39,7 +39,7 @@ func (h *SystemHandler) GetConfig(c *gin.Context) {
 			"recordings_path": h.config.Storage.RecordingsPath,
 			"hls_path":        h.config.Storage.HLSPath,
 			"temp_path":       h.config.Storage.TempPath,
-			"max_disk_usage":   h.config.Storage.MaxDiskUsage,
+			"max_disk_usage":  h.config.Storage.MaxDiskUsage,
 		},
 		"ffmpeg": map[string]interface{}{
 			"path":         h.config.FFmpeg.Path,
@@ -60,7 +60,7 @@ type UpdateConfigRequest struct {
 	RecordingsPath *string `json:"recordings_path"`
 	HLSPath        *string `json:"hls_path"`
 	TempPath       *string `json:"temp_path"`
-	MaxDiskUsage  *int    `json:"max_disk_usage"`
+	MaxDiskUsage   *int    `json:"max_disk_usage"`
 	FFmpegPath     *string `json:"ffmpeg_path"`
 	FFprobePath    *string `json:"ffprobe_path"`
 	LogLevel       *string `json:"log_level"`
@@ -128,7 +128,7 @@ func (h *SystemHandler) UpdateConfig(c *gin.Context) {
 
 	response.GinSuccess(c, gin.H{
 		"message": "配置已更新，路径和FFmpeg相关配置需要重启服务后生效",
-		"changes":  changes,
+		"changes": changes,
 	})
 }
 
