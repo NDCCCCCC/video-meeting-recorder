@@ -42,6 +42,7 @@ const (
 	VideoStatusPending    VideoRecordingTaskStatus = "pending"    // 待执行
 	VideoStatusConnecting VideoRecordingTaskStatus = "connecting" // 连接会议中
 	VideoStatusRecording  VideoRecordingTaskStatus = "recording"  // 录制中
+	VideoStatusConverting VideoRecordingTaskStatus = "converting" // 转换中（MKV转MP4）
 	VideoStatusCompleted  VideoRecordingTaskStatus = "completed"  // 已完成
 	VideoStatusFailed     VideoRecordingTaskStatus = "failed"     // 执行失败
 	VideoStatusCancelled  VideoRecordingTaskStatus = "cancelled"  // 已取消
@@ -94,11 +95,12 @@ func (t *VideoRecordingTask) IsValid() error {
 func (t *VideoRecordingTask) CanTransitionTo(newStatus VideoRecordingTaskStatus) bool {
 	validTransitions := map[VideoRecordingTaskStatus][]VideoRecordingTaskStatus{
 		VideoStatusPending:    {VideoStatusConnecting, VideoStatusFailed, VideoStatusCancelled}, // pending可直接转为failed（如触发时间已过期）
-		VideoStatusConnecting: {VideoStatusRecording, VideoStatusFailed, VideoStatusCancelled},
-		VideoStatusRecording:  {VideoStatusCompleted, VideoStatusFailed, VideoStatusCancelled},
-		VideoStatusCompleted:  {},                   // 终态
-		VideoStatusFailed:     {VideoStatusPending}, // 可重试
-		VideoStatusCancelled:  {},                   // 终态
+		VideoStatusConnecting: {VideoStatusRecording, VideoStatusFailed, VideoStatusCancelled},  // 连接中可以转为录制、失败或取消
+		VideoStatusRecording:  {VideoStatusConverting, VideoStatusFailed, VideoStatusCancelled}, // 录制中可以转为转换中、失败或取消
+		VideoStatusConverting: {VideoStatusCompleted, VideoStatusFailed},                        // 转换中可以转为完成或失败
+		VideoStatusCompleted:  {},                    // 终态
+		VideoStatusFailed:     {VideoStatusPending},  // 可重试
+		VideoStatusCancelled:  {},                    // 终态
 	}
 
 	allowed, ok := validTransitions[t.Status]

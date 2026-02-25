@@ -22,6 +22,7 @@ export type VideoRecordingTaskStatus =
   | 'pending'     // 待执行
   | 'connecting'  // 连接会议中
   | 'recording'   // 录制中
+  | 'converting'  // 转换中（MKV转MP4）
   | 'completed'   // 已完成
   | 'failed'      // 执行失败
   | 'cancelled'   // 已取消
@@ -95,6 +96,7 @@ export const TaskStatusConfig: Record<VideoRecordingTaskStatus, { label: string;
   pending: { label: '待执行', color: 'default' },
   connecting: { label: '连接中', color: 'processing' },
   recording: { label: '录制中', color: 'blue' },
+  converting: { label: '转换中', color: 'warning' },
   completed: { label: '已完成', color: 'success' },
   failed: { label: '失败', color: 'error' },
   cancelled: { label: '已取消', color: 'default' },

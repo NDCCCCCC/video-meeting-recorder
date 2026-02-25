@@ -46,6 +46,8 @@ import {
   canCancelTask,
   canRetryTask,
   canPreviewTask,
+  canEditEndTime,
+  canEditAllFields,
 } from './constants'
 import { formatDuration, hasActiveTasks } from './utils'
 import type {
@@ -211,16 +213,23 @@ export default function TaskManagement() {
       }
 
       if (editingTask) {
-        const req: UpdateTaskRequest = {
-          name: requestData.name,
-          description: requestData.description,
-          start_time: requestData.start_time,
-          end_time: requestData.end_time,
-          pre_join_minutes: requestData.pre_join_minutes,
-          record_delay_minutes: requestData.record_delay_minutes,
-        }
+        // 录制中状态只更新结束时间
+        const isRecording = editingTask.status === 'recording'
+        const req: UpdateTaskRequest = isRecording
+          ? {
+              end_time: requestData.end_time,
+            }
+          : {
+              name: requestData.name,
+              description: requestData.description,
+              start_time: requestData.start_time,
+              end_time: requestData.end_time,
+              pre_join_minutes: requestData.pre_join_minutes,
+              record_delay_minutes: requestData.record_delay_minutes,
+            }
+
         await taskApi.updateTask(editingTask.id, req)
-        message.success('更新成功')
+        message.success(isRecording ? '结束时间已更新' : '更新成功')
       } else {
         const req: CreateTaskRequest = requestData
         await taskApi.createTask(req)
@@ -389,8 +398,8 @@ export default function TaskManagement() {
           )}
         </PermissionGuard>
         <PermissionGuard permission={PERMISSIONS.TASK_EDIT}>
-          {canStartTask(record.status) && (
-            <Tooltip title="编辑任务">
+          {canEditEndTime(record.status) && (
+            <Tooltip title={record.status === 'recording' ? '修改结束时间' : '编辑任务'}>
               <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openModal(record)} />
             </Tooltip>
           )}
@@ -541,7 +550,13 @@ export default function TaskManagement() {
 
       {/* 新建/编辑任务对话框 */}
       <Modal
-        title={editingTask ? '编辑录制任务' : '新建录制任务'}
+        title={
+          editingTask
+            ? editingTask.status === 'recording'
+              ? '修改结束时间'
+              : '编辑录制任务'
+            : '新建录制任务'
+        }
         open={modalVisible}
         onOk={handleSubmit}
         onCancel={closeModal}
@@ -549,15 +564,25 @@ export default function TaskManagement() {
         destroyOnClose
       >
         <Form form={form} layout="vertical">
+          {/* 录制中状态只能编辑结束时间，其他字段被禁用并显示提示 */}
+          {editingTask && editingTask.status === 'recording' && (
+            <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 4 }}>
+              任务正在录制中，仅可修改结束时间
+            </div>
+          )}
+
           <Form.Item
             name="name"
             label="任务名称"
             rules={[
-              { required: true, message: '请输入任务名称' },
+              { required: !editingTask || canEditAllFields(editingTask.status), message: '请输入任务名称' },
               { max: 200, message: '任务名称最多200个字符' },
             ]}
           >
-            <Input placeholder="请输入任务名称" />
+            <Input
+              placeholder="请输入任务名称"
+              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
+            />
           </Form.Item>
 
           <Form.Item
@@ -565,30 +590,38 @@ export default function TaskManagement() {
             label="描述"
             rules={[{ max: 500, message: '描述最多500个字符' }]}
           >
-            <Input.TextArea placeholder="请输入任务描述" rows={3} />
+            <Input.TextArea
+              placeholder="请输入任务描述"
+              rows={3}
+              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
+            />
           </Form.Item>
 
           <Form.Item
             name="conference_number"
             label="会议号"
             rules={[
-              { required: true, message: '请输入会议号' },
+              { required: !editingTask || canEditAllFields(editingTask.status), message: '请输入会议号' },
               { max: 50, message: '会议号最多50个字符' },
             ]}
           >
-            <Input placeholder="请输入华为会议号" />
+            <Input
+              placeholder="请输入华为会议号"
+              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
+            />
           </Form.Item>
 
           <Form.Item
             name="huawei_config_id"
             label="华为配置"
-            rules={[{ required: true, message: '请选择华为配置' }]}
+            rules={[{ required: !editingTask || canEditAllFields(editingTask.status), message: '请选择华为配置' }]}
           >
             <Select
               placeholder="请选择华为配置"
               loading={configsLoading}
               showSearch
               optionFilterProp="label"
+              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
             >
               {huaweiConfigs.map((config) => (
                 <Select.Option key={config.id} value={config.id}>
@@ -602,9 +635,9 @@ export default function TaskManagement() {
             <Form.Item
               name="start_time"
               label="开始时间"
-              rules={[{ required: true, message: '请选择开始时间' }]}
+              rules={[{ required: !editingTask || canEditAllFields(editingTask.status), message: '请选择开始时间' }]}
             >
-              <DatePicker showTime format="YYYY-MM-DD HH:mm:ss" />
+              <DatePicker showTime format="YYYY-MM-DD HH:mm:ss" disabled={!!editingTask && !canEditAllFields(editingTask.status)} />
             </Form.Item>
 
             <Form.Item
@@ -625,7 +658,7 @@ export default function TaskManagement() {
               ]}
               initialValue={DEFAULT_PRE_JOIN_MINUTES}
             >
-              <Input type="number" style={{ width: 120 }} />
+              <Input type="number" style={{ width: 120 }} disabled={!!editingTask && !canEditAllFields(editingTask.status)} />
             </Form.Item>
 
             <Form.Item
@@ -636,7 +669,7 @@ export default function TaskManagement() {
               ]}
               initialValue={DEFAULT_RECORD_DELAY_MINUTES}
             >
-              <Input type="number" style={{ width: 120 }} />
+              <Input type="number" style={{ width: 120 }} disabled={!!editingTask && !canEditAllFields(editingTask.status)} />
             </Form.Item>
           </Space>
         </Form>
