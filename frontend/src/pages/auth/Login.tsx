@@ -13,7 +13,7 @@ export default function Login() {
   const login = useAuthStore((state) => state.login)
 
   // 获取登录前的跳转路径
-  const from = (location.state as any)?.from?.pathname || '/'
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || '/'
 
   const onFinish = async (values: LoginRequest) => {
     try {

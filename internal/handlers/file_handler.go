@@ -186,7 +186,7 @@ func (h *FileHandler) Share(c *gin.Context) {
 // ShareRequest 分享请求
 type ShareRequest struct {
 	ExpiresIn int    `json:"expires_in" binding:"min=60,max=2592000"` // 1分钟到30天
-	Password   string `json:"password" binding:"omitempty,max=100"`
+	Password  string `json:"password" binding:"omitempty,max=100"`
 }
 
 // ShareDownload 通过分享链接下载

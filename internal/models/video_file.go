@@ -9,21 +9,21 @@ import (
 // VideoFile 视频文件模型
 type VideoFile struct {
 	Base
-	FileName           string    `gorm:"type:varchar(200);not null" json:"file_name"`
-	FilePath           string    `gorm:"type:varchar(500);not null;uniqueIndex:idx_file_path" json:"file_path"`
-	FileSize           int64     `gorm:"default:0" json:"file_size"`  // 字节
-	Duration           int       `gorm:"default:0" json:"duration"`   // 秒
-	Format             string    `gorm:"type:varchar(20)" json:"format"` // mp4, mkv
-	Resolution         string    `gorm:"type:varchar(20)" json:"resolution"` // 1920x1080
-	Bitrate            int       `json:"bitrate"` // kbps
-	Codec              string    `gorm:"type:varchar(50)" json:"codec"`
-	TaskID             *uint     `gorm:"index" json:"task_id,omitempty"`                      // 关联的录制任务ID
-	Task               *VideoRecordingTask `gorm:"foreignKey:TaskID" json:"task,omitempty"`  // 关联的录制任务
-	CreatedBy          uint      `gorm:"not null" json:"created_by"`                       // 创建者ID
-	Creator            *User     `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`       // 创建者
-	Status             string    `gorm:"type:varchar(20);default:'ready';index:idx_status_created,priority:1" json:"status"` // ready, processing, error
-	ThumbnailPath      *string   `json:"thumbnail_path,omitempty"`
-	RecordedAt         *time.Time `gorm:"index" json:"recorded_at,omitempty"`
+	FileName      string              `gorm:"type:varchar(200);not null" json:"file_name"`
+	FilePath      string              `gorm:"type:varchar(500);not null;uniqueIndex:idx_file_path" json:"file_path"`
+	FileSize      int64               `gorm:"default:0" json:"file_size"`         // 字节
+	Duration      int                 `gorm:"default:0" json:"duration"`          // 秒
+	Format        string              `gorm:"type:varchar(20)" json:"format"`     // mp4, mkv
+	Resolution    string              `gorm:"type:varchar(20)" json:"resolution"` // 1920x1080
+	Bitrate       int                 `json:"bitrate"`                            // kbps
+	Codec         string              `gorm:"type:varchar(50)" json:"codec"`
+	TaskID        *uint               `gorm:"index" json:"task_id,omitempty"`                                                     // 关联的录制任务ID
+	Task          *VideoRecordingTask `gorm:"foreignKey:TaskID" json:"task,omitempty"`                                            // 关联的录制任务
+	CreatedBy     uint                `gorm:"not null" json:"created_by"`                                                         // 创建者ID
+	Creator       *User               `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`                                      // 创建者
+	Status        string              `gorm:"type:varchar(20);default:'ready';index:idx_status_created,priority:1" json:"status"` // ready, processing, error
+	ThumbnailPath *string             `json:"thumbnail_path,omitempty"`
+	RecordedAt    *time.Time          `gorm:"index" json:"recorded_at,omitempty"`
 }
 
 // 文件状态常量

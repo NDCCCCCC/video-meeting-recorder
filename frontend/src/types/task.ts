@@ -46,7 +46,7 @@ export interface VideoRecordingTask {
   error_msg?: string
   created_by: number
   creator?: TaskCreator
-  conference_record?: any
+  conference_record?: Record<string, unknown>
   conference_record_id?: number
 }
 

@@ -33,7 +33,7 @@ type ListConfigsRequest struct {
 
 // ListConfigsResponse 配置列表响应
 type ListConfigsResponse struct {
-	Total int64              `json:"total"`
+	Total int64                 `json:"total"`
 	Items []models.HuaweiConfig `json:"items"`
 }
 
@@ -47,8 +47,8 @@ type CreateConfigRequest struct {
 	Password         string `json:"password" binding:"required,max=100"`
 	TerminalNumber   string `json:"terminal_number" binding:"required,max=50"`
 	ConferenceNumber string `json:"conference_number" binding:"omitempty,max=50"`
-	CameraBackend    string `json:"camera_backend" binding:"omitempty,max=20"`    // dshow | v4l2 | avfoundation
-	AudioBackend     string `json:"audio_backend" binding:"omitempty,max=20"`     // dshow | alsa | coreaudio | wasapi
+	CameraBackend    string `json:"camera_backend" binding:"omitempty,max=20"` // dshow | v4l2 | avfoundation
+	AudioBackend     string `json:"audio_backend" binding:"omitempty,max=20"`  // dshow | alsa | coreaudio | wasapi
 	USBCameraName    string `json:"usb_camera_name" binding:"omitempty,max=100"`
 	USBCameraDevice  string `json:"usb_camera_device" binding:"omitempty,max=100"`
 	USBAudioName     string `json:"usb_audio_name" binding:"omitempty,max=100"`
@@ -341,15 +341,15 @@ func (s *HuaweiConfigService) validateBackendConfig(config *models.HuaweiConfig)
 		"avfoundation": true,
 	}
 	validAudioBackends := map[string]bool{
-		"dshow":      true,
-		"alsa":       true,
-		"coreaudio":  true,
-		"wasapi":     true,
+		"dshow":     true,
+		"alsa":      true,
+		"coreaudio": true,
+		"wasapi":    true,
 	}
 	validOutputFormats := map[string]bool{
-		"mp4":  true,
-		"mkv":  true,
-		"avi":  true,
+		"mp4": true,
+		"mkv": true,
+		"avi": true,
 	}
 
 	if config.CameraBackend != "" && !validCameraBackends[config.CameraBackend] {

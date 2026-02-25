@@ -82,11 +82,11 @@ export default function HuaweiConfigManagement() {
     setParams({ ...params, keyword: value, page: 1 })
   }
 
-  const handleTableChange = (pagination: any) => {
+  const handleTableChange = (pagination: { current?: number; pageSize?: number }) => {
     setParams({
       ...params,
-      page: pagination.current,
-      page_size: pagination.pageSize,
+      page: pagination.current ?? 1,
+      page_size: pagination.pageSize ?? 20,
     })
   }
 
@@ -175,16 +175,17 @@ export default function HuaweiConfigManagement() {
 
       closeModal()
       loadConfigs()
-    } catch (error: any) {
+    } catch (error) {
       // 改进错误提示，显示具体的验证错误信息
-      if (error?.errorFields) {
+      const err = error as Error & { errorFields?: Array<{ name?: string[]; errors?: string[] }> }
+      if (err.errorFields) {
         // Ant Design 表单验证错误
-        const firstError = error.errorFields[0]
+        const firstError = err.errorFields[0]
         const fieldName = firstError?.name?.[0] || '字段'
         const errorMessage = firstError?.errors?.[0] || '验证失败'
         message.error(`${fieldName}: ${errorMessage}`)
-      } else if (error?.message) {
-        message.error(error.message)
+      } else if (err.message) {
+        message.error(err.message)
       } else {
         message.error('操作失败，请检查表单填写是否正确')
       }

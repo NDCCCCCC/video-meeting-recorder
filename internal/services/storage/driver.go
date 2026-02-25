@@ -48,11 +48,11 @@ type UploadResult struct {
 
 // FileInfo 文件信息
 type FileInfo struct {
-	Path         string    `json:"path"`
-	Name         string    `json:"name"`
-	Size         int64     `json:"size"`
-	ModTime      time.Time `json:"mod_time"`
-	IsDir        bool      `json:"is_dir"`
-	ContentType  string    `json:"content_type,omitempty"`
-	ETag         string    `json:"etag,omitempty"`
+	Path        string    `json:"path"`
+	Name        string    `json:"name"`
+	Size        int64     `json:"size"`
+	ModTime     time.Time `json:"mod_time"`
+	IsDir       bool      `json:"is_dir"`
+	ContentType string    `json:"content_type,omitempty"`
+	ETag        string    `json:"etag,omitempty"`
 }

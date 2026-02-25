@@ -47,14 +47,14 @@ const (
 
 // RecordingInput 录制输入配置
 type RecordingInput struct {
-	Type         InputSourceType `json:"type"`
-	RTSPURL      string          `json:"rtsp_url,omitempty"`
-	CameraBackend string         `json:"camera_backend"`
-	AudioBackend  string         `json:"audio_backend"`
+	Type          InputSourceType `json:"type"`
+	RTSPURL       string          `json:"rtsp_url,omitempty"`
+	CameraBackend string          `json:"camera_backend"`
+	AudioBackend  string          `json:"audio_backend"`
 	CameraDevice  string          `json:"camera_device,omitempty"`
 	AudioDevice   string          `json:"audio_device,omitempty"`
-	CameraName    string          `json:"camera_name,omitempty"`    // 实际设备名称
-	AudioName     string          `json:"audio_name,omitempty"`     // 实际设备名称
+	CameraName    string          `json:"camera_name,omitempty"` // 实际设备名称
+	AudioName     string          `json:"audio_name,omitempty"`  // 实际设备名称
 	hasAudio      bool            // 内部标记是否有音频
 }
 
@@ -116,9 +116,9 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 		logFile:    logFile,
 	}
 	c.cancelFuncs[task.ID] = cancel
-	task.RecordingFile = mkvPath     // 兼容旧字段
-	task.MKVFilePath = mkvPath       // 新字段指向 MKV 文件
-	task.HLSPreviewPath = m3u8Path   // HLS 预览路径
+	task.RecordingFile = mkvPath   // 兼容旧字段
+	task.MKVFilePath = mkvPath     // 新字段指向 MKV 文件
+	task.HLSPreviewPath = m3u8Path // HLS 预览路径
 
 	c.logger.Info("录制已启动（同时生成 MKV 和 HLS）",
 		zap.Uint("task_id", task.ID),
@@ -209,8 +209,8 @@ func escapePathForTeeMuxerOptions(path string) string {
 
 	// 如果有盘符，分别处理盘符和剩余部分
 	if hasDriveLetter {
-		drive := normalized[:2]   // 如 "D:"
-		rest := normalized[2:]    // 如 "/Record_V2/..."
+		drive := normalized[:2] // 如 "D:"
+		rest := normalized[2:]  // 如 "/Record_V2/..."
 
 		// 转义剩余部分中的冒号（不包括盘符）
 		// Windows FFmpeg tee muxer 需要使用双反斜杠转义冒号
@@ -476,7 +476,7 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 		zap.String("hls_segment_path", hlsSegmentPath),
 		zap.Int("hls_segment_duration", hlsSegmentDuration),
 		zap.Int("hls_list_size", hlsListSize),
-		zap.String("tee_spec", teeSpec),  // 打印完整的 tee spec 以便调试
+		zap.String("tee_spec", teeSpec), // 打印完整的 tee spec 以便调试
 	)
 
 	return args, nil
@@ -535,7 +535,7 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 	validBackends := map[string]bool{
 		"dshow":        true,
 		"v4l2":         true,
-		"avfoundation":  true,
+		"avfoundation": true,
 	}
 
 	if !validBackends[input.CameraBackend] {
@@ -586,10 +586,10 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 // buildUSBAudioArgs 构建USB音频输入参数
 func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]string, error) {
 	validBackends := map[string]bool{
-		"dshow":      true,
-		"alsa":       true,
-		"coreaudio":  true,
-		"wasapi":     true,
+		"dshow":     true,
+		"alsa":      true,
+		"coreaudio": true,
+		"wasapi":    true,
 	}
 
 	if !validBackends[input.AudioBackend] {

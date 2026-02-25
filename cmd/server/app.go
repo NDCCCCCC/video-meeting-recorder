@@ -47,13 +47,13 @@ type MinimalApp struct {
 	services   map[string]common.Service
 	wg         sync.WaitGroup
 	// 调度器和协调器
-	scheduler            *scheduler.VideoSimpleScheduler
-	coordinator          *recorder.SimpleRecordingCoordinator
-	huaweiManager        *huaweiapi.Manager
-	huaweiConnector      *video_recording.HuaweiConferenceConnector
-	videoTaskService     *services.VideoRecordingTaskService
-	videoFileService     *services.VideoFileService
-	conversionService    services.ConversionService
+	scheduler         *scheduler.VideoSimpleScheduler
+	coordinator       *recorder.SimpleRecordingCoordinator
+	huaweiManager     *huaweiapi.Manager
+	huaweiConnector   *video_recording.HuaweiConferenceConnector
+	videoTaskService  *services.VideoRecordingTaskService
+	videoFileService  *services.VideoFileService
+	conversionService services.ConversionService
 }
 
 // Handlers 处理器集合
@@ -67,7 +67,7 @@ type Handlers struct {
 	File         *handlers.FileHandler
 	Audit        *handlers.AuditHandler
 	Notification *handlers.NotificationHandler
-	System        *handlers.SystemHandler
+	System       *handlers.SystemHandler
 }
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
@@ -284,24 +284,24 @@ func (a *MinimalApp) seedPermissions() error {
 	// 权限中文描述映射
 	permissionDescriptions := map[string]string{
 		models.ResourceTaskView:   "查看录制任务",
-		models.ResourceTaskCreate:  "创建录制任务",
-		models.ResourceTaskEdit:    "编辑录制任务",
-		models.ResourceTaskDelete:  "删除录制任务",
-		models.ResourceTaskStart:   "启动录制任务",
-		models.ResourceTaskStop:    "停止录制任务",
-		models.ResourceFileView:    "查看视频文件",
-		models.ResourceFileDelete:  "删除视频文件",
-		models.ResourceFileScan:    "扫描视频文件",
-		models.ResourceUserView:    "查看用户",
-		models.ResourceUserCreate:  "创建用户",
-		models.ResourceUserEdit:    "编辑用户",
-		models.ResourceUserDelete:  "删除用户",
-		models.ResourceRoleView:    "查看角色",
-		models.ResourceRoleCreate:  "创建角色",
-		models.ResourceRoleEdit:    "编辑角色",
-		models.ResourceRoleDelete:  "删除角色",
-		models.ResourceConfigView:  "查看华为配置",
-		models.ResourceConfigEdit:  "编辑华为配置",
+		models.ResourceTaskCreate: "创建录制任务",
+		models.ResourceTaskEdit:   "编辑录制任务",
+		models.ResourceTaskDelete: "删除录制任务",
+		models.ResourceTaskStart:  "启动录制任务",
+		models.ResourceTaskStop:   "停止录制任务",
+		models.ResourceFileView:   "查看视频文件",
+		models.ResourceFileDelete: "删除视频文件",
+		models.ResourceFileScan:   "扫描视频文件",
+		models.ResourceUserView:   "查看用户",
+		models.ResourceUserCreate: "创建用户",
+		models.ResourceUserEdit:   "编辑用户",
+		models.ResourceUserDelete: "删除用户",
+		models.ResourceRoleView:   "查看角色",
+		models.ResourceRoleCreate: "创建角色",
+		models.ResourceRoleEdit:   "编辑角色",
+		models.ResourceRoleDelete: "删除角色",
+		models.ResourceConfigView: "查看华为配置",
+		models.ResourceConfigEdit: "编辑华为配置",
 	}
 
 	// 遍历所有权限常量
@@ -495,25 +495,25 @@ func (a *MinimalApp) registerRoutes() error {
 	// 用户管理
 	users := api.Group("/users")
 	{
-		users.GET("", a.handlers.User.ListUsers)           // 获取用户列表
-		users.GET("/profile", a.handlers.User.GetCurrentProfile) // 获取当前用户资料
-		users.PUT("/profile", a.handlers.User.UpdateCurrentProfile) // 更新当前用户资料
-		users.GET("/:id", a.handlers.User.GetUser)         // 获取用户详情
-		users.POST("", a.handlers.User.CreateUser)         // 创建用户
-		users.PUT("/:id", a.handlers.User.UpdateUser)      // 更新用户
-		users.DELETE("/:id", a.handlers.User.DeleteUser)   // 删除用户
-		users.POST("/:id/reset-password", a.handlers.User.ResetPassword) // 重置密码
+		users.GET("", a.handlers.User.ListUsers)                           // 获取用户列表
+		users.GET("/profile", a.handlers.User.GetCurrentProfile)           // 获取当前用户资料
+		users.PUT("/profile", a.handlers.User.UpdateCurrentProfile)        // 更新当前用户资料
+		users.GET("/:id", a.handlers.User.GetUser)                         // 获取用户详情
+		users.POST("", a.handlers.User.CreateUser)                         // 创建用户
+		users.PUT("/:id", a.handlers.User.UpdateUser)                      // 更新用户
+		users.DELETE("/:id", a.handlers.User.DeleteUser)                   // 删除用户
+		users.POST("/:id/reset-password", a.handlers.User.ResetPassword)   // 重置密码
 		users.POST("/:id/toggle-status", a.handlers.User.ToggleUserStatus) // 切换状态
 	}
 
 	// 角色管理
 	roles := api.Group("/roles")
 	{
-		roles.GET("", a.handlers.Role.ListRoles)                    // 获取角色列表
-		roles.GET("/:id", a.handlers.Role.GetRole)                   // 获取角色详情
-		roles.POST("", a.handlers.Role.CreateRole)                  // 创建角色
-		roles.PUT("/:id", a.handlers.Role.UpdateRole)               // 更新角色
-		roles.DELETE("/:id", a.handlers.Role.DeleteRole)            // 删除角色
+		roles.GET("", a.handlers.Role.ListRoles)                          // 获取角色列表
+		roles.GET("/:id", a.handlers.Role.GetRole)                        // 获取角色详情
+		roles.POST("", a.handlers.Role.CreateRole)                        // 创建角色
+		roles.PUT("/:id", a.handlers.Role.UpdateRole)                     // 更新角色
+		roles.DELETE("/:id", a.handlers.Role.DeleteRole)                  // 删除角色
 		roles.GET("/:id/permissions", a.handlers.Role.GetRolePermissions) // 获取角色权限
 		roles.POST("/:id/permissions", a.handlers.Role.AssignPermissions) // 分配权限
 	}
@@ -524,57 +524,57 @@ func (a *MinimalApp) registerRoutes() error {
 	// 录制任务管理 (使用 /recordings 路径符合API文档规范)
 	recordings := api.Group("/recordings")
 	{
-		recordings.GET("", a.handlers.VideoTask.ListTasks)                      // 获取任务列表
-		recordings.GET("/:id", a.handlers.VideoTask.GetTask)                    // 获取任务详情
-		recordings.POST("", a.handlers.VideoTask.CreateTask)                    // 创建任务
-		recordings.PUT("/:id", a.handlers.VideoTask.UpdateTask)                 // 更新任务
-		recordings.DELETE("/:id", a.handlers.VideoTask.DeleteTask)              // 删除任务
-		recordings.DELETE("/batch", a.handlers.VideoTask.BatchDeleteTasks)      // 批量删除任务
-		recordings.POST("/:id/start", a.handlers.VideoTask.StartTask)           // 启动任务
-		recordings.POST("/:id/stop", a.handlers.VideoTask.StopTask)             // 停止任务
-		recordings.POST("/:id/cancel", a.handlers.VideoTask.CancelTask)         // 取消任务
-		recordings.POST("/:id/retry", a.handlers.VideoTask.RetryTask)           // 重试任务
+		recordings.GET("", a.handlers.VideoTask.ListTasks)                 // 获取任务列表
+		recordings.GET("/:id", a.handlers.VideoTask.GetTask)               // 获取任务详情
+		recordings.POST("", a.handlers.VideoTask.CreateTask)               // 创建任务
+		recordings.PUT("/:id", a.handlers.VideoTask.UpdateTask)            // 更新任务
+		recordings.DELETE("/:id", a.handlers.VideoTask.DeleteTask)         // 删除任务
+		recordings.DELETE("/batch", a.handlers.VideoTask.BatchDeleteTasks) // 批量删除任务
+		recordings.POST("/:id/start", a.handlers.VideoTask.StartTask)      // 启动任务
+		recordings.POST("/:id/stop", a.handlers.VideoTask.StopTask)        // 停止任务
+		recordings.POST("/:id/cancel", a.handlers.VideoTask.CancelTask)    // 取消任务
+		recordings.POST("/:id/retry", a.handlers.VideoTask.RetryTask)      // 重试任务
 		// 转换相关
-		recordings.GET("/:id/conversion-status", a.handlers.VideoTask.GetConversionStatus)  // 获取转换状态
+		recordings.GET("/:id/conversion-status", a.handlers.VideoTask.GetConversionStatus) // 获取转换状态
 		recordings.POST("/:id/conversion-retry", a.handlers.VideoTask.RetryConversion)     // 重试转换
 		// HLS 预览相关
-		recordings.GET("/:id/preview", a.handlers.VideoTask.GetHLSPreview)      // 获取HLS预览信息
+		recordings.GET("/:id/preview", a.handlers.VideoTask.GetHLSPreview) // 获取HLS预览信息
 		// 注意：/:id/preview/stream/:file 路由已移至公开路由（无需JWT认证）
 	}
 
 	// 华为配置管理
 	huaweiConfigs := api.Group("/huawei-configs")
 	{
-		huaweiConfigs.GET("/scan-devices", a.handlers.HuaweiConfig.ScanUSBDevices)       // 扫描USB设备
+		huaweiConfigs.GET("/scan-devices", a.handlers.HuaweiConfig.ScanUSBDevices)             // 扫描USB设备
 		huaweiConfigs.GET("/recommended-device", a.handlers.HuaweiConfig.GetRecommendedDevice) // 获取推荐设备
-		huaweiConfigs.GET("", a.handlers.HuaweiConfig.ListConfigs)             // 获取配置列表
-		huaweiConfigs.GET("/active", a.handlers.HuaweiConfig.GetActiveConfigs) // 获取可用配置
-		huaweiConfigs.GET("/:id", a.handlers.HuaweiConfig.GetConfig)           // 获取配置详情
-		huaweiConfigs.POST("", a.handlers.HuaweiConfig.CreateConfig)           // 创建配置
-		huaweiConfigs.PUT("/:id", a.handlers.HuaweiConfig.UpdateConfig)        // 更新配置
-		huaweiConfigs.DELETE("/:id", a.handlers.HuaweiConfig.DeleteConfig)     // 删除配置
+		huaweiConfigs.GET("", a.handlers.HuaweiConfig.ListConfigs)                             // 获取配置列表
+		huaweiConfigs.GET("/active", a.handlers.HuaweiConfig.GetActiveConfigs)                 // 获取可用配置
+		huaweiConfigs.GET("/:id", a.handlers.HuaweiConfig.GetConfig)                           // 获取配置详情
+		huaweiConfigs.POST("", a.handlers.HuaweiConfig.CreateConfig)                           // 创建配置
+		huaweiConfigs.PUT("/:id", a.handlers.HuaweiConfig.UpdateConfig)                        // 更新配置
+		huaweiConfigs.DELETE("/:id", a.handlers.HuaweiConfig.DeleteConfig)                     // 删除配置
 	}
 
 	// 文件存储管理
 	storage := api.Group("/storage")
 	{
-		storage.POST("/upload", a.handlers.File.Upload)               // 上传文件
-		storage.GET("/quota", a.handlers.File.GetQuota)                // 获取配额
-		storage.GET("", a.handlers.File.List)                          // 获取文件列表
-		storage.DELETE("/:id", a.handlers.File.Delete)                 // 删除文件
-		storage.POST("/:id/share", a.handlers.File.Share)              // 生成分享链接
+		storage.POST("/upload", a.handlers.File.Upload)   // 上传文件
+		storage.GET("/quota", a.handlers.File.GetQuota)   // 获取配额
+		storage.GET("", a.handlers.File.List)             // 获取文件列表
+		storage.DELETE("/:id", a.handlers.File.Delete)    // 删除文件
+		storage.POST("/:id/share", a.handlers.File.Share) // 生成分享链接
 	}
 
 	// 视频文件管理
 	files := api.Group("/files")
 	{
-		files.GET("", a.handlers.VideoFile.ListFiles)                    // 获取文件列表
-		files.GET("/stats", a.handlers.VideoFile.GetFileStats)            // 获取文件统计
-			files.DELETE("/batch", a.handlers.VideoFile.BatchDeleteFiles)    // 批量删除文件（必须在 /:id 之前）
-		files.GET("/:id/download", a.handlers.VideoFile.DownloadFile)    // 下载文件（必须在 /:id 之前）
+		files.GET("", a.handlers.VideoFile.ListFiles)                 // 获取文件列表
+		files.GET("/stats", a.handlers.VideoFile.GetFileStats)        // 获取文件统计
+		files.DELETE("/batch", a.handlers.VideoFile.BatchDeleteFiles) // 批量删除文件（必须在 /:id 之前）
+		files.GET("/:id/download", a.handlers.VideoFile.DownloadFile) // 下载文件（必须在 /:id 之前）
 		files.GET("/:id", a.handlers.VideoFile.GetFile)               // 获取文件详情
-		files.DELETE("/:id", a.handlers.VideoFile.DeleteFile)            // 删除文件
-		files.POST("/scan", a.handlers.VideoFile.ScanFiles)             // 扫描并导入文件
+		files.DELETE("/:id", a.handlers.VideoFile.DeleteFile)         // 删除文件
+		files.POST("/scan", a.handlers.VideoFile.ScanFiles)           // 扫描并导入文件
 	}
 
 	// 公开文件访问（无需认证）
@@ -587,28 +587,28 @@ func (a *MinimalApp) registerRoutes() error {
 	// 审计日志管理
 	auditLog := api.Group("/audit")
 	{
-		auditLog.GET("/logs", a.handlers.Audit.Query)                    // 查询审计日志
-		auditLog.GET("/logs/:id", a.handlers.Audit.GetByID)              // 获取日志详情
-		auditLog.GET("/statistics", a.handlers.Audit.Statistics)        // 获取操作统计
+		auditLog.GET("/logs", a.handlers.Audit.Query)            // 查询审计日志
+		auditLog.GET("/logs/:id", a.handlers.Audit.GetByID)      // 获取日志详情
+		auditLog.GET("/statistics", a.handlers.Audit.Statistics) // 获取操作统计
 	}
 
 	// 通知管理
 	notifications := api.Group("/notifications")
 	{
-		notifications.GET("", a.handlers.Notification.ListNotifications)                   // 获取通知列表
-		notifications.GET("/unread-count", a.handlers.Notification.GetUnreadCount)         // 获取未读数量
-		notifications.PUT("/:id/read", a.handlers.Notification.MarkAsRead)               // 标记为已读
-		notifications.PUT("/read-all", a.handlers.Notification.MarkAllAsRead)             // 全部标记为已读
-		notifications.GET("/settings", a.handlers.Notification.GetUserSetting)           // 获取通知配置
-		notifications.PUT("/settings", a.handlers.Notification.UpdateUserSetting)        // 更新通知配置
+		notifications.GET("", a.handlers.Notification.ListNotifications)           // 获取通知列表
+		notifications.GET("/unread-count", a.handlers.Notification.GetUnreadCount) // 获取未读数量
+		notifications.PUT("/:id/read", a.handlers.Notification.MarkAsRead)         // 标记为已读
+		notifications.PUT("/read-all", a.handlers.Notification.MarkAllAsRead)      // 全部标记为已读
+		notifications.GET("/settings", a.handlers.Notification.GetUserSetting)     // 获取通知配置
+		notifications.PUT("/settings", a.handlers.Notification.UpdateUserSetting)  // 更新通知配置
 	}
 
 	// 系统管理（需要 admin 权限）
 	system := api.Group("/system")
 	{
-		system.GET("/config", a.handlers.System.GetConfig)                  // 获取系统配置
-		system.PUT("/config", a.handlers.System.UpdateConfig)               // 更新系统配置
-		system.POST("/clear-files", a.handlers.System.ClearFiles)           // 清空文件数据库
+		system.GET("/config", a.handlers.System.GetConfig)        // 获取系统配置
+		system.PUT("/config", a.handlers.System.UpdateConfig)     // 更新系统配置
+		system.POST("/clear-files", a.handlers.System.ClearFiles) // 清空文件数据库
 	}
 
 	// 前端静态文件服务 (SPA 路由回退)
@@ -931,18 +931,18 @@ func (a *MinimalApp) schedulerDebugHandler(c *gin.Context) {
 			for _, task := range pendingTasks {
 				triggerTime := task.StartTime.Add(-time.Duration(task.PreJoinMinutes) * time.Minute)
 				taskDetail := map[string]interface{}{
-					"id":                 task.ID,
-					"name":               task.Name,
-					"status":             task.Status,
-					"start_time":         task.StartTime.Format(time.RFC3339),
-					"end_time":           task.EndTime.Format(time.RFC3339),
-					"trigger_time":       triggerTime.Format(time.RFC3339),
-					"pre_join_minutes":   task.PreJoinMinutes,
-					"is_scheduled":       a.scheduler.IsTaskScheduled(task.ID),
-					"is_executing":       a.scheduler.IsTaskExecuting(task.ID),
-					"seconds_until":      int(triggerTime.Sub(nowUTC).Seconds()),
-					"is_past_trigger":    nowUTC.After(triggerTime),
-					"is_past_end":        nowUTC.After(task.EndTime),
+					"id":               task.ID,
+					"name":             task.Name,
+					"status":           task.Status,
+					"start_time":       task.StartTime.Format(time.RFC3339),
+					"end_time":         task.EndTime.Format(time.RFC3339),
+					"trigger_time":     triggerTime.Format(time.RFC3339),
+					"pre_join_minutes": task.PreJoinMinutes,
+					"is_scheduled":     a.scheduler.IsTaskScheduled(task.ID),
+					"is_executing":     a.scheduler.IsTaskExecuting(task.ID),
+					"seconds_until":    int(triggerTime.Sub(nowUTC).Seconds()),
+					"is_past_trigger":  nowUTC.After(triggerTime),
+					"is_past_end":      nowUTC.After(task.EndTime),
 				}
 				taskDetails = append(taskDetails, taskDetail)
 			}

@@ -62,7 +62,7 @@ func NewTestFileService(t *testing.T) *FileService {
 				BasePath: t.TempDir(),
 				BaseURL:  "http://localhost:8080/files",
 			},
-			MaxFileSize:    100 * 1024 * 1024, // 100MB for testing
+			MaxFileSize:       100 * 1024 * 1024, // 100MB for testing
 			AllowedExtensions: []string{".txt", ".jpg", ".png"},
 		},
 		Server: config.ServerConfig{
@@ -356,7 +356,7 @@ func TestQuotaExceeded(t *testing.T) {
 	t.Run("配额不足", func(t *testing.T) {
 		// 先创建一个小的配额记录
 		quota := &models.UserStorageQuota{
-			UserID:    1,
+			UserID:     1,
 			TotalQuota: 100, // 100 bytes
 			UsedQuota:  90,
 			FileCount:  0,

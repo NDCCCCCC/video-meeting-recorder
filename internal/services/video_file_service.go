@@ -19,11 +19,11 @@ import (
 
 // 常量定义
 const (
-	DefaultFormat          = "mkv"
-	FFProbeTimeout       = 30 * time.Second
-	DefaultBitrate       = 0
-	DefaultCodec          = "h264"
-	DefaultResolution     = "1920x1080"
+	DefaultFormat     = "mkv"
+	FFProbeTimeout    = 30 * time.Second
+	DefaultBitrate    = 0
+	DefaultCodec      = "h264"
+	DefaultResolution = "1920x1080"
 )
 
 // VideoFileService 视频文件服务
@@ -56,17 +56,17 @@ func (s *VideoFileService) SetHLSPath(hlsPath string) {
 
 // ListFilesRequest 文件列表请求
 type ListFilesRequest struct {
-	Page          int    `form:"page"`
-	PageSize      int    `form:"page_size" binding:"max=100"`
-	Keyword       string  `form:"keyword"`
-	TaskID        *uint   `form:"task_id"`
-	Status        string  `form:"status"`
-	Format        string  `form:"format"`
-	StartDate     string  `form:"start_date"`
-	EndDate       string  `form:"end_date"`
-	UserID        uint    `form:"-"`
-	IsAdmin       bool    `form:"-"`
-	ApplyDataScope bool    `form:"-"`
+	Page           int    `form:"page"`
+	PageSize       int    `form:"page_size" binding:"max=100"`
+	Keyword        string `form:"keyword"`
+	TaskID         *uint  `form:"task_id"`
+	Status         string `form:"status"`
+	Format         string `form:"format"`
+	StartDate      string `form:"start_date"`
+	EndDate        string `form:"end_date"`
+	UserID         uint   `form:"-"`
+	IsAdmin        bool   `form:"-"`
+	ApplyDataScope bool   `form:"-"`
 }
 
 // ListFilesResponse 文件列表响应
@@ -293,9 +293,9 @@ func (s *VideoFileService) BatchDeleteFiles(ids []uint) (*BatchDeleteFilesResult
 	}
 
 	// 按文件状态和任务关联分类
-	var filesWithTask []models.VideoFile      // 有关联任务的文件
-	var orphanFiles []models.VideoFile        // 孤立文件（TaskID 为 nil）
-	var processingFileIDs []uint              // 处理中的文件 ID
+	var filesWithTask []models.VideoFile // 有关联任务的文件
+	var orphanFiles []models.VideoFile   // 孤立文件（TaskID 为 nil）
+	var processingFileIDs []uint         // 处理中的文件 ID
 
 	for _, file := range files {
 		if file.Status == models.FileStatusProcessing {
@@ -328,7 +328,7 @@ func (s *VideoFileService) BatchDeleteFiles(ids []uint) (*BatchDeleteFilesResult
 	}
 
 	// 按任务 ID 分组（一个任务可能有两个文件：mp4 和 mkv）
-	taskIDToFileCount := make(map[uint]int)  // 任务 ID -> 文件数量
+	taskIDToFileCount := make(map[uint]int) // 任务 ID -> 文件数量
 	taskIDs := make(map[uint]bool)
 	for _, file := range filesWithTask {
 		if file.TaskID != nil {
@@ -549,8 +549,8 @@ func (s *VideoFileService) GetFileStats(format string) (map[string]interface{}, 
 	}
 
 	return map[string]interface{}{
-		"total":        total,
-		"total_size":   totalSize,
+		"total":         total,
+		"total_size":    totalSize,
 		"total_size_gb": float64(totalSize) / (1024 * 1024 * 1024),
 	}, nil
 }
@@ -806,7 +806,7 @@ func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recorded
 		Status:     models.FileStatusReady,
 		TaskID:     taskID,
 		CreatedBy:  createdBy,
-		RecordedAt:  recordedAt,
+		RecordedAt: recordedAt,
 	}
 
 	if err := s.createWithDuplicateCheck(videoFile); err != nil {

@@ -13,7 +13,7 @@ import (
 // NotificationHandler 通知处理器
 type NotificationHandler struct {
 	notificationService *notification.NotificationService
-	logger               *zap.Logger
+	logger              *zap.Logger
 }
 
 // NewNotificationHandler 创建通知处理器

@@ -1,7 +1,7 @@
 // 认证相关类型定义
 
 // 统一响应结构
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   code: number
   message: string
   data?: T

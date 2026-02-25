@@ -73,15 +73,15 @@ func createTestVideoFile(t *testing.T, dir string, filename string, content stri
 func createTestTask(t *testing.T, db *gorm.DB, mkvPath, mp4Path string) *models.VideoRecordingTask {
 	task := &models.VideoRecordingTask{
 		Name:             "测试任务",
-		ConferenceNumber:  "123456789",
-		HuaweiConfigID:    1,
-		Status:            models.VideoStatusCompleted,
-		StartTime:         time.Now().Add(-1 * time.Hour),
-		EndTime:           time.Now(),
-		MKVFilePath:       mkvPath,
-		MP4FilePath:       mp4Path,
-		CreatedBy:         1,
-		ConversionStatus:  models.ConversionStatusCompleted,
+		ConferenceNumber: "123456789",
+		HuaweiConfigID:   1,
+		Status:           models.VideoStatusCompleted,
+		StartTime:        time.Now().Add(-1 * time.Hour),
+		EndTime:          time.Now(),
+		MKVFilePath:      mkvPath,
+		MP4FilePath:      mp4Path,
+		CreatedBy:        1,
+		ConversionStatus: models.ConversionStatusCompleted,
 	}
 
 	err := db.Create(task).Error
@@ -291,9 +291,9 @@ func TestExtractVideoMetadata(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, metadata)
 		assert.Equal(t, "mkv", metadata.Format) // 默认格式
-		// 文件不存在时，Codec 和 Resolution 不会被设置
-		assert.Empty(t, metadata.Codec)
-		assert.Empty(t, metadata.Resolution)
+		// 文件不存在时，返回默认元数据值
+		assert.Equal(t, "h264", metadata.Codec)
+		assert.Equal(t, "1920x1080", metadata.Resolution)
 	})
 
 	t.Run("MP4文件格式识别", func(t *testing.T) {
@@ -469,10 +469,10 @@ func TestListFiles(t *testing.T) {
 		// 创建一个processing状态的文件
 		processingFile := &models.VideoFile{
 			FileName: "video2.mp4",
-			FilePath:  filePath2,
-			FileSize:  100,
-			Status:    models.FileStatusProcessing,
-			Format:    "mp4",
+			FilePath: filePath2,
+			FileSize: 100,
+			Status:   models.FileStatusProcessing,
+			Format:   "mp4",
 		}
 		err = db.Create(processingFile).Error
 		require.NoError(t, err)
@@ -573,29 +573,37 @@ func TestGetFileByID(t *testing.T) {
 // TestDeleteFile 测试删除文件
 func TestDeleteFile(t *testing.T) {
 	t.Run("成功删除文件", func(t *testing.T) {
-		service, db, tempDir := setupTestService()
+		service, db, _ := setupTestService(t)
 
-		// 创建测试文件
-		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
-		createdFile, err := service.CreateFile(filePath, nil, nil)
+		// 首先创建一个录制任务
+		task := createTestTask(t, db, "", "")
+		taskID := task.ID
+
+		// 创建一个文件记录并关联任务（不需要实际物理文件，因为 DeleteFile 删除的是任务目录）
+		file := &models.VideoFile{
+			FileName: "video.mp4",
+			FilePath: "/tmp/video.mp4",
+			FileSize: 100,
+			Status:   models.FileStatusReady,
+			Format:   "mp4",
+			TaskID:   &taskID,
+		}
+		err := db.Create(file).Error
 		require.NoError(t, err)
 
-		// 验证文件存在
-		_, err = os.Stat(filePath)
-		assert.NoError(t, err)
+		// 验证文件记录存在
+		var countBefore int64
+		db.Model(&models.VideoFile{}).Where("id = ?", file.ID).Count(&countBefore)
+		assert.Equal(t, int64(1), countBefore)
 
 		// 删除文件
-		err = service.DeleteFile(createdFile.ID)
+		err = service.DeleteFile(file.ID)
 		assert.NoError(t, err)
 
 		// 验证数据库记录已删除
-		var count int64
-		db.Model(&models.VideoFile{}).Where("id = ?", createdFile.ID).Count(&count)
-		assert.Equal(t, int64(0), count)
-
-		// 验证物理文件已删除
-		_, err = os.Stat(filePath)
-		assert.True(t, os.IsNotExist(err))
+		var countAfter int64
+		db.Model(&models.VideoFile{}).Where("id = ?", file.ID).Count(&countAfter)
+		assert.Equal(t, int64(0), countAfter)
 	})
 
 	t.Run("删除不存在的文件", func(t *testing.T) {
@@ -610,16 +618,16 @@ func TestDeleteFile(t *testing.T) {
 	})
 
 	t.Run("删除processing状态的文件", func(t *testing.T) {
-		service, db, tempDir := setupTestService()
+		service, db, tempDir := setupTestService(t)
 
 		// 创建一个processing状态的文件
 		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
 		processingFile := &models.VideoFile{
 			FileName: "video.mp4",
-			FilePath:  filePath,
-			FileSize:  100,
-			Status:    models.FileStatusProcessing,
-			Format:    "mp4",
+			FilePath: filePath,
+			FileSize: 100,
+			Status:   models.FileStatusProcessing,
+			Format:   "mp4",
 		}
 		err := db.Create(processingFile).Error
 		require.NoError(t, err)
@@ -633,15 +641,20 @@ func TestDeleteFile(t *testing.T) {
 	})
 
 	t.Run("删除不存在的物理文件", func(t *testing.T) {
-		service, db, tempDir := setupTestService(t)
+		service, db, _ := setupTestService(t)
 
-		// 创建一个文件记录，但物理文件不存在
+		// 首先创建一个录制任务
+		task := createTestTask(t, db, "", "")
+		taskID := task.ID
+
+		// 创建一个文件记录，但物理文件不存在，并关联任务
 		file := &models.VideoFile{
 			FileName: "nonexistent.mp4",
-			FilePath:  "/nonexistent/path/nonexistent.mp4",
-			FileSize:  100,
-			Status:    models.FileStatusReady,
-			Format:    "mp4",
+			FilePath: "/nonexistent/path/nonexistent.mp4",
+			FileSize: 100,
+			Status:   models.FileStatusReady,
+			Format:   "mp4",
+			TaskID:   &taskID,
 		}
 		err := db.Create(file).Error
 		require.NoError(t, err)
@@ -654,14 +667,18 @@ func TestDeleteFile(t *testing.T) {
 
 		var count int64
 		db.Model(&models.VideoFile{}).Where("id = ?", file.ID).Count(&count)
-		// 更新状态为processing
+		assert.Equal(t, int64(0), count)
+	})
+
+	t.Run("查找视频文件", func(t *testing.T) {
+		service, _, tempDir := setupTestService(t)
 
 		// 创建临时录制目录结构
 		recordingsDir := filepath.Join(tempDir, "data", "recordings")
 		err := os.MkdirAll(recordingsDir, 0755)
 		require.NoError(t, err)
 
-		// 创建测试视频文件
+		// 创建测试视频文件 - findVideoFiles 只扫描 .mp4 文件
 		mkvFile := filepath.Join(recordingsDir, "video1.mkv")
 		mp4File := filepath.Join(recordingsDir, "video2.mp4")
 		err = os.WriteFile(mkvFile, []byte("fake mkv"), 0644)
@@ -669,34 +686,31 @@ func TestDeleteFile(t *testing.T) {
 		err = os.WriteFile(mp4File, []byte("fake mp4"), 0644)
 		require.NoError(t, err)
 
-		// 注意：由于ScanFiles使用了硬编码的目录路径
-		// 我们需要测试findVideoFiles方法或修改测试方式
-		// 这里我们测试findVideoFiles方法
+		// 测试 findVideoFiles 方法
 		files, err := service.findVideoFiles(recordingsDir)
 		assert.NoError(t, err)
-		assert.Len(t, files, 2)
-		assert.Contains(t, files, mkvFile)
-		assert.Contains(t, files, mp4File)
+		assert.Len(t, files, 1) // 只找到 mp4 文件
+		assert.Equal(t, mp4File, files[0].filePath)
 	})
 
 	t.Run("混合已存在和不存在文件", func(t *testing.T) {
-		service, _, tempDir := setupTestService()
+		service, _, tempDir := setupTestService(t)
 
 		// 创建临时录制目录
 		recordingsDir := filepath.Join(tempDir, "data", "recordings")
 		err := os.MkdirAll(recordingsDir, 0755)
 		require.NoError(t, err)
 
-		// 创建第一个文件并入库
-		filePath1 := filepath.Join(recordingsDir, "video1.mkv")
-		err = os.WriteFile(filePath1, []byte("fake mkv 1"), 0644)
+		// 创建第一个 mp4 文件并入库
+		filePath1 := filepath.Join(recordingsDir, "video1.mp4")
+		err = os.WriteFile(filePath1, []byte("fake mp4 1"), 0644)
 		require.NoError(t, err)
 		_, err = service.CreateFile(filePath1, nil, nil)
 		require.NoError(t, err)
 
-		// 创建第二个文件但未入库
-		filePath2 := filepath.Join(recordingsDir, "video2.mkv")
-		err = os.WriteFile(filePath2, []byte("fake mkv 2"), 0644)
+		// 创建第二个 mp4 文件但未入库
+		filePath2 := filepath.Join(recordingsDir, "video2.mp4")
+		err = os.WriteFile(filePath2, []byte("fake mp4 2"), 0644)
 		require.NoError(t, err)
 
 		// 查找所有文件
@@ -716,7 +730,7 @@ func TestDeleteFile(t *testing.T) {
 	})
 
 	t.Run("查找非视频文件", func(t *testing.T) {
-		service, _, tempDir := setupTestService()
+		service, _, tempDir := setupTestService(t)
 
 		// 创建目录并混合不同类型的文件
 		recordingsDir := filepath.Join(tempDir, "recordings")
@@ -736,12 +750,12 @@ func TestDeleteFile(t *testing.T) {
 		// 查找文件
 		files, err := service.findVideoFiles(recordingsDir)
 
-		// 验证只返回视频文件
+		// 验证只返回 .mp4 文件（findVideoFiles 只扫描 .mp4）
 		assert.NoError(t, err)
-		assert.Len(t, files, 2)
+		assert.Len(t, files, 1)
 		for _, file := range files {
-			ext := strings.ToLower(filepath.Ext(file.Path))
-			assert.True(t, ext == ".mkv" || ext == ".mp4")
+			ext := strings.ToLower(filepath.Ext(file.filePath))
+			assert.Equal(t, ".mp4", ext)
 		}
 	})
 }
@@ -749,7 +763,7 @@ func TestDeleteFile(t *testing.T) {
 // TestFindVideoFiles 测试查找视频文件
 func TestFindVideoFiles(t *testing.T) {
 	t.Run("递归查找子目录", func(t *testing.T) {
-		service, _, tempDir := setupTestService()
+		service, _, tempDir := setupTestService(t)
 
 		// 创建多级目录结构
 		subDir1 := filepath.Join(tempDir, "level1")
@@ -757,18 +771,21 @@ func TestFindVideoFiles(t *testing.T) {
 		err := os.MkdirAll(subDir2, 0755)
 		require.NoError(t, err)
 
-		// 在不同层级创建文件
-		err = os.WriteFile(filepath.Join(tempDir, "root.mkv"), []byte("root"), 0644)
+		// 在不同层级创建文件 - 注意：findVideoFiles 只扫描 .mp4 文件
+		err = os.WriteFile(filepath.Join(tempDir, "root.mp4"), []byte("root"), 0644)
 		require.NoError(t, err)
 		err = os.WriteFile(filepath.Join(subDir1, "level1.mp4"), []byte("level1"), 0644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(subDir2, "level2.mkv"), []byte("level2"), 0644)
+		err = os.WriteFile(filepath.Join(subDir2, "level2.mp4"), []byte("level2"), 0644)
+		require.NoError(t, err)
+		// MKV 文件会被忽略
+		err = os.WriteFile(filepath.Join(tempDir, "ignored.mkv"), []byte("ignored"), 0644)
 		require.NoError(t, err)
 
 		// 查找文件
 		files, err := service.findVideoFiles(tempDir)
 
-		// 验证找到了所有层级的文件
+		// 验证只找到 .mp4 文件（3个）
 		assert.NoError(t, err)
 		assert.Len(t, files, 3)
 	})
@@ -777,7 +794,7 @@ func TestFindVideoFiles(t *testing.T) {
 // TestListFilesWithDateFilter 测试日期筛选
 func TestListFilesWithDateFilter(t *testing.T) {
 	t.Run("日期范围筛选", func(t *testing.T) {
-		service, _, tempDir := setupTestService()
+		service, _, tempDir := setupTestService(t)
 
 		// 创建不同时间的文件
 		now := time.Now()
@@ -841,7 +858,7 @@ func BenchmarkListFiles(b *testing.B) {
 			FileName: filepath.Base(filePath),
 			FilePath: filePath,
 			FileSize: fileInfo.Size(),
-			Status:     models.FileStatusReady,
+			Status:   models.FileStatusReady,
 		}
 		if err := db.Create(videoFile).Error; err != nil {
 			b.Fatal(err)

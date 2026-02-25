@@ -32,7 +32,7 @@ type Claims struct {
 	RoleID      uint     `json:"role_id"`
 	Permissions []string `json:"permissions"` // 用户权限列表
 	IsAdmin     bool     `json:"is_admin"`    // 是否是管理员
-	TokenType   string   `json:"token_type"` // access | refresh
+	TokenType   string   `json:"token_type"`  // access | refresh
 	jwt.RegisteredClaims
 }
 

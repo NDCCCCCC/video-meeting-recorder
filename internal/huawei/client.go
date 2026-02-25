@@ -17,15 +17,15 @@ import (
 
 // Config 华为终端API配置
 type Config struct {
-	Server            string        // 终端设备IP地址
-	Port              int           // 终端设备端口（通常是443）
-	Username          string        // 登录用户名
-	Password          string        // 登录密码
-	APITimeout        time.Duration // API超时时间
-	SessionTimeout    time.Duration // 会话超时时间
-	KeepAliveInterval time.Duration // 保活间隔（必须小于60秒）
-	InsecureSkipVerify bool         // 是否跳过证书验证
-	MinTLSVersion     uint16        // 最小TLS版本
+	Server             string        // 终端设备IP地址
+	Port               int           // 终端设备端口（通常是443）
+	Username           string        // 登录用户名
+	Password           string        // 登录密码
+	APITimeout         time.Duration // API超时时间
+	SessionTimeout     time.Duration // 会话超时时间
+	KeepAliveInterval  time.Duration // 保活间隔（必须小于60秒）
+	InsecureSkipVerify bool          // 是否跳过证书验证
+	MinTLSVersion      uint16        // 最小TLS版本
 }
 
 // Session 会话信息
@@ -67,18 +67,18 @@ func (s *Session) SetActive(active bool) {
 
 // APIResponse 统一API响应格式（华为终端实际返回格式）
 type APIResponse struct {
-	Success   int             `json:"success"`
-	Data      string          `json:"data,omitempty"`      // 注意：华为API返回的是JSON字符串，不是对象
-	Exception ExceptionInfo   `json:"exception,omitempty"` // 某些API使用exception
-	Error     ExceptionInfo   `json:"error,omitempty"`     // 某些API使用error
-	Cookies   []*http.Cookie  `json:"-"`                   // 从响应中提取的Cookies
+	Success   int            `json:"success"`
+	Data      string         `json:"data,omitempty"`      // 注意：华为API返回的是JSON字符串，不是对象
+	Exception ExceptionInfo  `json:"exception,omitempty"` // 某些API使用exception
+	Error     ExceptionInfo  `json:"error,omitempty"`     // 某些API使用error
+	Cookies   []*http.Cookie `json:"-"`                   // 从响应中提取的Cookies
 }
 
 // ExceptionInfo 异常信息
 type ExceptionInfo struct {
-	ID     int    `json:"id"`
-	Code   int    `json:"code,omitempty"`   // 错误码
-	Params []int  `json:"params,omitempty"`  // 错误参数
+	ID     int   `json:"id"`
+	Code   int   `json:"code,omitempty"`   // 错误码
+	Params []int `json:"params,omitempty"` // 错误参数
 }
 
 // GetErrorID 获取错误ID（兼容exception和error字段）
@@ -91,7 +91,7 @@ func (e *ExceptionInfo) GetErrorID() int {
 
 // SessionIDResponse 获取会话ID响应（解析data字段后的结构）
 type SessionIDResponse struct {
-	AcSessionID string `json:"acSessionId"`  // 注意：华为API使用驼峰命名
+	AcSessionID string `json:"acSessionId"` // 注意：华为API使用驼峰命名
 	SzTermType  string `json:"szTermType"`
 }
 
@@ -149,25 +149,25 @@ type HangupCallResponse struct {
 
 // ConferenceInfo 会议信息
 type ConferenceInfo struct {
-	Status      string      `json:"status"`       // 会议状态
-	Name        string      `json:"name"`         // 会议名称
-	Number      string      `json:"number"`       // 会议号
-	SiteList    []SiteInfo  `json:"site_list"`    // 站点列表
-	StartTime   string      `json:"start_time"`   // 开始时间
-	EndTime     string      `json:"end_time"`     // 结束时间
-	Duration    int         `json:"duration"`     // 持续时间
-	IsActive    bool        `json:"is_active"`    // 是否活跃
-	IsRecording bool        `json:"is_recording"` // 是否录制
+	Status      string       `json:"status"`       // 会议状态
+	Name        string       `json:"name"`         // 会议名称
+	Number      string       `json:"number"`       // 会议号
+	SiteList    []SiteInfo   `json:"site_list"`    // 站点列表
+	StartTime   string       `json:"start_time"`   // 开始时间
+	EndTime     string       `json:"end_time"`     // 结束时间
+	Duration    int          `json:"duration"`     // 持续时间
+	IsActive    bool         `json:"is_active"`    // 是否活跃
+	IsRecording bool         `json:"is_recording"` // 是否录制
 	RTSPStreams []RTSPStream `json:"rtsp_streams"` // RTSP流列表
 }
 
 // SiteInfo 站点信息
 type SiteInfo struct {
-	SiteURI      string `json:"site_uri"`       // 站点URI
-	SiteName     string `json:"site_name"`      // 站点名称
-	SiteIP       string `json:"site_ip"`        // 站点IP
-	SiteStatus   int    `json:"site_status"`    // 站点状态
-	JoinTime     string `json:"join_time"`      // 加入时间
+	SiteURI    string `json:"site_uri"`    // 站点URI
+	SiteName   string `json:"site_name"`   // 站点名称
+	SiteIP     string `json:"site_ip"`     // 站点IP
+	SiteStatus int    `json:"site_status"` // 站点状态
+	JoinTime   string `json:"join_time"`   // 加入时间
 }
 
 // RTSPStream RTSP流信息
@@ -178,41 +178,41 @@ type RTSPStream struct {
 
 // TerminalStatus 终端状态
 type TerminalStatus struct {
-	TerminalNumber string        `json:"terminal_number"`
-	Name           string        `json:"name"`
-	Status         string        `json:"status"` // idle, in_call, offline
-	IPAddress      string        `json:"ip_address"`
-	Version        string        `json:"version"`
+	TerminalNumber string          `json:"terminal_number"`
+	Name           string          `json:"name"`
+	Status         string          `json:"status"` // idle, in_call, offline
+	IPAddress      string          `json:"ip_address"`
+	Version        string          `json:"version"`
 	USBDevices     []USBDeviceInfo `json:"usb_devices"`
 }
 
 // USBDeviceInfo USB设备信息
 type USBDeviceInfo struct {
-	Type     string `json:"type"`     // camera, audio
+	Type     string `json:"type"` // camera, audio
 	Name     string `json:"name"`
 	DeviceID string `json:"device_id"`
-	Status   string `json:"status"`   // available, busy, error
+	Status   string `json:"status"` // available, busy, error
 }
 
 // MailboxState 邮箱状态信息（来自WEB_GetMailboxDataAPI）
 type MailboxState struct {
 	State struct {
-		Sitename   string `json:"sitename"`
-		Speaker    int    `json:"speaker"`
-		Mic        int    `json:"mic"`
-		Gk         int    `json:"gk"`
-		Sip        int    `json:"sip"`
-		Callstate  int    `json:"callstate"`  // 通话状态
-		Calltype   int    `json:"calltype"`
-		Conftype   int    `json:"conftype"`
-		IsInConf   int    `json:"isInConf"`   // 是否在会议中，1表示在会议中
+		Sitename  string `json:"sitename"`
+		Speaker   int    `json:"speaker"`
+		Mic       int    `json:"mic"`
+		Gk        int    `json:"gk"`
+		Sip       int    `json:"sip"`
+		Callstate int    `json:"callstate"` // 通话状态
+		Calltype  int    `json:"calltype"`
+		Conftype  int    `json:"conftype"`
+		IsInConf  int    `json:"isInConf"` // 是否在会议中，1表示在会议中
 	} `json:"state"`
 }
 
 // HTTPClient HTTP客户端封装
 type HTTPClient struct {
-	client *http.Client
-	logger *zap.Logger
+	client  *http.Client
+	logger  *zap.Logger
 	baseURL *url.URL
 }
 
@@ -236,8 +236,8 @@ func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipV
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: insecureSkipVerify,
-					MinVersion:         minTLSVersion,     // TLS 1.0
-					MaxVersion:         tls.VersionTLS12,  // 限制最大版本为 TLS 1.2（华为终端兼容性）
+					MinVersion:         minTLSVersion,    // TLS 1.0
+					MaxVersion:         tls.VersionTLS12, // 限制最大版本为 TLS 1.2（华为终端兼容性）
 					// 华为终端使用的密码套件
 					CipherSuites: []uint16{
 						tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -260,7 +260,7 @@ func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipV
 				MaxIdleConnsPerHost: 10,
 				IdleConnTimeout:     90 * time.Second,
 				// 禁用 HTTP/2，强制使用 HTTP/1.1（华为老设备兼容）
-				ForceAttemptHTTP2:   false,
+				ForceAttemptHTTP2: false,
 			},
 		},
 		logger:  logger,
@@ -365,11 +365,11 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 
 // HuaweiClient 华为终端API客户端
 type HuaweiClient struct {
-	config         *Config
-	httpClient     *HTTPClient
-	session        *Session
-	logger         *zap.Logger
-	mu             sync.RWMutex
+	config          *Config
+	httpClient      *HTTPClient
+	session         *Session
+	logger          *zap.Logger
+	mu              sync.RWMutex
 	cancelKeepAlive context.CancelFunc
 }
 
@@ -681,7 +681,7 @@ func (c *HuaweiClient) CallConference(ctx context.Context, conferenceNumber stri
 			UwID:      0,
 			SzName:    conferenceNumber, // 使用会议号作为名称
 			SzPName:   "",
-			UcType:    8,  // 8表示会议号类型
+			UcType:    8, // 8表示会议号类型
 			BIsLdap:   0,
 			UcDevice:  0,
 			UcOnline:  0,

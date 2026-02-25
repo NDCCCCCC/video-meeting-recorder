@@ -126,15 +126,15 @@ export function canAccessSubMenu(user: User | null, path: string): boolean {
  * @param menuItems 菜单项数组
  * @returns 过滤后的菜单项（过滤掉无权限的项）
  */
-export function filterMenuByPermission<T>(
+export function filterMenuByPermission<T extends { key?: string; children?: T[] }>(
   user: User | null,
   menuItems: T[]
 ): T[] {
-  return menuItems.filter((item: any) => {
+  return menuItems.filter((item) => {
     if (!item || (!item.key && !item.children)) return false
     // 处理带子菜单的项目
     if (item.children && Array.isArray(item.children)) {
-      const filteredChildren = item.children.filter((child: any) => {
+      const filteredChildren = item.children.filter((child) => {
         if (!child.key) return true
         return canAccessMenu(user, String(child.key))
       })
@@ -155,11 +155,11 @@ export function filterMenuByPermission<T>(
  * @param subMenuItems 子菜单项数组
  * @returns 过滤后的子菜单项
  */
-export function filterSubMenuByPermission<T>(
+export function filterSubMenuByPermission<T extends { key?: string }>(
   user: User | null,
   subMenuItems: T[]
 ): T[] {
-  return subMenuItems.filter((item: any) => {
+  return subMenuItems.filter((item) => {
     if (!item || !item.key) return true
     return canAccessSubMenu(user, String(item.key))
   })

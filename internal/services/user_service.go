@@ -33,7 +33,7 @@ type ListUsersRequest struct {
 
 // ListResponse 用户列表响应
 type ListUsersResponse struct {
-	Total int64        `json:"total"`
+	Total int64         `json:"total"`
 	Items []models.User `json:"items"`
 }
 

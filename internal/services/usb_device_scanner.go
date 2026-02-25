@@ -15,11 +15,11 @@ import (
 
 // USBDeviceInfo USB设备信息
 type USBDeviceInfo struct {
-	Type     string `json:"type"`     // "camera" | "audio"
-	Name     string `json:"name"`     // 设备名称
+	Type     string `json:"type"`      // "camera" | "audio"
+	Name     string `json:"name"`      // 设备名称
 	DeviceID string `json:"device_id"` // 设备ID (/dev/video0, hw:1,0, video=0)
-	Status   string `json:"status"`   // "available" | "in_use" | "error"
-	Backend  string `json:"backend"`  // "v4l2" | "alsa" | "dshow" | "wasapi"
+	Status   string `json:"status"`    // "available" | "in_use" | "error"
+	Backend  string `json:"backend"`   // "v4l2" | "alsa" | "dshow" | "wasapi"
 }
 
 // USBDeviceScanner USB设备扫描器
@@ -289,7 +289,7 @@ func (s *USBDeviceScanner) scanWindowsAudioDevices() ([]USBDeviceInfo, error) {
 
 	err := cmd.Run()
 	if err != nil {
-	s.logger.Warn("PowerShell Get-AudioDevice失败，尝试使用ffmpeg", zap.Error(err))
+		s.logger.Warn("PowerShell Get-AudioDevice失败，尝试使用ffmpeg", zap.Error(err))
 		// 如果PowerShell失败，尝试使用ffmpeg
 		return s.scanWindowsAudioDevicesFFmpeg()
 	}

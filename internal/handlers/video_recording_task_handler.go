@@ -18,11 +18,11 @@ import (
 
 // VideoRecordingTaskHandler 视频录制任务处理器
 type VideoRecordingTaskHandler struct {
-	taskService      *services.VideoRecordingTaskService
+	taskService       *services.VideoRecordingTaskService
 	conversionService services.ConversionService
-	logger           *zap.Logger
-	config           *config.Config
-	hlsToken         *hlstoken.HLSToken
+	logger            *zap.Logger
+	config            *config.Config
+	hlsToken          *hlstoken.HLSToken
 }
 
 // NewVideoRecordingTaskHandler 创建视频录制任务处理器
@@ -237,10 +237,10 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 	)
 
 	response.GinSuccess(c, gin.H{
-		"message":      message,
-		"deleted_ids":  result.DeletedIDs,
-		"failed_ids":   result.FailedIDs,
-		"failed_tasks": result.FailedTasks,
+		"message":       message,
+		"deleted_ids":   result.DeletedIDs,
+		"failed_ids":    result.FailedIDs,
+		"failed_tasks":  result.FailedTasks,
 		"total_deleted": result.TotalDeleted,
 		"total_failed":  result.TotalFailed,
 	})

@@ -26,10 +26,10 @@ const (
 
 // FileService 文件服务
 type FileService struct {
-	db           *gorm.DB
-	logger       *zap.Logger
-	config       *config.Config
-	drivers      map[models.StorageType]StorageDriver
+	db            *gorm.DB
+	logger        *zap.Logger
+	config        *config.Config
+	drivers       map[models.StorageType]StorageDriver
 	defaultDriver StorageDriver
 }
 
@@ -55,10 +55,10 @@ type FileUploadResult struct {
 
 // QueryRequest 查询请求
 type QueryRequest struct {
-	Page       int    `form:"page" binding:"min=1"`
-	PageSize   int    `form:"page_size" binding:"min=1,max=100"`
-	FileType   string `form:"file_type"`
-	Keyword    string `form:"keyword"`
+	Page     int    `form:"page" binding:"min=1"`
+	PageSize int    `form:"page_size" binding:"min=1,max=100"`
+	FileType string `form:"file_type"`
+	Keyword  string `form:"keyword"`
 }
 
 // QueryResponse 查询响应
@@ -72,11 +72,11 @@ type QueryResponse struct {
 
 // QuotaInfo 配额信息
 type QuotaInfo struct {
-	TotalQuota  int64   `json:"total_quota"`
-	UsedQuota   int64   `json:"used_quota"`
-	FileCount   int     `json:"file_count"`
-	AvailableQuota int64 `json:"available_quota"`
-	UsagePercent float64 `json:"usage_percent"`
+	TotalQuota     int64   `json:"total_quota"`
+	UsedQuota      int64   `json:"used_quota"`
+	FileCount      int     `json:"file_count"`
+	AvailableQuota int64   `json:"available_quota"`
+	UsagePercent   float64 `json:"usage_percent"`
 }
 
 // NewFileService 创建文件服务
@@ -415,7 +415,7 @@ func (s *FileService) GetUserQuota(ctx context.Context, userID uint) (*QuotaInfo
 		if err == gorm.ErrRecordNotFound {
 			// 创建默认配额
 			quota = models.UserStorageQuota{
-				UserID:    userID,
+				UserID:     userID,
 				TotalQuota: defaultQuota,
 				UsedQuota:  0,
 				FileCount:  0,
@@ -527,8 +527,8 @@ func (s *FileService) updateUserQuota(ctx context.Context, userID uint, delta in
 	s.db.Model(&models.UserStorageQuota{}).
 		Where("user_id = ?", userID).
 		Updates(map[string]interface{}{
-			"used_quota":  gorm.Expr("used_quota + ?", delta),
-			"file_count":  gorm.Expr("file_count + ?", fileCountDelta),
+			"used_quota": gorm.Expr("used_quota + ?", delta),
+			"file_count": gorm.Expr("file_count + ?", fileCountDelta),
 		})
 }
 
