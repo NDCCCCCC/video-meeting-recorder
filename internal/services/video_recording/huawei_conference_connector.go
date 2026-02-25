@@ -283,6 +283,48 @@ func (c *HuaweiConferenceConnector) unlockTerminal(configID uint) error {
 	return nil
 }
 
+// UnlockTerminalByTaskID 通过任务ID解锁终端
+// 此方法用于任务取消时强制解锁，即使任务对象无法完整获取
+func (c *HuaweiConferenceConnector) UnlockTerminalByTaskID(taskID uint) error {
+	// 通过任务ID查找华为配置
+	var config models.HuaweiConfig
+	if err := c.db.Where("locked_by = ?", taskID).First(&config).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.logger.Info("未找到被此任务锁定的终端",
+				zap.Uint("task_id", taskID),
+			)
+			return nil // 没有被锁定的终端，不算错误
+		}
+		return fmt.Errorf("查找被锁定的终端失败: %w", err)
+	}
+
+	// 确认确实是此任务锁定的
+	if !config.IsLocked || config.LockedBy == nil || *config.LockedBy != taskID {
+		c.logger.Info("终端未被此任务锁定",
+			zap.Uint("task_id", taskID),
+			zap.Uint("config_id", config.ID),
+		)
+		return nil
+	}
+
+	// 解锁终端
+	if err := config.Unlock(); err != nil {
+		return fmt.Errorf("解锁配置失败: %w", err)
+	}
+
+	if err := c.db.Save(&config).Error; err != nil {
+		return fmt.Errorf("保存解锁状态失败: %w", err)
+	}
+
+	c.logger.Info("通过任务ID解锁终端成功",
+		zap.Uint("task_id", taskID),
+		zap.Uint("config_id", config.ID),
+		zap.String("terminal_number", config.TerminalNumber),
+	)
+
+	return nil
+}
+
 // getHuaweiConfig 获取华为配置
 func (c *HuaweiConferenceConnector) getHuaweiConfig(configID uint) (*models.HuaweiConfig, error) {
 	var config models.HuaweiConfig

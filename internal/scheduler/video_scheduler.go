@@ -969,9 +969,6 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 		zap.Uint("task_id", taskID),
 	)
 
-	// 加载任务信息用于解锁终端和提交转换
-	task, err := s.taskService.GetTask(taskID)
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -993,36 +990,11 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 		)
 
 		// 断开华为会议连接，解锁终端
-		if err == nil && s.connector != nil {
-			s.logger.Info("取消任务时断开华为会议连接",
-				zap.Uint("task_id", taskID),
-			)
-			ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancelCtx()
-			if disconnectErr := s.connector.DisconnectFromConference(ctx, task); disconnectErr != nil {
-				s.logger.Warn("断开华为会议连接失败",
-					zap.Uint("task_id", taskID),
-					zap.Error(disconnectErr),
-				)
-			} else {
-				s.logger.Info("华为会议连接已断开",
-					zap.Uint("task_id", taskID),
-				)
-			}
-		}
-
-		// 如果有 MKV 文件，提交转换任务
-		if err == nil && s.conversionService != nil && task.MKVFilePath != "" {
-			s.logger.Info("提交已取消任务的转换任务",
-				zap.Uint("task_id", taskID),
-				zap.String("mkv_file", task.MKVFilePath),
-			)
-			if convertErr := s.conversionService.SubmitConversion(taskID); convertErr != nil {
-				s.logger.Warn("提交转换任务失败",
-					zap.Uint("task_id", taskID),
-					zap.Error(convertErr),
-				)
-			}
+		// 注意：这里在锁外获取任务信息，避免在持有锁时进行数据库查询
+		if s.connector != nil {
+			s.mu.Unlock()
+			s.releaseHuaweiDevice(taskID)
+			s.mu.Lock()
 		}
 
 		return nil
@@ -1034,6 +1006,95 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 	}
 
 	return fmt.Errorf("任务未在执行中")
+}
+
+// releaseHuaweiDevice 释放华为设备（在取消任务时调用）
+// 此函数会尝试完整地断开会议连接并解锁终端，即使获取任务信息失败也会尝试解锁
+func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
+	// 加载任务信息用于断开连接和提交转换
+	task, err := s.taskService.GetTask(taskID)
+
+	if err == nil && task != nil {
+		// 正常情况：成功获取任务信息，完整地断开连接
+		s.logger.Info("取消任务时断开华为会议连接",
+			zap.Uint("task_id", taskID),
+		)
+		ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelCtx()
+		if disconnectErr := s.connector.DisconnectFromConference(ctx, task); disconnectErr != nil {
+			s.logger.Warn("断开华为会议连接失败",
+				zap.Uint("task_id", taskID),
+				zap.Error(disconnectErr),
+			)
+		} else {
+			s.logger.Info("华为会议连接已断开",
+				zap.Uint("task_id", taskID),
+			)
+		}
+
+		// 创建视频文件记录（如果 videoFileService 可用）
+		// 这样手动停止的任务生成的文件也会在文件管理页面列出
+		if s.videoFileService != nil {
+			// 为 MKV 文件创建记录
+			if task.MKVFilePath != "" {
+				mkv := "mkv"
+				if _, err := s.videoFileService.CreateFileFromTask(task, &mkv); err != nil {
+					s.logger.Warn("创建MKV文件记录失败",
+						zap.Uint("task_id", taskID),
+						zap.Error(err),
+					)
+				} else {
+					s.logger.Info("已取消任务的MKV文件记录已创建",
+						zap.Uint("task_id", taskID),
+					)
+				}
+			}
+			// 如果 MP4 已存在，也为它创建记录
+			if task.MP4FilePath != "" {
+				mp4 := "mp4"
+				if _, err := s.videoFileService.CreateFileFromTask(task, &mp4); err != nil {
+					s.logger.Warn("创建MP4文件记录失败",
+						zap.Uint("task_id", taskID),
+						zap.Error(err),
+					)
+				} else {
+					s.logger.Info("已取消任务的MP4文件记录已创建",
+						zap.Uint("task_id", taskID),
+					)
+				}
+			}
+		}
+
+		// 如果有 MKV 文件，提交转换任务
+		if s.conversionService != nil && task.MKVFilePath != "" {
+			s.logger.Info("提交已取消任务的转换任务",
+				zap.Uint("task_id", taskID),
+				zap.String("mkv_file", task.MKVFilePath),
+			)
+			if convertErr := s.conversionService.SubmitConversion(taskID); convertErr != nil {
+				s.logger.Warn("提交转换任务失败",
+					zap.Uint("task_id", taskID),
+					zap.Error(convertErr),
+				)
+			}
+		}
+	} else {
+		// 降级处理：获取任务信息失败，至少尝试解锁终端
+		s.logger.Warn("获取任务信息失败，尝试强制解锁终端",
+			zap.Uint("task_id", taskID),
+			zap.Error(err),
+		)
+		if unlockErr := s.connector.UnlockTerminalByTaskID(taskID); unlockErr != nil {
+			s.logger.Error("强制解锁终端失败",
+				zap.Uint("task_id", taskID),
+				zap.Error(unlockErr),
+			)
+		} else {
+			s.logger.Info("强制解锁终端成功",
+				zap.Uint("task_id", taskID),
+			)
+		}
+	}
 }
 
 // cleanupStaleTerminalLocks 清理过期的终端锁
