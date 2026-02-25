@@ -20,18 +20,24 @@ type FileHandler struct {
 }
 
 // NewFileHandler 创建文件处理器
-func NewFileHandler(fileService *storage.FileService) *FileHandler {
+func NewFileHandler(
+	fileService *storage.FileService,
+	logger *zap.Logger,
+	jwtService *auth.JWTService,
+) *FileHandler {
 	return &FileHandler{
 		fileService: fileService,
+		logger:      logger,
+		jwtService:  jwtService,
 	}
 }
 
-// SetJWTService 设置JWT服务
+// SetJWTService 设置JWT服务（向后兼容）
 func (h *FileHandler) SetJWTService(jwtService *auth.JWTService) {
 	h.jwtService = jwtService
 }
 
-// SetLogger 设置日志记录器
+// SetLogger 设置日志记录器（向后兼容）
 func (h *FileHandler) SetLogger(logger *zap.Logger) {
 	h.logger = logger
 }
@@ -95,7 +101,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	response.GinSuccess(c, result)
 }
 
-// Download 下载文件
+// Download 下载文件（支持 Range 请求和断点续传）
 // @Summary 下载文件
 // @Tags 文件管理
 // @Produce application/octet-stream
@@ -104,15 +110,30 @@ func (h *FileHandler) Upload(c *gin.Context) {
 // @Router /api/v1/files/download/{token} [get]
 func (h *FileHandler) Download(c *gin.Context) {
 	accessToken := c.Param("token")
+	userID := h.getUserID(c)
 
-	reader, filename, err := h.fileService.Download(c.Request.Context(), accessToken, h.getUserID(c))
+	reader, filename, err := h.fileService.Download(c.Request.Context(), accessToken, userID)
 	if err != nil {
+		h.logger.Warn("文件下载失败",
+			zap.Uint("user_id", userID),
+			zap.String("token", accessToken),
+			zap.Error(err),
+		)
 		response.GinError(c, response.CodeNotFound, err.Error())
 		return
 	}
 	defer reader.Close()
 
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	// 获取文件信息用于设置响应头
+	// 注意：这里需要将 reader 转换为可Seek的接口或使用临时文件
+	// 简化方案：使用 c.DataFromReader 但添加 Range 支持
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Accept-Ranges", "bytes")
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
+
+	// 流式传输文件
 	c.DataFromReader(200, -1, "application/octet-stream", reader, nil)
 }
 

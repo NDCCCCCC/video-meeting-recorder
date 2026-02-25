@@ -422,9 +422,7 @@ func (a *MinimalApp) initHandlers() error {
 	a.videoFileService.SetHLSPath(a.config.Storage.HLSPath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
 	fileService := storage.NewFileService(a.db, a.logger, a.config)
-	fileHandler := handlers.NewFileHandler(fileService)
-	fileHandler.SetLogger(a.logger)
-	fileHandler.SetJWTService(a.jwtService)
+	fileHandler := handlers.NewFileHandler(fileService, a.logger, a.jwtService)
 
 	// 审计日志服务
 	auditService := audit.NewAuditLogService(a.db, a.logger)

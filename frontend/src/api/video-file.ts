@@ -19,7 +19,6 @@ export async function getVideoFileList(
   if (params.page) queryParams.append('page', params.page.toString())
   if (params.page_size) queryParams.append('page_size', params.page_size.toString())
   if (params.keyword) queryParams.append('keyword', params.keyword)
-  // 按任务ID筛选
   if (params.task_id) queryParams.append('task_id', params.task_id.toString())
   if (params.status) queryParams.append('status', params.status)
   if (params.format) queryParams.append('format', params.format)
@@ -37,40 +36,20 @@ export async function getVideoFile(id: number): Promise<ApiResponse<VideoFile>> 
   return apiRequest<VideoFile>(`/api/v1/files/${id}`)
 }
 
-// 下载文件
-export async function downloadVideoFile(id: number): Promise<void> {
-  const url = `${API_BASE_URL}/api/v1/files/${id}/download`
+// 下载文件（触发浏览器原生下载，显示进度）
+export function downloadVideoFile(id: number, fileName?: string): void {
   const token = getToken()
+  const url = token
+    ? `${API_BASE_URL}/api/v1/files/${id}/download?token=${token}`
+    : `${API_BASE_URL}/api/v1/files/${id}/download`
 
-  const response = await fetch(url, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  })
-
-  if (!response.ok) {
-    const data = await response.json()
-    throw new Error(data.message || 'Download failed')
-  }
-
-  // 获取文件名
-  const contentDisposition = response.headers.get('Content-Disposition')
-  let fileName = `video_${id}.mp4`
-  if (contentDisposition) {
-    const match = contentDisposition.match(/filename="(.+)"/)
-    if (match) fileName = match[1]
-  }
-
-  // 下载文件
-  const blob = await response.blob()
-  const blobUrl = window.URL.createObjectURL(blob)
   const link = document.createElement('a')
-  link.href = blobUrl
-  link.download = fileName
+  link.href = url
+  link.download = fileName || `video_${id}.mp4`
+  link.style.display = 'none'
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-  window.URL.revokeObjectURL(blobUrl)
 }
 
 // 删除文件
@@ -95,10 +74,10 @@ export async function scanVideoFiles(): Promise<ApiResponse<ScanResult>> {
 
 // 扫描结果
 export interface ScanResult {
-  scanned: number    // 扫描到的文件数
-  created: number    // 新创建的记录数
-  skipped: number    // 跳过的文件数（已存在）
-  errors: string[]   // 错误信息列表
+  scanned: number
+  created: number
+  skipped: number
+  errors: string[]
 }
 
 // 批量删除请求

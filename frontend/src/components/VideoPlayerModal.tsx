@@ -228,32 +228,6 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     onClose()
   }, [onClose])
 
-  // ==================== 视频事件处理 ====================
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    const handleTimeUpdate = () => setCurrentTime(video.currentTime)
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration)
-      setLoading(false)
-    }
-    const handleError = () => {
-      setError('视频加载失败，请检查文件是否存在或稍后重试')
-      setLoading(false)
-    }
-
-    video.addEventListener('timeupdate', handleTimeUpdate)
-    video.addEventListener('loadedmetadata', handleLoadedMetadata)
-    video.addEventListener('error', handleError)
-
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate)
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata)
-      video.removeEventListener('error', handleError)
-    }
-  }, [visible, videoUrl])
-
   // ==================== 状态重置 ====================
   useEffect(() => {
     if (visible) {
@@ -263,6 +237,33 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
       setError(undefined)
       setLoading(true)
     }
+  }, [visible])
+
+  // ==================== 处理浏览器缓存的视频 ====================
+  useEffect(() => {
+    if (!visible) return
+
+    const video = videoRef.current
+    if (!video) return
+
+    // 检查视频是否已经加载（处理浏览器缓存）
+    const checkVideoLoaded = () => {
+      if (video.readyState >= 1) { // HAVE_METADATA
+        setDuration(video.duration)
+        setLoading(false)
+      }
+    }
+
+    // 延迟检查，给视频元素一些时间加载
+    const timer = setTimeout(checkVideoLoaded, 100)
+
+    // 如果视频已经加载，立即检查
+    if (video.readyState >= 1) {
+      clearTimeout(timer)
+      checkVideoLoaded()
+    }
+
+    return () => clearTimeout(timer)
   }, [visible])
 
   // ==================== 不支持格式的内容 ====================
@@ -312,11 +313,26 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
             )}
 
             <video
-              key={videoUrl}
+              key={`${file.id}-${visible}`}
               ref={videoRef}
               src={videoUrl}
               style={STYLES.video}
               preload="metadata"
+              onLoadedMetadata={() => {
+                const video = videoRef.current
+                if (video) {
+                  setDuration(video.duration)
+                  setLoading(false)
+                }
+              }}
+              onError={() => {
+                setError('视频加载失败，请检查文件是否存在或稍后重试')
+                setLoading(false)
+              }}
+              onTimeUpdate={() => {
+                const video = videoRef.current
+                if (video) setCurrentTime(video.currentTime)
+              }}
             />
 
             {/* 自定义控制条 */}
