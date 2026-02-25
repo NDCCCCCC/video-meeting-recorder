@@ -1,7 +1,9 @@
 // 基础布局
 
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { useCallback, useMemo, memo } from 'react'
 import { Layout, Menu, Dropdown, Avatar } from 'antd'
+import type { MenuProps } from 'antd'
 import {
   DashboardOutlined,
   VideoCameraOutlined,
@@ -15,14 +17,14 @@ import {
   AuditOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
-import type { MenuProps } from 'antd'
+import type { User } from '../types/auth'
 import { MENU_PERMISSIONS } from '../utils/permissions'
 import './BasicLayout.css'
 
 const { Header, Sider, Content } = Layout
 
-// 检查菜单权限
-function canAccessPath(path: string | undefined, user: any): boolean {
+// 检查菜单权限 - 提取为纯函数便于测试
+function canAccessPath(path: string | undefined, user: User | null): boolean {
   if (!path) return true
   const required = MENU_PERMISSIONS[path]
   if (!required) return true
@@ -31,43 +33,65 @@ function canAccessPath(path: string | undefined, user: any): boolean {
   return user.permissions?.includes(required) ?? false
 }
 
-export default function BasicLayout() {
+function BasicLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const logout = useAuthStore((state) => state.logout)
   const user = useAuthStore((state) => state.user)
 
-  const handleLogout = async () => {
+  // 使用 useCallback 缓存事件处理函数
+  const handleLogout = useCallback(async () => {
     await logout()
     navigate('/auth/login')
-  }
+  }, [logout, navigate])
 
-  // 构建过滤后的菜单项
-  const menuItems: MenuProps['items'] = [
-    canAccessPath('/dashboard', user) ? { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' } : null,
-    canAccessPath('/tasks', user) ? { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' } : null,
-    canAccessPath('/files', user) ? { key: '/files', icon: <FolderOutlined />, label: '文件管理' } : null,
-    canAccessPath('/audit', user) ? { key: '/audit', icon: <AuditOutlined />, label: '审计日志' } : null,
-    canAccessPath('/system/users', user) || canAccessPath('/system/roles', user) || canAccessPath('/system/huawei-configs', user) || canAccessPath('/system/settings', user) ? {
-      key: 'system',
-      icon: <SettingOutlined />,
-      label: '系统管理',
-      children: [
-        canAccessPath('/system/users', user) ? { key: '/system/users', icon: <TeamOutlined />, label: '用户管理' } : null,
-        canAccessPath('/system/roles', user) ? { key: '/system/roles', icon: <SafetyOutlined />, label: '角色管理' } : null,
-        canAccessPath('/system/huawei-configs', user) ? { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' } : null,
-        canAccessPath('/system/settings', user) ? { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' } : null,
-      ].filter((item): item is NonNullable<typeof item> => item !== null),
-    } : null,
-  ].filter((item): item is NonNullable<typeof item> => item !== null)
+  // 使用 useCallback 缓存菜单点击处理
+  const handleMenuClick = useCallback(({ key }: { key: string }) => {
+    navigate(key)
+  }, [navigate])
 
-  const userMenuItems: MenuProps['items'] = [
+  // 使用 useMemo 缓存菜单项计算
+  const menuItems: MenuProps['items'] = useMemo(() => {
+    const hasSystemAccess =
+      canAccessPath('/system/users', user) ||
+      canAccessPath('/system/roles', user) ||
+      canAccessPath('/system/huawei-configs', user) ||
+      canAccessPath('/system/settings', user)
+
+    const items: MenuProps['items'] = [
+      canAccessPath('/dashboard', user) ? { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' } : null,
+      canAccessPath('/tasks', user) ? { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' } : null,
+      canAccessPath('/files', user) ? { key: '/files', icon: <FolderOutlined />, label: '文件管理' } : null,
+      canAccessPath('/audit', user) ? { key: '/audit', icon: <AuditOutlined />, label: '审计日志' } : null,
+      hasSystemAccess ? {
+        key: 'system',
+        icon: <SettingOutlined />,
+        label: '系统管理',
+        children: [
+          canAccessPath('/system/users', user) ? { key: '/system/users', icon: <TeamOutlined />, label: '用户管理' } : null,
+          canAccessPath('/system/roles', user) ? { key: '/system/roles', icon: <SafetyOutlined />, label: '角色管理' } : null,
+          canAccessPath('/system/huawei-configs', user) ? { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' } : null,
+          canAccessPath('/system/settings', user) ? { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' } : null,
+        ].filter((item): item is NonNullable<typeof item> => item !== null),
+      } : null,
+    ].filter((item): item is NonNullable<typeof item> => item !== null)
+
+    return items
+  }, [user])
+
+  // 用户菜单项 - 使用 useMemo 避免每次渲染重新创建
+  const userMenuItems: MenuProps['items'] = useMemo(() => ([
     { key: 'profile', icon: <UserOutlined />, label: '个人信息' },
-    { type: 'divider' },
+    { type: 'divider' as const },
     { key: 'settings', icon: <SettingOutlined />, label: '系统设置' },
-    { type: 'divider' },
+    { type: 'divider' as const },
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
-  ]
+  ]), [handleLogout])
+
+  // 用户名显示 - 使用 useMemo 缓存计算
+  const displayName = useMemo(() => {
+    return user?.full_name || user?.username || '用户'
+  }, [user?.full_name, user?.username])
 
   return (
     <Layout className="basic-layout">
@@ -79,7 +103,7 @@ export default function BasicLayout() {
           mode="inline"
           items={menuItems}
           selectedKeys={[location.pathname]}
-          onClick={({ key }) => navigate(key as string)}
+          onClick={handleMenuClick}
         />
       </Sider>
       <Layout>
@@ -88,7 +112,7 @@ export default function BasicLayout() {
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <Avatar icon={<UserOutlined />} style={{ cursor: 'pointer' }} />
             </Dropdown>
-            <span className="user-name">{user?.full_name || user?.username}</span>
+            <span className="user-name">{displayName}</span>
           </div>
         </Header>
         <Content className="layout-content">
@@ -98,3 +122,6 @@ export default function BasicLayout() {
     </Layout>
   )
 }
+
+// 使用 memo 优化，仅在 props 或 context 变化时重渲染
+export default memo(BasicLayout)

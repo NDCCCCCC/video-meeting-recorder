@@ -74,13 +74,13 @@ func (m *mockTaskService) UpdateTaskStatus(id uint, status models.VideoRecording
 
 func (m *mockTaskService) GetHuaweiConfig(id uint) (*models.HuaweiConfig, error) {
 	return &models.HuaweiConfig{
-		Base:       models.Base{ID: id},
-		Name:       "Test Config",
-		Server:     "192.168.1.100",
-		Port:       80,
-		Username:   "admin",
-		Password:   "password",
-		OutputFormat: "mp4",
+		Base:          models.Base{ID: id},
+		Name:          "Test Config",
+		Server:        "192.168.1.100",
+		Port:          80,
+		Username:      "admin",
+		Password:      "password",
+		OutputFormat:  "mp4",
 		CameraBackend: "dshow",
 		AudioBackend:  "dshow",
 	}, nil
@@ -118,15 +118,15 @@ func (m *mockCoordinator) HealthCheck() error {
 // 测试辅助函数
 func createTestTask(id uint, name string, startTime time.Time) *models.VideoRecordingTask {
 	return &models.VideoRecordingTask{
-		Base:             models.Base{ID: id},
-		Name:              name,
-		StartTime:         startTime,
-		EndTime:           startTime.Add(1 * time.Hour),
-		PreJoinMinutes:    5,
+		Base:               models.Base{ID: id},
+		Name:               name,
+		StartTime:          startTime,
+		EndTime:            startTime.Add(1 * time.Hour),
+		PreJoinMinutes:     5,
 		RecordDelayMinutes: 0,
-		ConferenceNumber:  "123456",
-		HuaweiConfigID:    1,
-		Status:            models.VideoStatusPending,
+		ConferenceNumber:   "123456",
+		HuaweiConfigID:     1,
+		Status:             models.VideoStatusPending,
 	}
 }
 

@@ -59,7 +59,6 @@ function HLSPlayer({ src, onError }: { src: string; onError: () => void }) {
           hls.attachMedia(video)
 
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            console.log('HLS manifest parsed, starting playback')
             video.play().catch(err => {
               console.warn('Auto-play prevented:', err)
             })
@@ -182,8 +181,9 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
           setRetryCount(0)  // 成功后重置计数
         }
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || '加载预览失败')
+    } catch (err) {
+      const error = err as Error & { response?: { data?: { message?: string } } }
+      setError(error.response?.data?.message || error.message || '加载预览失败')
       setIsPreparing(false)
     } finally {
       setLoading(false)

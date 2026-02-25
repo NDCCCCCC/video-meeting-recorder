@@ -4,8 +4,8 @@ import "time"
 
 // UserNotificationSetting 用户通知配置
 type UserNotificationSetting struct {
-	ID     uint `gorm:"primarykey" json:"id"`
-	UserID uint `gorm:"uniqueIndex:idx_user_notification_setting;not null" json:"user_id"`
+	ID     uint  `gorm:"primarykey" json:"id"`
+	UserID uint  `gorm:"uniqueIndex:idx_user_notification_setting;not null" json:"user_id"`
 	User   *User `gorm:"foreignKey:UserID" json:"user,omitempty"`
 
 	// 渠道开关
@@ -16,10 +16,10 @@ type UserNotificationSetting struct {
 	FeiShuEnabled   bool `gorm:"default:false" json:"feishu_enabled"`
 
 	// 通知类型偏好
-	TaskEnabled     bool `gorm:"default:true" json:"task_enabled"`
-	SystemEnabled   bool `gorm:"default:true" json:"system_enabled"`
-	WarningEnabled  bool `gorm:"default:true" json:"warning_enabled"`
-	ReminderEnabled bool `gorm:"default:true" json:"reminder_enabled"`
+	TaskEnabled       bool `gorm:"default:true" json:"task_enabled"`
+	SystemEnabled     bool `gorm:"default:true" json:"system_enabled"`
+	WarningEnabled    bool `gorm:"default:true" json:"warning_enabled"`
+	ReminderEnabled   bool `gorm:"default:true" json:"reminder_enabled"`
 	ConferenceEnabled bool `gorm:"default:true" json:"conference_enabled"`
 
 	// 免打扰时段

@@ -23,13 +23,13 @@ type AuditLogService struct {
 
 // LogOperationRequest 操作日志请求
 type LogOperationRequest struct {
-	UserID    uint
-	Username  string
-	RoleID    uint
-	RoleName  string
-	Action    string
-	Module    string
-	Resource  string
+	UserID     uint
+	Username   string
+	RoleID     uint
+	RoleName   string
+	Action     string
+	Module     string
+	Resource   string
 	ResourceID *uint
 
 	// 请求上下文
@@ -89,7 +89,7 @@ type QueryResponse struct {
 
 // StatisticsItem 统计项
 type StatisticsItem struct {
-	Date  string `json:"date"`
+	Date   string `json:"date"`
 	Count  int    `json:"count"`
 	Module string `json:"module"`
 	Action string `json:"action"`
@@ -97,12 +97,12 @@ type StatisticsItem struct {
 
 // StatisticsResponse 统计响应
 type StatisticsResponse struct {
-	TotalOps    int64             `json:"total_ops"`
-	SuccessOps  int64             `json:"success_ops"`
-	FailureOps  int64             `json:"failure_ops"`
-	TopUsers    []StatisticsItem  `json:"top_users"`
-	TopModules  []StatisticsItem  `json:"top_modules"`
-	DailyStats  []StatisticsItem  `json:"daily_stats"`
+	TotalOps   int64            `json:"total_ops"`
+	SuccessOps int64            `json:"success_ops"`
+	FailureOps int64            `json:"failure_ops"`
+	TopUsers   []StatisticsItem `json:"top_users"`
+	TopModules []StatisticsItem `json:"top_modules"`
+	DailyStats []StatisticsItem `json:"daily_stats"`
 }
 
 // NewAuditLogService 创建审计日志服务

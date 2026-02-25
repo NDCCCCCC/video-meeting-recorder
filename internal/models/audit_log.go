@@ -56,8 +56,8 @@ func (AuditLog) TableName() string {
 // 操作类型常量
 const (
 	// 认证操作
-	ActionLogin         = "login"
-	ActionLogout        = "logout"
+	ActionLogin          = "login"
+	ActionLogout         = "logout"
 	ActionPasswordChange = "password_change"
 
 	// CRUD操作

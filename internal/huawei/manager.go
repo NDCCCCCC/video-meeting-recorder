@@ -70,15 +70,15 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	}
 
 	config := &Config{
-		Server:            cfg.Server,
-		Port:              cfg.Port,
-		Username:          cfg.Username,
-		Password:          cfg.Password,
-		APITimeout:        30 * time.Second,
-		SessionTimeout:    1800 * time.Second, // 30分钟会话有效期
-		KeepAliveInterval: 30 * time.Second,   // 30秒保活间隔（必须小于60秒）
+		Server:             cfg.Server,
+		Port:               cfg.Port,
+		Username:           cfg.Username,
+		Password:           cfg.Password,
+		APITimeout:         30 * time.Second,
+		SessionTimeout:     1800 * time.Second, // 30分钟会话有效期
+		KeepAliveInterval:  30 * time.Second,   // 30秒保活间隔（必须小于60秒）
 		InsecureSkipVerify: true,
-		MinTLSVersion:     0x0301, // TLS 1.0
+		MinTLSVersion:      0x0301, // TLS 1.0
 	}
 
 	client := NewHuaweiClient(config, m.logger)

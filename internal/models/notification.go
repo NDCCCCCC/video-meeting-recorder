@@ -15,9 +15,9 @@ type NotificationMessage struct {
 
 	// 消息内容
 	Type    NotificationType `gorm:"type:varchar(20);index;not null" json:"type"`
-	Title   string          `gorm:"type:varchar(200);not null" json:"title"`
-	Content string          `gorm:"type:text" json:"content"`
-	Data    string          `gorm:"type:text" json:"data,omitempty"`
+	Title   string           `gorm:"type:varchar(200);not null" json:"title"`
+	Content string           `gorm:"type:text" json:"content"`
+	Data    string           `gorm:"type:text" json:"data,omitempty"`
 
 	// 关联信息
 	RelatedID   *uint  `json:"related_id,omitempty"`
@@ -47,24 +47,24 @@ func (NotificationMessage) TableName() string {
 type NotificationType string
 
 const (
-	TypeSystem    NotificationType = "system"    // 系统通知
-	TypeTask      NotificationType = "task"      // 任务通知
+	TypeSystem     NotificationType = "system"     // 系统通知
+	TypeTask       NotificationType = "task"       // 任务通知
 	TypeConference NotificationType = "conference" // 会议通知
-	TypeWarning   NotificationType = "warning"   // 警告通知
-	TypeReminder  NotificationType = "reminder"  // 提醒通知
+	TypeWarning    NotificationType = "warning"    // 警告通知
+	TypeReminder   NotificationType = "reminder"   // 提醒通知
 )
 
 // NotificationChannel 通知渠道
 type NotificationChannel string
 
 const (
-	ChannelSystem  NotificationChannel = "system"  // 站内消息
-	ChannelEmail   NotificationChannel = "email"   // 邮件
-	ChannelSMS     NotificationChannel = "sms"     // 短信
-	ChannelWebhook NotificationChannel = "webhook" // Webhook
+	ChannelSystem   NotificationChannel = "system"   // 站内消息
+	ChannelEmail    NotificationChannel = "email"    // 邮件
+	ChannelSMS      NotificationChannel = "sms"      // 短信
+	ChannelWebhook  NotificationChannel = "webhook"  // Webhook
 	ChannelDingTalk NotificationChannel = "dingtalk" // 钉钉
-	ChannelWeChat  NotificationChannel = "wechat"  // 企业微信
-	ChannelFeiShu  NotificationChannel = "feishu"  // 飞书
+	ChannelWeChat   NotificationChannel = "wechat"   // 企业微信
+	ChannelFeiShu   NotificationChannel = "feishu"   // 飞书
 )
 
 // ChannelStatus 渠道状态

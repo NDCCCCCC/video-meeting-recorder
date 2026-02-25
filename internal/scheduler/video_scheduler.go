@@ -35,20 +35,20 @@ type SchedulerInterface interface {
 
 // VideoSimpleScheduler 视频录制任务调度器
 type VideoSimpleScheduler struct {
-	cron             *cron.Cron
-	taskService      TaskServiceInterface
-	coordinator      RecorderCoordinatorInterface
-	connector        *video_recording.HuaweiConferenceConnector
+	cron              *cron.Cron
+	taskService       TaskServiceInterface
+	coordinator       RecorderCoordinatorInterface
+	connector         *video_recording.HuaweiConferenceConnector
 	conversionService ConversionServiceInterface // 转换服务
-	videoFileService VideoFileServiceInterface   // 视频文件服务
-	taskEntries      map[uint]cron.EntryID
-	entryTasks       map[cron.EntryID]uint
-	executing        map[uint]bool
-	cancelFuncs      map[uint]context.CancelFunc // 任务取消函数
-	logger           *zap.Logger
-	config           *config.Config
-	mu               sync.RWMutex
-	startTime        time.Time
+	videoFileService  VideoFileServiceInterface  // 视频文件服务
+	taskEntries       map[uint]cron.EntryID
+	entryTasks        map[cron.EntryID]uint
+	executing         map[uint]bool
+	cancelFuncs       map[uint]context.CancelFunc // 任务取消函数
+	logger            *zap.Logger
+	config            *config.Config
+	mu                sync.RWMutex
+	startTime         time.Time
 }
 
 // ConversionServiceInterface 转换服务接口
@@ -582,8 +582,8 @@ func (s *VideoSimpleScheduler) GetStats() map[string]interface{} {
 
 	return map[string]interface{}{
 		"scheduled_tasks": len(s.taskEntries),
-		"executing_tasks":  len(s.executing),
-		"uptime":           time.Since(s.startTime).String(),
+		"executing_tasks": len(s.executing),
+		"uptime":          time.Since(s.startTime).String(),
 	}
 }
 
@@ -731,7 +731,7 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 			s.logger.Info("移除已取消/完成的任务",
 				zap.Uint("task_id", taskID),
 			)
-			} else {
+		} else {
 			// 任务仍在待执行列表中，需要重新处理（因为Cron调度器在重启后会丢失任务）
 			// 加载任务详情
 			task, err := s.taskService.GetTask(taskID)

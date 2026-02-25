@@ -1,6 +1,6 @@
 // 录制任务管理页面
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Table,
   Button,
@@ -32,44 +32,32 @@ import * as huaweiConfigApi from '../../api/huawei-config'
 import { HLSPreview } from '../../components/HLSPreview'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
+import {
+  STATUS_CONFIG,
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_PRE_JOIN_MINUTES,
+  DEFAULT_RECORD_DELAY_MINUTES,
+  POLL_INTERVAL,
+  DELETABLE_STATUSES,
+  ACTIVE_STATUSES,
+  STATUS_OPTIONS,
+  canStartTask,
+  canStopTask,
+  canCancelTask,
+  canRetryTask,
+  canPreviewTask,
+} from './constants'
+import { formatDuration, hasActiveTasks } from './utils'
 import type {
   VideoRecordingTask,
+  VideoRecordingTaskStatus,
   TaskListParams,
   CreateTaskRequest,
   UpdateTaskRequest,
-  VideoRecordingTaskStatus,
 } from '../../types/task'
 import type { HuaweiConfig } from '../../types/huawei-config'
 
 const { RangePicker } = DatePicker
-
-// 状态配置
-const STATUS_CONFIG: Record<VideoRecordingTaskStatus, { label: string; color: string }> = {
-  pending: { label: '待执行', color: 'default' },
-  connecting: { label: '连接中', color: 'processing' },
-  recording: { label: '录制中', color: 'blue' },
-  completed: { label: '已完成', color: 'success' },
-  failed: { label: '失败', color: 'error' },
-  cancelled: { label: '已取消', color: 'default' },
-}
-
-// 常量定义
-const DEFAULT_PAGE_SIZE = 20
-const DEFAULT_PRE_JOIN_MINUTES = 30
-const DEFAULT_RECORD_DELAY_MINUTES = 0
-const DELETABLE_STATUSES: VideoRecordingTaskStatus[] = ['pending', 'completed', 'failed', 'cancelled']
-
-// 格式化时长
-const formatDuration = (seconds: number): string => {
-  if (!seconds) return '-'
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = Math.floor(seconds % 60)
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
-}
 
 export default function TaskManagement() {
   const [tasks, setTasks] = useState<VideoRecordingTask[]>([])
@@ -93,6 +81,9 @@ export default function TaskManagement() {
     page_size: DEFAULT_PAGE_SIZE,
   })
 
+  // 使用 ref 存储 loadTasks 函数，避免依赖循环 (rerender-functional-setstate)
+  const loadTasksRef = useRef<((showLoading?: boolean) => Promise<void>) | null>(null)
+
   // 加载任务列表
   const loadTasks = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
@@ -108,6 +99,9 @@ export default function TaskManagement() {
       if (showLoading) setLoading(false)
     }
   }, [params])
+
+  // 存储最新的 loadTasks 引用
+  loadTasksRef.current = loadTasks
 
   // 加载华为配置列表
   const loadHuaweiConfigs = useCallback(async () => {
@@ -130,20 +124,16 @@ export default function TaskManagement() {
     loadHuaweiConfigs()
   }, [loadTasks, loadHuaweiConfigs])
 
-  // 定时轮询：自动刷新进行中的任务状态
+  // 定时轮询：自动刷新进行中的任务状态 (使用 ref 避免依赖)
   useEffect(() => {
-    const hasActiveTasks = tasks.some(task =>
-      ['pending', 'connecting', 'recording'].includes(task.status)
-    )
-
-    if (!hasActiveTasks) return
+    if (!hasActiveTasks(tasks, ACTIVE_STATUSES)) return
 
     const interval = setInterval(() => {
-      loadTasks(false)
-    }, 5000)
+      loadTasksRef.current?.(false)
+    }, POLL_INTERVAL)
 
     return () => clearInterval(interval)
-  }, [tasks, loadTasks])
+  }, [tasks])
 
   // 搜索
   const handleSearch = useCallback((value: string) => {
@@ -156,16 +146,17 @@ export default function TaskManagement() {
   }, [])
 
   // 日期范围筛选
-  const handleDateRangeChange = useCallback((dates: any) => {
-    if (dates && dates.length === 2) {
+  const handleDateRangeChange = useCallback((dates: unknown) => {
+    if (dates && Array.isArray(dates) && dates.length === 2) {
       setParams(prev => ({
         ...prev,
-        start_date: dates[0].format('YYYY-MM-DD'),
-        end_date: dates[1].format('YYYY-MM-DD'),
+        start_date: (dates[0] as { format: (fmt: string) => string }).format('YYYY-MM-DD'),
+        end_date: (dates[1] as { format: (fmt: string) => string }).format('YYYY-MM-DD'),
         page: 1,
       }))
     } else {
       setParams(prev => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { start_date, end_date, ...rest } = prev
         return rest
       })
@@ -173,13 +164,13 @@ export default function TaskManagement() {
   }, [])
 
   // 分页变化
-  const handleTableChange = useCallback((pagination: any) => {
+  const handleTableChange = useCallback((pagination: { current?: number; pageSize?: number }) => {
     setParams(prev => ({
       ...prev,
-      page: pagination.current,
-      page_size: pagination.pageSize,
+      page: pagination.current ?? 1,
+      page_size: pagination.pageSize ?? DEFAULT_PAGE_SIZE,
     }))
-  }, [])
+  }, [DEFAULT_PAGE_SIZE])
 
   // 打开新建/编辑对话框
   const openModal = useCallback((task: VideoRecordingTask | null = null) => {
@@ -337,7 +328,7 @@ export default function TaskManagement() {
     })
   }, [selectedRowKeys, tasks, loadTasks])
 
-  // 获取可删除的任务 ID 列表
+  // 获取可删除的任务 ID 列表 (rerender-derived-state)
   const deletableTaskIds = useMemo(() => {
     return new Set(
       tasks
@@ -359,61 +350,53 @@ export default function TaskManagement() {
   }), [selectedRowKeys, deletableTaskIds])
 
   // 渲染状态标签
-  const renderStatus = useCallback((status: VideoRecordingTaskStatus) => {
-    const config = STATUS_CONFIG[status]
-    return <Tag color={config.color}>{config.label}</Tag>
+  const renderStatus = useCallback((status: string) => {
+    const config = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG]
+    return config ? <Tag color={config.color}>{config.label}</Tag> : null
   }, [])
 
   // 渲染操作按钮
   const renderActions = useCallback((record: VideoRecordingTask) => {
-    const canEdit = record.status === 'pending'
-    const canDelete = DELETABLE_STATUSES.includes(record.status)
-    const canStart = record.status === 'pending'
-    const canStop = ['recording', 'connecting'].includes(record.status)
-    const canCancel = ['pending', 'connecting'].includes(record.status)
-    const canRetry = record.status === 'failed'
-    const canPreview = record.status === 'recording'
-
     return (
       <Space size="small">
-        {canPreview && <HLSPreview taskId={record.id} taskName={record.name} status={record.status} />}
+        {canPreviewTask(record.status) && <HLSPreview taskId={record.id} taskName={record.name} status={record.status} />}
         <PermissionGuard permission={PERMISSIONS.TASK_START}>
-          {canStart && (
+          {canStartTask(record.status) && (
             <Tooltip title="启动任务">
               <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => handleStart(record.id)} />
             </Tooltip>
           )}
         </PermissionGuard>
         <PermissionGuard permission={PERMISSIONS.TASK_STOP}>
-          {canStop && (
+          {canStopTask(record.status) && (
             <Tooltip title="停止任务">
               <Button type="link" size="small" danger icon={<StopOutlined />} onClick={() => handleStop(record.id)} />
             </Tooltip>
           )}
         </PermissionGuard>
         <PermissionGuard permission={PERMISSIONS.TASK_STOP}>
-          {canCancel && (
+          {canCancelTask(record.status) && (
             <Tooltip title="取消任务">
               <Button type="link" size="small" icon={<CloseCircleOutlined />} onClick={() => handleCancel(record.id)} />
             </Tooltip>
           )}
         </PermissionGuard>
         <PermissionGuard permission={PERMISSIONS.TASK_START}>
-          {canRetry && (
+          {canRetryTask(record.status) && (
             <Tooltip title="重试任务">
               <Button type="link" size="small" icon={<ReloadOutlined />} onClick={() => handleRetry(record.id)} />
             </Tooltip>
           )}
         </PermissionGuard>
         <PermissionGuard permission={PERMISSIONS.TASK_EDIT}>
-          {canEdit && (
+          {canStartTask(record.status) && (
             <Tooltip title="编辑任务">
               <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openModal(record)} />
             </Tooltip>
           )}
         </PermissionGuard>
         <PermissionGuard permission={PERMISSIONS.TASK_DELETE}>
-          {canDelete && (
+          {DELETABLE_STATUSES.includes(record.status) && (
             <Popconfirm title="确定要删除这个任务吗？" onConfirm={() => handleDelete(record.id)}>
               <Button type="link" size="small" danger icon={<DeleteOutlined />} />
             </Popconfirm>
@@ -488,17 +471,10 @@ export default function TaskManagement() {
     },
   ], [renderStatus, renderActions])
 
-  const statusOptions = useMemo(() =>
-    Object.entries(STATUS_CONFIG).map(([value, { label }]) => ({
-      value,
-      label,
-    }))
-  , [])
-
   return (
-    <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0 }}>录制任务管理</h2>
+    <div className="page-container">
+      <div className="page-header">
+        <h2>录制任务管理</h2>
         <Space>
           <PermissionGuard permission={PERMISSIONS.TASK_DELETE}>
             {selectedRowKeys.length > 0 && (
@@ -520,7 +496,7 @@ export default function TaskManagement() {
         </Space>
       </div>
 
-      <div style={{ marginBottom: '16px' }}>
+      <div className="toolbar">
         <Space size="middle" wrap>
           <Input.Search
             placeholder="搜索任务名称、会议号"
@@ -534,7 +510,7 @@ export default function TaskManagement() {
             allowClear
             style={{ width: 120 }}
             onChange={handleStatusFilter}
-            options={statusOptions}
+            options={STATUS_OPTIONS}
           />
           <RangePicker
             placeholder={['开始日期', '结束日期']}

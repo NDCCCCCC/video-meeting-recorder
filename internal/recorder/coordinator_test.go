@@ -48,9 +48,9 @@ func TestBuildRecordingInput(t *testing.T) {
 		RTSPStreamURL: "",
 	}
 	huaweiConfig := &models.HuaweiConfig{
-		CameraBackend:  "dshow",
+		CameraBackend:   "dshow",
 		USBCameraDevice: "Integrated Camera",
-		USBAudioDevice: "Microphone",
+		USBAudioDevice:  "Microphone",
 	}
 
 	input := coordinator.buildRecordingInput(task, huaweiConfig)
@@ -283,8 +283,8 @@ func TestGetOutputPath(t *testing.T) {
 	coordinator := NewSimpleRecordingCoordinator(logger, cfg)
 
 	task := &models.VideoRecordingTask{
-		Base:            models.Base{ID: 123},
-		Name:            "TestTask",
+		Base:             models.Base{ID: 123},
+		Name:             "TestTask",
 		ConferenceNumber: "123456",
 	}
 	outputPath := coordinator.getOutputPath(task, "mp4")
@@ -319,7 +319,7 @@ func TestRecordingStatus(t *testing.T) {
 
 	coordinator.processes[1] = &RecordingProcess{
 		TaskID:     1,
-		Cmd:         nil,
+		Cmd:        nil,
 		StartTime:  time.Now(),
 		OutputPath: tempDir + "/test.mp4",
 		Status:     "running",

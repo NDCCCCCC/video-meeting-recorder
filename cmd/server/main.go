@@ -28,7 +28,7 @@ func main() {
 	defer logger.Sync()
 
 	logger.Info("Starting Record V2 Server",
-	zap.String("version", "2.0.0"),
+		zap.String("version", "2.0.0"),
 		zap.String("environment", cfg.Server.Environment),
 	)
 

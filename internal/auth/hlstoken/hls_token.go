@@ -13,22 +13,22 @@ import (
 
 // HLSTokenClaims HLS Token 声明
 type HLSTokenClaims struct {
-	TaskID    uint      `json:"task_id"`
-	UserID    uint      `json:"user_id"`
-	ExpiresAt int64     `json:"expires_at"`
-	IssuedAt  int64     `json:"issued_at"`
+	TaskID    uint  `json:"task_id"`
+	UserID    uint  `json:"user_id"`
+	ExpiresAt int64 `json:"expires_at"`
+	IssuedAt  int64 `json:"issued_at"`
 }
 
 // HLSToken HLS Token 管理器
 type HLSToken struct {
-	secret     string
+	secret        string
 	tokenDuration time.Duration
 }
 
 // NewHLSToken 创建 HLS Token 管理器
 func NewHLSToken(secret string, duration time.Duration) *HLSToken {
 	return &HLSToken{
-		secret:     secret,
+		secret:        secret,
 		tokenDuration: duration,
 	}
 }

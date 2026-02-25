@@ -13,10 +13,10 @@ type Role struct {
 
 // 预定义角色
 const (
-	RoleAdmin      = "admin"      // 系统管理员
-	RoleOperator   = "operator"   // 操作员
-	RoleViewer     = "viewer"     // 查看者
-	RoleAPIClient  = "api_client" // API客户端
+	RoleAdmin     = "admin"      // 系统管理员
+	RoleOperator  = "operator"   // 操作员
+	RoleViewer    = "viewer"     // 查看者
+	RoleAPIClient = "api_client" // API客户端
 )
 
 // BeforeCreate GORM hook - 在创建前调用

@@ -20,29 +20,29 @@ type NotificationService struct {
 	config *config.Config
 
 	// 消息队列
-	queue   chan *models.NotificationMessage
-	stopCh  chan struct{}
+	queue  chan *models.NotificationMessage
+	stopCh chan struct{}
 }
 
 // SendNotificationRequest 发送通知请求
 type SendNotificationRequest struct {
-	UserID       uint                         `json:"user_id"`
-	Type         models.NotificationType      `json:"type"`
-	Title        string                       `json:"title,omitempty"`
-	Content      string                       `json:"content,omitempty"`
-	Data         map[string]interface{}       `json:"data,omitempty"`
-	Channels     []models.NotificationChannel `json:"channels"`
-	RelatedID    *uint                        `json:"related_id,omitempty"`
-	RelatedType  string                       `json:"related_type,omitempty"`
-	RelatedURL   string                       `json:"related_url,omitempty"`
+	UserID      uint                         `json:"user_id"`
+	Type        models.NotificationType      `json:"type"`
+	Title       string                       `json:"title,omitempty"`
+	Content     string                       `json:"content,omitempty"`
+	Data        map[string]interface{}       `json:"data,omitempty"`
+	Channels    []models.NotificationChannel `json:"channels"`
+	RelatedID   *uint                        `json:"related_id,omitempty"`
+	RelatedType string                       `json:"related_type,omitempty"`
+	RelatedURL  string                       `json:"related_url,omitempty"`
 }
 
 // QueryRequest 查询请求
 type QueryRequest struct {
-	Type   string `form:"type"`
-	IsRead *bool  `form:"is_read"`
-	Page   int    `form:"page" binding:"min=1"`
-	PageSize int   `form:"page_size" binding:"min=1,max=100"`
+	Type     string `form:"type"`
+	IsRead   *bool  `form:"is_read"`
+	Page     int    `form:"page" binding:"min=1"`
+	PageSize int    `form:"page_size" binding:"min=1,max=100"`
 }
 
 // QueryResponse 查询响应
@@ -111,16 +111,16 @@ func (s *NotificationService) SendNotification(ctx context.Context, req *SendNot
 
 	// 5. 构建消息
 	message := &models.NotificationMessage{
-		UserID:       req.UserID,
-		Type:         req.Type,
-		Title:        req.Title,
-		Content:      req.Content,
-		RelatedID:    req.RelatedID,
-		RelatedType:  req.RelatedType,
-		RelatedURL:   req.RelatedURL,
-		IsRead:       false,
+		UserID:        req.UserID,
+		Type:          req.Type,
+		Title:         req.Title,
+		Content:       req.Content,
+		RelatedID:     req.RelatedID,
+		RelatedType:   req.RelatedType,
+		RelatedURL:    req.RelatedURL,
+		IsRead:        false,
 		ChannelStatus: "{}",
-		CreatedAt:    time.Now(),
+		CreatedAt:     time.Now(),
 	}
 
 	if req.Data != nil {

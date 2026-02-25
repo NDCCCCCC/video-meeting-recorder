@@ -12,23 +12,23 @@ import (
 
 // Config 应用配置
 type Config struct {
-	Server    ServerConfig    `mapstructure:"server" json:"server" yaml:"server"`
-	Database  DatabaseConfig  `mapstructure:"database" json:"database" yaml:"database"`
-	Auth      AuthConfig      `mapstructure:"auth" json:"auth" yaml:"auth"`
-	Logging   LoggingConfig   `mapstructure:"logging" json:"logging" yaml:"logging"`
-	Storage   StorageConfig   `mapstructure:"storage" json:"storage" yaml:"storage"`
-	Huawei    HuaweiConfig    `mapstructure:"huawei" json:"huawei" yaml:"huawei"`
-	RTSP      RTSPConfig      `mapstructure:"rtsp" json:"rtsp" yaml:"rtsp"`
-	FFmpeg    FFmpegConfig    `mapstructure:"ffmpeg" json:"ffmpeg" yaml:"ffmpeg"`
+	Server   ServerConfig   `mapstructure:"server" json:"server" yaml:"server"`
+	Database DatabaseConfig `mapstructure:"database" json:"database" yaml:"database"`
+	Auth     AuthConfig     `mapstructure:"auth" json:"auth" yaml:"auth"`
+	Logging  LoggingConfig  `mapstructure:"logging" json:"logging" yaml:"logging"`
+	Storage  StorageConfig  `mapstructure:"storage" json:"storage" yaml:"storage"`
+	Huawei   HuaweiConfig   `mapstructure:"huawei" json:"huawei" yaml:"huawei"`
+	RTSP     RTSPConfig     `mapstructure:"rtsp" json:"rtsp" yaml:"rtsp"`
+	FFmpeg   FFmpegConfig   `mapstructure:"ffmpeg" json:"ffmpeg" yaml:"ffmpeg"`
 }
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Host        string `mapstructure:"host" json:"host" yaml:"host"`
-	Port        int    `mapstructure:"port" json:"port" yaml:"port"`
-	Environment string `mapstructure:"environment" json:"environment" yaml:"environment"`
-	ReadTimeout int    `mapstructure:"read_timeout" json:"read_timeout" yaml:"read_timeout"`
-	WriteTimeout int   `mapstructure:"write_timeout" json:"write_timeout" yaml:"write_timeout"`
+	Host         string `mapstructure:"host" json:"host" yaml:"host"`
+	Port         int    `mapstructure:"port" json:"port" yaml:"port"`
+	Environment  string `mapstructure:"environment" json:"environment" yaml:"environment"`
+	ReadTimeout  int    `mapstructure:"read_timeout" json:"read_timeout" yaml:"read_timeout"`
+	WriteTimeout int    `mapstructure:"write_timeout" json:"write_timeout" yaml:"write_timeout"`
 }
 
 // DatabaseConfig 数据库配置
@@ -43,12 +43,12 @@ type DatabaseConfig struct {
 	BusyTimeout      int    `mapstructure:"busy_timeout" json:"busy_timeout" yaml:"busy_timeout"`
 	MaxOpenConns     int    `mapstructure:"max_open_conns" json:"max_open_conns" yaml:"max_open_conns"`
 	MaxIdleConns     int    `mapstructure:"max_idle_conns" json:"max_idle_conns" yaml:"max_idle_conns"`
-	ConnMaxLifetime   int    `mapstructure:"conn_max_lifetime" json:"conn_max_lifetime" yaml:"conn_max_lifetime"`
+	ConnMaxLifetime  int    `mapstructure:"conn_max_lifetime" json:"conn_max_lifetime" yaml:"conn_max_lifetime"`
 }
 
 // AuthConfig 认证配置
 type AuthConfig struct {
-	JWTSecret           string        `mapstructure:"jwt_secret" json:"jwt_secret" yaml:"jwt_secret"`
+	JWTSecret            string        `mapstructure:"jwt_secret" json:"jwt_secret" yaml:"jwt_secret"`
 	AccessTokenDuration  time.Duration `mapstructure:"access_token_duration" json:"access_token_duration" yaml:"access_token_duration"`
 	RefreshTokenDuration time.Duration `mapstructure:"refresh_token_duration" json:"refresh_token_duration" yaml:"refresh_token_duration"`
 	MaxSessionDuration   time.Duration `mapstructure:"max_session_duration" json:"max_session_duration" yaml:"max_session_duration"`
@@ -70,14 +70,14 @@ type LoggingConfig struct {
 // StorageConfig 存储配置
 type StorageConfig struct {
 	RecordingsPath string `mapstructure:"recordings_path" json:"recordings_path" yaml:"recordings_path"`
-	HLSPath        string `mapstructure:"hls_path" json:"hls_path" yaml:"hls_path"`        // HLS预览文件存储路径
+	HLSPath        string `mapstructure:"hls_path" json:"hls_path" yaml:"hls_path"` // HLS预览文件存储路径
 	TempPath       string `mapstructure:"temp_path" json:"temp_path" yaml:"temp_path"`
 	MaxDiskUsage   int    `mapstructure:"max_disk_usage" json:"max_disk_usage" yaml:"max_disk_usage"`
 
 	// 文件存储配置
-	Local          LocalStorageConfig `mapstructure:"local" json:"local" yaml:"local"`
-	MaxFileSize    int64              `mapstructure:"max_file_size" json:"max_file_size" yaml:"max_file_size"`
-	AllowedExtensions []string        `mapstructure:"allowed_extensions" json:"allowed_extensions" yaml:"allowed_extensions"`
+	Local             LocalStorageConfig `mapstructure:"local" json:"local" yaml:"local"`
+	MaxFileSize       int64              `mapstructure:"max_file_size" json:"max_file_size" yaml:"max_file_size"`
+	AllowedExtensions []string           `mapstructure:"allowed_extensions" json:"allowed_extensions" yaml:"allowed_extensions"`
 }
 
 // LocalStorageConfig 本地存储配置
@@ -88,16 +88,16 @@ type LocalStorageConfig struct {
 
 // HuaweiConfig 华为会议系统配置
 type HuaweiConfig struct {
-	ConferenceServer string        `mapstructure:"conference_server" json:"conference_server" yaml:"conference_server"`
-	ConferencePort   int           `mapstructure:"conference_port" json:"conference_port" yaml:"conference_port"`
-	Username         string        `mapstructure:"username" json:"username" yaml:"username"`
-	Password         string        `mapstructure:"password" json:"password" yaml:"password"`
-	HTTPS            bool          `mapstructure:"https" json:"https" yaml:"https"`
-	InsecureSkipVerify bool         `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecure_skip_verify"`
-	APITimeout       time.Duration `mapstructure:"api_timeout" json:"api_timeout" yaml:"api_timeout"`
-	SessionTimeout   time.Duration `mapstructure:"session_timeout" json:"session_timeout" yaml:"session_timeout"`
-	KeepAliveInterval time.Duration `mapstructure:"keep_alive_interval" json:"keep_alive_interval" yaml:"keep_alive_interval"`
-	MinTLSVersion    string        `mapstructure:"min_tls_version" json:"min_tls_version" yaml:"min_tls_version"`
+	ConferenceServer   string        `mapstructure:"conference_server" json:"conference_server" yaml:"conference_server"`
+	ConferencePort     int           `mapstructure:"conference_port" json:"conference_port" yaml:"conference_port"`
+	Username           string        `mapstructure:"username" json:"username" yaml:"username"`
+	Password           string        `mapstructure:"password" json:"password" yaml:"password"`
+	HTTPS              bool          `mapstructure:"https" json:"https" yaml:"https"`
+	InsecureSkipVerify bool          `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecure_skip_verify"`
+	APITimeout         time.Duration `mapstructure:"api_timeout" json:"api_timeout" yaml:"api_timeout"`
+	SessionTimeout     time.Duration `mapstructure:"session_timeout" json:"session_timeout" yaml:"session_timeout"`
+	KeepAliveInterval  time.Duration `mapstructure:"keep_alive_interval" json:"keep_alive_interval" yaml:"keep_alive_interval"`
+	MinTLSVersion      string        `mapstructure:"min_tls_version" json:"min_tls_version" yaml:"min_tls_version"`
 }
 
 // RTSPConfig RTSP配置
@@ -110,20 +110,20 @@ type RTSPConfig struct {
 
 // FFmpegConfig FFmpeg配置
 type FFmpegConfig struct {
-	Path              string        `mapstructure:"path" json:"path" yaml:"path"`
-	FFProbePath       string        `mapstructure:"ffprobe_path" json:"ffprobe_path" yaml:"ffprobe_path"`
-	MaxProcesses      int           `mapstructure:"max_processes" json:"max_processes" yaml:"max_processes"`
-	Timeout           time.Duration `mapstructure:"timeout" json:"timeout" yaml:"timeout"`
-	DefaultCodec      string        `mapstructure:"default_codec" json:"default_codec" yaml:"default_codec"`
-	DefaultFormat     string        `mapstructure:"default_format" json:"default_format" yaml:"default_format"`
-	DefaultVideoBitrate string      `mapstructure:"default_video_bitrate" json:"default_video_bitrate" yaml:"default_video_bitrate"`
-	DefaultAudioBitrate string      `mapstructure:"default_audio_bitrate" json:"default_audio_bitrate" yaml:"default_audio_bitrate"`
+	Path                string        `mapstructure:"path" json:"path" yaml:"path"`
+	FFProbePath         string        `mapstructure:"ffprobe_path" json:"ffprobe_path" yaml:"ffprobe_path"`
+	MaxProcesses        int           `mapstructure:"max_processes" json:"max_processes" yaml:"max_processes"`
+	Timeout             time.Duration `mapstructure:"timeout" json:"timeout" yaml:"timeout"`
+	DefaultCodec        string        `mapstructure:"default_codec" json:"default_codec" yaml:"default_codec"`
+	DefaultFormat       string        `mapstructure:"default_format" json:"default_format" yaml:"default_format"`
+	DefaultVideoBitrate string        `mapstructure:"default_video_bitrate" json:"default_video_bitrate" yaml:"default_video_bitrate"`
+	DefaultAudioBitrate string        `mapstructure:"default_audio_bitrate" json:"default_audio_bitrate" yaml:"default_audio_bitrate"`
 	// DShow 设备配置
-	DShowBufferSize   int    `mapstructure:"dshow_buffer_size" json:"dshow_buffer_size" yaml:"dshow_buffer_size"`   // 实时缓冲区大小（字节）
-	DShowThreadQueueSize int  `mapstructure:"dshow_thread_queue_size" json:"dshow_thread_queue_size" yaml:"dshow_thread_queue_size"` // 线程队列大小
+	DShowBufferSize      int `mapstructure:"dshow_buffer_size" json:"dshow_buffer_size" yaml:"dshow_buffer_size"`                   // 实时缓冲区大小（字节）
+	DShowThreadQueueSize int `mapstructure:"dshow_thread_queue_size" json:"dshow_thread_queue_size" yaml:"dshow_thread_queue_size"` // 线程队列大小
 	// HLS 配置
-	HLSSegmentDuration int    `mapstructure:"hls_segment_duration" json:"hls_segment_duration" yaml:"hls_segment_duration"` // HLS 分片时长（秒）
-	HLSListSize       int    `mapstructure:"hls_list_size" json:"hls_list_size" yaml:"hls_list_size"`                 // HLS 播放列表保留分片数
+	HLSSegmentDuration int `mapstructure:"hls_segment_duration" json:"hls_segment_duration" yaml:"hls_segment_duration"` // HLS 分片时长（秒）
+	HLSListSize        int `mapstructure:"hls_list_size" json:"hls_list_size" yaml:"hls_list_size"`                      // HLS 播放列表保留分片数
 	// 录制监控配置
 	MaxRecordingDuration time.Duration `mapstructure:"max_recording_duration" json:"max_recording_duration" yaml:"max_recording_duration"` // 最长录制时长
 }
@@ -350,10 +350,10 @@ func setDefaults(cfg *Config) {
 	}
 
 	if cfg.FFmpeg.Path == "" {
-		cfg.FFmpeg.Path = "./bin/ffmpeg"  // 默认使用项目内置的 ffmpeg
+		cfg.FFmpeg.Path = "./bin/ffmpeg" // 默认使用项目内置的 ffmpeg
 	}
 	if cfg.FFmpeg.FFProbePath == "" {
-		cfg.FFmpeg.FFProbePath = "./bin/ffprobe"  // 默认使用项目内置的 ffprobe
+		cfg.FFmpeg.FFProbePath = "./bin/ffprobe" // 默认使用项目内置的 ffprobe
 	}
 	if cfg.FFmpeg.MaxProcesses == 0 {
 		cfg.FFmpeg.MaxProcesses = 5

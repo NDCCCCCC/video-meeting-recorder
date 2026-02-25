@@ -64,8 +64,8 @@ func NewFFmpegConversionService(db *gorm.DB, logger *zap.Logger, cfg *config.Con
 		logger:           logger,
 		config:           cfg,
 		taskQueue:        make(chan uint, 100), // 缓冲队列
-		workers:          3,                     // 默认3个worker
-		maxRetries:       3,                     // 最大重试次数
+		workers:          3,                    // 默认3个worker
+		maxRetries:       3,                    // 最大重试次数
 		cancelFuncs:      make(map[uint]context.CancelFunc),
 		ffmpegPath:       cfg.FFmpeg.Path,
 		videoFileService: videoFileService,
@@ -146,9 +146,9 @@ func (s *FFmpegConversionService) SubmitConversion(taskID uint) error {
 
 	// 更新状态为pending
 	updates := map[string]interface{}{
-		"conversion_status":       models.ConversionStatusPending,
-		"conversion_error_msg":     "",
-		"conversion_retry_count":   0,
+		"conversion_status":      models.ConversionStatusPending,
+		"conversion_error_msg":   "",
+		"conversion_retry_count": 0,
 	}
 	if err := s.db.Model(&task).Updates(updates).Error; err != nil {
 		return fmt.Errorf("更新任务状态失败: %w", err)
@@ -182,8 +182,8 @@ func (s *FFmpegConversionService) GetConversionStatus(taskID uint) (models.Conve
 func (s *FFmpegConversionService) RetryConversion(taskID uint) error {
 	// 重置重试计数并重新提交
 	updates := map[string]interface{}{
-		"conversion_status":     models.ConversionStatusPending,
-		"conversion_error_msg":  "",
+		"conversion_status":      models.ConversionStatusPending,
+		"conversion_error_msg":   "",
 		"conversion_retry_count": 0,
 	}
 	if err := s.db.Model(&models.VideoRecordingTask{}).Where("id = ?", taskID).Updates(updates).Error; err != nil {
@@ -250,9 +250,9 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 	// 更新状态为processing
 	now := time.Now()
 	updates := map[string]interface{}{
-		"conversion_status":      models.ConversionStatusProcessing,
-		"conversion_started_at":  &now,
-		"conversion_error_msg":    "",
+		"conversion_status":     models.ConversionStatusProcessing,
+		"conversion_started_at": &now,
+		"conversion_error_msg":  "",
 	}
 	s.db.Model(&task).Updates(updates)
 
@@ -269,8 +269,8 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 	s.db.Model(&task).Updates(map[string]interface{}{
 		"conversion_status":       models.ConversionStatusCompleted,
 		"conversion_completed_at": &now,
-		"conversion_error_msg":     "",
-		"mp4_file_path":            outputPath,
+		"conversion_error_msg":    "",
+		"mp4_file_path":           outputPath,
 	})
 
 	// 创建 MP4 文件记录
@@ -310,7 +310,7 @@ func (s *FFmpegConversionService) convertMKVToMP4(ctx context.Context, task *mod
 		"-y", // 覆盖输出文件
 		"-i", inputPath,
 		"-c:v", "copy", // 视频直接复制（不重新编码）
-		"-c:a", "aac",  // 音频转AAC
+		"-c:a", "aac", // 音频转AAC
 		"-b:a", "128k",
 		"-movflags", "+faststart",
 		outputPath,
@@ -371,7 +371,7 @@ func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecord
 	if task.ConversionRetryCount >= s.maxRetries {
 		// 标记为失败
 		s.db.Model(task).Updates(map[string]interface{}{
-			"conversion_status":  models.ConversionStatusFailed,
+			"conversion_status":    models.ConversionStatusFailed,
 			"conversion_error_msg": err.Error(),
 		})
 		s.logger.Error("转换失败，已达最大重试次数",

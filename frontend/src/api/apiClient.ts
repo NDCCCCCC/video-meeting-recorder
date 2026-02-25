@@ -10,6 +10,32 @@ let isRefreshing = false
 // 等待刷新完成的回调队列
 let refreshSubscribers: Array<(token: string) => void> = []
 
+// 缓存 localStorage 读取以避免频繁解析 JSON (client-localstorage-schema)
+let cachedToken: string | null = null
+let cachedRefreshToken: string | null = null
+let authStorageString: string | null = null
+
+// 更新缓存
+const updateTokenCache = () => {
+  const currentAuthStorage = localStorage.getItem('auth-storage')
+  if (currentAuthStorage !== authStorageString) {
+    authStorageString = currentAuthStorage
+    if (currentAuthStorage) {
+      try {
+        const parsed = JSON.parse(currentAuthStorage)
+        cachedToken = parsed.state?.token || null
+        cachedRefreshToken = parsed.state?.refreshToken || null
+      } catch {
+        cachedToken = null
+        cachedRefreshToken = null
+      }
+    } else {
+      cachedToken = localStorage.getItem('access_token')
+      cachedRefreshToken = localStorage.getItem('refresh_token')
+    }
+  }
+}
+
 // 将回调加入队列
 function subscribeTokenRefresh(callback: (token: string) => void) {
   refreshSubscribers.push(callback)
@@ -21,18 +47,16 @@ function onTokenRefreshed(token: string) {
   refreshSubscribers = []
 }
 
-// 获取 Token - 优先从 authStore 的 localStorage 获取
+// 获取 Token - 使用缓存
 export const getToken = (): string | null => {
-  return localStorage.getItem('auth-storage')
-    ? JSON.parse(localStorage.getItem('auth-storage')!).state.token
-    : localStorage.getItem('access_token')
+  updateTokenCache()
+  return cachedToken
 }
 
-// 获取刷新 Token
+// 获取刷新 Token - 使用缓存
 const getRefreshToken = (): string | null => {
-  return localStorage.getItem('auth-storage')
-    ? JSON.parse(localStorage.getItem('auth-storage')!).state.refreshToken
-    : localStorage.getItem('refresh_token')
+  updateTokenCache()
+  return cachedRefreshToken
 }
 
 // 保存 Token（用于刷新后更新）

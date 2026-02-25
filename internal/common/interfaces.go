@@ -42,11 +42,11 @@ type Service interface {
 type ServiceStatus int
 
 const (
-	StatusStopped   ServiceStatus = iota // 已停止
-	StatusStarting                       // 启动中
-	StatusRunning                        // 运行中
-	StatusStopping                       // 停止中
-	StatusError                          // 错误状态
+	StatusStopped  ServiceStatus = iota // 已停止
+	StatusStarting                      // 启动中
+	StatusRunning                       // 运行中
+	StatusStopping                      // 停止中
+	StatusError                         // 错误状态
 )
 
 // String 返回状态的字符串表示
@@ -162,10 +162,10 @@ type Repository[T any] interface {
 
 // ListOptions 列表查询选项
 type ListOptions struct {
-	Page     int                 `json:"page"`
-	PageSize int                 `json:"page_size"`
-	OrderBy  string              `json:"order_by"`
-	Order    string              `json:"order"` // "asc" or "desc"
+	Page     int                    `json:"page"`
+	PageSize int                    `json:"page_size"`
+	OrderBy  string                 `json:"order_by"`
+	Order    string                 `json:"order"` // "asc" or "desc"
 	Filters  map[string]interface{} `json:"filters"`
 }
 
@@ -175,23 +175,23 @@ var (
 		Code:    "SERVICE_NOT_RUNNING",
 		Message: "service is not running",
 	}
-	ErrNotFound        = &BusinessError{
+	ErrNotFound = &BusinessError{
 		Code:    "NOT_FOUND",
 		Message: "resource not found",
 	}
-	ErrAlreadyExists   = &BusinessError{
+	ErrAlreadyExists = &BusinessError{
 		Code:    "ALREADY_EXISTS",
 		Message: "resource already exists",
 	}
-	ErrUnauthorized    = &BusinessError{
+	ErrUnauthorized = &BusinessError{
 		Code:    "UNAUTHORIZED",
 		Message: "unauthorized access",
 	}
-	ErrForbidden       = &BusinessError{
+	ErrForbidden = &BusinessError{
 		Code:    "FORBIDDEN",
 		Message: "forbidden access",
 	}
-	ErrInvalidInput    = &BusinessError{
+	ErrInvalidInput = &BusinessError{
 		Code:    "INVALID_INPUT",
 		Message: "invalid input parameters",
 	}

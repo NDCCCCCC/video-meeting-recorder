@@ -41,14 +41,14 @@ const (
 
 // MenuPermissionMap 菜单权限映射
 var MenuPermissionMap = map[string]string{
-	"/dashboard":            ResourceDashboardView,
-	"/tasks":               ResourceTaskView,
-	"/files":               ResourceFileView,
-	"/audit":               ResourceAuditView,
-	"/system/users":        ResourceUserView,
-	"/system/roles":        ResourceRoleView,
+	"/dashboard":             ResourceDashboardView,
+	"/tasks":                 ResourceTaskView,
+	"/files":                 ResourceFileView,
+	"/audit":                 ResourceAuditView,
+	"/system/users":          ResourceUserView,
+	"/system/roles":          ResourceRoleView,
 	"/system/huawei-configs": ResourceConfigView,
-	"/system/settings":      ResourceSystemSettings,
+	"/system/settings":       ResourceSystemSettings,
 }
 
 // AllPermissions 所有权限列表（用于权限分配）
