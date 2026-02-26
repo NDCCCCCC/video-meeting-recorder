@@ -118,6 +118,11 @@ type FFmpegConfig struct {
 	DefaultFormat       string        `mapstructure:"default_format" json:"default_format" yaml:"default_format"`
 	DefaultVideoBitrate string        `mapstructure:"default_video_bitrate" json:"default_video_bitrate" yaml:"default_video_bitrate"`
 	DefaultAudioBitrate string        `mapstructure:"default_audio_bitrate" json:"default_audio_bitrate" yaml:"default_audio_bitrate"`
+	// 视频编码质量控制
+	CRF                 int    `mapstructure:"crf" json:"crf" yaml:"crf"`                                           // CRF质量值（0-51，值越小质量越高，推荐23）
+	Preset              string `mapstructure:"preset" json:"preset" yaml:"preset"`                                   // 编码速度预设（ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow）
+	MaxVideoBitrate     string `mapstructure:"max_video_bitrate" json:"max_video_bitrate" yaml:"max_video_bitrate"` // 最大视频码率（配合CRF使用）
+	VideoBufSize        string `mapstructure:"video_bufsize" json:"video_bufsize" yaml:"video_bufsize"`              // 视频缓冲区大小（通常是maxrate的2倍）
 	// DShow 设备配置
 	DShowBufferSize      int `mapstructure:"dshow_buffer_size" json:"dshow_buffer_size" yaml:"dshow_buffer_size"`                   // 实时缓冲区大小（字节）
 	DShowThreadQueueSize int `mapstructure:"dshow_thread_queue_size" json:"dshow_thread_queue_size" yaml:"dshow_thread_queue_size"` // 线程队列大小
@@ -367,6 +372,19 @@ func setDefaults(cfg *Config) {
 	if cfg.FFmpeg.DefaultFormat == "" {
 		cfg.FFmpeg.DefaultFormat = "mp4"
 	}
+	// 视频编码质量控制默认值
+	if cfg.FFmpeg.CRF == 0 {
+		cfg.FFmpeg.CRF = 23 // 推荐值，质量与大小平衡
+	}
+	if cfg.FFmpeg.Preset == "" {
+		cfg.FFmpeg.Preset = "medium" // 编码速度与压缩率平衡
+	}
+	if cfg.FFmpeg.MaxVideoBitrate == "" {
+		cfg.FFmpeg.MaxVideoBitrate = "3M" // 最大码率3Mbps
+	}
+	if cfg.FFmpeg.VideoBufSize == "" {
+		cfg.FFmpeg.VideoBufSize = "6M" // 缓冲区大小（2倍maxrate）
+	}
 	// DShow 设备默认值
 	if cfg.FFmpeg.DShowBufferSize == 0 {
 		cfg.FFmpeg.DShowBufferSize = 104857600 // 100MB
@@ -498,8 +516,13 @@ ffmpeg:
   timeout: "5m"
   default_codec: "h264"
   default_format: "mp4"
-  default_video_bitrate: "2000"
+  default_video_bitrate: "2000"   # 已废弃，使用 crf/max_video_bitrate
   default_audio_bitrate: "128"
+  # 视频编码质量控制（CRF模式 - 推荐）
+  crf: 23                         # CRF质量值：18-28，值越小质量越高。23为推荐值，可减少30-50%文件大小
+  preset: "medium"                # 编码速度预设：ultrafast~veryslow。medium平衡速度与压缩率
+  max_video_bitrate: "3M"         # 最大视频码率（配合CRF使用，防止码率过高）
+  video_bufsize: "6M"             # 视频缓冲区大小（通常是maxrate的2倍）
   # DShow 设备配置
   dshow_buffer_size: 2097152      # 2MB 实时缓冲区
   dshow_thread_queue_size: 8      # 线程队列大小
