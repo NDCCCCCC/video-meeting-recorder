@@ -382,17 +382,19 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	}
 	args = append(args, inputArgs...)
 
-	// 添加视频编码参数
+	// 添加视频编码参数（使用CRF质量模式）
 	args = append(args,
 		"-c:v", "libx264",
-		"-preset", "medium",
-		"-b:v", "5M",
+		"-preset", c.config.FFmpeg.Preset,
+		"-crf", fmt.Sprintf("%d", c.config.FFmpeg.CRF),
+		"-maxrate", c.config.FFmpeg.MaxVideoBitrate,
+		"-bufsize", c.config.FFmpeg.VideoBufSize,
 		"-pix_fmt", "yuv420p",
 	)
 
 	// 添加音频编码参数（如果有音频）
 	if input.hasAudio {
-		args = append(args, "-c:a", "aac", "-b:a", "128k")
+		args = append(args, "-c:a", "aac", "-b:a", c.config.FFmpeg.DefaultAudioBitrate+"k")
 	}
 
 	// 添加时长限制
@@ -424,6 +426,8 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	// 从配置读取 HLS 参数
 	hlsSegmentDuration := c.config.FFmpeg.HLSSegmentDuration
 	hlsListSize := c.config.FFmpeg.HLSListSize
+	// hls_delete_threshold 设置为 hls_list_size + 1，确保只保留最近的分片
+	hlsDeleteThreshold := hlsListSize + 1
 
 	// 使用相对路径，避免 Windows 盘符转义问题
 	// 配置中的路径本身就是相对路径（如 ./data/recordings），直接使用即可
@@ -460,10 +464,12 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	hlsM3U8PathEscaped := escapeSimple(hlsM3U8RelPath)
 
 	// 使用相对路径构建 tee spec
-	teeSpec := fmt.Sprintf("%s|[f=hls:hls_time=%d:hls_list_size=%d:hls_segment_filename=%s]%s",
+	// 添加 hls_flags=delete_segments+hls_delete_threshold 确保自动删除旧分段，防止长时间录制占用过多磁盘
+	teeSpec := fmt.Sprintf("%s|[f=hls:hls_time=%d:hls_list_size=%d:hls_flags=delete_segments:hls_delete_threshold=%d:hls_segment_filename=%s]%s",
 		mkvPathEscaped,
 		hlsSegmentDuration,
 		hlsListSize,
+		hlsDeleteThreshold,
 		hlsSegmentPathEscaped,
 		hlsM3U8PathEscaped,
 	)
@@ -476,6 +482,7 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 		zap.String("hls_segment_path", hlsSegmentPath),
 		zap.Int("hls_segment_duration", hlsSegmentDuration),
 		zap.Int("hls_list_size", hlsListSize),
+		zap.Int("hls_delete_threshold", hlsDeleteThreshold),
 		zap.String("tee_spec", teeSpec), // 打印完整的 tee spec 以便调试
 	)
 

@@ -120,11 +120,13 @@ func (c *RecordingConfig) BuildFFmpegCommand() []string {
         }
     }
 
-    // 视频编码参数
+    // 视频编码参数（使用CRF质量模式）
     args = append(args,
         "-c:v", "libx264",
-        "-preset", "medium",
-        "-b:v", c.VideoBitrate,
+        "-preset", c.Preset,      // medium / fast / faster / slow
+        "-crf", fmt.Sprintf("%d", c.CRF),  // CRF质量值：18-28，推荐23
+        "-maxrate", c.MaxVideoBitrate,     // 最大码率上限
+        "-bufsize", c.VideoBufSize,        // 缓冲区大小（通常2倍maxrate）
         "-pix_fmt", "yuv420p",
     )
 
@@ -150,29 +152,29 @@ func (c *RecordingConfig) BuildFFmpegCommand() []string {
 **命令示例**：
 
 ```bash
-# Windows (DirectShow)
+# Windows (DirectShow) - CRF质量模式
 ffmpeg -y \
   -f dshow -video_size 1920x1080 -framerate 30 -i "video=USB Camera" \
   -f dshow -i "audio=麦克风" \
-  -c:v libx264 -preset medium -b:v 5M -pix_fmt yuv420p \
+  -c:v libx264 -preset medium -crf 23 -maxrate 3M -bufsize 6M -pix_fmt yuv420p \
   -c:a aac -b:a 128k \
   -f mp4 -movflags +faststart \
   output.mp4
 
-# Linux (Video4Linux2)
+# Linux (Video4Linux2) - CRF质量模式
 ffmpeg -y \
   -f v4l2 -video_size 1920x1080 -framerate 30 -i /dev/video0 \
   -f alsa -i hw:1,0 \
-  -c:v libx264 -preset medium -b:v 5M -pix_fmt yuv420p \
+  -c:v libx264 -preset medium -crf 23 -maxrate 3M -bufsize 6M -pix_fmt yuv420p \
   -c:a aac -b:a 128k \
   -f mp4 -movflags +faststart \
   output.mp4
 
-# macOS (AVFoundation)
+# macOS (AVFoundation) - CRF质量模式
 ffmpeg -y \
   -f avfoundation -video_size 1920x1080 -framerate 30 -i "0" \
   -f avfoundation -i ":0" \
-  -c:v libx264 -preset medium -b:v 5M -pix_fmt yuv420p \
+  -c:v libx264 -preset medium -crf 23 -maxrate 3M -bufsize 6M -pix_fmt yuv420p \
   -c:a aac -b:a 128k \
   -f mp4 -movflags +faststart \
   output.mp4
@@ -727,58 +729,75 @@ func (r *RTSPRecorder) StartRecording(streamURL, outputPath string, duration tim
 # config.yaml
 ffmpeg:
   # FFmpeg可执行文件路径
-  path: "/usr/bin/ffmpeg"
+  path: "./bin/ffmpeg"
 
-  # 输出目录
-  output_dir: "./recordings"
+  # 录制配置 - 视频编码质量控制（CRF模式）
+  # CRF（Constant Rate Factor）是H.264推荐的编码模式，相比固定码率可以获得更好的质量/大小平衡
+  crf: 23                         # CRF质量值：18-28，值越小质量越高，推荐23
+  preset: "medium"                # 编码速度预设：ultrafast~veryslow，medium平衡速度与压缩率
+  max_video_bitrate: "3M"         # 最大视频码率（配合CRF使用，防止码率过高）
+  video_bufsize: "6M"             # 视频缓冲区大小（通常是maxrate的2倍）
+  default_audio_bitrate: "128"    # 音频码率（kbps）
 
-  # 日志目录
-  log_dir: "./logs/ffmpeg"
+  # CRF值参考指南
+  # ---------------------------------------------------------------------------
+  # | CRF值 | 质量    | 文件大小 | 适用场景                              |
+  # |-------|---------|----------|----------------------------------------|
+  # | 18    | 极高    | 很大     | 存档/制作母版                          |
+  # | 20-22 | 很高    | 大       | 高质量要求场景                          |
+  # | 23    | 高（推荐） | 中等   | 一般录制（推荐值）                      |
+  # | 26    | 中等    | 小       | 长时间存储/低带宽                       |
+  # | 28+   | 较低    | 很小     | 仅用于预览                              |
+  # ---------------------------------------------------------------------------
 
-  # 录制配置
-  recording:
-    # 默认分辨率
-    resolution: "1920x1080"
+  # preset值参考指南
+  # ---------------------------------------------------------------------------
+  # | 预设        | 编码速度 | 压缩率 | 适用场景                              |
+  # |------------|----------|--------|----------------------------------------|
+  # | ultrafast  | 极快     | 很低   | 实时低延迟（不推荐用于录制）           |
+  # | superfast  | 很快     | 低     | 低延迟场景                            |
+  # | veryfast   | 快       | 较低   | 快速编码                              |
+  # | faster     | 较快     | 中下   | 平衡选择之一                          |
+  # | fast       | 快       | 中等   | 平衡选择之一                          |
+  # | medium     | 中等（推荐） | 中等 | 推荐用于录制                          |
+  # | slow       | 慢       | 高     | 离线编码                              |
+  # | slower     | 很慢     | 很高   | 最终存档                              |
+  # | veryslow   | 极慢     | 极高   | 最高压缩率（耗时很长）                 |
+  # ---------------------------------------------------------------------------
 
-    # 默认帧率
-    frame_rate: 30
+  # DShow 设备配置（Windows）
+  dshow_buffer_size: 2097152      # 2MB 实时缓冲区
+  dshow_thread_queue_size: 8      # 线程队列大小
 
-    # 视频比特率
-    video_bitrate: "5M"
+  # HLS 配置（实时预览流）
+  hls_segment_duration: 10        # HLS 分片时长（秒）
+  hls_list_size: 5                # HLS 播放列表保留分片数
+  # 注意：系统会自动删除旧分片文件，仅保留最近 hls_list_size 个分片
+  # 这确保长时间录制不会导致磁盘空间被占满，同时保持低延迟预览
 
-    # 音频比特率
-    audio_bitrate: "128k"
-
-    # 预设
-    preset: "medium"  # ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
-
-    # 编解码器
-    video_codec: "libx264"
-    audio_codec: "aac"
-
-    # 像素格式
-    pixel_format: "yuv420p"
-
-  # 转换配置
-  conversion:
-    # 并发转换数
-    concurrent_conversions: 3
-
-    # 超时时间
-    timeout: 300
-
-  # 进程管理
-  process:
-    # 最大进程数
-    max_processes: 10
-
-    # 停止超时
-    stop_timeout: 10
-
-    # 自动重试
-    auto_retry: true
-    max_retries: 3
+  # 录制监控配置
+  max_recording_duration: "24h"   # 最长录制时长
 ```
+
+### 6.2 编码模式对比
+
+| 对比项 | 旧模式（固定码率CBR） | 新模式（CRF质量模式） |
+|--------|----------------------|----------------------|
+| 码率控制 | `-b:v 5M` 固定 | `-crf 23 -maxrate 3M` 可变 |
+| 简单场景 | 浪费码率 | 自动降低码率 |
+| 复杂场景 | 质量下降 | 保持质量 |
+| 文件大小 | 固定较大 | 自动优化（可减少30-50%） |
+| 适用场景 | 流媒体直播 | 本地录制 |
+
+### 6.3 文件大小优化效果
+
+使用CRF模式后，预期文件大小变化：
+
+| 场景 | 旧模式（CBR 5Mbps） | 新模式（CRF 23） | 优化幅度 |
+|------|---------------------|------------------|----------|
+| 1小时会议 | ~2.2GB | ~0.7-1.5GB | 30-65% |
+| 2小时会议 | ~4.5GB | ~1.5-3GB | 30-65% |
+| 4小时会议 | ~9GB | ~3-6GB | 30-65% |
 
 ## 七、相关文档
 

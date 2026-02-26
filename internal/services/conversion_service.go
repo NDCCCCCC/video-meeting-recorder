@@ -266,25 +266,31 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 
 	// 转换成功，更新转换状态和任务状态
 	now = time.Now()
-	s.db.Model(&task).Updates(map[string]interface{}{
+	updates = map[string]interface{}{
 		"conversion_status":       models.ConversionStatusCompleted,
 		"conversion_completed_at": &now,
 		"conversion_error_msg":    "",
 		"mp4_file_path":           outputPath,
 		// 同时更新任务状态为已完成
 		"status": models.VideoStatusCompleted,
-	})
+	}
 
-	// 创建 MP4 文件记录
+	// 创建 MP4 文件记录，并获取实际视频时长
 	if s.videoFileService != nil {
 		mp4 := "mp4"
-		if _, err := s.videoFileService.CreateFileFromTask(&task, &mp4); err != nil {
+		videoFile, err := s.videoFileService.CreateFileFromTask(&task, &mp4)
+		if err != nil {
 			s.logger.Error("创建MP4文件记录失败",
 				zap.Uint("task_id", taskID),
 				zap.Error(err),
 			)
+		} else if videoFile != nil && videoFile.Duration > 0 {
+			// 更新录制时长（从视频文件元数据获取）
+			updates["recording_duration"] = videoFile.Duration
 		}
 	}
+
+	s.db.Model(&task).Updates(updates)
 
 	s.logger.Info("转换完成，任务已结束",
 		zap.Uint("task_id", taskID),
