@@ -69,10 +69,6 @@ const formatDuration = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-// 格式化时间
-const formatDateTime = (time: string | null): string =>
-  time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-'
-
 export default function FileManagement() {
   const [files, setFiles] = useState<VideoFile[]>([])
   const [stats, setStats] = useState<VideoFileStats | null>(null)
@@ -319,10 +315,10 @@ export default function FileManagement() {
       render: renderStatus,
     },
     {
-      title: '录制时间',
-      dataIndex: 'recorded_at',
+      title: '创建时间',
+      dataIndex: 'created_at',
       width: 160,
-      render: formatDateTime,
+      render: (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm'),
     },
     {
       title: '操作',
@@ -511,9 +507,6 @@ export default function FileManagement() {
 
                 <Col span={8}><strong>状态:</strong></Col>
                 <Col span={16}>{renderStatus(viewingFile.status)}</Col>
-
-                <Col span={8}><strong>录制时间:</strong></Col>
-                <Col span={16}>{formatDateTime(viewingFile.recorded_at)}</Col>
 
                 <Col span={8}><strong>创建时间:</strong></Col>
                 <Col span={16}>{dayjs(viewingFile.created_at).format('YYYY-MM-DD HH:mm:ss')}</Col>

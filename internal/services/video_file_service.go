@@ -81,6 +81,7 @@ type ListFilesResponse struct {
 type ScanResult struct {
 	Scanned int      `json:"scanned"`
 	Created int      `json:"created"`
+	Updated int      `json:"updated"`  // 更新的文件数量
 	Skipped int      `json:"skipped"`
 	Errors  []string `json:"errors"`
 }
@@ -928,6 +929,7 @@ func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 	s.logger.Info("文件扫描完成",
 		zap.Int("scanned", result.Scanned),
 		zap.Int("created", result.Created),
+		zap.Int("updated", result.Updated),
 		zap.Int("skipped", result.Skipped),
 		zap.Int("errors", len(result.Errors)),
 	)
@@ -975,6 +977,50 @@ func (s *VideoFileService) handleExistingFile(file fileInfoWithPath, result *Sca
 		return
 	}
 
+	// 检查文件是否关联了任务
+	var taskID uint
+	if existingFile.TaskID != nil {
+		taskID = *existingFile.TaskID
+	} else if file.taskID != nil {
+		taskID = *file.taskID
+	}
+
+	// 如果有任务ID，检查转换状态
+	if taskID > 0 {
+		var task models.VideoRecordingTask
+		if err := s.db.Select("id, " +
+			"conversion_status, " +
+			"status").First(&task, taskID).Error; err == nil {
+
+			// 如果任务还在转换中或转换失败，跳过元数据更新
+			// 因为此时文件可能不完整或数据不准确
+			if task.ConversionStatus == models.ConversionStatusProcessing ||
+				task.ConversionStatus == models.ConversionStatusPending {
+				result.Skipped++
+				s.logger.Debug("跳过转换中的文件",
+					zap.Uint("file_id", existingFile.ID),
+					zap.Uint("task_id", taskID),
+					zap.String("conversion_status", string(task.ConversionStatus)),
+				)
+				return
+			}
+
+			// 如果任务状态是转换中（converting），也跳过
+			if task.Status == models.VideoStatusConverting {
+				result.Skipped++
+				s.logger.Debug("跳过转换中的文件（任务状态）",
+					zap.Uint("file_id", existingFile.ID),
+					zap.Uint("task_id", taskID),
+					zap.String("task_status", string(task.Status)),
+				)
+				return
+			}
+		}
+	}
+
+	// 如果转换已完成，更新文件的元数据（文件大小、码率、时长等）
+	updated := false
+
 	// 如果 task_id 为空且可以推断出任务ID，则更新
 	if existingFile.TaskID == nil && file.taskID != nil {
 		if s.validateTaskID(*file.taskID) {
@@ -983,10 +1029,80 @@ func (s *VideoFileService) handleExistingFile(file fileInfoWithPath, result *Sca
 				zap.Uint("file_id", existingFile.ID),
 				zap.Uint("task_id", *file.taskID),
 			)
+			updated = true
 		}
 	}
 
-	result.Skipped++
+	// 重新提取文件元数据并更新
+	// 使用新的元数据更新文件大小、码率、时长等信息
+	metadata, err := s.extractVideoMetadata(file.filePath)
+	if err != nil {
+		s.logger.Warn("提取视频元数据失败",
+			zap.String("file", file.filePath),
+			zap.Error(err),
+		)
+	} else {
+		// 获取文件大小
+		fileInfo, _ := os.Stat(file.filePath)
+		fileSize := int64(0)
+		if fileInfo != nil {
+			fileSize = fileInfo.Size()
+		}
+
+		// 检查是否需要更新（只在数据有变化时更新）
+		needsUpdate := false
+		updates := make(map[string]interface{})
+
+		if existingFile.FileSize != fileSize {
+			updates["file_size"] = fileSize
+			needsUpdate = true
+		}
+
+		if existingFile.Duration != int(metadata.Duration) {
+			updates["duration"] = int(metadata.Duration)
+			needsUpdate = true
+		}
+
+		if existingFile.Bitrate != metadata.Bitrate {
+			updates["bitrate"] = metadata.Bitrate
+			needsUpdate = true
+		}
+
+		if existingFile.Resolution != metadata.Resolution && metadata.Resolution != "" {
+			updates["resolution"] = metadata.Resolution
+			needsUpdate = true
+		}
+
+		if existingFile.Codec != metadata.Codec && metadata.Codec != "" {
+			updates["codec"] = metadata.Codec
+			needsUpdate = true
+		}
+
+		// 如果需要更新，执行更新
+		if needsUpdate {
+			if err := s.db.Model(&existingFile).Updates(updates).Error; err != nil {
+				s.logger.Error("更新文件元数据失败",
+					zap.Uint("file_id", existingFile.ID),
+					zap.Error(err),
+				)
+			} else {
+				s.logger.Info("更新文件元数据",
+					zap.Uint("file_id", existingFile.ID),
+					zap.String("file_path", file.filePath),
+					zap.Int64("file_size", fileSize),
+					zap.Int("duration", int(metadata.Duration)),
+					zap.Int("bitrate", metadata.Bitrate),
+				)
+				updated = true
+			}
+		}
+	}
+
+	if updated {
+		result.Updated++
+	} else {
+		result.Skipped++
+	}
 }
 
 // validateTaskID 验证任务ID是否存在

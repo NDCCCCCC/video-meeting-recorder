@@ -66,14 +66,21 @@ ffmpeg:
   timeout: "5m"
   default_codec: "h264"
   default_format: "mp4"
-  default_video_bitrate: "2000"
+  default_video_bitrate: "2000"   # 已废弃，使用 crf/max_video_bitrate
   default_audio_bitrate: "128"
+  # 视频编码质量控制（CRF模式 - 推荐）
+  crf: 23                         # CRF质量值：18-28，值越小质量越高。23为推荐值，可减少30-50%文件大小
+  preset: "medium"                # 编码速度预设：ultrafast~veryslow。medium平衡速度与压缩率
+  max_video_bitrate: "3M"         # 最大视频码率（配合CRF使用，防止码率过高）
+  video_bufsize: "6M"             # 视频缓冲区大小（通常是maxrate的2倍）
   # DShow 设备配置
   dshow_buffer_size: 2097152      # 2MB 实时缓冲区
   dshow_thread_queue_size: 8      # 线程队列大小
-  # HLS 配置
+  # HLS 配置（实时预览流）
   hls_segment_duration: 10        # HLS 分片时长（秒）
   hls_list_size: 5                # HLS 播放列表保留分片数
+  # 系统会自动删除旧分片文件，仅保留最近 hls_list_size 个分片
+  # 这确保长时间录制不会占用过多磁盘空间，同时保持低延迟预览
   # 录制监控配置
   max_recording_duration: "24h"   # 最长录制时长
 
