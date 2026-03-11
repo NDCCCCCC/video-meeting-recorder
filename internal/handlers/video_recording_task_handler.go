@@ -655,3 +655,42 @@ func getHLSContentType(filename string) string {
 	}
 	return "application/octet-stream"
 }
+
+// ClearStuckTasks 清理卡住的任务
+// @Summary 清理卡住的任务
+// @Description 将转换中状态超过指定时间的任务标记为失败，并释放终端锁
+// @Tags 录制任务
+// @Security Bearer
+// @Param timeout_minutes query int false "超时时间（分钟），默认30分钟" default(30)
+// @Success 200 {object} response.Response{data=services.ClearStuckTasksResult}
+// @Router /api/v1/tasks/clear-stuck [post]
+func (h *VideoRecordingTaskHandler) ClearStuckTasks(c *gin.Context) {
+	// 获取超时参数
+	timeoutMinutes := 30 // 默认30分钟
+	if timeoutStr := c.Query("timeout_minutes"); timeoutStr != "" {
+		if parsed, err := parseUintParamFromString(timeoutStr); err == nil && parsed > 0 {
+			timeoutMinutes = int(parsed)
+		}
+	}
+
+	result, err := h.taskService.ClearStuckTasks(timeoutMinutes)
+	if err != nil {
+		h.logger.Error("清理卡住任务失败", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "清理卡住任务失败")
+		return
+	}
+
+	h.logger.Info("清理卡住任务成功",
+		zap.Int("total_cleared", result.TotalCleared),
+		zap.Int("total_unlocked", result.TotalUnlocked),
+	)
+
+	response.GinSuccess(c, result)
+}
+
+// parseUintParamFromString 从字符串解析uint参数
+func parseUintParamFromString(s string) (uint, error) {
+	var result uint
+	_, err := fmt.Sscanf(s, "%d", &result)
+	return result, err
+}

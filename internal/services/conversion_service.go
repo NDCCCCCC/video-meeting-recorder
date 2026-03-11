@@ -452,10 +452,12 @@ func (s *FFmpegConversionService) loadPendingTasks() error {
 	var tasks []models.VideoRecordingTask
 
 	// 查找所有有MKV文件但未完成转换的任务
-	if err := s.db.Where("mkv_file_path != ? AND (conversion_status = ? OR conversion_status = ? OR conversion_status = '' OR conversion_status IS NULL)",
+	// 包括：pending、failed、processing（服务重启后需要重置）
+	if err := s.db.Where("mkv_file_path != ? AND (conversion_status = ? OR conversion_status = ? OR conversion_status = ? OR conversion_status = '' OR conversion_status IS NULL)",
 		"",
 		models.ConversionStatusPending,
 		models.ConversionStatusFailed,
+		models.ConversionStatusProcessing, // 处理可能卡住的 processing 任务
 	).Find(&tasks).Error; err != nil {
 		return err
 	}
@@ -464,6 +466,19 @@ func (s *FFmpegConversionService) loadPendingTasks() error {
 
 	// 提交到队列
 	for _, task := range tasks {
+		// 如果任务是 processing 状态，说明服务可能崩溃过，重置为 pending
+		if task.ConversionStatus == models.ConversionStatusProcessing {
+			s.logger.Info("重置崩溃的转换任务状态",
+				zap.Uint("task_id", task.ID),
+				zap.String("mkv_file", task.MKVFilePath),
+			)
+			s.db.Model(&task).Updates(map[string]interface{}{
+				"conversion_status":     models.ConversionStatusPending,
+				"conversion_error_msg":  "",
+				"conversion_retry_count": 0,
+			})
+		}
+
 		select {
 		case s.taskQueue <- task.ID:
 		default:

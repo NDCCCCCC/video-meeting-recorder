@@ -395,9 +395,11 @@ func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
 			continue
 		}
 
-		// 任务存在但状态不是 recording 或 connecting，解锁
+		// 任务存在但状态不是 recording、connecting 或 converting，解锁
+		// 注意：converting 是转换中状态，此时终端应该已经释放
+		// 如果 converting 状态的终端仍被锁定，说明任务卡住了，需要清理
 		if task.Status != models.VideoStatusRecording && task.Status != models.VideoStatusConnecting {
-			c.logger.Info("清理已完成/取消任务的终端锁",
+			c.logger.Info("清理已完成/取消/转换中任务的终端锁",
 				zap.Uint("config_id", config.ID),
 				zap.Uint("locked_by_task_id", *config.LockedBy),
 				zap.String("task_status", string(task.Status)),

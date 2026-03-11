@@ -1,6 +1,8 @@
 package migrations
 
 import (
+	"fmt"
+
 	"gorm.io/gorm"
 )
 
@@ -68,57 +70,47 @@ func (m *AddStreamConfigMigration) Name() string {
 }
 
 func (m *AddStreamConfigMigration) Up(db *gorm.DB) error {
-	// 使用 PRAGMA table_info 检查列是否已存在
+	// 第一部分：添加流媒体字段到 huawei_configs 表
+	// 检查列是否已存在
 	var columnName string
 	checkErr := db.Raw("SELECT name FROM pragma_table_info('huawei_configs') WHERE name = 'stream_protocol'").Scan(&columnName).Error
 
-	// 如果查询成功且找到了列，说明已存在，跳过迁移
-	if checkErr == nil && columnName != "" {
-		return nil
-	}
+	// 只有当列不存在时才添加
+	if checkErr != nil || columnName == "" {
+		addResult := db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_protocol VARCHAR(20)")
+		if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+			return addResult.Error
+		}
 
-	// 添加流媒体字段到 huawei_configs 表
-	addResult := db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_protocol VARCHAR(20)")
-	if addResult.Error != nil {
-		if !isDuplicateColumnError(addResult.Error) {
+		addResult = db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_url VARCHAR(500)")
+		if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+			return addResult.Error
+		}
+
+		addResult = db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_username VARCHAR(100)")
+		if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+			return addResult.Error
+		}
+
+		addResult = db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_password VARCHAR(100)")
+		if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+			return addResult.Error
+		}
+
+		addResult = db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_enabled BOOLEAN DEFAULT 0")
+		if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
 			return addResult.Error
 		}
 	}
 
-	addResult = db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_url VARCHAR(500)")
-	if addResult.Error != nil {
-		if !isDuplicateColumnError(addResult.Error) {
-			return addResult.Error
-		}
-	}
-
-	addResult = db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_username VARCHAR(100)")
-	if addResult.Error != nil {
-		if !isDuplicateColumnError(addResult.Error) {
-			return addResult.Error
-		}
-	}
-
-	addResult = db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_password VARCHAR(100)")
-	if addResult.Error != nil {
-		if !isDuplicateColumnError(addResult.Error) {
-			return addResult.Error
-		}
-	}
-
-	addResult = db.Exec("ALTER TABLE huawei_configs ADD COLUMN stream_enabled BOOLEAN DEFAULT 0")
-	if addResult.Error != nil {
-		if !isDuplicateColumnError(addResult.Error) {
-			return addResult.Error
-		}
-	}
-
-	// 检查关联表是否已存在
+	// 第二部分：创建或验证 task_huawei_configs 表
+	// 检查表是否已存在并验证结构
 	var count int64
 	db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='task_huawei_configs'").Scan(&count)
+
 	if count == 0 {
-		// 创建任务配置关联表
-		db.Exec(`
+		// 表不存在，直接创建
+		err := db.Exec(`
 			CREATE TABLE task_huawei_configs (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				task_id INTEGER NOT NULL,
@@ -129,9 +121,16 @@ func (m *AddStreamConfigMigration) Up(db *gorm.DB) error {
 				FOREIGN KEY(task_id) REFERENCES video_recording_tasks(id) ON DELETE CASCADE,
 				FOREIGN KEY(huawei_config_id) REFERENCES huawei_configs(id) ON DELETE CASCADE
 			)
-		`)
-		db.Exec("CREATE INDEX IF NOT EXISTS idx_task_huawei_config ON task_huawei_configs(task_id, huawei_config_id)")
+		`).Error
+		if err != nil {
+			return fmt.Errorf("failed to create task_huawei_configs table: %w", err)
+		}
 	}
+
+	// 确保索引存在（幂等操作）
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_task_huawei_config ON task_huawei_configs(task_id, huawei_config_id)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_task_huawei_config_task_id ON task_huawei_configs(task_id)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_task_huawei_config_config_id ON task_huawei_configs(huawei_config_id)")
 
 	return nil
 }

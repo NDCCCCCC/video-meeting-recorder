@@ -317,13 +317,14 @@ func TestRecordingStatus(t *testing.T) {
 	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	coordinator.processes[1] = &RecordingProcess{
+	coordinator.processes["1_usb"] = &RecordingProcess{
 		TaskID:     1,
 		Cmd:        nil,
 		StartTime:  time.Now(),
 		OutputPath: tempDir + "/test.mp4",
 		Status:     "running",
 		CancelFunc: cancel,
+		ConfigType: "usb",
 	}
 
 	status, err = coordinator.GetRecordingStatus(1)

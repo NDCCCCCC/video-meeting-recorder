@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -9,6 +10,9 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	_ "modernc.org/sqlite"
 )
 
 // mockVideoFileService 模拟视频文件服务
@@ -36,11 +40,34 @@ func (m *mockVideoFileService) CreateFileFromTask(task *models.VideoRecordingTas
 // mockTaskService 模拟任务服务
 type mockTaskService struct {
 	tasks map[uint]*models.VideoRecordingTask
+	db    *gorm.DB
 }
 
 func newMockTaskService() *mockTaskService {
+	// 创建内存数据库用于测试（使用纯Go SQLite驱动）
+	sqlDB, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		panic(fmt.Sprintf("创建测试数据库失败: %v", err))
+	}
+
+	db, err := gorm.Open(sqlite.Dialector{Conn: sqlDB}, &gorm.Config{})
+	if err != nil {
+		panic(fmt.Sprintf("创建GORM失败: %v", err))
+	}
+
+	// 自动迁移需要的表
+	err = db.AutoMigrate(
+		&models.TaskHuaweiConfig{},
+		&models.HuaweiConfig{},
+		&models.VideoRecordingTask{},
+	)
+	if err != nil {
+		panic(fmt.Sprintf("迁移测试数据库失败: %v", err))
+	}
+
 	return &mockTaskService{
 		tasks: make(map[uint]*models.VideoRecordingTask),
+		db:    db,
 	}
 }
 
@@ -96,6 +123,10 @@ func (m *mockTaskService) UpdateRecordingPaths(id uint, mkvPath, hlsPath string)
 	return nil
 }
 
+func (m *mockTaskService) GetDB() *gorm.DB {
+	return m.db
+}
+
 // mockCoordinator 模拟录制协调器
 type mockCoordinator struct{}
 
@@ -104,6 +135,10 @@ func newMockCoordinator() *mockCoordinator {
 }
 
 func (m *mockCoordinator) StartRecording(task *models.VideoRecordingTask, config *models.HuaweiConfig) error {
+	return nil
+}
+
+func (m *mockCoordinator) StartRecordingWithConfig(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig, configType string) error {
 	return nil
 }
 
@@ -117,6 +152,7 @@ func (m *mockCoordinator) HealthCheck() error {
 
 // 测试辅助函数
 func createTestTask(id uint, name string, startTime time.Time) *models.VideoRecordingTask {
+	configID := uint(1)
 	return &models.VideoRecordingTask{
 		Base:               models.Base{ID: id},
 		Name:               name,
@@ -125,8 +161,41 @@ func createTestTask(id uint, name string, startTime time.Time) *models.VideoReco
 		PreJoinMinutes:     5,
 		RecordDelayMinutes: 0,
 		ConferenceNumber:   "123456",
-		HuaweiConfigID:     1,
+		HuaweiConfigID:     &configID,
 		Status:             models.VideoStatusPending,
+	}
+}
+
+// setupTestDBData 设置测试数据库中的华为配置数据
+func setupTestDBData(db *gorm.DB) {
+	// 创建测试华为配置
+	config := &models.HuaweiConfig{
+		Base:          models.Base{ID: 1},
+		Name:          "Test Config",
+		Server:        "192.168.1.100",
+		Port:          80,
+		Username:      "admin",
+		Password:      "password",
+		OutputFormat:  "mp4",
+		CameraBackend: "dshow",
+		AudioBackend:  "dshow",
+	}
+	db.Create(config)
+}
+
+// setupTaskWithConfig 设置任务及其关联配置
+func setupTaskWithConfig(taskSvc *mockTaskService, task *models.VideoRecordingTask) {
+	taskSvc.tasks[task.ID] = task
+	// 设置测试数据库数据
+	setupTestDBData(taskSvc.db)
+	// 创建任务配置关联
+	if task.HuaweiConfigID != nil {
+		taskConfig := &models.TaskHuaweiConfig{
+			TaskID:         task.ID,
+			HuaweiConfigID: *task.HuaweiConfigID,
+			ConfigType:     "usb",
+		}
+		taskSvc.db.Create(taskConfig)
 	}
 }
 
@@ -189,7 +258,7 @@ func TestAddTask(t *testing.T) {
 	// 创建测试任务
 	startTime := time.Now().Add(1 * time.Hour)
 	task := createTestTask(1, "Test Task", startTime)
-	taskSvc.tasks[1] = task
+	setupTaskWithConfig(taskSvc, task)
 
 	// 添加任务
 	err = scheduler.AddTask(task)
@@ -215,7 +284,7 @@ func TestAddTask_DuplicateTask(t *testing.T) {
 	// 创建测试任务
 	startTime := time.Now().Add(1 * time.Hour)
 	task := createTestTask(1, "Test Task", startTime)
-	taskSvc.tasks[1] = task
+	setupTaskWithConfig(taskSvc, task)
 
 	// 第一次添加
 	err = scheduler.AddTask(task)
@@ -268,7 +337,7 @@ func TestAddTaskWithPastStartTime(t *testing.T) {
 	startTime := time.Now().Add(-30 * time.Minute)
 	task := createTestTask(1, "Immediate Task", startTime)
 	// 任务的结束时间是 startTime + 1小时 = 当前时间 + 30分钟（未过期）
-	taskSvc.tasks[1] = task
+	setupTaskWithConfig(taskSvc, task)
 
 	// 添加任务应该成功（立即执行）
 	err = scheduler.AddTask(task)
@@ -293,7 +362,7 @@ func TestRemoveTask(t *testing.T) {
 	// 创建并添加任务
 	startTime := time.Now().Add(1 * time.Hour)
 	task := createTestTask(1, "Test Task", startTime)
-	taskSvc.tasks[1] = task
+	setupTaskWithConfig(taskSvc, task)
 
 	err = scheduler.AddTask(task)
 	assert.NoError(t, err)
@@ -322,7 +391,7 @@ func TestGetScheduledTasks(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		startTime := time.Now().Add(time.Duration(i) * time.Hour)
 		task := createTestTask(uint(i), "Test Task", startTime)
-		taskSvc.tasks[uint(i)] = task
+		setupTaskWithConfig(taskSvc, task)
 		err = scheduler.AddTask(task)
 		assert.NoError(t, err)
 	}

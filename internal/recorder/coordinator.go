@@ -26,14 +26,22 @@ type SimpleRecordingCoordinator struct {
 
 // RecordingProcess 录制进程
 type RecordingProcess struct {
-	TaskID     uint
-	Cmd        *exec.Cmd // 主录制进程 (使用 tee muxer 同时输出 MKV 和 HLS)
-	StartTime  time.Time
-	OutputPath string // MKV文件路径
-	HLSPath    string // HLS预览路径 (m3u8文件)
-	Status     string
-	CancelFunc context.CancelFunc
-	logFile    *os.File
+	TaskID         uint
+	Cmd            *exec.Cmd // 主录制进程 (使用 tee muxer 同时输出 MKV 和 HLS)
+	StartTime      time.Time
+	OutputPath     string // MKV文件路径
+	HLSPath        string // HLS预览路径 (m3u8文件)
+	Status         string
+	CancelFunc     context.CancelFunc
+	logFile        *os.File
+	// 自动重连支持
+	ConfigType     string              // 配置类型: usb 或 stream
+	Task           *models.VideoRecordingTask // 任务信息（用于重连）
+	HuaweiConfig   *models.HuaweiConfig       // 华为配置（用于重连）
+	ReconnectCount int                 // 当前重连次数
+	MaxReconnects  int                 // 最大重连次数
+	ReconnectDelay time.Duration       // 重连间隔
+	ShouldReconnect bool               // 是否应该重连（仅对流媒体有效）
 }
 
 // InputSourceType 输入源类型
@@ -119,15 +127,27 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 
 	// 使用带配置类型的键存储进程
 	processKey := c.getProcessKey(task.ID, configType)
+
+	// 判断是否为流媒体录制（仅对流媒体启用自动重连）
+	isStreamRecording := configType == "stream" && input.Type != InputSourceUSB
+	shouldReconnect := isStreamRecording
+
 	c.processes[processKey] = &RecordingProcess{
-		TaskID:     task.ID,
-		Cmd:        cmd,
-		StartTime:  time.Now(),
-		OutputPath: mkvPath,
-		HLSPath:    m3u8Path,
-		Status:     "running",
-		CancelFunc: cancel,
-		logFile:    logFile,
+		TaskID:         task.ID,
+		Cmd:            cmd,
+		StartTime:      time.Now(),
+		OutputPath:     mkvPath,
+		HLSPath:        m3u8Path,
+		Status:         "running",
+		CancelFunc:     cancel,
+		logFile:        logFile,
+		ConfigType:     configType,
+		Task:           task,
+		HuaweiConfig:   huaweiConfig,
+		ReconnectCount: 0,
+		MaxReconnects:  3,                    // 最多重连3次
+		ReconnectDelay: 10 * time.Second,    // 重连间隔10秒
+		ShouldReconnect: shouldReconnect,
 	}
 	c.cancelFuncs[processKey] = cancel
 
@@ -192,11 +212,12 @@ func (c *SimpleRecordingCoordinator) getHLSPathWithType(task *models.VideoRecord
 }
 
 // monitorProcessWithKey 监控录制进程状态（带配置类型键）
+// 支持自动重连：当流媒体录制异常退出时，自动尝试重新连接
 func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cmd *exec.Cmd, ctx context.Context) {
 	// 先等待进程结束，不持有锁
 	err := cmd.Wait()
 
-	// 然后获取锁更新状态
+	// 获取进程信息
 	c.mu.Lock()
 	process, exists := c.processes[processKey]
 	if exists {
@@ -208,16 +229,144 @@ func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cm
 		if ctx.Err() != nil {
 			// Context 被取消，是主动停止
 			c.logger.Debug("录制进程已停止", zap.String("process_key", processKey))
-		} else {
-			// 非预期退出
-			c.logger.Error("录制进程异常退出",
-				zap.String("process_key", processKey),
-				zap.Error(err),
-			)
+			return
+		}
+
+		// 非预期退出，检查是否需要重连
+		c.logger.Error("录制进程异常退出",
+			zap.String("process_key", processKey),
+			zap.Error(err),
+		)
+
+		// 尝试自动重连（仅对启用了重连的流媒体录制）
+		if process != nil && process.ShouldReconnect && process.Task != nil && process.HuaweiConfig != nil {
+			c.attemptReconnect(processKey, process)
 		}
 	} else {
 		c.logger.Info("录制进程正常结束", zap.String("process_key", processKey))
 	}
+}
+
+// attemptReconnect 尝试重新连接流媒体
+func (c *SimpleRecordingCoordinator) attemptReconnect(processKey string, process *RecordingProcess) {
+	// 检查是否超过最大重连次数
+	if process.ReconnectCount >= process.MaxReconnects {
+		c.logger.Error("已达到最大重连次数，停止重连",
+			zap.String("process_key", processKey),
+			zap.Int("max_reconnects", process.MaxReconnects),
+		)
+		return
+	}
+
+	// 等待重连间隔
+	c.logger.Info("等待重连间隔...",
+		zap.String("process_key", processKey),
+		zap.Duration("delay", process.ReconnectDelay),
+		zap.Int("attempt", process.ReconnectCount+1),
+	)
+	time.Sleep(process.ReconnectDelay)
+
+	// 增加重连计数
+	process.ReconnectCount++
+
+	c.logger.Info("尝试重新连接流媒体",
+		zap.String("process_key", processKey),
+		zap.Int("attempt", process.ReconnectCount),
+		zap.Int("max_attempts", process.MaxReconnects),
+	)
+
+	// 重新启动录制
+	if err := c.restartRecording(processKey, process); err != nil {
+		c.logger.Error("重连失败",
+			zap.String("process_key", processKey),
+			zap.Error(err),
+		)
+		// 递归尝试下一次重连
+		if process.ReconnectCount < process.MaxReconnects {
+			go c.attemptReconnect(processKey, process)
+		}
+	} else {
+		c.logger.Info("重连成功，录制已恢复",
+			zap.String("process_key", processKey),
+		)
+	}
+}
+
+// restartRecording 重新启动录制
+func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process *RecordingProcess) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 获取配置类型
+	configType := process.ConfigType
+	task := process.Task
+	huaweiConfig := process.HuaweiConfig
+
+	// 生成新的输出路径（使用新的时间戳）
+	mkvPath := c.getOutputPathWithType(task, configType, "mkv")
+	if err := os.MkdirAll(filepath.Dir(mkvPath), 0755); err != nil {
+		return fmt.Errorf("创建输出目录失败: %w", err)
+	}
+
+	hlsPath := c.getHLSPathWithType(task, configType)
+	if err := os.MkdirAll(hlsPath, 0755); err != nil {
+		return fmt.Errorf("创建HLS目录失败: %w", err)
+	}
+
+	input := c.buildRecordingInput(task, huaweiConfig)
+
+	// 计算剩余录制时长
+	remainingDuration := task.EndTime.Sub(time.Now())
+	if remainingDuration <= 0 {
+		return fmt.Errorf("任务已结束，无法继续录制")
+	}
+
+	// 使用 tee muxer 同时生成 MKV 和 HLS
+	args, err := c.buildRecordingCommand(input, mkvPath, hlsPath, remainingDuration, task.ID)
+	if err != nil {
+		return fmt.Errorf("构建录制命令失败: %w", err)
+	}
+
+	// 关闭旧的日志文件
+	if process.logFile != nil {
+		process.logFile.Close()
+	}
+
+	// 创建新的录制进程
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, c.config.FFmpeg.Path, args...)
+
+	logFile, err := c.startFFmpegProcess(cmd, mkvPath)
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	// HLS m3u8 文件路径
+	m3u8Path := filepath.Join(hlsPath, "index.m3u8")
+
+	// 更新进程信息
+	process.Cmd = cmd
+	process.StartTime = time.Now()
+	process.OutputPath = mkvPath
+	process.HLSPath = m3u8Path
+	process.Status = "running"
+	process.CancelFunc = cancel
+	process.logFile = logFile
+
+	// 更新 cancelFuncs
+	c.cancelFuncs[processKey] = cancel
+
+	c.logger.Info("重连录制已启动",
+		zap.String("process_key", processKey),
+		zap.String("mkv_path", mkvPath),
+		zap.String("hls_path", m3u8Path),
+	)
+
+	// 重新启动监控 goroutine
+	go c.monitorProcessWithKey(processKey, cmd, ctx)
+
+	return nil
 }
 
 // getOutputPath 生成输出文件路径
