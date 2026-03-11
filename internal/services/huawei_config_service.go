@@ -1,9 +1,14 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os/exec"
+	"strings"
+	"time"
 
+	"github.com/cpic/record_v2/internal/config"
 	"github.com/cpic/record_v2/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -13,13 +18,15 @@ import (
 type HuaweiConfigService struct {
 	db     *gorm.DB
 	logger *zap.Logger
+	config *config.Config
 }
 
 // NewHuaweiConfigService 创建华为配置服务
-func NewHuaweiConfigService(db *gorm.DB, logger *zap.Logger) *HuaweiConfigService {
+func NewHuaweiConfigService(db *gorm.DB, logger *zap.Logger, cfg *config.Config) *HuaweiConfigService {
 	return &HuaweiConfigService{
 		db:     db,
 		logger: logger,
+		config: cfg,
 	}
 }
 
@@ -406,14 +413,124 @@ func (s *HuaweiConfigService) validateBackendConfig(config *models.HuaweiConfig)
 }
 
 // TestStreamConnection 测试流媒体连接
+// 使用 FFprobe 检测流媒体源是否可用，超时时间 10 秒
 func (s *HuaweiConfigService) TestStreamConnection(req *TestStreamRequest) error {
-	// TODO: 使用 FFprobe 或 FFmpeg 测试连接
-	// 构建测试命令，设置10秒超时
-	// 返回连接是否成功
 	s.logger.Info("测试流媒体连接",
 		zap.String("protocol", req.Protocol),
 		zap.String("url", req.URL),
 	)
-	// 暂时返回成功，后续实现实际的连接测试
+
+	// 检查 FFprobe 路径
+	ffprobePath := s.config.FFmpeg.FFProbePath
+	if ffprobePath == "" {
+		// 如果未配置，尝试使用系统路径
+		ffprobePath = "ffprobe"
+	}
+
+	// 构建输入参数
+	var inputArgs []string
+	switch req.Protocol {
+	case "rtmp":
+		inputArgs = []string{"-i", req.URL}
+	case "rtsp":
+		inputArgs = []string{"-rtsp_transport", "tcp", "-i", req.URL}
+	case "srt":
+		inputArgs = []string{"-i", req.URL}
+	case "hls":
+		inputArgs = []string{"-i", req.URL}
+	default:
+		return fmt.Errorf("不支持的流媒体协议: %s", req.Protocol)
+	}
+
+	// 添加认证信息（如果提供）
+	if req.Username != "" {
+		// FFprobe 支持在 URL 中嵌入认证信息
+		// 格式: protocol://username:password@host/path
+		if req.Password != "" {
+			// 解析 URL 并插入认证信息
+			urlParts := strings.SplitN(req.URL, "://", 2)
+			if len(urlParts) == 2 {
+				authURL := fmt.Sprintf("%s://%s:%s@%s", urlParts[0], req.Username, req.Password, urlParts[1])
+				// 更新最后一个参数（URL）
+				inputArgs[len(inputArgs)-1] = authURL
+			}
+		} else {
+			// 只有用户名没有密码
+			urlParts := strings.SplitN(req.URL, "://", 2)
+			if len(urlParts) == 2 {
+				authURL := fmt.Sprintf("%s://%s@%s", urlParts[0], req.Username, urlParts[1])
+				inputArgs[len(inputArgs)-1] = authURL
+			}
+		}
+	}
+
+	// 构建完整的 FFprobe 命令
+	// -show_streams: 显示流信息
+	// -loglevel error: 只显示错误信息
+	// -t 3: 只分析 3 秒的数据（快速测试）
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-show_streams",
+		"-show_format",
+		"-print_format", "json",
+		"-t", "3", // 只读取 3 秒数据用于测试
+	}
+	args = append(args, inputArgs...)
+
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, ffprobePath, args...)
+
+	// 运行命令并捕获输出
+	output, err := cmd.CombinedOutput()
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return fmt.Errorf("连接超时（15秒），请检查网络和流媒体地址是否正确")
+	}
+
+	if err != nil {
+		s.logger.Error("流媒体连接测试失败",
+			zap.String("protocol", req.Protocol),
+			zap.String("url", req.URL),
+			zap.Error(err),
+			zap.String("output", string(output)),
+		)
+		// 解析错误信息，提供更友好的提示
+		outputStr := string(output)
+		if strings.Contains(outputStr, "Connection refused") {
+			return fmt.Errorf("连接被拒绝，请检查流媒体服务器是否运行")
+		}
+		if strings.Contains(outputStr, "Network is unreachable") {
+			return fmt.Errorf("网络不可达，请检查网络连接")
+		}
+		if strings.Contains(outputStr, "404") || strings.Contains(outputStr, "Not Found") {
+			return fmt.Errorf("流媒体地址不存在（404）")
+		}
+		if strings.Contains(outputStr, "401") || strings.Contains(outputStr, "Unauthorized") {
+			return fmt.Errorf("认证失败，请检查用户名和密码")
+		}
+		if strings.Contains(outputStr, "403") || strings.Contains(outputStr, "Forbidden") {
+			return fmt.Errorf("访问被拒绝（403），请检查权限设置")
+		}
+		if strings.Contains(outputStr, "Timeout") {
+			return fmt.Errorf("连接超时，请检查网络或防火墙设置")
+		}
+		return fmt.Errorf("连接测试失败: %v", err)
+	}
+
+	// 验证输出是否包含有效的流信息
+	outputStr := string(output)
+	if !strings.Contains(outputStr, "streams") && !strings.Contains(outputStr, "format") {
+		return fmt.Errorf("未检测到有效的音视频流，请确认流媒体源正常推送")
+	}
+
+	s.logger.Info("流媒体连接测试成功",
+		zap.String("protocol", req.Protocol),
+		zap.String("url", req.URL),
+	)
+
 	return nil
 }

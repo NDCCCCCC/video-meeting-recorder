@@ -100,3 +100,18 @@ export async function getTaskPreview(id: number): Promise<ApiResponse<{ task_id:
 export function getHLSStreamUrl(id: number, file: string): string {
   return `${API_BASE_URL}/api/v1/recordings/${id}/preview/stream/${file}`
 }
+
+// 清理卡住的任务结果类型
+export interface ClearStuckTasksResult {
+  cleared_task_ids: number[]
+  unlocked_config_ids: number[]
+  total_cleared: number
+  total_unlocked: number
+}
+
+// 清理卡住的任务
+export async function clearStuckTasks(timeoutMinutes: number = 30): Promise<ApiResponse<ClearStuckTasksResult>> {
+  return apiRequest(`/api/v1/tasks/clear-stuck?timeout_minutes=${timeoutMinutes}`, {
+    method: 'POST',
+  })
+}

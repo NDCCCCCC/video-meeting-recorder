@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/cpic/record_v2/internal/services"
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -254,4 +257,46 @@ func (h *HuaweiConfigHandler) TestStream(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, gin.H{"message": "连接测试成功"})
+}
+
+// PreviewStream 预览流媒体
+// @Summary 预览流媒体
+// @Description 将流媒体转换为 HLS 格式供前端播放
+// @Tags 华为配置
+// @Security Bearer
+// @Param protocol query string true "协议类型" Enums(rtmp, rtsp, srt, hls)
+// @Param url query string true "流媒体URL"
+// @Param username query string false "用户名"
+// @Param password query string false "密码"
+// @Success 200 {object} response.Response
+// @Router /api/v1/stream/preview [get]
+func (h *HuaweiConfigHandler) PreviewStream(c *gin.Context) {
+	protocol := c.Query("protocol")
+	url := c.Query("url")
+	_, _ = c.Query("username"), c.Query("password") // 预留认证参数
+
+	if protocol == "" || url == "" {
+		response.GinError(c, response.CodeInvalidRequest, "缺少必要参数")
+		return
+	}
+
+	// 对于 HLS，直接返回 URL
+	if protocol == "hls" {
+		response.GinSuccess(c, gin.H{"preview_url": url, "type": "hls"})
+		return
+	}
+
+	// 对于其他协议，返回提示信息
+	// 说明：RTMP/RTSP/SRT 转换为 HLS 需要持续运行的服务
+	// 建议用户使用录制的 HLS 预览功能或直接使用 VLC 等播放器预览
+	h.logger.Info("预览请求",
+		zap.String("protocol", protocol),
+		zap.String("url", url),
+	)
+
+	response.GinSuccess(c, gin.H{
+		"message": fmt.Sprintf("%s 协议需要先启动录制才能预览。请创建临时录制任务来预览画面。", strings.ToUpper(protocol)),
+		"protocol": protocol,
+		"preview_available": false,
+	})
 }

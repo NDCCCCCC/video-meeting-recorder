@@ -71,10 +71,11 @@ func createTestVideoFile(t *testing.T, dir string, filename string, content stri
 
 // createTestTask 创建测试录制任务
 func createTestTask(t *testing.T, db *gorm.DB, mkvPath, mp4Path string) *models.VideoRecordingTask {
+	configID := uint(1)
 	task := &models.VideoRecordingTask{
 		Name:             "测试任务",
 		ConferenceNumber: "123456789",
-		HuaweiConfigID:   1,
+		HuaweiConfigID:   &configID,
 		Status:           models.VideoStatusCompleted,
 		StartTime:        time.Now().Add(-1 * time.Hour),
 		EndTime:          time.Now(),
