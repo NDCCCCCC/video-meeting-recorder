@@ -295,8 +295,8 @@ func (h *HuaweiConfigHandler) PreviewStream(c *gin.Context) {
 	)
 
 	response.GinSuccess(c, gin.H{
-		"message": fmt.Sprintf("%s 协议需要先启动录制才能预览。请创建临时录制任务来预览画面。", strings.ToUpper(protocol)),
-		"protocol": protocol,
+		"message":           fmt.Sprintf("%s 协议需要先启动录制才能预览。请创建临时录制任务来预览画面。", strings.ToUpper(protocol)),
+		"protocol":          protocol,
 		"preview_available": false,
 	})
 }
