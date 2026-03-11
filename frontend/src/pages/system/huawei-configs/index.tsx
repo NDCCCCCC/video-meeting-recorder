@@ -311,6 +311,29 @@ export default function HuaweiConfigManagement() {
     }
   }
 
+  // 流媒体预览相关状态
+  const [previewVisible, setPreviewVisible] = useState(false)
+  const [previewInfo, setPreviewInfo] = useState<{ protocol: string; message: string } | null>(null)
+
+  const handlePreviewStream = async () => {
+    try {
+      const values = await form.validateFields(['stream_protocol', 'stream_url'])
+      const protocol = values.stream_protocol
+
+      setPreviewVisible(true)
+      setPreviewInfo({
+        protocol: protocol.toUpperCase(),
+        message: `${protocol.toUpperCase()} 协议需要先启动录制才能预览。建议创建一个临时录制任务来预览画面。对于 HLS 流，可以直接使用支持 HLS 的播放器（如 VLC、ffplay）播放。`,
+      })
+    } catch (error: any) {
+      if (error?.errorFields) {
+        message.error('请先填写协议和URL')
+      } else {
+        message.error(error instanceof Error ? error.message : '预览失败')
+      }
+    }
+  }
+
   const columns: ColumnsType<HuaweiConfig> = [
     {
       title: 'ID',
@@ -679,13 +702,22 @@ export default function HuaweiConfigManagement() {
                             </Space>
 
                             <Form.Item label="连接测试">
-                              <Button
-                                type="default"
-                                icon={<PlayCircleOutlined />}
-                                onClick={handleTestStream}
-                              >
-                                测试连接
-                              </Button>
+                              <Space>
+                                <Button
+                                  type="default"
+                                  icon={<PlayCircleOutlined />}
+                                  onClick={handleTestStream}
+                                >
+                                  测试连接
+                                </Button>
+                                <Button
+                                  type="primary"
+                                  icon={<VideoCameraOutlined />}
+                                  onClick={handlePreviewStream}
+                                >
+                                  预览画面
+                                </Button>
+                              </Space>
                             </Form.Item>
                           </>
                         ) : null
@@ -697,6 +729,53 @@ export default function HuaweiConfigManagement() {
             ]}
           />
         </Form>
+      </Modal>
+
+      {/* 流媒体预览对话框 */}
+      <Modal
+        title={<Space><VideoCameraOutlined />流媒体预览</Space>}
+        open={previewVisible}
+        onCancel={() => {
+          setPreviewVisible(false)
+          setPreviewInfo(null)
+        }}
+        footer={[
+          <Button key="close" onClick={() => {
+            setPreviewVisible(false)
+            setPreviewInfo(null)
+          }}>
+            关闭
+          </Button>,
+        ]}
+        width={600}
+      >
+        {previewInfo && (
+          <div style={{ padding: '20px 0' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <Tag color="blue" style={{ fontSize: '14px', padding: '5px 10px' }}>
+                {previewInfo.protocol}
+              </Tag>
+            </div>
+            <div style={{
+              backgroundColor: '#f0f5ff',
+              border: '1px solid #adc6ff',
+              borderRadius: '6px',
+              padding: '16px',
+              lineHeight: '1.6'
+            }}>
+              <p style={{ margin: 0 }}>{previewInfo.message}</p>
+            </div>
+            <div style={{ marginTop: '20px', fontSize: '12px', color: '#666' }}>
+              <p><strong>提示：</strong></p>
+              <ul style={{ paddingLeft: '20px', margin: '10px 0' }}>
+                <li>RTMP/RTSP/SRT 流无法直接在浏览器中播放</li>
+                <li>可以创建一个临时录制任务来预览画面</li>
+                <li>录制任务会生成 HLS 预览流，可在任务详情中查看</li>
+                <li>也可以使用 VLC、ffplay 等播放器直接播放流地址</li>
+              </ul>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* 配置详情对话框 */}

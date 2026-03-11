@@ -850,3 +850,88 @@ func (s *VideoRecordingTaskService) validateConfigTypes(configIDs []uint) error 
 func (s *VideoRecordingTaskService) GetDB() *gorm.DB {
 	return s.db
 }
+
+// ClearStuckTasks 清理卡住的任务
+// 将 converting 状态超过指定时间的任务标记为失败，并释放终端锁
+func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearStuckTasksResult, error) {
+	if timeoutMinutes <= 0 {
+		timeoutMinutes = 30 // 默认30分钟
+	}
+
+	timeout := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
+
+	s.logger.Info("开始清理卡住的任务",
+		zap.Int("timeout_minutes", timeoutMinutes),
+		zap.Time("before_time", timeout),
+	)
+
+	// 查找所有 converting 状态且超过超时时间的任务
+	var stuckTasks []models.VideoRecordingTask
+	if err := s.db.Where("status = ? AND updated_at < ?", models.VideoStatusConverting, timeout).Find(&stuckTasks).Error; err != nil {
+		return nil, fmt.Errorf("查询卡住任务失败: %w", err)
+	}
+
+	s.logger.Info("发现卡住的任务", zap.Int("count", len(stuckTasks)))
+
+	result := &ClearStuckTasksResult{
+		ClearedTaskIDs: make([]uint, 0),
+		UnlockedConfigIDs: make([]uint, 0),
+	}
+
+	for _, task := range stuckTasks {
+		s.logger.Info("清理卡住的任务",
+			zap.Uint("task_id", task.ID),
+			zap.String("task_name", task.Name),
+			zap.Time("updated_at", task.UpdatedAt),
+		)
+
+		// 更新任务状态为失败
+		task.Status = models.VideoStatusFailed
+		task.ErrorMsg = fmt.Sprintf("任务卡在转换中状态超过 %d 分钟，已自动清理", timeoutMinutes)
+		task.ConversionStatus = models.ConversionStatusFailed
+		task.ConversionErrorMsg = "任务被清理"
+
+		if err := s.db.Save(&task).Error; err != nil {
+			s.logger.Error("更新任务状态失败",
+				zap.Uint("task_id", task.ID),
+				zap.Error(err),
+			)
+			continue
+		}
+		result.ClearedTaskIDs = append(result.ClearedTaskIDs, task.ID)
+
+		// 释放终端锁
+		if task.HuaweiConfigID != nil && *task.HuaweiConfigID > 0 {
+			updates := map[string]interface{}{
+				"is_locked": false,
+				"locked_by": nil,
+				"locked_at": nil,
+			}
+			if err := s.db.Model(&models.HuaweiConfig{}).Where("id = ?", *task.HuaweiConfigID).Updates(updates).Error; err == nil {
+				result.UnlockedConfigIDs = append(result.UnlockedConfigIDs, *task.HuaweiConfigID)
+				s.logger.Info("已释放终端锁",
+					zap.Uint("task_id", task.ID),
+					zap.Uint("config_id", *task.HuaweiConfigID),
+				)
+			}
+		}
+	}
+
+	result.TotalCleared = len(result.ClearedTaskIDs)
+	result.TotalUnlocked = len(result.UnlockedConfigIDs)
+
+	s.logger.Info("清理卡住任务完成",
+		zap.Int("total_cleared", result.TotalCleared),
+		zap.Int("total_unlocked", result.TotalUnlocked),
+	)
+
+	return result, nil
+}
+
+// ClearStuckTasksResult 清理卡住任务的结果
+type ClearStuckTasksResult struct {
+	ClearedTaskIDs    []uint `json:"cleared_task_ids"`    // 被清理的任务ID列表
+	UnlockedConfigIDs []uint `json:"unlocked_config_ids"` // 被解锁的配置ID列表
+	TotalCleared      int    `json:"total_cleared"`       // 总共清理的任务数
+	TotalUnlocked     int    `json:"total_unlocked"`      // 总共解锁的配置数
+}

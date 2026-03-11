@@ -1263,12 +1263,6 @@ func (s *VideoSimpleScheduler) cleanupStaleTerminalLocks() {
 
 	if err := s.connector.ClearStaleTerminalLocks(); err != nil {
 		s.logger.Error("清理过期终端锁失败", zap.Error(err))
-	// 收集所有待执行任务的华为配置 ID
-	pendingConfigIDs := make(map[uint]bool)
-	for _, task := range tasks {
-		if task.HuaweiConfigID != nil {
-			pendingConfigIDs[*task.HuaweiConfigID] = true
-		}
 	}
 }
 

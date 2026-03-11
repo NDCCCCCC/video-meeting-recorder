@@ -218,7 +218,7 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.AuditLog{},
 		&models.NotificationMessage{},
 		&models.UserNotificationSetting{},
-		&models.TaskHuaweiConfig{}, // 添加任务配置关联表
+		// 注意：TaskHuaweiConfig 表由自定义迁移管理，不在这里处理
 	)
 
 	if err != nil {
@@ -442,7 +442,7 @@ func (a *MinimalApp) initHandlers() error {
 	authService := auth.NewService(a.config, a.db, a.logger)
 	userService := services.NewUserService(a.db, a.logger)
 	roleService := services.NewRoleService(a.db, a.logger)
-	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger)
+	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger, a.config)
 	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
 	// 优先使用配置中的 ffprobe_path，否则从 ffmpeg 路径推导
 	ffprobePath := a.config.FFmpeg.FFProbePath
@@ -576,6 +576,12 @@ func (a *MinimalApp) registerRoutes() error {
 		// HLS 预览相关
 		recordings.GET("/:id/preview", a.handlers.VideoTask.GetHLSPreview) // 获取HLS预览信息
 		// 注意：/:id/preview/stream/:file 路由已移至公开路由（无需JWT认证）
+	}
+
+	// 任务管理（使用 /tasks 路径）
+	tasks := api.Group("/tasks")
+	{
+		tasks.POST("/clear-stuck", a.handlers.VideoTask.ClearStuckTasks) // 清理卡住的任务
 	}
 
 	// 华为配置管理

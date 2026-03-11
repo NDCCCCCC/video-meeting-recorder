@@ -1,6 +1,6 @@
 // 录制任务管理页面
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, memo, lazy } from 'react'
 import {
   Table,
   Button,
@@ -25,11 +25,11 @@ import {
   StopOutlined,
   CloseCircleOutlined,
   ReloadOutlined,
+  ClearOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import * as taskApi from '../../api/task'
 import * as huaweiConfigApi from '../../api/huawei-config'
-import { HLSPreview } from '../../components/HLSPreview'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
 import {
@@ -59,7 +59,109 @@ import type {
 } from '../../types/task'
 import type { HuaweiConfig } from '../../types/huawei-config'
 
+// 动态导入 HLSPreview 组件（命名导出需要包装为默认导出）
+const HLSPreview = lazy(() =>
+  import('../../components/HLSPreview').then(module => ({ default: module.HLSPreview }))
+)
+
 const { RangePicker } = DatePicker
+
+type ConfigType = 'usb' | 'stream' | 'none'
+
+const CONFIG_TYPE_TAGS: Record<ConfigType, { color: string; label: string }> = {
+  usb: { color: 'blue', label: 'USB' },
+  stream: { color: 'green', label: '流媒体' },
+  none: { color: 'default', label: '未配置' },
+}
+
+const getConfigType = (config: HuaweiConfig): ConfigType => {
+  const hasUSB = config.usb_camera_device || config.usb_audio_device
+  const hasStream = config.stream_enabled && config.stream_url
+
+  if (hasUSB) return 'usb'
+  if (hasStream) return 'stream'
+  return 'none'
+}
+
+const getConfigTypeTagConfig = (config: HuaweiConfig) => {
+  const type = getConfigType(config)
+  const tagConfig = CONFIG_TYPE_TAGS[type]
+  const label = type === 'stream'
+    ? `${tagConfig.label}(${config.stream_protocol?.toUpperCase()})`
+    : tagConfig.label
+  return { ...tagConfig, label }
+}
+
+// Memo 化的任务操作按钮组件 (rerender-memo)
+interface TaskActionsProps {
+  record: VideoRecordingTask
+  onStart: (id: number) => void
+  onStop: (id: number) => void
+  onCancel: (id: number) => void
+  onRetry: (id: number) => void
+  onDelete: (id: number) => void
+  onEdit: (task: VideoRecordingTask) => void
+}
+
+const TaskActions = memo(function TaskActions({
+  record,
+  onStart,
+  onStop,
+  onCancel,
+  onRetry,
+  onDelete,
+  onEdit,
+}: TaskActionsProps) {
+  return (
+    <Space size="small">
+      {canPreviewTask(record.status) && (
+        <HLSPreview taskId={record.id} taskName={record.name} status={record.status} />
+      )}
+      <PermissionGuard permission={PERMISSIONS.TASK_START}>
+        {canStartTask(record.status) && (
+          <Tooltip title="启动任务">
+            <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => onStart(record.id)} />
+          </Tooltip>
+        )}
+      </PermissionGuard>
+      <PermissionGuard permission={PERMISSIONS.TASK_STOP}>
+        {canStopTask(record.status) && (
+          <Tooltip title="停止任务">
+            <Button type="link" size="small" danger icon={<StopOutlined />} onClick={() => onStop(record.id)} />
+          </Tooltip>
+        )}
+      </PermissionGuard>
+      <PermissionGuard permission={PERMISSIONS.TASK_STOP}>
+        {canCancelTask(record.status) && (
+          <Tooltip title="取消任务">
+            <Button type="link" size="small" icon={<CloseCircleOutlined />} onClick={() => onCancel(record.id)} />
+          </Tooltip>
+        )}
+      </PermissionGuard>
+      <PermissionGuard permission={PERMISSIONS.TASK_START}>
+        {canRetryTask(record.status) && (
+          <Tooltip title="重试任务">
+            <Button type="link" size="small" icon={<ReloadOutlined />} onClick={() => onRetry(record.id)} />
+          </Tooltip>
+        )}
+      </PermissionGuard>
+      <PermissionGuard permission={PERMISSIONS.TASK_EDIT}>
+        {canEditEndTime(record.status) && (
+          <Tooltip title={record.status === 'recording' ? '修改结束时间' : '编辑任务'}>
+            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)} />
+          </Tooltip>
+        )}
+      </PermissionGuard>
+      <PermissionGuard permission={PERMISSIONS.TASK_DELETE}>
+        {DELETABLE_STATUSES.includes(record.status) && (
+          <Popconfirm title="确定要删除这个任务吗？" onConfirm={() => onDelete(record.id)}>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        )}
+      </PermissionGuard>
+    </Space>
+  )
+})
 
 export default function TaskManagement() {
   const [tasks, setTasks] = useState<VideoRecordingTask[]>([])
@@ -72,31 +174,6 @@ export default function TaskManagement() {
   // 华为配置列表
   const [huaweiConfigs, setHuaweiConfigs] = useState<HuaweiConfig[]>([])
   const [configsLoading, setConfigsLoading] = useState(false)
-
-  // 配置类型检测辅助函数
-  const getConfigType = (config: HuaweiConfig): 'usb' | 'stream' | 'none' => {
-    // 检查是否有USB设备配置
-    const hasUSB = config.usb_camera_device || config.usb_audio_device
-    // 检查是否启用了流媒体
-    const hasStream = config.stream_enabled && config.stream_url
-
-    if (hasUSB) return 'usb'
-    if (hasStream) return 'stream'
-    return 'none'
-  }
-
-  // 获取配置类型标签
-  const getConfigTypeTag = (config: HuaweiConfig) => {
-    const type = getConfigType(config)
-    switch (type) {
-      case 'usb':
-        return <Tag color="blue">USB</Tag>
-      case 'stream':
-        return <Tag color="green">流媒体({config.stream_protocol?.toUpperCase()})</Tag>
-      default:
-        return <Tag color="default">未配置</Tag>
-    }
-  }
 
   // 行选择状态
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
@@ -197,7 +274,7 @@ export default function TaskManagement() {
       page: pagination.current ?? 1,
       page_size: pagination.pageSize ?? DEFAULT_PAGE_SIZE,
     }))
-  }, [DEFAULT_PAGE_SIZE])
+  }, [])
 
   // 打开新建/编辑对话框
   const openModal = useCallback((task: VideoRecordingTask | null = null) => {
@@ -211,7 +288,7 @@ export default function TaskManagement() {
         pre_join_minutes: task.pre_join_minutes,
         record_delay_minutes: task.record_delay_minutes,
         conference_number: task.conference_number,
-        huawei_config_id: task.huawei_config_id, // 编辑时保持单选兼容
+        huawei_config_id: task.huawei_config_id,
       })
     } else {
       form.resetFields()
@@ -256,18 +333,19 @@ export default function TaskManagement() {
       const requestData = {
         ...values,
         huawei_config_id: Array.isArray(values.huawei_config_id) ? values.huawei_config_id[0] : values.huawei_config_id,
-        huawei_config_ids: Array.isArray(values.huawei_config_id) ? values.huawei_config_id : (values.huawei_config_id ? [values.huawei_config_id] : []),
+        huawei_config_ids: Array.isArray(values.huawei_config_id)
+          ? values.huawei_config_id
+          : values.huawei_config_id
+            ? [values.huawei_config_id]
+            : [],
         start_time: values.start_time.toISOString(),
         end_time: values.end_time.toISOString(),
       }
 
       if (editingTask) {
-        // 录制中状态只更新结束时间
         const isRecording = editingTask.status === 'recording'
         const req: UpdateTaskRequest = isRecording
-          ? {
-              end_time: requestData.end_time,
-            }
+          ? { end_time: requestData.end_time }
           : {
               name: requestData.name,
               description: requestData.description,
@@ -393,6 +471,34 @@ export default function TaskManagement() {
     })
   }, [selectedRowKeys, tasks, loadTasks])
 
+  // 清理卡住的任务
+  const handleClearStuckTasks = useCallback(async () => {
+    Modal.confirm({
+      title: '清理卡住的任务',
+      content: '此操作将所有"转换中"状态超过30分钟的任务标记为失败，并释放相关的华为终端锁。是否继续？',
+      okText: '确定清理',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const response = await taskApi.clearStuckTasks(30)
+          if (response.data) {
+            const result = response.data
+            if (result.total_cleared > 0) {
+              message.success(
+                `已清理 ${result.total_cleared} 个卡住的任务，释放了 ${result.total_unlocked} 个终端锁`
+              )
+            } else {
+              message.info('没有发现卡住的任务')
+            }
+            loadTasks()
+          }
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : '清理失败')
+        }
+      },
+    })
+  }, [loadTasks])
+
   // 获取可删除的任务 ID 列表 (rerender-derived-state)
   const deletableTaskIds = useMemo(() => {
     return new Set(
@@ -420,56 +526,26 @@ export default function TaskManagement() {
     return config ? <Tag color={config.color}>{config.label}</Tag> : null
   }, [])
 
-  // 渲染操作按钮
+  // 渲染操作按钮 - 使用稳定的回调引用
   const renderActions = useCallback((record: VideoRecordingTask) => {
     return (
-      <Space size="small">
-        {canPreviewTask(record.status) && <HLSPreview taskId={record.id} taskName={record.name} status={record.status} />}
-        <PermissionGuard permission={PERMISSIONS.TASK_START}>
-          {canStartTask(record.status) && (
-            <Tooltip title="启动任务">
-              <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => handleStart(record.id)} />
-            </Tooltip>
-          )}
-        </PermissionGuard>
-        <PermissionGuard permission={PERMISSIONS.TASK_STOP}>
-          {canStopTask(record.status) && (
-            <Tooltip title="停止任务">
-              <Button type="link" size="small" danger icon={<StopOutlined />} onClick={() => handleStop(record.id)} />
-            </Tooltip>
-          )}
-        </PermissionGuard>
-        <PermissionGuard permission={PERMISSIONS.TASK_STOP}>
-          {canCancelTask(record.status) && (
-            <Tooltip title="取消任务">
-              <Button type="link" size="small" icon={<CloseCircleOutlined />} onClick={() => handleCancel(record.id)} />
-            </Tooltip>
-          )}
-        </PermissionGuard>
-        <PermissionGuard permission={PERMISSIONS.TASK_START}>
-          {canRetryTask(record.status) && (
-            <Tooltip title="重试任务">
-              <Button type="link" size="small" icon={<ReloadOutlined />} onClick={() => handleRetry(record.id)} />
-            </Tooltip>
-          )}
-        </PermissionGuard>
-        <PermissionGuard permission={PERMISSIONS.TASK_EDIT}>
-          {canEditEndTime(record.status) && (
-            <Tooltip title={record.status === 'recording' ? '修改结束时间' : '编辑任务'}>
-              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openModal(record)} />
-            </Tooltip>
-          )}
-        </PermissionGuard>
-        <PermissionGuard permission={PERMISSIONS.TASK_DELETE}>
-          {DELETABLE_STATUSES.includes(record.status) && (
-            <Popconfirm title="确定要删除这个任务吗？" onConfirm={() => handleDelete(record.id)}>
-              <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
-          )}
-        </PermissionGuard>
-      </Space>
+      <TaskActions
+        record={record}
+        onStart={handleStart}
+        onStop={handleStop}
+        onCancel={handleCancel}
+        onRetry={handleRetry}
+        onDelete={handleDelete}
+        onEdit={openModal}
+      />
     )
   }, [handleStart, handleStop, handleCancel, handleRetry, handleDelete, openModal])
+
+  // 渲染配置类型标签
+  const renderConfigTypeTag = useCallback((config: HuaweiConfig): React.ReactElement => {
+    const tagConfig = getConfigTypeTagConfig(config)
+    return <Tag color={tagConfig.color}>{tagConfig.label}</Tag>
+  }, [])
 
   // 表格列定义
   const columns: ColumnsType<VideoRecordingTask> = useMemo(() => [
@@ -536,13 +612,20 @@ export default function TaskManagement() {
     },
   ], [renderStatus, renderActions])
 
+  // 录制中状态提示内容 (rendering-hoist-jsx)
+  const RECORDING_TIP = (
+    <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 4 }}>
+      任务正在录制中，仅可修改结束时间
+    </div>
+  )
+
   return (
     <div className="page-container">
       <div className="page-header">
         <h2>录制任务管理</h2>
         <Space>
           <PermissionGuard permission={PERMISSIONS.TASK_DELETE}>
-            {selectedRowKeys.length > 0 && (
+            {selectedRowKeys.length > 0 ? (
               <Button
                 danger
                 icon={<DeleteOutlined />}
@@ -551,7 +634,7 @@ export default function TaskManagement() {
               >
                 批量删除 ({selectedRowKeys.length})
               </Button>
-            )}
+            ) : null}
           </PermissionGuard>
           <PermissionGuard permission={PERMISSIONS.TASK_CREATE}>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
@@ -584,6 +667,14 @@ export default function TaskManagement() {
           <Button icon={<ReloadOutlined />} onClick={() => loadTasks(true)}>
             刷新
           </Button>
+          <PermissionGuard permission={PERMISSIONS.TASK_DELETE}>
+            <Button
+              icon={<ClearOutlined />}
+              onClick={handleClearStuckTasks}
+            >
+              清理卡住任务
+            </Button>
+          </PermissionGuard>
         </Space>
       </div>
 
@@ -621,11 +712,7 @@ export default function TaskManagement() {
       >
         <Form form={form} layout="vertical">
           {/* 录制中状态只能编辑结束时间，其他字段被禁用并显示提示 */}
-          {editingTask && editingTask.status === 'recording' && (
-            <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 4 }}>
-              任务正在录制中，仅可修改结束时间
-            </div>
-          )}
+          {editingTask && editingTask.status === 'recording' ? RECORDING_TIP : null}
 
           <Form.Item
             name="name"
@@ -676,7 +763,6 @@ export default function TaskManagement() {
                   if (!value || (Array.isArray(value) && value.length === 0) || (!Array.isArray(value) && !value)) {
                     throw new Error('请选择华为配置')
                   }
-                  // 验证配置类型
                   const ids = Array.isArray(value) ? value : [value]
                   const selectedConfigs = huaweiConfigs.filter(c => ids.includes(c.id))
                   const usbCount = selectedConfigs.filter(c => getConfigType(c) === 'usb').length
@@ -689,7 +775,6 @@ export default function TaskManagement() {
                     throw new Error('最多只能选择1个流媒体配置')
                   }
 
-                  // 检查是否有未配置设备或流媒体的配置
                   const invalidConfigs = selectedConfigs.filter(c => getConfigType(c) === 'none')
                   if (invalidConfigs.length > 0) {
                     throw new Error(`配置"${invalidConfigs[0].name}"未配置USB设备或流媒体`)
@@ -704,33 +789,32 @@ export default function TaskManagement() {
               loading={configsLoading}
               showSearch
               optionFilterProp="label"
+              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
               tagRender={(props) => {
                 const { label, value, onClose } = props
                 const config = huaweiConfigs.find(c => c.id === value)
-                const configType = config ? getConfigType(config) : 'none'
+                const tagConfig = config ? getConfigTypeTagConfig(config) : CONFIG_TYPE_TAGS.none
 
                 return (
                   <Tag
-                    color={configType === 'usb' ? 'blue' : configType === 'stream' ? 'green' : 'default'}
+                    color={tagConfig.color}
                     closable
                     onClose={onClose}
                     style={{ marginRight: 3 }}
                   >
-                    {label} {configType === 'stream' && `(${config?.stream_protocol?.toUpperCase()})`}
+                    {label}
                   </Tag>
                 )
               }}
             >
-              {huaweiConfigs.map((config) => {
-                return (
-                  <Select.Option key={config.id} value={config.id}>
-                    <Space>
-                      {config.name} ({config.server}:{config.port})
-                      {getConfigTypeTag(config)}
-                    </Space>
-                  </Select.Option>
-                )
-              })}
+              {huaweiConfigs.map((config) => (
+                <Select.Option key={config.id} value={config.id}>
+                  <Space>
+                    {config.name} ({config.server}:{config.port})
+                    {renderConfigTypeTag(config)}
+                  </Space>
+                </Select.Option>
+              ))}
             </Select>
           </Form.Item>
 
