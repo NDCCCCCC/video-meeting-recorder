@@ -874,7 +874,7 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearS
 	s.logger.Info("发现卡住的任务", zap.Int("count", len(stuckTasks)))
 
 	result := &ClearStuckTasksResult{
-		ClearedTaskIDs: make([]uint, 0),
+		ClearedTaskIDs:    make([]uint, 0),
 		UnlockedConfigIDs: make([]uint, 0),
 	}
 

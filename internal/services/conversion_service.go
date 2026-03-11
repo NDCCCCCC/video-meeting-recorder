@@ -473,8 +473,8 @@ func (s *FFmpegConversionService) loadPendingTasks() error {
 				zap.String("mkv_file", task.MKVFilePath),
 			)
 			s.db.Model(&task).Updates(map[string]interface{}{
-				"conversion_status":     models.ConversionStatusPending,
-				"conversion_error_msg":  "",
+				"conversion_status":      models.ConversionStatusPending,
+				"conversion_error_msg":   "",
 				"conversion_retry_count": 0,
 			})
 		}

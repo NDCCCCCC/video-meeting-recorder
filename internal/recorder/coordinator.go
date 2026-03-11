@@ -26,22 +26,22 @@ type SimpleRecordingCoordinator struct {
 
 // RecordingProcess 录制进程
 type RecordingProcess struct {
-	TaskID         uint
-	Cmd            *exec.Cmd // 主录制进程 (使用 tee muxer 同时输出 MKV 和 HLS)
-	StartTime      time.Time
-	OutputPath     string // MKV文件路径
-	HLSPath        string // HLS预览路径 (m3u8文件)
-	Status         string
-	CancelFunc     context.CancelFunc
-	logFile        *os.File
+	TaskID     uint
+	Cmd        *exec.Cmd // 主录制进程 (使用 tee muxer 同时输出 MKV 和 HLS)
+	StartTime  time.Time
+	OutputPath string // MKV文件路径
+	HLSPath    string // HLS预览路径 (m3u8文件)
+	Status     string
+	CancelFunc context.CancelFunc
+	logFile    *os.File
 	// 自动重连支持
-	ConfigType     string              // 配置类型: usb 或 stream
-	Task           *models.VideoRecordingTask // 任务信息（用于重连）
-	HuaweiConfig   *models.HuaweiConfig       // 华为配置（用于重连）
-	ReconnectCount int                 // 当前重连次数
-	MaxReconnects  int                 // 最大重连次数
-	ReconnectDelay time.Duration       // 重连间隔
-	ShouldReconnect bool               // 是否应该重连（仅对流媒体有效）
+	ConfigType      string                     // 配置类型: usb 或 stream
+	Task            *models.VideoRecordingTask // 任务信息（用于重连）
+	HuaweiConfig    *models.HuaweiConfig       // 华为配置（用于重连）
+	ReconnectCount  int                        // 当前重连次数
+	MaxReconnects   int                        // 最大重连次数
+	ReconnectDelay  time.Duration              // 重连间隔
+	ShouldReconnect bool                       // 是否应该重连（仅对流媒体有效）
 }
 
 // InputSourceType 输入源类型
@@ -133,20 +133,20 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 	shouldReconnect := isStreamRecording
 
 	c.processes[processKey] = &RecordingProcess{
-		TaskID:         task.ID,
-		Cmd:            cmd,
-		StartTime:      time.Now(),
-		OutputPath:     mkvPath,
-		HLSPath:        m3u8Path,
-		Status:         "running",
-		CancelFunc:     cancel,
-		logFile:        logFile,
-		ConfigType:     configType,
-		Task:           task,
-		HuaweiConfig:   huaweiConfig,
-		ReconnectCount: 0,
-		MaxReconnects:  3,                    // 最多重连3次
-		ReconnectDelay: 10 * time.Second,    // 重连间隔10秒
+		TaskID:          task.ID,
+		Cmd:             cmd,
+		StartTime:       time.Now(),
+		OutputPath:      mkvPath,
+		HLSPath:         m3u8Path,
+		Status:          "running",
+		CancelFunc:      cancel,
+		logFile:         logFile,
+		ConfigType:      configType,
+		Task:            task,
+		HuaweiConfig:    huaweiConfig,
+		ReconnectCount:  0,
+		MaxReconnects:   3,                // 最多重连3次
+		ReconnectDelay:  10 * time.Second, // 重连间隔10秒
 		ShouldReconnect: shouldReconnect,
 	}
 	c.cancelFuncs[processKey] = cancel
