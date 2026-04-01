@@ -66,6 +66,17 @@ type CreateTaskRequest struct {
 	HuaweiConfigIDs    []uint `json:"huawei_config_ids"` // 多配置支持
 }
 
+// CreateTaskAutoRequest 自动创建任务请求（不需要传入华为配置）
+type CreateTaskAutoRequest struct {
+	Name               string `json:"name" binding:"required,max=200"`
+	Description        string `json:"description"`
+	StartTime          string `json:"start_time" binding:"required"` // RFC3339
+	EndTime            string `json:"end_time" binding:"required"`   // RFC3339
+	PreJoinMinutes     int    `json:"pre_join_minutes" binding:"min=0,max=60"`
+	RecordDelayMinutes int    `json:"record_delay_minutes" binding:"min=0,max=60"`
+	ConferenceNumber   string `json:"conference_number" binding:"required,max=50"`
+}
+
 // UpdateTaskRequest 更新任务请求
 type UpdateTaskRequest struct {
 	Name               *string `json:"name" binding:"omitempty,max=200"`
@@ -279,6 +290,22 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 	}
 
 	return task, nil
+}
+
+// CreateTaskAuto 自动创建任务（固定华为配置ID为1）
+func (s *VideoRecordingTaskService) CreateTaskAuto(req *CreateTaskAutoRequest, createdBy uint) (*models.VideoRecordingTask, error) {
+	// 构造标准创建请求，固定华为配置ID为1
+	standardReq := &CreateTaskRequest{
+		Name:             req.Name,
+		Description:      req.Description,
+		StartTime:        req.StartTime,
+		EndTime:          req.EndTime,
+		PreJoinMinutes:   req.PreJoinMinutes,
+		RecordDelayMinutes: req.RecordDelayMinutes,
+		ConferenceNumber: req.ConferenceNumber,
+		HuaweiConfigID:   1,
+	}
+	return s.CreateTask(standardReq, createdBy)
 }
 
 // UpdateTask 更新任务
