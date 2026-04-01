@@ -136,6 +136,34 @@ func (h *VideoRecordingTaskHandler) CreateTask(c *gin.Context) {
 	response.GinSuccess(c, task)
 }
 
+// CreateTaskAuto 自动创建录制任务（固定华为配置ID为1）
+// @Summary 自动创建录制任务
+// @Description 创建新的视频录制任务，自动使用默认华为配置
+// @Tags 录制任务
+// @Security Bearer
+// @Accept json
+// @Produce json
+// @Param request body services.CreateTaskAutoRequest true "创建任务请求"
+// @Success 200 {object} response.Response{data=models.VideoRecordingTask}
+// @Router /api/v1/recordings/auto [post]
+func (h *VideoRecordingTaskHandler) CreateTaskAuto(c *gin.Context) {
+	var req services.CreateTaskAutoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	task, err := h.taskService.CreateTaskAuto(&req, userID)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		return
+	}
+
+	h.logger.Info("录制任务已自动创建", zap.Uint("task_id", task.ID), zap.String("name", task.Name))
+	response.GinSuccess(c, task)
+}
+
 // UpdateTask 更新录制任务
 // @Summary 更新录制任务
 // @Description 更新录制任务信息
