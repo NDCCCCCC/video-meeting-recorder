@@ -30,6 +30,12 @@ export const PERMISSIONS = {
   ROLE_EDIT: 'roles:edit',
   ROLE_DELETE: 'roles:delete',
 
+  // API密钥
+  APIKEY_VIEW: 'apikey:view',
+  APIKEY_CREATE: 'apikey:create',
+  APIKEY_EDIT: 'apikey:edit',
+  APIKEY_DELETE: 'apikey:delete',
+
   CONFIG_VIEW: 'configs:view',
   CONFIG_EDIT: 'configs:edit',
 
@@ -45,6 +51,7 @@ export const MENU_PERMISSIONS: Record<string, string> = {
   '/audit': PERMISSIONS.AUDIT_VIEW,
   '/system/users': PERMISSIONS.USER_VIEW,
   '/system/roles': PERMISSIONS.ROLE_VIEW,
+  '/system/apikeys': PERMISSIONS.APIKEY_VIEW,
   '/system/huawei-configs': PERMISSIONS.CONFIG_VIEW,
   '/system/settings': PERMISSIONS.SYSTEM_SETTINGS,
 }
@@ -53,6 +60,7 @@ export const MENU_PERMISSIONS: Record<string, string> = {
 export const SUBMENU_PERMISSIONS: Record<string, string> = {
   '/system/users': PERMISSIONS.USER_VIEW,
   '/system/roles': PERMISSIONS.ROLE_VIEW,
+  '/system/apikeys': PERMISSIONS.APIKEY_VIEW,
   '/system/huawei-configs': PERMISSIONS.CONFIG_VIEW,
   '/system/settings': PERMISSIONS.SYSTEM_SETTINGS,
 }
