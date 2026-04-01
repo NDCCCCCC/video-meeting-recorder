@@ -55,6 +55,7 @@ type MinimalApp struct {
 	videoTaskService  *services.VideoRecordingTaskService
 	videoFileService  *services.VideoFileService
 	conversionService services.ConversionService
+	rateLimiter        *services.RateLimiter
 }
 
 // Handlers 处理器集合
@@ -69,6 +70,7 @@ type Handlers struct {
 	Audit        *handlers.AuditHandler
 	Notification *handlers.NotificationHandler
 	System       *handlers.SystemHandler
+	APIKey       *handlers.APIKeyHandler
 }
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
@@ -207,6 +209,7 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.Role{},
 		&models.Permission{},
 		&models.APIKey{},
+		&models.APIKeyUsageLog{},
 		&models.Session{},
 		&models.HuaweiConfig{},
 		&models.VideoRecordingTask{},
@@ -472,6 +475,15 @@ func (a *MinimalApp) initHandlers() error {
 	notificationHandler := handlers.NewNotificationHandler(notificationService)
 	notificationHandler.SetLogger(a.logger)
 
+	// API密钥服务
+	apikeyService := services.NewAPIKeyService(a.db, a.logger)
+	apikeyService.SetAuditService(auditService)
+	apikeyHandler := handlers.NewAPIKeyHandler(apikeyService, a.logger)
+	apikeyHandler.SetLogger(a.logger)
+
+	// API密钥速率限制器
+	a.rateLimiter = services.NewRateLimiter(a.logger)
+
 	// 转换服务（需要 videoFileService）
 	a.conversionService = services.NewFFmpegConversionService(a.db, a.logger, a.config, a.videoFileService)
 
@@ -492,6 +504,7 @@ func (a *MinimalApp) initHandlers() error {
 		Audit:        auditHandler,
 		Notification: notificationHandler,
 		System:       handlers.NewSystemHandler(a.db, a.logger, a.config),
+		APIKey:       apikeyHandler,
 	}
 
 	return nil
@@ -556,6 +569,19 @@ func (a *MinimalApp) registerRoutes() error {
 
 	// 权限列表
 	api.GET("/permissions", a.handlers.Role.GetAllPermissions)
+
+	// API密钥管理
+	apikeys := api.Group("/apikeys")
+	{
+		apikeys.GET("", a.handlers.APIKey.ListAPIKeys)                      // 获取API密钥列表
+		apikeys.POST("", a.handlers.APIKey.CreateAPIKey)                    // 创建API密钥
+		apikeys.GET("/:id", a.handlers.APIKey.GetAPIKey)                    // 获取API密钥详情
+		apikeys.PUT("/:id", a.handlers.APIKey.UpdateAPIKey)                 // 更新API密钥
+		apikeys.DELETE("/:id", a.handlers.APIKey.DeleteAPIKey)              // 删除API密钥
+		apikeys.POST("/:id/toggle", a.handlers.APIKey.ToggleAPIKeyStatus)  // 切换状态
+		apikeys.GET("/:id/logs", a.handlers.APIKey.ListUsageLogs)           // 获取使用日志
+		apikeys.GET("/:id/summary", a.handlers.APIKey.GetUsageLogSummary)  // 获取使用统计
+	}
 
 	// 录制任务管理 (使用 /recordings 路径符合API文档规范)
 	recordings := api.Group("/recordings")
@@ -872,6 +898,11 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 	if a.conversionService != nil {
 		a.logger.Info("正在停止转换服务...")
 		a.conversionService.Stop()
+	}
+
+	// 停止速率限制器
+	if a.rateLimiter != nil {
+		a.rateLimiter.Shutdown()
 	}
 
 	// 停止所有服务
