@@ -589,6 +589,7 @@ func (a *MinimalApp) registerRoutes() error {
 		recordings.GET("", a.handlers.VideoTask.ListTasks)                 // 获取任务列表
 		recordings.GET("/:id", a.handlers.VideoTask.GetTask)               // 获取任务详情
 		recordings.POST("", a.handlers.VideoTask.CreateTask)               // 创建任务
+		recordings.POST("/auto", a.handlers.VideoTask.CreateTaskAuto)       // 自动创建任务（固定华为配置）
 		recordings.PUT("/:id", a.handlers.VideoTask.UpdateTask)            // 更新任务
 		recordings.DELETE("/:id", a.handlers.VideoTask.DeleteTask)         // 删除任务
 		recordings.DELETE("/batch", a.handlers.VideoTask.BatchDeleteTasks) // 批量删除任务
