@@ -39,6 +39,7 @@ export default [
         children: [
           { path: 'users', Component: lazy(() => import('../pages/system/users')) },
           { path: 'roles', Component: lazy(() => import('../pages/system/roles')) },
+          { path: 'apikeys', Component: lazy(() => import('../pages/system/apikeys')) },
           { path: 'huawei-configs', Component: lazy(() => import('../pages/system/huawei-configs')) },
           { path: 'settings', Component: lazy(() => import('../pages/system/settings')) },
         ],

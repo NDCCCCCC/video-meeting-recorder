@@ -23,6 +23,7 @@ const (
 	CodeNotFound          = 1004
 	CodeInternalError     = 1005
 	CodeDuplicateRecord   = 1006
+	CodeTooManyRequests   = 1007
 	CodeInvalidCredential = 2001
 	CodeUserNotFound      = 2002
 	CodeUserExists        = 2003
@@ -125,6 +126,8 @@ func GinError(c *gin.Context, code int, message string) {
 		httpStatus = http.StatusNotFound
 	case CodeInvalidRequest:
 		httpStatus = http.StatusBadRequest
+	case CodeTooManyRequests:
+		httpStatus = http.StatusTooManyRequests
 	default:
 		httpStatus = http.StatusInternalServerError
 	}
