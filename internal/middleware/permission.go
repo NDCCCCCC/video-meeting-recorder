@@ -163,7 +163,7 @@ func GetDataScopeFilter(c *gin.Context) (string, uint, bool) {
 	return field.(string), ownerID.(uint), true
 }
 
-// SetUserAuthContext 从 JWT Claims 设置用户认证上下文
+// SetUserAuthContext 从 Token Claims 设置用户认证上下文
 func SetUserAuthContext(c *gin.Context, claims interface{}) {
 	c.Set("user_claims", claims)
 }

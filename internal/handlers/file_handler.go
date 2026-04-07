@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cpic/record_v2/internal/auth"
 	"github.com/cpic/record_v2/internal/services/storage"
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -16,25 +15,17 @@ import (
 type FileHandler struct {
 	fileService *storage.FileService
 	logger      *zap.Logger
-	jwtService  *auth.JWTService
 }
 
 // NewFileHandler 创建文件处理器
 func NewFileHandler(
 	fileService *storage.FileService,
 	logger *zap.Logger,
-	jwtService *auth.JWTService,
 ) *FileHandler {
 	return &FileHandler{
 		fileService: fileService,
 		logger:      logger,
-		jwtService:  jwtService,
 	}
-}
-
-// SetJWTService 设置JWT服务（向后兼容）
-func (h *FileHandler) SetJWTService(jwtService *auth.JWTService) {
-	h.jwtService = jwtService
 }
 
 // SetLogger 设置日志记录器（向后兼容）

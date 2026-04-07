@@ -24,7 +24,7 @@ func NewAuthHandler(authService *auth.Service, logger *zap.Logger) *AuthHandler 
 
 // Login 用户登录
 // @Summary 用户登录
-// @Description 用户名密码登录，返回JWT Token
+// @Description 用户名密码登录，返回SM4-GCM加密Token
 // @Tags 认证
 // @Accept json
 // @Produce json
