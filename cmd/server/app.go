@@ -43,7 +43,7 @@ type MinimalApp struct {
 	db         *gorm.DB
 	httpServer *http.Server
 	router     *gin.Engine
-	jwtService *auth.JWTService
+	tokenService *auth.SM4TokenService
 	handlers   *Handlers
 	services   map[string]common.Service
 	wg         sync.WaitGroup
@@ -441,7 +441,7 @@ func corsMiddleware() gin.HandlerFunc {
 
 // initHandlers 初始化处理器
 func (a *MinimalApp) initHandlers() error {
-	a.jwtService = auth.NewJWTService(a.config, a.db, a.logger)
+	a.tokenService = auth.NewSM4TokenService(a.config, a.db, a.logger)
 	authService := auth.NewService(a.config, a.db, a.logger)
 	userService := services.NewUserService(a.db, a.logger)
 	roleService := services.NewRoleService(a.db, a.logger)
@@ -463,7 +463,7 @@ func (a *MinimalApp) initHandlers() error {
 	a.videoFileService.SetHLSPath(a.config.Storage.HLSPath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
 	fileService := storage.NewFileService(a.db, a.logger, a.config)
-	fileHandler := handlers.NewFileHandler(fileService, a.logger, a.jwtService)
+	fileHandler := handlers.NewFileHandler(fileService, a.logger)
 
 	// 审计日志服务
 	auditService := audit.NewAuditLogService(a.db, a.logger)
@@ -529,7 +529,7 @@ func (a *MinimalApp) registerRoutes() error {
 
 	// 需要认证的路由
 	authenticated := a.router.Group("/api/v1/auth")
-	authenticated.Use(middleware.JWTAuth(a.jwtService))
+	authenticated.Use(middleware.SM4Auth(a.tokenService))
 	{
 		authenticated.POST("/logout", a.handlers.Auth.Logout)
 		authenticated.POST("/logout-all", a.handlers.Auth.LogoutAll)
@@ -539,7 +539,7 @@ func (a *MinimalApp) registerRoutes() error {
 
 	// API路由组
 	api := a.router.Group("/api/v1")
-	api.Use(middleware.JWTAuth(a.jwtService)) // 全局认证
+	api.Use(middleware.MultiAuth(a.db, a.tokenService)) // 支持SM4 Token和API Key认证
 
 	// 用户管理
 	users := api.Group("/users")
@@ -602,7 +602,7 @@ func (a *MinimalApp) registerRoutes() error {
 		recordings.POST("/:id/conversion-retry", a.handlers.VideoTask.RetryConversion)     // 重试转换
 		// HLS 预览相关
 		recordings.GET("/:id/preview", a.handlers.VideoTask.GetHLSPreview) // 获取HLS预览信息
-		// 注意：/:id/preview/stream/:file 路由已移至公开路由（无需JWT认证）
+		// 注意：/:id/preview/stream/:file 路由已移至公开路由（无需Token认证）
 	}
 
 	// 任务管理（使用 /tasks 路径）

@@ -20,7 +20,7 @@ database:
   conn_max_lifetime: 3600
 
 auth:
-  jwt_secret: "change-me-in-production-please-set-a-secure-random-key"
+  sm4_secret: "EDC6UNKa5JQUrBnBsmgRww=="
   access_token_duration: "2h"
   refresh_token_duration: "168h"  # 7 days
   max_session_duration: "720h"   # 30 days

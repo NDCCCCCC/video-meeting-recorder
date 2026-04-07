@@ -13,7 +13,7 @@ import (
 // Service 认证服务
 type Service struct {
 	db                *gorm.DB
-	jwtService        *JWTService
+	tokenService      *SM4TokenService
 	passwordValidator *PasswordValidator
 	logger            *zap.Logger
 }
@@ -68,12 +68,12 @@ type UserDTO struct {
 
 // NewService 创建认证服务
 func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
-	jwtService := NewJWTService(cfg, db, logger)
+	tokenService := NewSM4TokenService(cfg, db, logger)
 	passwordValidator := NewPasswordValidator(8, true, true, true, false)
 
 	return &Service{
 		db:                db,
-		jwtService:        jwtService,
+		tokenService:      tokenService,
 		passwordValidator: passwordValidator,
 		logger:            logger,
 	}
@@ -101,8 +101,8 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 		return nil, errors.New("用户已被禁用")
 	}
 
-	// 4. 生成JWT token
-	tokenPair, err := s.jwtService.GenerateTokenPair(&user)
+	// 4. 生成Token
+	tokenPair, err := s.tokenService.GenerateTokenPair(&user)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 	s.db.Save(&user)
 
 	// 6. 创建session记录（可选，用于token撤销）
-	if err := s.jwtService.CreateSession(user.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt); err != nil {
+	if err := s.tokenService.CreateSession(user.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt); err != nil {
 		s.logger.Warn("Failed to create session", zap.Error(err))
 	}
 
@@ -121,14 +121,14 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 	return &LoginResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
-		ExpiresIn:    int64(s.jwtService.expireHours * 3600),
+		ExpiresIn:    int64(s.tokenService.expireHours * 3600),
 		User:         s.toUserDTO(&user),
 	}, nil
 }
 
 // RefreshToken 刷新Token
 func (s *Service) RefreshToken(refreshToken string) (*RefreshTokenResponse, error) {
-	tokenPair, err := s.jwtService.RefreshAccessToken(refreshToken)
+	tokenPair, err := s.tokenService.RefreshAccessToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
@@ -136,14 +136,14 @@ func (s *Service) RefreshToken(refreshToken string) (*RefreshTokenResponse, erro
 	return &RefreshTokenResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
-		ExpiresIn:    int64(s.jwtService.expireHours * 3600),
+		ExpiresIn:    int64(s.tokenService.expireHours * 3600),
 	}, nil
 }
 
 // Logout 用户登出
 func (s *Service) Logout(token string) error {
 	// 撤销token
-	if err := s.jwtService.RevokeSession(token); err != nil {
+	if err := s.tokenService.RevokeSession(token); err != nil {
 		s.logger.Warn("Failed to revoke session", zap.Error(err))
 	}
 	return nil
@@ -151,7 +151,7 @@ func (s *Service) Logout(token string) error {
 
 // LogoutAll 登出所有设备
 func (s *Service) LogoutAll(userID uint) error {
-	return s.jwtService.RevokeUserSessions(userID)
+	return s.tokenService.RevokeUserSessions(userID)
 }
 
 // ChangePassword 修改密码
