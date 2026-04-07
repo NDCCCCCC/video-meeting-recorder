@@ -48,7 +48,7 @@ type DatabaseConfig struct {
 
 // AuthConfig 认证配置
 type AuthConfig struct {
-	JWTSecret            string        `mapstructure:"jwt_secret" json:"jwt_secret" yaml:"jwt_secret"`
+	SM4Secret            string        `mapstructure:"sm4_secret" json:"sm4_secret" yaml:"sm4_secret"`
 	AccessTokenDuration  time.Duration `mapstructure:"access_token_duration" json:"access_token_duration" yaml:"access_token_duration"`
 	RefreshTokenDuration time.Duration `mapstructure:"refresh_token_duration" json:"refresh_token_duration" yaml:"refresh_token_duration"`
 	MaxSessionDuration   time.Duration `mapstructure:"max_session_duration" json:"max_session_duration" yaml:"max_session_duration"`
@@ -284,8 +284,8 @@ func setDefaults(cfg *Config) {
 		cfg.Database.MaxIdleConns = 1
 	}
 
-	if cfg.Auth.JWTSecret == "" {
-		cfg.Auth.JWTSecret = "change-me-in-production"
+	if cfg.Auth.SM4Secret == "" {
+		cfg.Auth.SM4Secret = "change-me-in-production"
 	}
 	if cfg.Auth.AccessTokenDuration == 0 {
 		cfg.Auth.AccessTokenDuration = 2 * time.Hour
@@ -296,9 +296,9 @@ func setDefaults(cfg *Config) {
 	if cfg.Auth.MaxSessionDuration == 0 {
 		cfg.Auth.MaxSessionDuration = 30 * 24 * time.Hour
 	}
-	// HLS Token 默认值：使用与 JWT 相同的密钥，5分钟有效期
+	// HLS Token 默认值：使用与SM4相同的密钥，5分钟有效期
 	if cfg.Auth.HLSTokenSecret == "" {
-		cfg.Auth.HLSTokenSecret = cfg.Auth.JWTSecret
+		cfg.Auth.HLSTokenSecret = cfg.Auth.SM4Secret
 	}
 	if cfg.Auth.HLSTokenDuration == 0 {
 		cfg.Auth.HLSTokenDuration = 5 * time.Minute
@@ -470,7 +470,7 @@ database:
   conn_max_lifetime: 3600
 
 auth:
-  jwt_secret: "change-me-in-production-please-set-a-secure-random-key"
+  sm4_secret: "change-me-in-production-please-set-a-secure-random-key"
   access_token_duration: "2h"
   refresh_token_duration: "168h"  # 7 days
   max_session_duration: "720h"   # 30 days

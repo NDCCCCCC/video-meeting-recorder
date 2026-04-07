@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Button, Table, Space, Modal, Form, Input, Select, Tag, message, Switch, Popconfirm, Tooltip, Card } from 'antd'
+import { Button, Table, Space, Modal, Form, Input, Select, Tag, message, Switch, Popconfirm, Tooltip, Card, DatePicker } from 'antd'
 import { PlusOutlined, ReloadOutlined, CopyOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
+import type { Dayjs } from 'dayjs'
 import type { ColumnsType } from 'antd/es/table'
 import * as apikeyAPI from '../../../api/apikey'
 import type { APIKey, CreateAPIKeyRequest, UpdateAPIKeyRequest } from '../../../types/apikey'
@@ -72,11 +74,15 @@ const APIKeysPage: React.FC = () => {
   }, [loadAPIKeys])
 
   // 创建API密钥
-  const handleCreate = async (values: CreateAPIKeyRequest) => {
+  const handleCreate = async (values: CreateAPIKeyRequest & { expires_at?: Dayjs }) => {
     try {
       const processedValues = {
-        ...values,
-        ip_whitelist: processIPWhitelist(values.ip_whitelist as any)
+        name: values.name,
+        scopes: values.scopes,
+        inherit_perms: values.inherit_perms,
+        ip_whitelist: processIPWhitelist(values.ip_whitelist as unknown as string),
+        expires_at: values.expires_at ? values.expires_at.toISOString() : null,
+        description: values.description,
       }
       const res = await apikeyAPI.createAPIKey(processedValues)
       message.success('API密钥创建成功')
@@ -370,6 +376,15 @@ const APIKeysPage: React.FC = () => {
             <Select mode="multiple" options={API_KEY_SCOPES} placeholder="选择作用域" />
           </Form.Item>
 
+          <Form.Item label="有效期" name="expires_at">
+            <DatePicker
+              showTime
+              style={{ width: '100%' }}
+              placeholder="留空表示永久有效"
+              disabledDate={(current) => current && current < dayjs().startOf('day')}
+            />
+          </Form.Item>
+
           <Form.Item
             label="权限继承"
             name="inherit_perms"
@@ -480,11 +495,20 @@ const APIKeysPage: React.FC = () => {
           <div>
             <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>您的API密钥：</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Input
-                value={fullKeyValue}
-                readOnly
-                style={{ fontFamily: 'monospace', fontSize: '14px' }}
-              />
+              <code
+                style={{
+                  flex: 1,
+                  fontFamily: 'monospace',
+                  fontSize: '14px',
+                  backgroundColor: '#f3f4f6',
+                  padding: '8px 12px',
+                  borderRadius: '4px',
+                  wordBreak: 'break-all',
+                  userSelect: 'all',
+                }}
+              >
+                {fullKeyValue}
+              </code>
               <Button icon={<CopyOutlined />} onClick={() => copyKey(fullKeyValue)}>
                 复制
               </Button>

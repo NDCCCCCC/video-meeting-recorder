@@ -69,12 +69,6 @@ func (u *User) HasPermission(resource, action string) bool {
 	return false
 }
 
-// GenerateToken 生成访问令牌（占位符，实际由auth服务实现）
-func (u *User) GenerateToken() (string, error) {
-	// JWT token生成在auth服务中实现
-	return "", nil
-}
-
 // TableName 指定表名
 func (User) TableName() string {
 	return "users"

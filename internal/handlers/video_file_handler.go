@@ -86,7 +86,7 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 		return
 	}
 
-	// 注意：token 验证由 JWTAuth 中间件处理（支持 Authorization 头和 token 查询参数）
+	// 注意：token 验证由 SM4Auth 中间件处理（支持 Authorization 头和 token 查询参数）
 
 	file, err := h.fileService.GetFileByID(id)
 	if err != nil {

@@ -41,9 +41,9 @@ func GetIsAdmin(c *gin.Context) bool {
 	return false
 }
 
-// JWTAuth JWT认证中间件
+// SM4Auth SM4-GCM Token认证中间件
 // 支持 Authorization 头和 token 查询参数（用于视频播放等场景）
-func JWTAuth(jwtService *auth.JWTService) gin.HandlerFunc {
+func SM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractToken(c)
 		if tokenString == "" {
@@ -56,7 +56,7 @@ func JWTAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 		}
 
 		// 验证token
-		claims, err := jwtService.ValidateToken(tokenString)
+		claims, err := tokenService.ValidateToken(tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    response.CodeInvalidToken,
@@ -72,8 +72,8 @@ func JWTAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 	}
 }
 
-// OptionalAuth 可选认证中间件（允许未认证用户访问）
-func OptionalAuth(jwtService *auth.JWTService) gin.HandlerFunc {
+// OptionalSM4Auth 可选认证中间件（允许未认证用户访问）
+func OptionalSM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractTokenFromHeader(c)
 		if tokenString == "" {
@@ -81,7 +81,7 @@ func OptionalAuth(jwtService *auth.JWTService) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := jwtService.ValidateToken(tokenString)
+		claims, err := tokenService.ValidateToken(tokenString)
 		if err != nil {
 			// Token 验证失败，允许继续（未认证场景）
 			c.Next()

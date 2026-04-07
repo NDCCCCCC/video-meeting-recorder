@@ -5,7 +5,7 @@ import "time"
 // Session 会话模型
 type Session struct {
 	Base
-	Token     string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"token"`
+	Token     string    `gorm:"type:varchar(512);uniqueIndex;not null" json:"token"`
 	UserID    uint      `gorm:"not null;index" json:"user_id"`
 	User      *User     `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	ExpiresAt time.Time `gorm:"index" json:"expires_at"`

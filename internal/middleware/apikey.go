@@ -163,8 +163,8 @@ func getContextTime(c *gin.Context, key string) time.Time {
 	return time.Time{}
 }
 
-// MultiAuth 支持多种认证方式（JWT或API Key）
-func MultiAuth(db *gorm.DB, jwtService *auth.JWTService) gin.HandlerFunc {
+// MultiAuth 支持多种认证方式（SM4 Token或API Key）
+func MultiAuth(db *gorm.DB, tokenService *auth.SM4TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 先尝试API Key认证
 		apiKey := c.GetHeader("X-API-Key")
@@ -233,12 +233,12 @@ func MultiAuth(db *gorm.DB, jwtService *auth.JWTService) gin.HandlerFunc {
 			}
 		}
 
-		// 再尝试JWT认证
+		// 再尝试SM4 Token认证
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != "" {
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) == 2 && parts[0] == "Bearer" {
-				JWTAuth(jwtService)(c)
+				SM4Auth(tokenService)(c)
 				return
 			}
 		}
@@ -250,7 +250,7 @@ func MultiAuth(db *gorm.DB, jwtService *auth.JWTService) gin.HandlerFunc {
 
 // RequireScope 验证 API Key 是否具有所需作用域
 // requiredScope: read, write, admin
-// 如果用户使用 JWT 认证，此中间件会跳过检查（由 RequirePermission 处理）
+// 如果用户使用 Token 认证，此中间件会跳过检查（由 RequirePermission 处理）
 func RequireScope(requiredScope string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authType := c.GetString("auth_type")
