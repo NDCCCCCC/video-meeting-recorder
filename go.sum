@@ -1,5 +1,7 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/Muprprpr/Go-pptx v0.0.0-20260402130143-a0d884f7e4a4 h1:bK3g3PLnqm8Ur872NOqDCxaNdt0iUeXqvoqrhqXtJ7k=
+github.com/Muprprpr/Go-pptx v0.0.0-20260402130143-a0d884f7e4a4/go.mod h1:N2a01nwKANTtKCsFZItGSqoKzeqLEu0Tp2XL9zUKAt8=
 github.com/bytedance/sonic v1.14.0 h1:/OfKt8HFw0kh2rj8N0F6C/qPGRESq0BbaNZgcNXXzQQ=
 github.com/bytedance/sonic v1.14.0/go.mod h1:WoEbx8WTcFJfzCe0hbmyTGrfjt8PzNEBdxlNUO24NhA=
 github.com/bytedance/sonic/loader v0.3.0 h1:dskwH8edlzNMctoruo8FPTJDF3vLtDT0sXZwvZJyqeA=
