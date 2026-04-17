@@ -3,6 +3,7 @@ module github.com/cpic/record_v2
 go 1.24.5
 
 require (
+	github.com/Muprprpr/Go-pptx v0.0.0-20260402130143-a0d884f7e4a4
 	github.com/gin-gonic/gin v1.11.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/viper v1.19.0
@@ -17,7 +18,6 @@ require (
 )
 
 require (
-	github.com/Muprprpr/Go-pptx v0.0.0-20260402130143-a0d884f7e4a4 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
@@ -52,6 +52,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
+	github.com/siliconcatalyst/officeforge v0.6.1 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
