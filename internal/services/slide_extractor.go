@@ -77,6 +77,14 @@ func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath string, out
 		e.logger.Error("Python extract script failed",
 			zap.String("output", string(output)),
 			zap.Error(err))
+
+		// Clean up partial output directory to prevent cache corruption
+		if cleanupErr := os.RemoveAll(outputDir); cleanupErr != nil {
+			e.logger.Warn("Failed to clean up partial extraction",
+				zap.String("output_dir", outputDir),
+				zap.Error(cleanupErr))
+		}
+
 		return 0, fmt.Errorf("failed to extract slides: %w (output: %s)", err, string(output))
 	}
 
@@ -86,6 +94,14 @@ func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath string, out
 		e.logger.Error("Failed to parse Python output",
 			zap.String("output", string(output)),
 			zap.Error(err))
+
+		// Clean up partial output directory
+		if cleanupErr := os.RemoveAll(outputDir); cleanupErr != nil {
+			e.logger.Warn("Failed to clean up partial extraction",
+				zap.String("output_dir", outputDir),
+				zap.Error(cleanupErr))
+		}
+
 		return 0, fmt.Errorf("failed to parse extract output: %w (output: %s)", err, string(output))
 	}
 
@@ -93,6 +109,14 @@ func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath string, out
 	if !result.Success {
 		e.logger.Error("Python script reported failure",
 			zap.String("error", result.Error))
+
+		// Clean up partial output directory
+		if cleanupErr := os.RemoveAll(outputDir); cleanupErr != nil {
+			e.logger.Warn("Failed to clean up partial extraction",
+				zap.String("output_dir", outputDir),
+				zap.Error(cleanupErr))
+		}
+
 		return 0, fmt.Errorf("slide extraction failed: %s", result.Error)
 	}
 
