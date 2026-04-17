@@ -26,6 +26,7 @@ type TranscriptionProgress struct {
 	Percentage      int     // Progress percentage (0-100)
 	ErrorMessage    string  // Error message if failed
 	ResultPPTFileID *uint   // ID of the generated PPT file
+	Mode            string  // local, cloud
 }
 
 // TranscriptionService handles video transcription with worker pool
@@ -45,6 +46,8 @@ type TranscriptionService struct {
 	similarityDetector *SimilarityDetector
 	pptxGenerator      *PPTXGenerator
 	videoFileService   *VideoFileService
+	ossService         *OSSService
+	tingwuClient       *TingwuClient
 	statusMap          map[uint]*TranscriptionProgress
 	statusMu           sync.RWMutex
 }
@@ -58,6 +61,8 @@ func NewTranscriptionService(
 	similarityDetector *SimilarityDetector,
 	pptxGenerator *PPTXGenerator,
 	videoFileService *VideoFileService,
+	ossService *OSSService,
+	tingwuClient *TingwuClient,
 ) *TranscriptionService {
 	ctx, cancel := context.WithCancel(context.Background())
 	ffmpegPath := cfg.FFmpeg.Path
@@ -79,6 +84,8 @@ func NewTranscriptionService(
 		similarityDetector: similarityDetector,
 		pptxGenerator:      pptxGenerator,
 		videoFileService:   videoFileService,
+		ossService:         ossService,
+		tingwuClient:       tingwuClient,
 		statusMap:          make(map[uint]*TranscriptionProgress),
 	}
 }
@@ -100,26 +107,44 @@ func (s *TranscriptionService) Stop() {
 	s.wg.Wait()
 }
 
-// SubmitTranscription submits a transcription task
+// SubmitTranscription submits a transcription task (backward compatible - defaults to local mode)
 func (s *TranscriptionService) SubmitTranscription(videoFileID uint, samplingRate float64, createdBy uint) error {
-	// Validate video file exists
-	var videoFile models.VideoFile
-	if err := s.db.First(&videoFile, videoFileID).Error; err != nil {
-		return fmt.Errorf("视频文件不存在: ID=%d", videoFileID)
+	return s.SubmitTranscriptionWithMode(videoFileID, samplingRate, models.TranscriptionModeLocal, createdBy)
+}
+
+// SubmitTranscriptionWithMode submits a transcription task with specified mode (local or cloud)
+func (s *TranscriptionService) SubmitTranscriptionWithMode(videoFileID uint, samplingRate float64, mode string, createdBy uint) error {
+	// Validate mode
+	validModes := map[string]bool{models.TranscriptionModeLocal: true, models.TranscriptionModeCloud: true}
+	if !validModes[mode] {
+		return fmt.Errorf("无效的转录模式: %s, 必须是 local 或 cloud", mode)
 	}
 
-	// Validate sampling rate (per D-02: 1s/2s/5s intervals = 1.0/0.5/0.2 fps)
-	validRates := map[float64]bool{1.0: true, 0.5: true, 0.2: true}
-	if !validRates[samplingRate] {
-		return fmt.Errorf("无效的采样率: %.1f, 必须是 1.0, 0.5 或 0.2", samplingRate)
+	// For cloud mode, verify cloud services are available
+	if mode == models.TranscriptionModeCloud {
+		if s.ossService == nil || !s.ossService.IsEnabled() {
+			return fmt.Errorf("云端转录不可用: OSS服务未配置")
+		}
+		if s.tingwuClient == nil || !s.tingwuClient.IsEnabled() {
+			return fmt.Errorf("云端转录不可用: Tingwu服务未配置")
+		}
 	}
 
-	// Create transcription task in database
+	// Per D-03: cloud mode skips sampling rate validation entirely
+	// Only validate sampling rate for local mode
+	if mode == models.TranscriptionModeLocal {
+		validRates := map[float64]bool{1.0: true, 0.5: true, 0.2: true}
+		if !validRates[samplingRate] {
+			return fmt.Errorf("无效的采样率: %.1f", samplingRate)
+		}
+	}
+
+	// Create task with mode
 	task := &models.TranscriptionTask{
 		VideoFileID:  videoFileID,
 		SamplingRate: samplingRate,
 		Status:       models.TranscriptionStatusPending,
-		CurrentStage: "",
+		Mode:         mode,
 		CreatedBy:    createdBy,
 	}
 	if err := s.db.Create(task).Error; err != nil {
@@ -131,6 +156,7 @@ func (s *TranscriptionService) SubmitTranscription(videoFileID uint, samplingRat
 	s.statusMap[videoFileID] = &TranscriptionProgress{
 		Status:       models.TranscriptionStatusProcessing,
 		CurrentStage: "",
+		Mode:         mode,
 	}
 	s.statusMu.Unlock()
 
@@ -139,8 +165,8 @@ func (s *TranscriptionService) SubmitTranscription(videoFileID uint, samplingRat
 	case s.taskQueue <- task:
 		s.logger.Info("转录任务已提交",
 			zap.Uint("video_file_id", videoFileID),
-			zap.Uint("task_id", task.ID),
-			zap.Float64("sampling_rate", samplingRate))
+			zap.String("mode", mode),
+			zap.Uint("task_id", task.ID))
 		return nil
 	default:
 		s.statusMu.Lock()
@@ -168,6 +194,7 @@ func (s *TranscriptionService) GetTranscriptionStatus(videoFileID uint) *Transcr
 			Percentage:       progress.Percentage,
 			ErrorMessage:     progress.ErrorMessage,
 			ResultPPTFileID:  progress.ResultPPTFileID,
+			Mode:             progress.Mode,
 		}
 	}
 	return nil
@@ -204,6 +231,20 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "panic: "+fmt.Sprint(r), 0, nil)
 		}
 	}()
+
+	// Reload task to check mode
+	if err := s.db.Preload("VideoFile").First(task, task.ID).Error; err != nil {
+		s.logger.Error("Failed to load task", zap.Error(err))
+		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
+		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		return
+	}
+
+	// Route to appropriate pipeline based on mode
+	if task.Mode == models.TranscriptionModeCloud {
+		s.processCloudTranscription(task)
+		return
+	}
 
 	// Create temp directory per D-05
 	tempDir, err := s.frameExtractor.CreateTempDir(s.config.Storage.RecordingsPath, task.VideoFileID)
@@ -439,8 +480,12 @@ func (s *TranscriptionService) updateProgress(
 		progress.Percentage = percentage
 	}
 	if errorMsg != "" {
-		progress.Status = models.TranscriptionStatusFailed
-		progress.ErrorMessage = errorMsg
+		// If this is a cloud fallback message, don't set status to failed
+		// The local pipeline will override this with normal progress
+		if !strings.HasPrefix(errorMsg, "cloud_fallback:") {
+			progress.Status = models.TranscriptionStatusFailed
+		}
+		progress.ErrorMessage = strings.TrimPrefix(errorMsg, "cloud_fallback:")
 	}
 	if resultPPTFileID != nil {
 		progress.Status = models.TranscriptionStatusCompleted
@@ -478,4 +523,291 @@ func (s *TranscriptionService) updateTaskStatus(
 		return result.Error
 	}
 	return nil
+}
+
+// processCloudTranscription handles cloud transcription pipeline (OSS upload, Tingwu submit, polling, result retrieval)
+func (s *TranscriptionService) processCloudTranscription(task *models.TranscriptionTask) {
+	// Load video file
+	var videoFile models.VideoFile
+	if err := s.db.First(&videoFile, task.VideoFileID).Error; err != nil {
+		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
+		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)
+	defer cancel()
+
+	// Stage 1: Upload to OSS (0-20%)
+	s.updateProgress(task.VideoFileID, models.TranscriptionStageUploading, 0, 0, 5, "", nil)
+	s.updateTaskStatus(task.ID, models.TranscriptionStatusProcessing, "", 0, nil)
+
+	objectKey := fmt.Sprintf("transcriptions/%d/%d.mp4", task.VideoFileID, task.ID)
+	ossURL, err := s.ossService.UploadFile(ctx, videoFile.FilePath, objectKey)
+	if err != nil {
+		s.handleCloudFailure(task, err, true) // Auto-fallback per D-07
+		return
+	}
+
+	// Save OSS URL
+	s.db.Model(task).Updates(map[string]interface{}{
+		"oss_url": ossURL,
+	})
+
+	s.updateProgress(task.VideoFileID, models.TranscriptionStageUploading, 0, 0, 20, "", nil)
+
+	// Stage 2: Submit to Tingwu (20%)
+	s.updateProgress(task.VideoFileID, models.TranscriptionStageQueued, 0, 0, 25, "", nil)
+
+	cloudTaskID, err := s.tingwuClient.SubmitTask(ctx, ossURL)
+	if err != nil {
+		s.handleCloudFailure(task, err, true) // Auto-fallback per D-07
+		return
+	}
+
+	// Save CloudTaskID
+	s.db.Model(task).Update("cloud_task_id", cloudTaskID)
+
+	// Stage 3: Poll Tingwu status with exponential backoff (25-90%)
+	s.pollTingwuStatus(ctx, task, cloudTaskID)
+
+	// Stage 4: Download results (90-100%)
+	s.updateProgress(task.VideoFileID, models.TranscriptionStageDownloading, 0, 0, 90, "", nil)
+
+	result, err := s.tingwuClient.GetResult(ctx, cloudTaskID)
+	if err != nil {
+		s.handleCloudFailure(task, err, false) // No auto-fallback per D-07
+		return
+	}
+
+	// Save text content to TranscriptionText table
+	if err := s.saveTextContent(task, result); err != nil {
+		s.logger.Error("保存文字内容失败", zap.Error(err))
+		// Don't fail the task for text save errors -- text is optional
+	}
+
+	// Trigger OSS lifecycle cleanup (24h) per OSS-02
+	go func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		ruleID := fmt.Sprintf("expire-transcription-%d", task.ID)
+		if err := s.ossService.SetLifecycleRule(cleanupCtx, ruleID,
+			fmt.Sprintf("transcriptions/%d/", task.VideoFileID), 1); err != nil {
+			s.logger.Warn("设置OSS清理规则失败", zap.Error(err))
+			// Fallback: attempt immediate deletion of this specific file
+			if delErr := s.ossService.DeleteFile(cleanupCtx, objectKey); delErr != nil {
+				s.logger.Error("OSS文件删除也失败，文件可能成为孤儿文件",
+					zap.String("object_key", objectKey),
+					zap.Error(delErr))
+			} else {
+				s.logger.Info("OSS生命周期规则失败，已直接删除文件",
+					zap.String("object_key", objectKey))
+			}
+		}
+	}()
+
+	// Mark completed (cloud transcription does NOT generate PPT -- text is the output)
+	s.updateProgress(task.VideoFileID, "", 0, 0, 100, "", &task.ID)
+	s.updateTaskStatus(task.ID, models.TranscriptionStatusCompleted, "", 0, &task.ID)
+
+	s.logger.Info("云端转录完成",
+		zap.Uint("task_id", task.ID),
+		zap.Uint("video_file_id", task.VideoFileID),
+		zap.Int("segments", len(result.Segments)))
+}
+
+// pollTingwuStatus polls Tingwu task status with exponential backoff (TRAN-04)
+func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *models.TranscriptionTask, cloudTaskID string) {
+	delay := 2 * time.Second
+	maxDelay := 60 * time.Second // TRAN-04: max delay for exponential backoff
+	maxAttempts := 120
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		select {
+		case <-ctx.Done():
+			s.handleCloudFailure(task, ctx.Err(), false)
+			return
+		case <-time.After(delay):
+		}
+
+		status, err := s.tingwuClient.GetStatus(ctx, cloudTaskID)
+		if err != nil {
+			s.logger.Warn("查询Tingwu状态失败，重试",
+				zap.String("cloud_task_id", cloudTaskID),
+				zap.Error(err))
+			// Exponential backoff with jitter: TRAN-04
+			delay = time.Duration(float64(delay) * 1.5)
+			if delay > maxDelay {
+				delay = maxDelay
+			}
+			continue
+		}
+
+		switch status.Status {
+		case "Queued":
+			s.updateProgress(task.VideoFileID, models.TranscriptionStageQueued, 0, 0, 30, "", nil)
+			delay = 5 * time.Second
+		case "Processing":
+			// Map Tingwu progress (0-100) to our percentage (30-90)
+			percentage := 30 + int(status.Progress*0.6)
+			if percentage > 89 {
+				percentage = 89
+			}
+			s.updateProgress(task.VideoFileID, models.TranscriptionStageProcessing, 0, 0, percentage, "", nil)
+			delay = 10 * time.Second
+		case "Completed":
+			return // Done!
+		case "Failed":
+			s.handleCloudFailure(task,
+				fmt.Errorf("Tingwu处理失败: %s", status.ErrorMessage), false)
+			return
+		default:
+			s.logger.Warn("未知Tingwu状态",
+				zap.String("status", status.Status))
+			delay = 10 * time.Second
+		}
+	}
+
+	// Exhausted attempts
+	s.handleCloudFailure(task, fmt.Errorf("轮询超时: 超过最大尝试次数"), false)
+}
+
+// handleCloudFailure handles cloud transcription failures with auto-fallback logic (per D-07, D-08)
+func (s *TranscriptionService) handleCloudFailure(task *models.TranscriptionTask, cloudErr error, isInitialStage bool) {
+	s.logger.Error("云端转录失败",
+		zap.Uint("task_id", task.ID),
+		zap.Uint("video_file_id", task.VideoFileID),
+		zap.Bool("initial_stage", isInitialStage),
+		zap.Error(cloudErr))
+
+	if isInitialStage {
+		// Auto-fallback to local transcription per D-07
+		s.logger.Info("自动切换到本地转录",
+			zap.Uint("video_file_id", task.VideoFileID))
+
+		// Update task mode atomically
+		s.db.Model(task).Updates(map[string]interface{}{
+			"mode":          models.TranscriptionModeLocal,
+			"cloud_task_id": "",
+			"oss_url":       "",
+		})
+		task.Mode = models.TranscriptionModeLocal
+		task.CloudTaskID = ""
+		task.OSSURL = ""
+
+		// Reset progress for local mode
+		s.statusMu.Lock()
+		s.statusMap[task.VideoFileID] = &TranscriptionProgress{
+			Status:       models.TranscriptionStatusProcessing,
+			CurrentStage: "",
+			Mode:         models.TranscriptionModeLocal,
+			ErrorMessage: "cloud_fallback:" + cloudErr.Error(), // Prefix so frontend can detect fallback
+		}
+		s.statusMu.Unlock()
+
+		// Start local transcription
+		s.processTranscription(task)
+	} else {
+		// Mid-processing failure: mark as failed, no auto-fallback per D-07
+		s.updateProgress(task.VideoFileID, "", 0, 0, 0, cloudErr.Error(), nil)
+		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, cloudErr.Error(), 0, nil)
+	}
+}
+
+// saveTextContent saves Tingwu transcription result to TranscriptionText table
+func (s *TranscriptionService) saveTextContent(task *models.TranscriptionTask, result *TingwuTaskResult) error {
+	if result == nil || len(result.Segments) == 0 {
+		s.logger.Info("没有文字内容需要保存")
+		return nil
+	}
+
+	// Delete any existing text content for this task (idempotent)
+	s.db.Where("transcription_task_id = ?", task.ID).Delete(&models.TranscriptionText{})
+
+	// Create text segment records
+	texts := make([]models.TranscriptionText, 0, len(result.Segments))
+	for i, segment := range result.Segments {
+		texts = append(texts, models.TranscriptionText{
+			TranscriptionTaskID: task.ID,
+			Text:                segment.Text,
+			BeginTime:           segment.BeginTime,
+			EndTime:             segment.EndTime,
+			SegmentIndex:        i,
+		})
+	}
+
+	if err := s.db.Create(&texts).Error; err != nil {
+		return fmt.Errorf("保存文字内容失败: %w", err)
+	}
+
+	s.logger.Info("文字内容已保存",
+		zap.Uint("task_id", task.ID),
+		zap.Int("segments", len(texts)))
+
+	return nil
+}
+
+// StartOSSCleanupScheduler starts a periodic cleanup of orphaned OSS files
+func (s *TranscriptionService) StartOSSCleanupScheduler() {
+	if s.ossService == nil || !s.ossService.IsEnabled() {
+		return
+	}
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+				s.cleanupOrphanedOSSFiles()
+			}
+		}
+	}()
+
+	s.logger.Info("OSS定期清理调度器已启动")
+}
+
+// cleanupOrphanedOSSFiles deletes OSS files for completed/failed tasks older than 24 hours
+func (s *TranscriptionService) cleanupOrphanedOSSFiles() {
+	cutoff := time.Now().Add(-24 * time.Hour)
+
+	var tasks []models.TranscriptionTask
+	if err := s.db.Where(
+		"mode = ? AND status IN ? AND oss_url != '' AND updated_at < ?",
+		models.TranscriptionModeCloud,
+		[]string{models.TranscriptionStatusCompleted, models.TranscriptionStatusFailed},
+		cutoff,
+	).Find(&tasks).Error; err != nil {
+		s.logger.Error("查询待清理OSS文件失败", zap.Error(err))
+		return
+	}
+
+	for _, task := range tasks {
+		if task.OSSURL == "" {
+			continue
+		}
+
+		objectKey := fmt.Sprintf("transcriptions/%d/%d.mp4", task.VideoFileID, task.ID)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := s.ossService.DeleteFile(ctx, objectKey); err != nil {
+			s.logger.Warn("清理OSS文件失败",
+				zap.String("object_key", objectKey),
+				zap.Error(err))
+		} else {
+			// Clear the OSSURL to avoid re-processing
+			s.db.Model(&task).Update("oss_url", "")
+			s.logger.Info("已清理过期OSS文件",
+				zap.Uint("task_id", task.ID),
+				zap.String("object_key", objectKey))
+		}
+		cancel()
+	}
+}
+
+// GetDB returns the database instance for handlers to use in queries
+func (s *TranscriptionService) GetDB() *gorm.DB {
+	return s.db
 }
