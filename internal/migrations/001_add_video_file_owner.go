@@ -198,11 +198,69 @@ func isDuplicateColumnError(err error) bool {
 	return contains(errStr, "duplicate column name")
 }
 
+// CreateTranscriptionTasksMigration 创建转录任务表
+type CreateTranscriptionTasksMigration struct{}
+
+func (m *CreateTranscriptionTasksMigration) Name() string {
+	return "004_create_transcription_tasks"
+}
+
+func (m *CreateTranscriptionTasksMigration) Up(db *gorm.DB) error {
+	// 检查表是否已存在
+	var count int64
+	checkErr := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='transcription_tasks'").Scan(&count).Error
+
+	// 如果表已存在，跳过迁移
+	if checkErr == nil && count > 0 {
+		return nil
+	}
+
+	// 创建表
+	err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS transcription_tasks (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			video_file_id INTEGER NOT NULL,
+			sampling_rate REAL DEFAULT 0.5,
+			status VARCHAR(20) DEFAULT 'pending',
+			current_stage VARCHAR(50),
+			frames_processed INTEGER DEFAULT 0,
+			total_frames INTEGER DEFAULT 0,
+			percentage INTEGER DEFAULT 0,
+			result_ppt_file_id INTEGER,
+			error_message TEXT,
+			created_by INTEGER NOT NULL DEFAULT 1,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME,
+			FOREIGN KEY (video_file_id) REFERENCES video_files(id),
+			FOREIGN KEY (result_ppt_file_id) REFERENCES ppt_files(id),
+			FOREIGN KEY (created_by) REFERENCES users(id)
+		);
+	`).Error
+
+	if err != nil {
+		return fmt.Errorf("failed to create transcription_tasks table: %w", err)
+	}
+
+	// 创建索引
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_transcription_tasks_video_file ON transcription_tasks(video_file_id)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_transcription_tasks_status ON transcription_tasks(status)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_transcription_tasks_deleted_at ON transcription_tasks(deleted_at)")
+
+	return nil
+}
+
+func (m *CreateTranscriptionTasksMigration) Down(db *gorm.DB) error {
+	db.Exec("DROP TABLE IF EXISTS transcription_tasks")
+	return nil
+}
+
 // GetRegisteredMigrations 返回已注册的迁移
 func GetRegisteredMigrations() []interface{} {
 	return []interface{}{
 		&AddVideoFileOwnerMigration{},
 		&AddStreamConfigMigration{},
 		&AddSegmentFieldsMigration{},
+		&CreateTranscriptionTasksMigration{},
 	}
 }
