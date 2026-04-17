@@ -76,11 +76,16 @@ func (g *PPTXGenerator) GeneratePPTX(ctx context.Context, framePaths []string, o
 	}
 
 	// Prepare command arguments
-	// Usage: python3 create_pptx.py <output_path> <image1> <image2> ...
+	// Usage: python create_pptx.py <output_path> <image1> <image2> ...
 	args := append([]string{g.pythonScript, outputPath}, sanitizedPaths...)
 
 	// Execute Python script
-	cmd := exec.CommandContext(ctx, "python3", args...)
+	// Try 'python3' first, then fall back to 'python'
+	cmdName := "python3"
+	if _, err := exec.LookPath("python3"); err != nil {
+		cmdName = "python"
+	}
+	cmd := exec.CommandContext(ctx, cmdName, args...)
 
 	// Capture both stdout and stderr
 	output, err := cmd.CombinedOutput()
@@ -140,23 +145,29 @@ func (g *PPTXGenerator) ValidateImageFiles(framePaths []string) ([]string, []err
 	return validPaths, errs
 }
 
-// CheckPythonAvailability checks if python3 and python-pptx are available
+// CheckPythonAvailability checks if python and python-pptx are available
 func (g *PPTXGenerator) CheckPythonAvailability(ctx context.Context) error {
-	// Check if python3 is available
-	cmd := exec.CommandContext(ctx, "python3", "--version")
+	// Determine python command name
+	cmdName := "python3"
+	if _, err := exec.LookPath("python3"); err != nil {
+		cmdName = "python"
+	}
+
+	// Check if python is available
+	cmd := exec.CommandContext(ctx, cmdName, "--version")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("python3 not available: %w", err)
+		return fmt.Errorf("python not available: %w", err)
 	}
 
 	// Check if python-pptx is installed
-	cmd = exec.CommandContext(ctx, "python3", "-c", "import pptx; print(pptx.__version__)")
+	cmd = exec.CommandContext(ctx, cmdName, "-c", "import pptx; print(pptx.__version__)")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("python-pptx not installed: %w (install with: pip3 install python-pptx)", err)
+		return fmt.Errorf("python-pptx not installed: %w (install with: pip install python-pptx)", err)
 	}
 
 	version := strings.TrimSpace(string(output))
-	g.logger.Info("python-pptx available", zap.String("version", version))
+	g.logger.Info("python-pptx available", zap.String("version", version), zap.String("command", cmdName))
 
 	return nil
 }
