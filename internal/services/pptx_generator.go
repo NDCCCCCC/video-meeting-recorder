@@ -20,9 +20,35 @@ type PPTXGenerator struct {
 
 // NewPPTXGenerator creates a new PPTXGenerator instance
 func NewPPTXGenerator(logger *zap.Logger) *PPTXGenerator {
+	// Get the project root directory (assuming we're in internal/services during tests)
+	// For production use, this should be configurable
+	projectRoot := getProjectRoot()
 	return &PPTXGenerator{
 		logger:       logger,
-		pythonScript: "scripts/create_pptx.py", // Relative to project root
+		pythonScript: filepath.Join(projectRoot, "scripts", "create_pptx.py"),
+	}
+}
+
+// getProjectRoot attempts to find the project root directory
+func getProjectRoot() string {
+	// Start from current directory and search for go.mod
+	dir, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+
+	// Search up for go.mod
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root, return current directory
+			return "."
+		}
+		dir = parent
 	}
 }
 
