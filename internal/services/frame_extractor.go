@@ -42,6 +42,14 @@ func (e *FrameExtractor) ExtractFrames(ctx context.Context, videoPath string, ou
 		return nil, fmt.Errorf("视频文件不存在: %s", videoPath)
 	}
 
+	// Validate paths to prevent command injection
+	if err := e.validatePath(videoPath); err != nil {
+		return nil, fmt.Errorf("invalid video path: %w", err)
+	}
+	if err := e.validatePath(outputDir); err != nil {
+		return nil, fmt.Errorf("invalid output directory: %w", err)
+	}
+
 	// 创建输出目录
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return nil, fmt.Errorf("创建输出目录失败: %w", err)
@@ -106,6 +114,14 @@ func (e *FrameExtractor) ExtractFrameAtTimestamp(ctx context.Context, videoPath 
 	// 验证输入
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
 		return fmt.Errorf("视频文件不存在: %s", videoPath)
+	}
+
+	// Validate paths to prevent command injection
+	if err := e.validatePath(videoPath); err != nil {
+		return fmt.Errorf("invalid video path: %w", err)
+	}
+	if err := e.validatePath(outputPath); err != nil {
+		return fmt.Errorf("invalid output path: %w", err)
 	}
 
 	// 确保输出目录存在
@@ -217,4 +233,29 @@ func (e *FrameExtractor) scanOutputDir(outputDir string, samplingRateSeconds flo
 	})
 
 	return frames, nil
+}
+
+// validatePath validates that a path is safe and doesn't contain shell metacharacters
+func (e *FrameExtractor) validatePath(path string) error {
+	// Check for shell metacharacters that could enable command injection
+	dangerousChars := []string{"`", "$", ";", "&", "|", ">", "<", "\n", "\r"}
+	for _, char := range dangerousChars {
+		if strings.Contains(path, char) {
+			return fmt.Errorf("path contains dangerous character: %s", char)
+		}
+	}
+
+	// Resolve absolute path
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("cannot resolve absolute path: %w", err)
+	}
+
+	// Verify path doesn't escape to sensitive system directories
+	if strings.HasPrefix(absPath, "/etc") || strings.HasPrefix(absPath, "/sys") ||
+		strings.HasPrefix(absPath, "/proc") || strings.HasPrefix(absPath, "/root") {
+		return fmt.Errorf("access to system directory not allowed: %s", path)
+	}
+
+	return nil
 }
