@@ -17,6 +17,7 @@ export const PERMISSIONS = {
   FILE_DELETE: 'files:delete',
   FILE_SCAN: 'files:scan',
   FILE_SPLIT: 'files:split',
+  FILE_TRANSCRIBE: 'files:transcribe',
 
   // 审计日志
   AUDIT_VIEW: 'audit:view',

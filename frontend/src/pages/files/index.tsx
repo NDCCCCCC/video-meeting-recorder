@@ -16,6 +16,7 @@ import {
   Row,
   Col,
   Tooltip,
+  Radio,
 } from 'antd'
 import {
   SearchOutlined,
@@ -28,20 +29,24 @@ import {
   EyeOutlined,
   ScanOutlined,
   ScissorsOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import * as videoFileApi from '../../api/video-file'
+import { submitTranscription } from '../../api/transcription'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
 import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
+import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
 import type {
   VideoFile,
   VideoFileListParams,
   VideoFileStats,
   VideoFileStatus,
 } from '../../types/video-file'
+import type { SamplingRateOption } from '../../types/transcription'
 
 // 状态配置
 const STATUS_CONFIG: Record<VideoFileStatus, { label: string; color: string }> = {
@@ -60,6 +65,13 @@ const STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([value, { label }]) =>
 const DEFAULT_PAGE_SIZE = 20
 // 默认文件格式筛选
 const DEFAULT_FORMAT = 'mp4'
+
+// 采样率选项 (per D-02)
+const samplingRateOptions: SamplingRateOption[] = [
+  { label: '1秒/帧', value: 1.0, secondsPerFrame: 1, description: '高精度, 文件较大' },
+  { label: '2秒/帧', value: 0.5, secondsPerFrame: 2, description: '推荐' },
+  { label: '5秒/帧', value: 0.2, secondsPerFrame: 5, description: '快速, 可能遗漏画面' },
+]
 
 // 格式化文件大小
 const formatFileSize = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(2)} MB`
@@ -82,6 +94,13 @@ export default function FileManagement() {
   const [viewingFile, setViewingFile] = useState<VideoFile | null>(null)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
+
+  // Transcription state
+  const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false)
+  const [transcriptionVideoFile, setTranscriptionVideoFile] = useState<VideoFile | null>(null)
+  const [triggerModalOpen, setTriggerModalOpen] = useState(false)
+  const [selectedSamplingRate, setSelectedSamplingRate] = useState<number>(0.5) // default 2s per D-02
+  const [triggerLoading, setTriggerLoading] = useState(false)
 
   const [params, setParams] = useState<VideoFileListParams>({
     page: 1,
@@ -233,6 +252,35 @@ export default function FileManagement() {
     }
   }, [loadFiles, loadStats])
 
+  // 转录相关处理函数
+  // 打开触发模态框 (采样率选择)
+  const handleTranscribeClick = useCallback((record: VideoFile) => {
+    setTranscriptionVideoFile(record)
+    setSelectedSamplingRate(0.5) // reset to default 2s per D-02
+    setTriggerModalOpen(true)
+  }, [])
+
+  // 提交转录任务
+  const handleTranscriptionSubmit = useCallback(async () => {
+    if (!transcriptionVideoFile) return
+    setTriggerLoading(true)
+    try {
+      await submitTranscription(transcriptionVideoFile.id, selectedSamplingRate)
+      setTriggerModalOpen(false)
+      setTranscriptionModalOpen(true) // open progress modal
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '提交转录任务失败')
+    } finally {
+      setTriggerLoading(false)
+    }
+  }, [transcriptionVideoFile, selectedSamplingRate])
+
+  // 转录完成回调
+  const handleTranscriptionCompleted = useCallback(() => {
+    loadFiles()
+    loadStats()
+  }, [loadFiles, loadStats])
+
   // 渲染状态标签
   const renderStatus = useCallback((status: VideoFileStatus) => {
     const config = STATUS_CONFIG[status]
@@ -263,6 +311,20 @@ export default function FileManagement() {
           </Tooltip>
         </PermissionGuard>
       )}
+      {record.format === 'mp4' && record.status === 'ready' && (
+        <PermissionGuard permission={PERMISSIONS.FILE_TRANSCRIBE}>
+          <Tooltip title="转录">
+            <Button
+              type="link"
+              size="small"
+              icon={<FileTextOutlined />}
+              onClick={() => handleTranscribeClick(record)}
+            >
+              转录
+            </Button>
+          </Tooltip>
+        </PermissionGuard>
+      )}
       <Button
         type="link"
         size="small"
@@ -290,7 +352,7 @@ export default function FileManagement() {
         </Popconfirm>
       </PermissionGuard>
     </Space>
-  ), [viewDetail, handleDownload, handleDelete, navigate])
+  ), [viewDetail, handleDownload, handleDelete, navigate, handleTranscribeClick])
 
   // 表格列定义
   const columns: ColumnsType<VideoFile> = useMemo(() => [
@@ -580,6 +642,44 @@ export default function FileManagement() {
           </>
         )}
       </Modal>
+
+      {/* 转录触发模态框 (采样率选择) */}
+      <Modal
+        title={`本地转录 - ${transcriptionVideoFile?.file_name || ''}`}
+        open={triggerModalOpen}
+        onCancel={() => setTriggerModalOpen(false)}
+        onOk={handleTranscriptionSubmit}
+        okText="开始转录"
+        cancelText="取消"
+        confirmLoading={triggerLoading}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 8 }}>选择采样间隔:</div>
+          <Radio.Group
+            value={selectedSamplingRate}
+            onChange={(e) => setSelectedSamplingRate(e.target.value)}
+          >
+            {samplingRateOptions.map(opt => (
+              <Radio key={opt.value} value={opt.value} style={{ display: 'block', marginBottom: 8 }}>
+                {opt.label} ({opt.description})
+              </Radio>
+            ))}
+          </Radio.Group>
+        </div>
+        <div style={{ color: '#faad14', fontSize: 13 }}>
+          提示: 转录过程可能需要几分钟，期间可以关闭此窗口继续使用系统。
+        </div>
+      </Modal>
+
+      {/* 转录进度模态框 */}
+      <TranscriptionProgressModal
+        open={transcriptionModalOpen}
+        onClose={() => setTranscriptionModalOpen(false)}
+        videoFileId={transcriptionVideoFile?.id || 0}
+        fileName={transcriptionVideoFile?.file_name || ''}
+        samplingRate={selectedSamplingRate}
+        onCompleted={handleTranscriptionCompleted}
+      />
     </div>
   )
 }
