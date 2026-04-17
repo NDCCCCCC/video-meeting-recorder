@@ -16,6 +16,9 @@ type TranscriptionTask struct {
 	ErrorMessage      string     `gorm:"type:text" json:"error_message,omitempty"`
 	CreatedBy         uint       `gorm:"not null" json:"created_by"`
 	Creator           *User      `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+	Mode              string     `gorm:"type:varchar(20);default:'local'" json:"mode"`            // local, cloud
+	CloudTaskID       string     `gorm:"type:varchar(100)" json:"cloud_task_id,omitempty"`         // Tingwu task ID
+	OSSURL            string     `gorm:"type:varchar(500)" json:"oss_url,omitempty"`               // OSS presigned URL
 }
 
 // 转录状态常量
@@ -31,6 +34,20 @@ const (
 	TranscriptionStageExtracting = "extracting"
 	TranscriptionStageDetecting  = "detecting"
 	TranscriptionStageGenerating = "generating"
+)
+
+// 转录模式常量
+const (
+	TranscriptionModeLocal = "local"
+	TranscriptionModeCloud = "cloud"
+)
+
+// 云端转录阶段常量
+const (
+	TranscriptionStageUploading   = "uploading"
+	TranscriptionStageQueued      = "queued"
+	TranscriptionStageProcessing  = "cloud_processing"  // avoid collision with existing "processing" status
+	TranscriptionStageDownloading = "downloading"
 )
 
 // TableName 指定表名
