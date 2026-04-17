@@ -7,7 +7,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Video Splitting** - Multi-point video splitting, recording snapshot, and auto scan
+- [x] **Phase 1: Video Splitting** - Multi-point video splitting, recording snapshot, and auto scan
 - [ ] **Phase 2: Local Transcription** - Frame extraction, SSIM/pHash/edge detection, and PPTX generation
 - [ ] **Phase 3: PPT Management** - PPT preview, multi-result management, and merge features
 - [ ] **Phase 4: Cloud Services** - Aliyun OSS integration, Tingwu transcription, and cloud/local switching
@@ -55,7 +55,13 @@ Plans:
 4. User can see real-time progress feedback showing "已处理 45/200 帧 (22%)" during local transcription
 5. After processing completes, a PPTX file is generated with each unique frame as a separate slide page
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Foundation: TranscriptionTask model + migration, SimilarityDetector (SSIM/pHash/edge), FrameExtractor
+- [ ] 02-02-PLAN.md — PPTX generator using unioffice with 16:9 full-frame slides
+- [ ] 02-03-PLAN.md — TranscriptionService worker pool + TranscriptionHandler + app.go wiring
+- [ ] 02-04-PLAN.md — Frontend: types, API client, TranscriptionProgressModal, file list transcription button
 
 ---
 
@@ -108,11 +114,11 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Video Splitting | 0/5 | Planned | - |
-| 2. Local Transcription | 0/3 | Not started | - |
+| 1. Video Splitting | 5/5 | Executed | 2026-04-17 |
+| 2. Local Transcription | 0/4 | Planned | - |
 | 3. PPT Management | 0/3 | Not started | - |
 | 4. Cloud Services | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-04-17*
-*Last updated: 2026-04-17 after phase planning for Phase 1 (Wave 0 added)*
+*Last updated: 2026-04-17 after phase planning for Phase 2*
