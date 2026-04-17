@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cpic/record_v2/internal/config"
@@ -26,7 +27,7 @@ func TestTingwuClientDisabledWithEmptyAppKey(t *testing.T) {
 func TestTingwuClientDisabledSubmitFails(t *testing.T) {
 	cfg := &config.TingwuConfig{Enabled: false}
 	client := NewTingwuClient(cfg, zap.NewNop())
-	_, err := client.SubmitTask(nil, "https://example.com/test.mp4")
+	_, err := client.SubmitTask(context.Background(), "https://example.com/test.mp4")
 	if err == nil {
 		t.Error("SubmitTask on disabled client should return error")
 	}
@@ -35,7 +36,7 @@ func TestTingwuClientDisabledSubmitFails(t *testing.T) {
 func TestTingwuClientDisabledGetStatusFails(t *testing.T) {
 	cfg := &config.TingwuConfig{Enabled: false}
 	client := NewTingwuClient(cfg, zap.NewNop())
-	_, err := client.GetStatus(nil, "task-123")
+	_, err := client.GetStatus(context.Background(), "task-123")
 	if err == nil {
 		t.Error("GetStatus on disabled client should return error")
 	}
@@ -44,7 +45,7 @@ func TestTingwuClientDisabledGetStatusFails(t *testing.T) {
 func TestTingwuClientDisabledGetResultFails(t *testing.T) {
 	cfg := &config.TingwuConfig{Enabled: false}
 	client := NewTingwuClient(cfg, zap.NewNop())
-	_, err := client.GetResult(nil, "task-123")
+	_, err := client.GetResult(context.Background(), "task-123")
 	if err == nil {
 		t.Error("GetResult on disabled client should return error")
 	}

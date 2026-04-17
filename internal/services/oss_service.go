@@ -107,3 +107,8 @@ func (s *OSSService) DeleteFile(ctx context.Context, objectKey string) error {
 func (s *OSSService) IsEnabled() bool {
 	return s.config.Enabled
 }
+
+// IsStub returns true when the OSS service is running in stub mode (no actual SDK integration)
+func (s *OSSService) IsStub() bool {
+	return true // TODO: Return false when actual OSS SDK integration is completed
+}
