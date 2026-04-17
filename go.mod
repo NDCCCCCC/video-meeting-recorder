@@ -3,6 +3,8 @@ module github.com/cpic/record_v2
 go 1.25.0
 
 require (
+	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.4.1
+	github.com/aliyun/credentials-go v1.4.12
 	github.com/corona10/goimagehash v1.1.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
@@ -20,6 +22,8 @@ require (
 )
 
 require (
+	github.com/alibabacloud-go/debug v1.0.1 // indirect
+	github.com/alibabacloud-go/tea v1.2.2 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
@@ -70,6 +74,7 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
