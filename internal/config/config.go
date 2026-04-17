@@ -20,6 +20,8 @@ type Config struct {
 	Huawei   HuaweiConfig   `mapstructure:"huawei" json:"huawei" yaml:"huawei"`
 	RTSP     RTSPConfig     `mapstructure:"rtsp" json:"rtsp" yaml:"rtsp"`
 	FFmpeg   FFmpegConfig   `mapstructure:"ffmpeg" json:"ffmpeg" yaml:"ffmpeg"`
+	OSS      OSSConfig      `mapstructure:"oss" json:"oss" yaml:"oss"`
+	Tingwu   TingwuConfig   `mapstructure:"tingwu" json:"tingwu" yaml:"tingwu"`
 }
 
 // ServerConfig 服务器配置
@@ -131,6 +133,26 @@ type FFmpegConfig struct {
 	HLSListSize        int `mapstructure:"hls_list_size" json:"hls_list_size" yaml:"hls_list_size"`                      // HLS 播放列表保留分片数
 	// 录制监控配置
 	MaxRecordingDuration time.Duration `mapstructure:"max_recording_duration" json:"max_recording_duration" yaml:"max_recording_duration"` // 最长录制时长
+}
+
+// OSSConfig 阿里云OSS配置
+type OSSConfig struct {
+	Endpoint        string `mapstructure:"endpoint" json:"endpoint" yaml:"endpoint"`
+	BucketName      string `mapstructure:"bucket_name" json:"bucket_name" yaml:"bucket_name"`
+	AccessKeyID     string `mapstructure:"access_key_id" json:"access_key_id" yaml:"access_key_id"`
+	AccessKeySecret string `mapstructure:"access_key_secret" json:"access_key_secret" yaml:"access_key_secret"`
+	Enabled         bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	UploadTimeout   int    `mapstructure:"upload_timeout" json:"upload_timeout" yaml:"upload_timeout"`       // seconds
+	PresignedURLTTL int    `mapstructure:"presigned_url_ttl" json:"presigned_url_ttl" yaml:"presigned_url_ttl"` // seconds, default 86400
+}
+
+// TingwuConfig 阿里通义听悟配置
+type TingwuConfig struct {
+	AppKey    string `mapstructure:"app_key" json:"app_key" yaml:"app_key"`
+	AppSecret string `mapstructure:"app_secret" json:"app_secret" yaml:"app_secret"`
+	BaseURL   string `mapstructure:"base_url" json:"base_url" yaml:"base_url"`
+	Enabled   bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	APITimeout int   `mapstructure:"api_timeout" json:"api_timeout" yaml:"api_timeout"` // seconds
 }
 
 // expandEnvWithDefault 展开环境变量，支持 ${VAR:default} 格式
@@ -420,6 +442,22 @@ func setDefaults(cfg *Config) {
 	if cfg.Huawei.MinTLSVersion == "" {
 		cfg.Huawei.MinTLSVersion = "1.0"
 	}
+
+	// OSS defaults
+	if cfg.OSS.UploadTimeout == 0 {
+		cfg.OSS.UploadTimeout = 300 // 5 minutes
+	}
+	if cfg.OSS.PresignedURLTTL == 0 {
+		cfg.OSS.PresignedURLTTL = 86400 // 24 hours
+	}
+
+	// Tingwu defaults
+	if cfg.Tingwu.BaseURL == "" {
+		cfg.Tingwu.BaseURL = "https://tingwu.cn-beijing.aliyuncs.com"
+	}
+	if cfg.Tingwu.APITimeout == 0 {
+		cfg.Tingwu.APITimeout = 30
+	}
 }
 
 // ensureDirectories 确保目录存在
@@ -537,6 +575,24 @@ rtsp:
   max_streams: 10
   reconnect_timeout: "30s"
   buffer_size: 1048576
+
+# 阿里云OSS配置
+oss:
+  endpoint: "${ALIYUN_OSS_ENDPOINT:}"
+  bucket_name: "${ALIYUN_OSS_BUCKET:}"
+  access_key_id: "${ALIYUN_OSS_ACCESS_KEY_ID:}"
+  access_key_secret: "${ALIYUN_OSS_ACCESS_KEY_SECRET:}"
+  enabled: false
+  upload_timeout: 300
+  presigned_url_ttl: 86400
+
+# 阿里通义听悟配置
+tingwu:
+  app_key: "${TYTW_APP_KEY:}"
+  app_secret: "${TYTW_APP_SECRET:}"
+  base_url: "https://tingwu.cn-beijing.aliyuncs.com"
+  enabled: true
+  api_timeout: 30
 `
 
 	// 写入配置文件
