@@ -31,6 +31,10 @@ export default [
         Component: lazy(() => import('../pages/files')),
       },
       {
+        path: 'split/:id',
+        Component: lazy(() => import('../pages/split')),
+      },
+      {
         path: 'audit',
         Component: lazy(() => import('../pages/audit')),
       },
