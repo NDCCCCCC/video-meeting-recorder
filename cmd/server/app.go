@@ -229,6 +229,7 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.AuditLog{},
 		&models.NotificationMessage{},
 		&models.UserNotificationSetting{},
+		&models.TranscriptionText{},
 		// 注意：TaskHuaweiConfig 表由自定义迁移管理，不在这里处理
 	)
 
