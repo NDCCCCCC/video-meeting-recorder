@@ -95,10 +95,14 @@ func (g *PPTXGenerator) GeneratePPTX(ctx context.Context, framePaths []string, o
 	// Sanitize output path to prevent path traversal (T-02-05 mitigation)
 	outputPath = filepath.Clean(outputPath)
 
-	// Sanitize all frame paths
+	// Sanitize and validate all frame paths to prevent command injection
 	sanitizedPaths := make([]string, len(framePaths))
 	for i, path := range framePaths {
 		sanitizedPaths[i] = filepath.Clean(path)
+		// Validate path is safe
+		if err := g.validatePath(path); err != nil {
+			return 0, fmt.Errorf("invalid frame path at index %d: %w", i, err)
+		}
 	}
 
 	// Prepare command arguments
@@ -194,6 +198,30 @@ func (g *PPTXGenerator) CheckPythonAvailability(ctx context.Context) error {
 
 	version := strings.TrimSpace(string(output))
 	g.logger.Info("python-pptx available", zap.String("version", version), zap.String("command", cmdName))
+
+	return nil
+}
+
+// validatePath validates that a path is safe and within allowed directories
+func (g *PPTXGenerator) validatePath(path string) error {
+	// Resolve absolute path
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("cannot resolve absolute path: %w", err)
+	}
+
+	// Check for suspicious characters that could enable injection
+	if strings.ContainsAny(path, "\n\r\t") {
+		return fmt.Errorf("path contains invalid characters")
+	}
+
+	// Ensure path is within allowed storage directory (project root)
+	// This prevents access to sensitive system directories
+	projectRoot := getProjectRoot()
+	allowedDir := filepath.Clean(projectRoot)
+	if !strings.HasPrefix(absPath, allowedDir) {
+		return fmt.Errorf("path outside allowed directory: %s", path)
+	}
 
 	return nil
 }
