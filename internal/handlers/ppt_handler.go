@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -143,6 +144,19 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 	if len(req.Slides) == 0 {
 		response.GinError(c, response.CodeInvalidRequest, "请选择要合并的幻灯片")
 		return
+	}
+
+	// Validate each slide item
+	for _, slide := range req.Slides {
+		if slide.SlideNumber <= 0 {
+			response.GinError(c, response.CodeInvalidRequest,
+				fmt.Sprintf("无效的幻灯片编号: %d", slide.SlideNumber))
+			return
+		}
+		if slide.PptFileID == 0 {
+			response.GinError(c, response.CodeInvalidRequest, "PPT文件ID不能为空")
+			return
+		}
 	}
 
 	// Set default output name if not provided
