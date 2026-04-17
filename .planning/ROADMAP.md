@@ -29,9 +29,10 @@
 4. User can click "确认分割" and FFmpeg splits the video into multiple MP4 segments using -c copy mode
 5. Split segments appear in the file list and can be renamed, deleted, downloaded, or individually transcribed
 
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
+- [ ] 01-00-PLAN.md — Wave 0: Test stubs for SplittingService, SnapshotService, SplitHandler, VideoFileService
 - [ ] 01-01-PLAN.md — Database model extension (parent_id, source_type) + VideoFileService segment creation
 - [ ] 01-02-PLAN.md — SplittingService, SnapshotService, SplitHandler backend + app.go wiring
 - [ ] 01-03-PLAN.md — Frontend split page with TimelineWithMarkers + split API client
@@ -107,11 +108,11 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Video Splitting | 0/4 | Planned | - |
+| 1. Video Splitting | 0/5 | Planned | - |
 | 2. Local Transcription | 0/3 | Not started | - |
 | 3. PPT Management | 0/3 | Not started | - |
 | 4. Cloud Services | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-04-17*
-*Last updated: 2026-04-17 after phase planning for Phase 1*
+*Last updated: 2026-04-17 after phase planning for Phase 1 (Wave 0 added)*

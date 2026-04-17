@@ -7,12 +7,12 @@
 ## Summary
 
 Phase 1 focuses on implementing video splitting capabilities, recording snapshots, and automatic file scanning. The phase requires extending the existing FFmpeg integration to support:
-1. Multi-point video splitting with timeline markers (fast mode using `-c copy` with ±2s precision limitation, re-encode mode for frame accuracy)
+1. Multi-point video splitting with timeline markers (fast mode using `-c copy` with +/-2s precision limitation, re-encode mode for frame accuracy)
 2. MP4 snapshot generation during active recording without stopping the recording process
 3. Automatic file scanning that triggers whenever new MP4 files are created (recording completion, snapshot, or splitting)
 4. A new split page with an extended video player featuring timeline markers and segment management
 
-The research reveals that FFmpeg's `-c copy` mode has inherent keyframe alignment limitations (±2s precision) which is a known technical constraint of H.264/H.265 codecs. The solution requires offering both fast (imprecise) and precise (re-encode) splitting modes.
+The research reveals that FFmpeg's `-c copy` mode has inherent keyframe alignment limitations (+/-2s precision) which is a known technical constraint of H.264/H.265 codecs. The solution requires offering both fast (imprecise) and precise (re-encode) splitting modes.
 
 **Primary recommendation:** Use the existing ConversionService worker pool pattern for split operations, extend VideoPlayerModal's Ant Design Slider into a marker-enabled timeline, and implement service callbacks for automatic file scanning.
 
@@ -21,13 +21,13 @@ The research reveals that FFmpeg's `-c copy` mode has inherent keyframe alignmen
 ### Locked Decisions
 
 **Split Marker Interaction**
-- D-01: Users add split markers by clicking on the video timeline OR by manually entering a timestamp in an input field — both methods are supported
+- D-01: Users add split markers by clicking on the video timeline OR by manually entering a timestamp in an input field -- both methods are supported
 - D-02: Markers can be repositioned by dragging along the timeline
-- D-03: Precision is second-level only — no frame-level micro-adjustment or timeline zoom needed
+- D-03: Precision is second-level only -- no frame-level micro-adjustment or timeline zoom needed
 - D-04: Markers display as vertical lines on the timeline with hover tooltip showing the timestamp; clicking a marker shows delete/edit actions
 
 **Split Precision vs Speed**
-- D-05: Default split uses FFmpeg `-c copy` mode (fast, lossless, potential ±2s keyframe misalignment)
+- D-05: Default split uses FFmpeg `-c copy` mode (fast, lossless, potential +/-2s keyframe misalignment)
 - D-06: If split results are imprecise, user can re-run with re-encode mode for frame-accurate cuts
 - D-07: The UI should communicate that fast mode may have slight imprecision at split points
 
@@ -39,7 +39,7 @@ The research reveals that FFmpeg's `-c copy` mode has inherent keyframe alignmen
 **Segment Management & Auto Scan**
 - D-11: Split segments are stored as independent VideoFile records with a `parent_id` field linking back to the source video
 - D-12: Segments appear in the existing file list with an additional column showing "来源" (source: 录制/快照/分割) and a link to the original video
-- D-13: Auto-scan uses service callbacks — recording service, conversion service, and splitting service call VideoFileService directly when new MP4 files are produced (no file system watching, no polling)
+- D-13: Auto-scan uses service callbacks -- recording service, conversion service, and splitting service call VideoFileService directly when new MP4 files are produced (no file system watching, no polling)
 - D-14: Segments can be independently renamed, deleted, downloaded, and triggered for transcription
 
 ### Claude's Discretion
@@ -56,7 +56,7 @@ The research reveals that FFmpeg's `-c copy` mode has inherent keyframe alignmen
 
 ### Deferred Ideas (OUT OF SCOPE)
 
-None — discussion stayed within phase scope.
+None -- discussion stayed within phase scope.
 
 ## Phase Requirements
 
@@ -77,15 +77,15 @@ None — discussion stayed within phase scope.
 
 | Capability | Primary Tier | Secondary Tier | Rationale |
 |------------|-------------|----------------|-----------|
-| Video timeline marker rendering | Browser / Client | — | Pure UI interaction, React state management |
-| Split marker state management | Browser / Client | — | Frontend maintains marker array during user interaction |
-| FFmpeg split execution | API / Backend | — | CPU-intensive operation, requires server-side FFmpeg access |
-| MP4 file generation (snapshot/split) | API / Backend | — | File system operations, FFmpeg processing |
-| VideoFile database operations | API / Backend | — | Database persistence, transaction management |
-| Auto-scan triggering | API / Backend | — | Service callbacks after file generation completion |
+| Video timeline marker rendering | Browser / Client | -- | Pure UI interaction, React state management |
+| Split marker state management | Browser / Client | -- | Frontend maintains marker array during user interaction |
+| FFmpeg split execution | API / Backend | -- | CPU-intensive operation, requires server-side FFmpeg access |
+| MP4 file generation (snapshot/split) | API / Backend | -- | File system operations, FFmpeg processing |
+| VideoFile database operations | API / Backend | -- | Database persistence, transaction management |
+| Auto-scan triggering | API / Backend | -- | Service callbacks after file generation completion |
 | File list real-time updates | Browser / Client | API / Backend | Frontend polls or receives WebSocket events |
-| Recording snapshot button | Browser / Client | — | Inline UI component on task list page |
-| Segment file metadata extraction | API / Backend | — | ffprobe execution, database record creation |
+| Recording snapshot button | Browser / Client | -- | Inline UI component on task list page |
+| Segment file metadata extraction | API / Backend | -- | ffprobe execution, database record creation |
 
 ## Standard Stack
 
@@ -179,7 +179,7 @@ None — discussion stayed within phase scope.
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │                    FFmpeg Operations                       │  │
 │  │  - Split: ffmpeg -i input.mp4 -ss XX -to YY -c copy seg.mp4│  │
-│  │  - Snapshot: Copy partial MKV / Dual-output tee           │  │
+│  │  - Snapshot: Copy partial MKV → Convert to MP4             │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -367,12 +367,12 @@ const marks = markers.reduce((acc, marker) => {
 
 ### Pitfall 1: FFmpeg Keyframe Misalignment with `-c copy`
 
-**What goes wrong:** User expects frame-accurate splits, but `-c copy` mode can only split on keyframe boundaries (I-frames), resulting in ±2s imprecision.
+**What goes wrong:** User expects frame-accurate splits, but `-c copy` mode can only split on keyframe boundaries (I-frames), resulting in +/-2s imprecision.
 
 **Why it happens:** H.264/H.265 codecs use inter-frame compression where most frames depend on previous frames. FFmpeg can only start a new segment at a keyframe without re-encoding.
 
 **How to avoid:**
-1. Document the limitation clearly in the UI (D-07: "快速分割模式可能有±2秒误差")
+1. Document the limitation clearly in the UI (D-07: "快速分割模式可能有+/-2秒误差")
 2. Offer re-encode mode as a precision option (D-06)
 3. Show actual split start/end times after fast mode completes
 4. Consider auto-adjusting markers to nearest keyframe before splitting
@@ -450,7 +450,7 @@ func buildSplitCommand(inputPath string, markers []time.Duration, outputDir stri
     }
 
     // Generate segments for each marker interval
-    // markers: [10s, 30s, 50s] → segments: [0-10s, 10-30s, 30-50s, 50s-end]
+    // markers: [10s, 30s, 50s] -> segments: [0-10s, 10-30s, 30-50s, 50s-end]
     for i, marker := range markers {
         startTime := marker
         var endTime time.Duration
@@ -619,38 +619,38 @@ func (s *SplittingService) processSplit(splitTask *SplitTask) error {
 | A4 | FFmpeg `-c copy` split with multiple segments can be done in single command | Code Examples | May require multiple FFmpeg invocations, affecting performance |
 | A5 | React 19 and Ant Design 6 are compatible (no breaking changes) | Standard Stack | May encounter UI component compatibility issues |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Snapshot technique selection**
+1. **Snapshot technique selection -- RESOLVED: Copy partial MKV**
    - What we know: Three potential approaches (copy partial MKV, dual-output tee, segment output)
-   - What's unclear: Which approach works reliably without interrupting ongoing recording
-   - Recommendation: Prototype and test all three approaches with 30+ minute recordings to verify no interruption
+   - Resolution: Use **copy partial MKV** technique. The existing coordinator.go already uses tee muxer for MKV+HLS output. Adding a third tee output would increase recording process complexity and risk. Instead, copy the partial MKV file to a temporary location (read-only, non-locking chunked read), then convert the copy to MP4. This is the approach implemented in Plan 02's SnapshotService (`copyFile()` with 32KB chunked reads). The copy completes quickly and never touches the original file being written by FFmpeg. Verified safe by the existing codebase pattern where `os.Open` + chunked `Read` on Windows does not lock files being written by another process.
+   - Discarded alternatives: Dual-output tee (adds complexity to critical recording path, risk of recording failure), FFmpeg segment output (requires reconfiguring recording command, incompatible with existing tee setup).
 
-2. **Timeline marker drag-to-reposition implementation**
+2. **Timeline marker drag-to-reposition -- RESOLVED: Custom drag implementation on Slider marks**
    - What we know: Ant Design Slider doesn't natively support draggable marks
-   - What's unclear: Whether custom drag implementation is needed or if there's a simpler alternative
-   - Recommendation: Investigate if clicking a marker opens a modal with timestamp input (simpler) vs implementing full drag-and-drop
+   - Resolution: Implement **custom drag via mousedown/mousemove/mouseup on marker label elements**. The TimelineWithMarkers component renders marks as Slider `marks` prop with custom styled labels. Attach `onMouseDown` to each marker label to initiate drag, track `mousemove` on the document to update position, and `mouseup` to finalize. This satisfies D-02 (drag to reposition) directly without a modal workaround. The alternative (modal-based repositioning) was rejected because D-02 explicitly says "dragging along the timeline" and a modal would feel disconnected from the timeline interaction. Implementation is ~30 lines of event handler code in TimelineWithMarkers.tsx, well within context budget.
+   - Fallback: If drag proves unreliable on touch devices, clicking a marker opens a popover with a timestamp input field (simpler interaction, same D-02 compliance).
 
-3. **Real-time file list update mechanism**
+3. **Real-time file list update mechanism -- RESOLVED: 5-second polling on file list page**
    - What we know: Service callbacks create database records, but frontend needs to know about updates
-   - What's unclear: Whether WebSocket infrastructure exists or if polling is acceptable
-   - Recommendation: Check if project has WebSocket support, otherwise implement 5-second polling on file list page
+   - Resolution: Use **5-second interval polling** on the file list page. The project has no WebSocket infrastructure (verified: no socket.io, no ws dependency in package.json, no WebSocket routes in app.go). Adding WebSocket would require a new dependency, server-side connection management, and auth token handling for WS connections -- significant scope creep for Phase 1. Polling is implemented as a `setInterval` in `useEffect` with silent refresh (no loading spinner) in Plan 04, Task 1. The 5-second interval is sufficient for the SCAN-02 requirement ("real-time" in the context of file management means "within a few seconds"). Polling cancels on component unmount via cleanup function.
+   - Future: WebSocket can be added in a later phase if polling proves insufficient for user experience.
 
-4. **Segment file storage organization**
+4. **Segment file storage organization -- RESOLVED: Subdirectory alongside source video**
    - What we know: Segments need unique names and organized storage
-   - What's unclear: Whether to use `/recordings/task_{id}/segments/` subdirectory or store alongside source video
-   - Recommendation: Use subdirectory for better organization, easier cleanup
+   - Resolution: Use **`/recordings/task_{id}/segments/` subdirectory**. Segments are stored in a `segments/` subdirectory within the same task directory as the source video. This provides: (1) clear separation from source files, (2) easy cleanup (delete entire subdirectory), (3) no naming conflicts with source files, (4) consistent with the existing recordings directory structure. Segment naming: `{source_basename}_segment_{NNN}.mp4` (e.g., `meeting_recording_segment_001.mp4`). Snapshot naming: `snapshot_{YYYYMMDD_HHmmss}.mp4` stored in `/recordings/task_{id}/snapshots/` subdirectory. This is the pattern implemented in Plan 02's SplittingService and SnapshotService.
+   - Rationale: Storing alongside source (flat) was rejected because it creates filename collision risk and makes cleanup harder. Subdirectory is the standard convention for derived/segmented media files.
 
 ## Environment Availability
 
 | Dependency | Required By | Available | Version | Fallback |
 |------------|------------|-----------|---------|----------|
-| FFmpeg | Split/snapshot operations | ✓ | Existing installation | — |
-| Go 1.24 | Backend services | ✓ | Project version | — |
-| React 19 | Frontend UI | ✓ | Project version | — |
-| Ant Design 6 | UI components | ✓ | Project version | — |
-| GORM | Database operations | ✓ | Project version | — |
-| SQLite | Database storage | ✓ | Project version | — |
+| FFmpeg | Split/snapshot operations | Y | Existing installation | -- |
+| Go 1.24 | Backend services | Y | Project version | -- |
+| React 19 | Frontend UI | Y | Project version | -- |
+| Ant Design 6 | UI components | Y | Project version | -- |
+| GORM | Database operations | Y | Project version | -- |
+| SQLite | Database storage | Y | Project version | -- |
 
 **Missing dependencies with no fallback:** None
 
@@ -666,25 +666,25 @@ All required dependencies are already available in the project environment.
 
 | Property | Value |
 |----------|-------|
-| Framework | None detected - need to verify if testing infrastructure exists |
-| Config file | TBD - check for pytest.ini, jest.config.*, vitest.config.* |
-| Quick run command | TBD - needs investigation |
-| Full suite command | TBD - needs investigation |
+| Framework | Go testing (go test) + testify assertions (existing in go.mod) |
+| Config file | go.mod (existing), vitest for frontend (to be added in Wave 0) |
+| Quick run command | `go test ./... -short` |
+| Full suite command | `go test ./... -v` |
 
-### Phase Requirements → Test Map
+### Phase Requirements -> Test Map
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| SPLIT-01 | User can mark multiple split points on timeline | E2E | ❌ Manual-only (UI interaction) | N/A |
-| SPLIT-02 | User can preview and locate split points | E2E | ❌ Manual-only (video playback) | N/A |
-| SPLIT-03 | FFmpeg splits video by markers | Integration | `go test ./internal/services/... -run TestSplitService -v` | ❌ Wave 0 |
-| SPLIT-04 | Segments appear in list with management | Integration | `go test ./internal/handlers/... -run TestSplitHandler -v` | ❌ Wave 0 |
-| SPLIT-05 | Segments can be transcribed | Integration | `go test ./internal/services/... -run TestSegmentTranscription -v` | ❌ Wave 0 |
-| SNAP-01 | Snapshot button appears on active recording | E2E | ❌ Manual-only (UI visibility) | N/A |
-| SNAP-02 | Snapshot exports MP4 without stopping recording | Integration | `go test ./internal/services/... -run TestSnapshot -v` | ❌ Wave 0 |
-| SCAN-01 | New MP4 files auto-scanned | Integration | `go test ./internal/services/... -run TestAutoScan -v` | ❌ Wave 0 |
-| SCAN-02 | File list updates in real-time | E2E | ❌ Manual-only (UI refresh) | N/A |
-| UI-01 | Split page layout | E2E | ❌ Manual-only (visual) | N/A |
+| SPLIT-01 | User can mark multiple split points on timeline | E2E | Manual-only (UI interaction) | N/A |
+| SPLIT-02 | User can preview and locate split points | E2E | Manual-only (video playback) | N/A |
+| SPLIT-03 | FFmpeg splits video by markers | Integration | `go test ./internal/services/... -run TestSplitService -v` | Wave 0 |
+| SPLIT-04 | Segments appear in list with management | Integration | `go test ./internal/handlers/... -run TestSplitHandler -v` | Wave 0 |
+| SPLIT-05 | Segments can be transcribed | Integration | `go test ./internal/services/... -run TestSegmentTranscription -v` | Wave 0 |
+| SNAP-01 | Snapshot button appears on active recording | E2E | Manual-only (UI visibility) | N/A |
+| SNAP-02 | Snapshot exports MP4 without stopping recording | Integration | `go test ./internal/services/... -run TestSnapshot -v` | Wave 0 |
+| SCAN-01 | New MP4 files auto-scanned | Integration | `go test ./internal/services/... -run TestAutoScan -v` | Wave 0 |
+| SCAN-02 | File list updates in real-time | E2E | Manual-only (UI refresh) | N/A |
+| UI-01 | Split page layout | E2E | Manual-only (visual) | N/A |
 
 ### Sampling Rate
 
@@ -694,10 +694,10 @@ All required dependencies are already available in the project environment.
 
 ### Wave 0 Gaps
 
-- [ ] `internal/services/splitting_service_test.go` — covers SPLIT-03, SNAP-02
-- [ ] `internal/handlers/split_handler_test.go` — covers SPLIT-04
-- [ ] `internal/services/video_file_service_test.go` — extends for SCAN-01, auto-scan callbacks
-- [ ] `frontend/src/components/__tests__/TimelineWithMarkers.test.tsx` — covers SPLIT-01 (unit test for component logic)
+- [ ] `internal/services/splitting_service_test.go` -- covers SPLIT-03, SNAP-02
+- [ ] `internal/handlers/split_handler_test.go` -- covers SPLIT-04
+- [ ] `internal/services/video_file_service_test.go` -- extends for SCAN-01, auto-scan callbacks
+- [ ] `frontend/src/components/__tests__/TimelineWithMarkers.test.tsx` -- covers SPLIT-01 (unit test for component logic)
 - [ ] Test framework setup: Verify if Go testing framework exists, add `go.mod` test dependencies if needed
 - [ ] Integration test helpers: Mock FFmpeg execution, test database fixtures
 
@@ -736,26 +736,26 @@ All required dependencies are already available in the project environment.
 ### Primary (HIGH confidence)
 
 - **Existing codebase analysis:**
-  - `internal/recorder/coordinator.go` — FFmpeg integration patterns, path escaping, tee muxer usage
-  - `internal/services/conversion_service.go` — Worker pool pattern, error handling, retry logic
-  - `internal/services/video_file_service.go` — File scanning, metadata extraction, database operations
-  - `internal/models/video_file.go` — VideoFile model structure, fields
-  - `frontend/src/components/VideoPlayerModal.tsx` — Video player with seek slider
-  - `frontend/src/pages/files/index.tsx` — File list page structure
-  - `frontend/src/pages/tasks/index.tsx` — Task list page structure
-  - `frontend/src/api/apiClient.ts` — API client patterns
+  - `internal/recorder/coordinator.go` -- FFmpeg integration patterns, path escaping, tee muxer usage
+  - `internal/services/conversion_service.go` -- Worker pool pattern, error handling, retry logic
+  - `internal/services/video_file_service.go` -- File scanning, metadata extraction, database operations
+  - `internal/models/video_file.go` -- VideoFile model structure, fields
+  - `frontend/src/components/VideoPlayerModal.tsx` -- Video player with seek slider
+  - `frontend/src/pages/files/index.tsx` -- File list page structure
+  - `frontend/src/pages/tasks/index.tsx` -- Task list page structure
+  - `frontend/src/api/apiClient.ts` -- API client patterns
 
 ### Secondary (MEDIUM confidence)
 
-- **[Stack Overflow: How to split video so each chunk starts with a keyframe](https://stackoverflow.com/questions/14005110/how-to-split-a-video-using-ffmpeg-so-that-each-chunk-starts-with-a-key-frame)** — FFmpeg split techniques and keyframe alignment
-- **[Video Stack Exchange: Using ffmpeg to cut videos with more precision than key frames allow](https://video.stackexchange.com/questions/16750/using-ffmpeg-to-cut-videos-with-more-precision-than-key-frames-allow)** — Confirmation that `-c copy` has precision limitations
-- **[Ant Design Slider Documentation](https://ant.design/components/slider/)** — Slider component API, marks property, customization options
-- **[Build a Custom Time Slider Component with Ant Design and Next.js](https://www.paigeniedringhaus.com/blog/build-a-custom-time-slider-component-with-ant-design-and-nextjs/)** — Custom time slider implementation patterns
+- **[Stack Overflow: How to split video so each chunk starts with a keyframe](https://stackoverflow.com/questions/14005110/how-to-split-a-video-using-ffmpeg-so-that-each-chunk-starts-with-a-key-frame)** -- FFmpeg split techniques and keyframe alignment
+- **[Video Stack Exchange: Using ffmpeg to cut videos with more precision than key frames allow](https://video.stackexchange.com/questions/16750/using-ffmpeg-to-cut-videos-with-more-precision-than-key-frames-allow)** -- Confirmation that `-c copy` has precision limitations
+- **[Ant Design Slider Documentation](https://ant.design/components/slider/)** -- Slider component API, marks property, customization options
+- **[Build a Custom Time Slider Component with Ant Design and Next.js](https://www.paigeniedringhaus.com/blog/build-a-custom-time-slider-component-with-ant-design-and-nextjs/)** -- Custom time slider implementation patterns
 
 ### Tertiary (LOW confidence)
 
-- **[React Video Timeline Slider examples](https://codesandbox.io/examples/package/react-video-timelines-slider)** — Timeline component patterns (not verified)
-- **[RVE - React Video Editor Timeline](https://www.reactvideoeditor.com/features/timeline)** — Video editor timeline features (not verified)
+- **[React Video Timeline Slider examples](https://codesandbox.io/examples/package/react-video-timelines-slider)** -- Timeline component patterns (not verified)
+- **[RVE - React Video Editor Timeline](https://www.reactvideoeditor.com/features/timeline)** -- Video editor timeline features (not verified)
 
 ## Metadata
 
