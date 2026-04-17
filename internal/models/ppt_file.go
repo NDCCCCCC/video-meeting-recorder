@@ -11,8 +11,10 @@ type PPTFile struct {
 	// 移除 ConferenceRecord 关联
 	// 直接关联 VideoFile，删除 VideoFile 时不会自动级联删除 PPTFile
 	// 如需级联删除，请在外部手动处理或添加数据库级联约束
-	SourceVideoFileID *uint      `json:"source_video_file_id,omitempty"`
-	SourceVideoFile   *VideoFile `gorm:"foreignKey:SourceVideoFileID" json:"source_video_file,omitempty"`
+	SourceVideoFileID    *uint             `json:"source_video_file_id,omitempty"`
+	SourceVideoFile      *VideoFile        `gorm:"foreignKey:SourceVideoFileID" json:"source_video_file,omitempty"`
+	TranscriptionTaskID  *uint             `json:"transcription_task_id,omitempty"`
+	TranscriptionTask    *TranscriptionTask `gorm:"foreignKey:TranscriptionTaskID" json:"transcription_task,omitempty"`
 }
 
 // GenerateFromVideo 从视频生成PPT（占位符实现）
