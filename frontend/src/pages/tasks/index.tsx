@@ -26,10 +26,12 @@ import {
   CloseCircleOutlined,
   ReloadOutlined,
   ClearOutlined,
+  CameraOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import * as taskApi from '../../api/task'
 import * as huaweiConfigApi from '../../api/huawei-config'
+import { apiRequest } from '../../api/apiClient'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
 import {
@@ -101,6 +103,8 @@ interface TaskActionsProps {
   onRetry: (id: number) => void
   onDelete: (id: number) => void
   onEdit: (task: VideoRecordingTask) => void
+  onGenerateSnapshot: (id: number) => void
+  snapshotGenerating: Set<number>
 }
 
 const TaskActions = memo(function TaskActions({
@@ -111,11 +115,26 @@ const TaskActions = memo(function TaskActions({
   onRetry,
   onDelete,
   onEdit,
+  onGenerateSnapshot,
+  snapshotGenerating,
 }: TaskActionsProps) {
   return (
     <Space size="small">
       {canPreviewTask(record.status) && (
         <HLSPreview taskId={record.id} taskName={record.name} status={record.status} />
+      )}
+      {record.status === 'recording' && (
+        <PermissionGuard permission={PERMISSIONS.RECORDING_SNAPSHOT}>
+          <Button
+            type="link"
+            size="small"
+            icon={<CameraOutlined />}
+            loading={snapshotGenerating.has(record.id)}
+            onClick={() => onGenerateSnapshot(record.id)}
+          >
+            {snapshotGenerating.has(record.id) ? '生成中...' : '生成MP4快照'}
+          </Button>
+        </PermissionGuard>
       )}
       <PermissionGuard permission={PERMISSIONS.TASK_START}>
         {canStartTask(record.status) && (
@@ -178,6 +197,9 @@ export default function TaskManagement() {
   // 行选择状态
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [batchDeleteLoading, setBatchDeleteLoading] = useState(false)
+
+  // 快照生成状态
+  const [snapshotGenerating, setSnapshotGenerating] = useState<Set<number>>(new Set())
 
   // 查询参数
   const [params, setParams] = useState<TaskListParams>({
@@ -432,6 +454,28 @@ export default function TaskManagement() {
     }
   }, [loadTasks])
 
+  // 生成MP4快照
+  const handleGenerateSnapshot = useCallback(async (id: number) => {
+    setSnapshotGenerating(prev => new Set(prev).add(id))
+    try {
+      const result = await apiRequest<{ snapshot_file_id: number; file_name: string }>(
+        `/api/v1/tasks/${id}/snapshot`,
+        { method: 'POST' }
+      )
+      if (result.data) {
+        message.success(`快照已生成：${result.data.file_name}`)
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '生成快照失败')
+    } finally {
+      setSnapshotGenerating(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }, [])
+
   // 批量删除任务
   const handleBatchDelete = useCallback(async () => {
     if (selectedRowKeys.length === 0) {
@@ -537,9 +581,11 @@ export default function TaskManagement() {
         onRetry={handleRetry}
         onDelete={handleDelete}
         onEdit={openModal}
+        onGenerateSnapshot={handleGenerateSnapshot}
+        snapshotGenerating={snapshotGenerating}
       />
     )
-  }, [handleStart, handleStop, handleCancel, handleRetry, handleDelete, openModal])
+  }, [handleStart, handleStop, handleCancel, handleRetry, handleDelete, openModal, handleGenerateSnapshot, snapshotGenerating])
 
   // 渲染配置类型标签
   const renderConfigTypeTag = useCallback((config: HuaweiConfig): React.ReactElement => {
