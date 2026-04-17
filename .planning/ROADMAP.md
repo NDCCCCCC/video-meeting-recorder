@@ -82,7 +82,11 @@ Plans:
 6. User can select specific slide pages from multiple PPT results and merge them into a final PPT file
 7. User can view transcription results in a dedicated page showing text content, PPT preview, and actions (download/retry/merge)
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 03-01-PLAN.md — Backend: PPTFile model extension, Python slide extraction/merge scripts, Go services (SlideExtractor, SlideCacheService, PPTMergeService), PPThandler API endpoints
+- [x] 03-02-PLAN.md — Frontend: PPT preview component, gallery strip, merge selection bar, result detail page, file list integration
 
 **UI hint**: yes
 
@@ -115,10 +119,10 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Video Splitting | 5/5 | Executed | 2026-04-17 |
-| 2. Local Transcription | 0/4 | Planned | - |
-| 3. PPT Management | 0/3 | Not started | - |
+| 2. Local Transcription | 4/4 | Planned | 2026-04-17 |
+| 3. PPT Management | 2/2 | Planned | 2026-04-17 |
 | 4. Cloud Services | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-04-17*
-*Last updated: 2026-04-17 after phase planning for Phase 2*
+*Last updated: 2026-04-17 after phase planning for Phase 3*
