@@ -27,9 +27,11 @@ import {
   VideoCameraOutlined,
   EyeOutlined,
   ScanOutlined,
+  ScissorsOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
+import { useNavigate } from 'react-router-dom'
 import * as videoFileApi from '../../api/video-file'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
@@ -70,6 +72,7 @@ const formatDuration = (seconds: number): string => {
 }
 
 export default function FileManagement() {
+  const navigate = useNavigate()
   const [files, setFiles] = useState<VideoFile[]>([])
   const [stats, setStats] = useState<VideoFileStats | null>(null)
   const [total, setTotal] = useState(0)
@@ -87,8 +90,8 @@ export default function FileManagement() {
   })
 
   // 加载文件列表
-  const loadFiles = useCallback(async () => {
-    setLoading(true)
+  const loadFiles = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
     try {
       const response = await videoFileApi.getVideoFileList(params)
       if (response.data) {
@@ -96,9 +99,11 @@ export default function FileManagement() {
         setTotal(response.data.total)
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '加载文件列表失败')
+      if (showLoading) {
+        message.error(error instanceof Error ? error.message : '加载文件列表失败')
+      }
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }, [params])
 
@@ -118,6 +123,14 @@ export default function FileManagement() {
   useEffect(() => {
     Promise.all([loadFiles(), loadStats()])
   }, [loadFiles, loadStats])
+
+  // 自动刷新文件列表 (SCAN-02)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadFiles(false) // silent refresh
+    }, 5000) // 5 seconds
+    return () => clearInterval(interval)
+  }, [loadFiles])
 
   // 搜索处理
   const handleSearch = useCallback((value: string) => {
@@ -238,6 +251,18 @@ export default function FileManagement() {
       >
         详情
       </Button>
+      {record.format === 'mp4' && (
+        <PermissionGuard permission={PERMISSIONS.FILE_SPLIT}>
+          <Tooltip title="视频分割">
+            <Button
+              type="link"
+              size="small"
+              icon={<ScissorsOutlined />}
+              onClick={() => navigate(`/split/${record.id}`)}
+            />
+          </Tooltip>
+        </PermissionGuard>
+      )}
       <Button
         type="link"
         size="small"
@@ -265,7 +290,7 @@ export default function FileManagement() {
         </Popconfirm>
       </PermissionGuard>
     </Space>
-  ), [viewDetail, handleDownload, handleDelete])
+  ), [viewDetail, handleDownload, handleDelete, navigate])
 
   // 表格列定义
   const columns: ColumnsType<VideoFile> = useMemo(() => [
@@ -309,6 +334,34 @@ export default function FileManagement() {
       width: 100,
     },
     {
+      title: '来源',
+      dataIndex: 'source_type',
+      width: 120,
+      render: (sourceType: string, record: VideoFile) => {
+        const SOURCE_CONFIG: Record<string, { label: string; color: string }> = {
+          recording: { label: '录制', color: 'blue' },
+          snapshot: { label: '快照', color: 'green' },
+          split: { label: '分割', color: 'orange' },
+        }
+        const config = SOURCE_CONFIG[sourceType] || SOURCE_CONFIG.recording
+        return (
+          <Space direction="vertical" size={2}>
+            <Tag color={config.color}>{config.label}</Tag>
+            {record.parent_id && (
+              <Button
+                type="link"
+                size="small"
+                style={{ padding: 0, fontSize: 12 }}
+                onClick={() => navigate(`/files`)}
+              >
+                查看原视频
+              </Button>
+            )}
+          </Space>
+        )
+      },
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       width: 100,
@@ -327,7 +380,7 @@ export default function FileManagement() {
       fixed: 'right' as const,
       render: renderActions,
     },
-  ], [renderStatus, viewDetail, handleDownload, handleDelete])
+  ], [renderStatus, viewDetail, handleDownload, handleDelete, navigate])
 
   const isReady = viewingFile?.status === 'ready'
 
