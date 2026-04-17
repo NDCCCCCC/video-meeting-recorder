@@ -59,6 +59,8 @@ type MinimalApp struct {
 	snapshotService      *services.SnapshotService
 	transcriptionService *services.TranscriptionService
 	rateLimiter          *services.RateLimiter
+	slideCacheService    *services.SlideCacheService
+	pptMergeService      *services.PPTMergeService
 }
 
 // Handlers 处理器集合
@@ -76,6 +78,7 @@ type Handlers struct {
 	APIKey        *handlers.APIKeyHandler
 	Split         *handlers.SplitHandler
 	Transcription *handlers.TranscriptionHandler
+	PPT           *handlers.PPThandler
 }
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
@@ -506,6 +509,12 @@ func (a *MinimalApp) initHandlers() error {
 		a.videoFileService,
 	)
 
+	// PPT管理服务
+	slideExtractor := services.NewSlideExtractor(a.logger)
+	a.slideCacheService = services.NewSlideCacheService(a.db, a.logger, a.config, slideExtractor)
+	a.pptMergeService = services.NewPPTMergeService(a.db, a.logger, a.config, a.slideCacheService)
+	pptFileService := services.NewPPTFileService(a.db, a.logger, a.config)
+
 	// 华为管理器（使用数据库配置动态创建客户端）
 	dbAdapter := &huaweiDBAdapter{db: a.db}
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
@@ -526,6 +535,7 @@ func (a *MinimalApp) initHandlers() error {
 		APIKey:       apikeyHandler,
 		Split:        handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
 		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, a.logger),
+		PPT:          handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.logger),
 	}
 
 	return nil
@@ -681,6 +691,17 @@ func (a *MinimalApp) registerRoutes() error {
 		videos.GET("/:id/segments", a.handlers.Split.GetSegments)          // 获取分割段落列表
 		videos.POST("/:id/transcribe", a.handlers.Transcription.SubmitTranscription)    // 提交转录任务
 		videos.GET("/:id/transcription-status", a.handlers.Transcription.GetTranscriptionStatus) // 获取转录状态
+		videos.GET("/:id/ppts", a.handlers.PPT.GetPptsByVideo)             // 获取视频的所有PPT结果
+	}
+
+	// PPT管理
+	ppts := api.Group("/ppts")
+	{
+		ppts.GET("/:id/slides", a.handlers.PPT.GetSlides)                         // 获取幻灯片图片列表
+		ppts.GET("/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage) // 服务幻灯片图片
+		ppts.POST("/merge", a.handlers.PPT.MergeSlides)                           // 合并幻灯片
+		ppts.GET("/:id/download", a.handlers.PPT.DownloadPPT)                      // 下载PPT文件
+		ppts.DELETE("/:id", a.handlers.PPT.DeletePPT)                              // 删除PPT
 	}
 
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
