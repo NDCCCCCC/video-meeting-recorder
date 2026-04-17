@@ -116,7 +116,20 @@ def merge_slides(output_path, slide_spec):
                     source_slide = source_prs.slides[slide_idx]
 
                     # Create blank slide in output (layout 6 is blank)
-                    blank_layout = output_prs.slide_layouts[6]
+                    # Safely get blank layout with bounds checking
+                    if len(output_prs.slide_layouts) < 7:
+                        # Fallback to first available layout
+                        blank_layout = output_prs.slide_layouts[0] if output_prs.slide_layouts else None
+                    else:
+                        blank_layout = output_prs.slide_layouts[6]
+
+                    if blank_layout is None:
+                        result = {
+                            'success': False,
+                            'error': 'Unable to create slide: no layouts available in output presentation'
+                        }
+                        return False, result, 1
+
                     output_slide = output_prs.slides.add_slide(blank_layout)
 
                     # Copy picture shapes from source slide
