@@ -164,7 +164,7 @@ Declared values (must be multiples of 4):
 ```
 
 **Spacing:**
-- Page container padding: 20px (existing pattern)
+- Page container padding: 24px (lg spacing, existing pattern)
 - Section gaps: 24px (lg spacing)
 - Button bar margin-top: 16px (md spacing)
 
