@@ -62,6 +62,7 @@ type ListFilesRequest struct {
 	TaskID         *uint  `form:"task_id"`
 	Status         string `form:"status"`
 	Format         string `form:"format"`
+	SourceType     string `form:"source_type"`
 	StartDate      string `form:"start_date"`
 	EndDate        string `form:"end_date"`
 	UserID         uint   `form:"-"`
@@ -161,6 +162,10 @@ func (s *VideoFileService) applyFilters(query *gorm.DB, req *ListFilesRequest) {
 
 	if req.Format != "" {
 		query = query.Where("format = ?", req.Format)
+	}
+
+	if req.SourceType != "" {
+		query = query.Where("source_type = ?", req.SourceType)
 	}
 
 	// 数据范围过滤
@@ -888,6 +893,81 @@ func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt 
 	}
 
 	return s.createNewFile(filePath, taskID, recordedAt, format, createdBy)
+}
+
+// CreateSegmentFile 创建分割段文件记录
+func (s *VideoFileService) CreateSegmentFile(segmentPath string, parentVideoID *uint, sourceType string, createdBy uint, snapshotOffset ...float64) (*models.VideoFile, error) {
+	// 1. 检查文件是否已存在（重复检查）
+	existing, err := s.findExistingFile(segmentPath)
+	if err == nil && existing != nil {
+		s.logger.Warn("文件记录已存在", zap.String("path", segmentPath), zap.Uint("existing_id", existing.ID))
+		return existing, nil
+	}
+
+	// 2. 获取文件信息
+	fileInfo, err := os.Stat(segmentPath)
+	if err != nil {
+		return nil, fmt.Errorf("文件不存在: %w", err)
+	}
+
+	// 3. 提取元数据（使用现有方法）
+	metadata, err := s.extractVideoMetadata(segmentPath)
+	if err != nil {
+		s.logger.Warn("提取视频元数据失败，使用默认值", zap.Error(err))
+		metadata = s.getDefaultMetadata(segmentPath)
+	}
+
+	// 4. 生成文件名
+	fileName := filepath.Base(segmentPath)
+
+	// 5. 推断格式
+	format := s.inferFormat(segmentPath)
+
+	// 6. 确定快照偏移量
+	offset := 0.0
+	if len(snapshotOffset) > 0 {
+		offset = snapshotOffset[0]
+	}
+
+	// 7. 创建 VideoFile 记录
+	videoFile := &models.VideoFile{
+		FileName:       fileName,
+		FilePath:       segmentPath,
+		FileSize:       fileInfo.Size(),
+		Duration:       int(metadata.Duration),
+		Format:         format,
+		Resolution:     metadata.Resolution,
+		Bitrate:        metadata.Bitrate,
+		Codec:          metadata.Codec,
+		ParentID:       parentVideoID,
+		SourceType:     sourceType,
+		SnapshotOffset: offset,
+		CreatedBy:      createdBy,
+		Status:         models.FileStatusReady,
+		RecordedAt:     nil,
+	}
+
+	// 8. 从父视频继承 RecordedAt
+	if parentVideoID != nil {
+		var parent models.VideoFile
+		if err := s.db.First(&parent, *parentVideoID).Error; err == nil {
+			videoFile.RecordedAt = parent.RecordedAt
+		}
+	}
+
+	// 9. 保存到数据库
+	if err := s.createWithDuplicateCheck(videoFile); err != nil {
+		return nil, fmt.Errorf("创建文件记录失败: %w", err)
+	}
+
+	return videoFile, nil
+}
+
+// GetSegmentsByParentID 根据父视频ID获取所有分割段
+func (s *VideoFileService) GetSegmentsByParentID(parentID uint) ([]models.VideoFile, error) {
+	var segments []models.VideoFile
+	err := s.db.Where("parent_id = ?", parentID).Order("id ASC").Find(&segments).Error
+	return segments, err
 }
 
 // fileInfoWithPath 包含文件路径和推断的任务ID
