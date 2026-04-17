@@ -30,6 +30,7 @@ Requirements covered: SPLIT-01 through SPLIT-05, SNAP-01, SNAP-02, SCAN-01, SCAN
 - **D-08:** "生成MP4快照" button appears inline on the active recording task row in the task list page
 - **D-09:** After clicking, button text changes to "生成中..." and the system uses the existing notification system to alert on completion
 - **D-10:** Snapshot MP4 file automatically appears in the file management list via service callback (same auto-scan mechanism as other MP4 generation)
+- **D-15:** Snapshot is incremental — each new snapshot starts from the end of the previous snapshot, not from the beginning. The system tracks the last snapshot's offset and uses FFmpeg `-ss` to seek past already-captured content. First snapshot captures from 0s; subsequent snapshots capture only the new portion since the last snapshot
 
 ### Segment Management & Auto Scan
 - **D-11:** Split segments are stored as independent VideoFile records with a `parent_id` field linking back to the source video
