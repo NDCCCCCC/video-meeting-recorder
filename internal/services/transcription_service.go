@@ -96,6 +96,7 @@ func (s *TranscriptionService) Start() error {
 // Stop stops the worker pool
 func (s *TranscriptionService) Stop() {
 	s.cancel()
+	close(s.taskQueue) // Signal workers to exit by closing channel
 	s.wg.Wait()
 }
 
@@ -177,7 +178,12 @@ func (s *TranscriptionService) worker(id int) {
 	defer s.wg.Done()
 	for {
 		select {
-		case task := <-s.taskQueue:
+		case task, ok := <-s.taskQueue:
+			if !ok {
+				// Channel closed, exit worker gracefully
+				s.logger.Info("Worker exiting", zap.Int("worker_id", id))
+				return
+			}
 			s.processTranscription(task)
 		case <-s.ctx.Done():
 			return
