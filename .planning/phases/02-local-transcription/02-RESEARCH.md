@@ -4,9 +4,11 @@
 
 Original plan specified unidoc/unioffice/v2, but discovered it requires a commercial license for PPTX file generation (FREE_TIER_LIMITS error in unioffice). User decided: **Switch to Muprprpr/Go-pptx (MIT license, free).**
 
-**CRITICAL DISCOVERY:** Muprprpr/Go-pptx is NOT a library - it's a command-line program that imports unioffice/v2 as a dependency. When we added it, go.mod showed `github.com/unidoc/unioffice/v2` as a transitive dependency, and tests failed with "unioffice license required" error.
+**CRITICAL DISCOVERY 1:** Muprprpr/Go-pptx is NOT a library - it's a command-line program that imports unioffice/v2 as a dependency. When we added it, go.mod showed `github.com/unidoc/unioffice/v2` as a transitive dependency, and tests failed with "unioffice license required" error.
 
-**NEW DECISION:** Switch to SiliconCatalyst/officeforge (MIT license, pure Go, zero external dependencies).
+**CRITICAL DISCOVERY 2:** SiliconCatalyst/officeforge only supports **template-based** PPTX generation (keyword replacement in existing PPTX files), NOT creating PPTX files from scratch with images. This won't work for our use case.
+
+**NEW DECISION:** Use Python's python-pptx library (BSD license, mature, free) called from Go via os/exec. This is a pragmatic solution that gives us full PPTX generation capabilities without licensing issues.
 
 ## Library Comparison
 
@@ -16,15 +18,6 @@ Original plan specified unidoc/unioffice/v2, but discovered it requires a commer
 
 **License:** Commercial (FREE_TIER_LIMITS on save operations)
 
-**Pros:**
-- Mature, well-documented
-- Active community
-- Comprehensive Office suite support
-
-**Cons:**
-- **Commercial license required for PPTX generation** (dealbreaker)
-- Free tier has limitations
-
 **Verdict:** REJECTED due to licensing costs
 
 ---
@@ -33,154 +26,294 @@ Original plan specified unidoc/unioffice/v2, but discovered it requires a commer
 
 **Repository:** github.com/Muprprpr/Go-pptx
 
-**License:** MIT License (free, no restrictions)
+**License:** MIT License
 
-**CRITICAL ISSUE:** This is NOT an importable Go library - it's a command-line program. When we added it with `go get`, Go's module system downloaded it, but it imports `github.com/unidoc/unioffice/v2` as a dependency. Tests immediately failed with:
-
-```
-Unlicensed version of UniOffice
-- Get a trial license on https://unidoc.io
-Error: failed to save PPTX file: unioffice license required
-```
+**CRITICAL ISSUE:** This is NOT an importable Go library - it's a command-line program that imports `github.com/unidoc/unioffice/v2` as a dependency. Tests failed with "unioffice license required" error.
 
 **Verdict:** REJECTED - Same licensing problem as unioffice (it wraps unioffice)
 
 ---
 
-### SiliconCatalyst/officeforge (SELECTED - FINAL CHOICE)
+### SiliconCatalyst/officeforge (REJECTED - WRONG CAPABILITIES)
 
 **Repository:** github.com/SiliconCatalyst/officeforge
 
-**License:** MIT License (free, no restrictions)
+**License:** MIT License
 
-**Documentation:** https://github.com/SiliconCatalyst/officeforge
+**API Functions Available:**
+- `ProcessPptxSingle(inputPath, outputPath, keyword, replacement)` - Replace one keyword
+- `ProcessPptxMulti(inputPath, outputPath, replacements map[string]string)` - Replace multiple keywords
+- `ProcessPptxMultipleRecords(...)` - Batch processing with templates
+
+**CRITICAL LIMITATION:** This library only supports **template-based** PPTX generation. You provide an existing PPTX template with placeholders like `{{NAME}}`, and it replaces them. It does NOT support:
+- Creating PPTX files from scratch
+- Adding images to slides
+- Positioning/sizing images
+- Creating slides dynamically
+
+**Why it doesn't work:** Our use case is: take N image files → create N slides (one per image) with full-frame layout. This requires creating PPTX from scratch, not template replacement.
+
+**Verdict:** REJECTED - Does not support our required functionality
+
+---
+
+### python-pptx (SELECTED - FINAL CHOICE)
+
+**Repository:** https://github.com/scanny/python-pptx
+
+**License:** BSD License (free, no restrictions)
+
+**Documentation:** https://python-pptx.readthedocs.io/
 
 **Key Features:**
-- Pure Go library for generating Word, Excel, and PowerPoint documents
-- Zero external dependencies (built on standard library)
-- Active development (last updated: 2026-01-23)
-- Includes `pptx` subpackage for PowerPoint generation
-- MIT licensed with no commercial restrictions
+- Mature, widely-used Python library for PPTX generation
+- Full support for creating PPTX files from scratch
+- Add images to slides with precise positioning and sizing
+- Set slide size (16:9, 4:3, custom)
+- No licensing restrictions
+- Active development and community
 
-**Repository Structure:**
-```
-officeforge/
-├── pptx/           # PowerPoint generation
-├── docx/           # Word generation
-├── examples/       # Usage examples
-├── go.mod          # Module: github.com/siliconcatalyst/officeforge
-└── README.md
-```
+**Integration Approach:** Call Python script from Go using `os/exec`
 
 **Pros:**
-- ✅ MIT license - no cost, no restrictions
-- ✅ Pure Go - no external dependencies
-- ✅ Zero licensing issues
-- ✅ Can generate PPTX files from scratch
-- ✅ Support for images, text, shapes
-- ✅ Standard library only - maximum portability
+- ✅ BSD license - no cost, no restrictions
+- ✅ Mature, well-documented (8.5k stars on GitHub)
+- ✅ Full PPTX generation from scratch
+- ✅ Add images with precise positioning/sizing
+- ✅ Supports our exact use case
+- ✅ No licensing issues
 
 **Cons:**
-- Newer library (2 stars, limited adoption)
-- Less mature than unioffice
-- Documentation may be limited
-- API may differ significantly from unioffice
+- ⚠️ Requires Python runtime on server
+- ⚠️ Cross-language integration (Go → Python)
+- ⚠️ Additional dependency to manage
 
-**Verdict:** SELECTED - Only viable free option that actually works
+**Verdict:** SELECTED - Only viable free option that actually supports our requirements
 
-## Pattern 3: officeforge PPTX Usage for Full-Frame 16:9 Image Slides
+## Proposed Solution: Python Integration
 
-### Key API Concepts
+### Architecture
 
-**Note:** As of this research, we need to explore the officeforge API to understand:
-1. How to create a new presentation
-2. How to add slides
-3. How to add images to slides
-4. How to position and size images (full-frame 16:9)
-5. How to save the PPTX file
-
-**Estimated API Pattern** (to be verified during implementation):
-```go
-import "github.com/siliconcatalyst/officeforge/pptx"
-
-// Create new presentation
-ppt := pptx.NewPresentation()
-
-// Add slide
-slide := ppt.AddSlide()
-
-// Add image to slide
-// officeforge likely uses standard units (pixels/inches) or EMU
-err := slide.AddImage("path/to/image.jpg", x, y, width, height)
+```
+Go Service (PPTXGenerator)
+    ↓
+    | os/exec.Command
+    ↓
+Python Script (create_pptx.py)
+    ↓
+    | python-pptx library
+    ↓
+PPTX File
 ```
 
-### Implementation Approach
+### Python Script Implementation
 
-Since officeforge is a newer library with limited documentation, the implementation will follow this discovery process:
+**File:** `scripts/create_pptx.py`
 
-1. **Add dependency:** `go get github.com/siliconcatalyst/officeforge`
-2. **Explore API:** Check the `pptx` package structure and available functions
-3. **Review examples:** Look at the `examples/` directory for usage patterns
-4. **Implement PPTXGenerator:** Adapt our existing structure to use officeforge API
-5. **Test generation:** Verify PPTX files are valid and open in PowerPoint/LibreOffice
+```python
+#!/usr/bin/env python3
+import sys
+import json
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.shapes import MSO_SHAPE
 
-### Key Differences from unioffice
+def create_pptx_from_images(image_paths, output_path):
+    """
+    Create a PowerPoint file from a list of images.
 
-| Aspect | unioffice | officeforge |
-|--------|-----------|-------------|
-| **License** | Commercial (FREE_TIER_LIMITS) | MIT (free) |
-| **Dependencies** | Multiple external deps | Zero external deps (pure Go) |
-| **API Maturity** | Mature, well-documented | Newer, limited docs |
-| **Unit System** | measurement.Inch | TBD (likely pixels or EMU) |
-| **Image Support** | Full-featured | TBD (basic support expected) |
+    Args:
+        image_paths: List of image file paths
+        output_path: Output PPTX file path
 
-## Migration Notes
+    Returns:
+        JSON string with result: {"success": true, "page_count": N}
+    """
+    try:
+        # Create presentation
+        prs = Presentation()
+        prs.slide_width = Inches(10)
+        prs.slide_height = Inches(5.625)  # 16:9 aspect ratio
 
-**From unioffice to officeforge:**
+        page_count = 0
 
-1. **Replace imports:**
-   - Remove: `github.com/unidoc/unioffice/v2/presentation`
-   - Remove: `github.com/unidoc/unioffice/v2/measurement`
-   - Remove: `github.com/unidoc/unioffice/v2/common`
-   - Add: `github.com/siliconcatalyst/officeforge/pptx`
+        # Add each image as a slide
+        for img_path in image_paths:
+            try:
+                # Add blank slide
+                blank_slide_layout = prs.slide_layouts[6]  # Blank layout
+                slide = prs.slides.add_slide(blank_slide_layout)
 
-2. **API exploration required:**
-   - Check if officeforge uses EMU or different unit system
-   - Verify image addition API differs from unioffice's two-step process
-   - Confirm slide size customization is supported
+                # Add image to slide (full-frame, no margins)
+                slide.shapes.add_picture(img_path, 0, 0, width=prs.slide_width, height=prs.slide_height)
 
-3. **Error handling:**
-   - officeforge likely returns standard Go errors
-   - No licensing errors to handle
+                page_count += 1
+            except Exception as e:
+                # Log error but continue with other images
+                sys.stderr.write(f"Error adding image {img_path}: {str(e)}\n")
+                continue
 
-4. **Testing:**
-   - Must verify generated PPTX files open correctly in PowerPoint/LibreOffice
-   - Test with actual image files to ensure full-frame layout works
+        # Save presentation
+        prs.save(output_path)
+
+        # Return success result
+        result = {
+            "success": True,
+            "page_count": page_count,
+            "output_path": output_path
+        }
+        print(json.dumps(result))
+        return 0
+
+    except Exception as e:
+        # Return error result
+        result = {
+            "success": False,
+            "error": str(e)
+        }
+        print(json.dumps(result), file=sys.stderr)
+        return 1
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: create_pptx.py <output_path> <image1> <image2> ...", file=sys.stderr)
+        sys.exit(1)
+
+    output_path = sys.argv[1]
+    image_paths = sys.argv[2:]
+
+    sys.exit(create_pptx_from_images(image_paths, output_path))
+```
+
+### Go Service Implementation
+
+```go
+package services
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "os/exec"
+    "path/filepath"
+
+    "go.uber.org/zap"
+)
+
+type PPTXGenerator struct {
+    logger        *zap.Logger
+    pythonScript  string  // Path to create_pptx.py
+}
+
+func NewPPTXGenerator(logger *zap.Logger) *PPTXGenerator {
+    return &PPTXGenerator{
+        logger:       logger,
+        pythonScript: "scripts/create_pptx.py",  // Relative to project root
+    }
+}
+
+func (g *PPTXGenerator) GeneratePPTX(ctx context.Context, framePaths []string, outputPath string) (int, error) {
+    if len(framePaths) == 0 {
+        return 0, fmt.Errorf("frame paths cannot be empty")
+    }
+
+    // Prevent DoS (T-02-06)
+    if len(framePaths) > MAX_SLIDES {
+        return 0, fmt.Errorf("number of frames (%d) exceeds maximum allowed (%d)", len(framePaths), MAX_SLIDES)
+    }
+
+    // Sanitize paths (T-02-05)
+    outputPath = filepath.Clean(outputPath)
+
+    // Prepare command arguments
+    args := append([]string{g.pythonScript, outputPath}, framePaths...)
+
+    // Execute Python script
+    cmd := exec.CommandContext(ctx, "python3", args...)
+    output, err := cmd.CombinedOutput()
+
+    if err != nil {
+        g.logger.Error("Python script failed",
+            zap.String("output", string(output)),
+            zap.Error(err))
+        return 0, fmt.Errorf("failed to generate PPTX: %w", err)
+    }
+
+    // Parse result
+    var result struct {
+        Success    bool   `json:"success"`
+        PageCount  int    `json:"page_count"`
+        OutputPath string `json:"output_path"`
+        Error      string `json:"error,omitempty"`
+    }
+
+    if err := json.Unmarshal(output, &result); err != nil {
+        return 0, fmt.Errorf("failed to parse Python output: %w", err)
+    }
+
+    if !result.Success {
+        return 0, fmt.Errorf("PPTX generation failed: %s", result.Error)
+    }
+
+    g.logger.Info("PPTX generated successfully",
+        zap.String("output", outputPath),
+        zap.Int("page_count", result.PageCount))
+
+    return result.PageCount, nil
+}
+```
+
+### Deployment Requirements
+
+**Server Dependencies:**
+- Python 3.7+
+- pip install python-pptx
+
+**Installation:**
+```bash
+# Install python-pptx
+pip3 install python-pptx
+
+# Or add to requirements.txt
+echo "python-pptx>=0.6.21" >> requirements.txt
+pip3 install -r requirements.txt
+```
+
+**Verification:**
+```bash
+# Test Python script
+python3 scripts/create_pptx.py test.pptx image1.jpg image2.jpg
+```
 
 ## Threat Model Considerations
 
 **T-02-05: Path Traversal**
 - Validate output path is within configured storage directory
 - Use filepath.Clean to prevent path traversal attacks
-- Same mitigation as unioffice approach
+- Python script also sanitizes paths
 
 **T-02-06: Denial of Service**
 - Limit maximum slides (cap at 500) to prevent OOM
-- Same mitigation as unioffice approach
+- Context timeout on command execution
+
+**Additional Security:**
+- Validate Python script path is within project directory
+- Use fixed Python script path (not user-controllable)
+- Timeout command execution with context
 
 ## Implementation Plan
 
-1. Remove Muprprpr/Go-pptx dependency from go.mod
-2. Add SiliconCatalyst/officeforge dependency
-3. Explore officeforge/pptx API to understand usage
-4. Rewrite pptx_generator.go using officeforge API
-5. Update tests if needed to match new API
+1. Remove officeforge dependency from go.mod
+2. Install python-pptx: `pip3 install python-pptx`
+3. Create `scripts/create_pptx.py` Python script
+4. Rewrite `internal/services/pptx_generator.go` to use os/exec
+5. Update tests to mock or integrate actual Python execution
 6. Verify tests pass and generate valid PPTX files
-7. Create SUMMARY.md documenting the migration
+7. Create SUMMARY.md documenting the Python integration
 
 ## References
 
-- officeforge Repository: https://github.com/SiliconCatalyst/officeforge
-- officeforge License: MIT (https://github.com/SiliconCatalyst/officeforge/blob/main/LICENSE)
+- python-pptx Documentation: https://python-pptx.readthedocs.io/
+- python-pptx GitHub: https://github.com/scanny/python-pptx
+- python-pptx License: BSD (https://github.com/scanny/python-pptx/blob/main/LICENSE)
 - 16:9 Aspect Ratio: 10" x 5.625" (standard widescreen)
-- EMU Documentation: https://docs.microsoft.com/en-us/windows/win32/vss/english-metric-units
