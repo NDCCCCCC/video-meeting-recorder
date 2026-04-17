@@ -10,11 +10,13 @@ export const PERMISSIONS = {
   TASK_DELETE: 'tasks:delete',
   TASK_START: 'tasks:start',
   TASK_STOP: 'tasks:stop',
+  RECORDING_SNAPSHOT: 'recording:snapshot',
 
   // 视频文件
   FILE_VIEW: 'files:view',
   FILE_DELETE: 'files:delete',
   FILE_SCAN: 'files:scan',
+  FILE_SPLIT: 'files:split',
 
   // 审计日志
   AUDIT_VIEW: 'audit:view',
