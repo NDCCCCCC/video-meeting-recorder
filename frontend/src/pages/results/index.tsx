@@ -46,6 +46,12 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
 }
 
+// 清理文件名中的危险字符
+const sanitizeFileName = (name: string): string => {
+  // 移除路径分隔符和特殊字符，防止路径注入
+  return name.replace(/[\/\\:*?"<>|]/g, '_').substring(0, 100)
+}
+
 export default function ResultDetailPage() {
   const navigate = useNavigate()
   const { videoFileId } = useParams<{ videoFileId: string }>()
