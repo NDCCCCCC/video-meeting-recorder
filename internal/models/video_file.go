@@ -19,6 +19,10 @@ type VideoFile struct {
 	Codec         string              `gorm:"type:varchar(50)" json:"codec"`
 	TaskID        *uint               `gorm:"index" json:"task_id,omitempty"`                                                     // 关联的录制任务ID
 	Task          *VideoRecordingTask `gorm:"foreignKey:TaskID" json:"task,omitempty"`                                            // 关联的录制任务
+	ParentID      *uint               `gorm:"index" json:"parent_id,omitempty"`                                                   // 父视频ID（用于分割段、快照）
+	SourceType    string              `gorm:"type:varchar(20);default:'recording'" json:"source_type"`                           // recording, snapshot, split
+	SnapshotOffset float64            `gorm:"default:0" json:"snapshot_offset"`                                                  // 增量快照偏移量（D-15）
+	Parent        *VideoFile          `gorm:"foreignKey:ParentID" json:"parent,omitempty"`                                       // 父视频
 	CreatedBy     uint                `gorm:"not null" json:"created_by"`                                                         // 创建者ID
 	Creator       *User               `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`                                      // 创建者
 	Status        string              `gorm:"type:varchar(20);default:'ready';index:idx_status_created,priority:1" json:"status"` // ready, processing, error
@@ -32,6 +36,13 @@ const (
 	FileStatusProcessing = "processing"
 	FileStatusError      = "error"
 	FileStatusDeleting   = "deleting"
+)
+
+// 视频来源类型常量
+const (
+	SourceTypeRecording = "recording"
+	SourceTypeSnapshot  = "snapshot"
+	SourceTypeSplit     = "split"
 )
 
 // GetSizeMB 获取文件大小（MB）
