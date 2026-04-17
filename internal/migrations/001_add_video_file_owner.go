@@ -141,6 +141,54 @@ func (m *AddStreamConfigMigration) Down(db *gorm.DB) error {
 	return nil
 }
 
+// AddSegmentFieldsMigration 添加分割段相关字段
+type AddSegmentFieldsMigration struct{}
+
+func (m *AddSegmentFieldsMigration) Name() string {
+	return "003_add_segment_fields"
+}
+
+func (m *AddSegmentFieldsMigration) Up(db *gorm.DB) error {
+	// 检查并添加 parent_id 列
+	var columnName string
+	checkErr := db.Raw("SELECT name FROM pragma_table_info('video_files') WHERE name = 'parent_id'").Scan(&columnName).Error
+	if checkErr != nil || columnName == "" {
+		addResult := db.Exec("ALTER TABLE video_files ADD COLUMN parent_id INTEGER")
+		if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+			return addResult.Error
+		}
+	}
+
+	// 检查并添加 source_type 列
+	checkErr = db.Raw("SELECT name FROM pragma_table_info('video_files') WHERE name = 'source_type'").Scan(&columnName).Error
+	if checkErr != nil || columnName == "" {
+		addResult := db.Exec("ALTER TABLE video_files ADD COLUMN source_type VARCHAR(20) DEFAULT 'recording'")
+		if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+			return addResult.Error
+		}
+	}
+
+	// 检查并添加 snapshot_offset 列
+	checkErr = db.Raw("SELECT name FROM pragma_table_info('video_files') WHERE name = 'snapshot_offset'").Scan(&columnName).Error
+	if checkErr != nil || columnName == "" {
+		addResult := db.Exec("ALTER TABLE video_files ADD COLUMN snapshot_offset REAL DEFAULT 0")
+		if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+			return addResult.Error
+		}
+	}
+
+	// 创建索引（幂等操作）
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_video_files_parent_id ON video_files(parent_id)")
+
+	return nil
+}
+
+func (m *AddSegmentFieldsMigration) Down(db *gorm.DB) error {
+	// SQLite 不支持 DROP COLUMN，需要重建表
+	// 这里简单处理：不执行回滚
+	return nil
+}
+
 // isDuplicateColumnError 检查是否是重复列错误
 func isDuplicateColumnError(err error) bool {
 	if err == nil {
@@ -155,5 +203,6 @@ func GetRegisteredMigrations() []interface{} {
 	return []interface{}{
 		&AddVideoFileOwnerMigration{},
 		&AddStreamConfigMigration{},
+		&AddSegmentFieldsMigration{},
 	}
 }
