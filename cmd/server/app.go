@@ -207,11 +207,7 @@ func (a *MinimalApp) initDatabase() error {
 func (a *MinimalApp) migrateDatabase() error {
 	a.logger.Info("正在执行数据库迁移...")
 
-	// 执行自定义迁移（在 AutoMigrate 之前）
-	if err := a.runCustomMigrations(); err != nil {
-		return err
-	}
-
+	// 先执行 AutoMigrate 创建基础表结构
 	err := a.db.AutoMigrate(
 		&models.User{},
 		&models.Role{},
@@ -229,12 +225,18 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.AuditLog{},
 		&models.NotificationMessage{},
 		&models.UserNotificationSetting{},
+		&models.TranscriptionTask{},
 		&models.TranscriptionText{},
 		// 注意：TaskHuaweiConfig 表由自定义迁移管理，不在这里处理
 	)
 
 	if err != nil {
 		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	// 执行自定义迁移（在 AutoMigrate 之后，添加额外字段和索引）
+	if err := a.runCustomMigrations(); err != nil {
+		return err
 	}
 
 	a.logger.Info("数据库迁移完成")

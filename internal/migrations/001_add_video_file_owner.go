@@ -231,10 +231,7 @@ func (m *CreateTranscriptionTasksMigration) Up(db *gorm.DB) error {
 			created_by INTEGER NOT NULL DEFAULT 1,
 			created_at DATETIME,
 			updated_at DATETIME,
-			deleted_at DATETIME,
-			FOREIGN KEY (video_file_id) REFERENCES video_files(id),
-			FOREIGN KEY (result_ppt_file_id) REFERENCES ppt_files(id),
-			FOREIGN KEY (created_by) REFERENCES users(id)
+			deleted_at DATETIME
 		);
 	`).Error
 
