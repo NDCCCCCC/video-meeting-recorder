@@ -255,6 +255,49 @@ func (m *CreateTranscriptionTasksMigration) Down(db *gorm.DB) error {
 	return nil
 }
 
+// AddPPTCacheFieldsMigration 为 ppt_files 表添加缓存字段
+type AddPPTCacheFieldsMigration struct{}
+
+func (m *AddPPTCacheFieldsMigration) Name() string {
+	return "005_add_ppt_cache_fields"
+}
+
+func (m *AddPPTCacheFieldsMigration) Up(db *gorm.DB) error {
+	// 检查 slide_cache_path 列是否已存在
+	var columnName string
+	checkErr := db.Raw("SELECT name FROM pragma_table_info('ppt_files') WHERE name = 'slide_cache_path'").Scan(&columnName).Error
+
+	// 如果列已存在，跳过迁移
+	if checkErr == nil && columnName != "" {
+		return nil
+	}
+
+	// 添加 slide_cache_path 列
+	addResult := db.Exec("ALTER TABLE ppt_files ADD COLUMN slide_cache_path VARCHAR(500) DEFAULT ''")
+	if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+		return addResult.Error
+	}
+
+	// 添加 source_type 列
+	addResult = db.Exec("ALTER TABLE ppt_files ADD COLUMN source_type VARCHAR(20) DEFAULT 'transcription'")
+	if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+		return addResult.Error
+	}
+
+	// 添加 merged_from 列
+	addResult = db.Exec("ALTER TABLE ppt_files ADD COLUMN merged_from TEXT DEFAULT ''")
+	if addResult.Error != nil && !isDuplicateColumnError(addResult.Error) {
+		return addResult.Error
+	}
+
+	return nil
+}
+
+func (m *AddPPTCacheFieldsMigration) Down(db *gorm.DB) error {
+	// SQLite 不支持 DROP COLUMN
+	return nil
+}
+
 // GetRegisteredMigrations 返回已注册的迁移
 func GetRegisteredMigrations() []interface{} {
 	return []interface{}{
@@ -262,5 +305,6 @@ func GetRegisteredMigrations() []interface{} {
 		&AddStreamConfigMigration{},
 		&AddSegmentFieldsMigration{},
 		&CreateTranscriptionTasksMigration{},
+		&AddPPTCacheFieldsMigration{},
 	}
 }
