@@ -1147,3 +1147,89 @@ func (s *VideoFileService) extractTaskIDFromPath(path string) *uint {
 	}
 	return nil
 }
+
+// CreateSegmentFile 创建分割段或快照文件记录
+// 用于 SplittingService 和 SnapshotService 回调（D-13: service callback pattern）
+func (s *VideoFileService) CreateSegmentFile(segmentPath string, parentVideoID *uint, sourceType string, createdBy uint, snapshotOffset ...float64) (*models.VideoFile, error) {
+	if segmentPath == "" {
+		return nil, errors.New("创建分割段文件记录失败：文件路径为空")
+	}
+
+	if _, err := os.Stat(segmentPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("文件不存在: %s", segmentPath)
+	}
+
+	// 检查是否已存在
+	if existingFile, err := s.findExistingFile(segmentPath); err == nil {
+		return existingFile, nil
+	}
+
+	format := s.inferFormat(segmentPath)
+
+	// 提取元数据
+	metadata, err := s.extractVideoMetadata(segmentPath)
+	if err != nil {
+		s.logger.Warn("提取视频元数据失败",
+			zap.String("file", segmentPath),
+			zap.Error(err),
+		)
+		metadata = &videoMetadata{
+			Format:     format,
+			Duration:   0,
+			Resolution: "",
+			Bitrate:    0,
+			Codec:      "",
+		}
+	}
+
+	// 获取文件信息
+	fileInfo, _ := os.Stat(segmentPath)
+	fileSize := int64(0)
+	if fileInfo != nil {
+		fileSize = fileInfo.Size()
+	}
+
+	// 创建分割段文件记录
+	videoFile := &models.VideoFile{
+		FileName:        filepath.Base(segmentPath),
+		FilePath:        segmentPath,
+		FileSize:        fileSize,
+		Duration:        int(metadata.Duration),
+		Format:          format,
+		Resolution:      metadata.Resolution,
+		Bitrate:         metadata.Bitrate,
+		Codec:           metadata.Codec,
+		Status:          models.FileStatusReady,
+		ParentID:        parentVideoID,
+		SourceType:      sourceType,
+		CreatedBy:       createdBy,
+	}
+
+	// 设置 snapshot_offset（如果提供）
+	if len(snapshotOffset) > 0 {
+		videoFile.SnapshotOffset = snapshotOffset[0]
+	}
+
+	if err := s.createWithDuplicateCheck(videoFile); err != nil {
+		return nil, fmt.Errorf("创建分割段文件记录失败: %w", err)
+	}
+
+	s.logger.Info("已创建分割段文件记录",
+		zap.Uint("file_id", videoFile.ID),
+		zap.String("file_path", segmentPath),
+		zap.String("source_type", sourceType),
+	)
+
+	return videoFile, nil
+}
+
+// GetSegmentsByParentID 获取父视频的所有分割段或快照
+func (s *VideoFileService) GetSegmentsByParentID(parentID uint) ([]models.VideoFile, error) {
+	var segments []models.VideoFile
+	if err := s.db.Where("parent_id = ?", parentID).
+		Order("created_at ASC").
+		Find(&segments).Error; err != nil {
+		return nil, err
+	}
+	return segments, nil
+}
