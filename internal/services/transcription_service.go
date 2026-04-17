@@ -607,8 +607,8 @@ func (s *TranscriptionService) processCloudTranscription(task *models.Transcript
 	}()
 
 	// Mark completed (cloud transcription does NOT generate PPT -- text is the output)
-	s.updateProgress(task.VideoFileID, "", 0, 0, 100, "", &task.ID)
-	s.updateTaskStatus(task.ID, models.TranscriptionStatusCompleted, "", 0, &task.ID)
+	s.updateProgress(task.VideoFileID, "", 0, 0, 100, "", nil)
+	s.updateTaskStatus(task.ID, models.TranscriptionStatusCompleted, "", 0, nil)
 
 	s.logger.Info("云端转录完成",
 		zap.Uint("task_id", task.ID),
