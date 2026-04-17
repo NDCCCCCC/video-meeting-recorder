@@ -17,90 +17,6 @@ import (
 // 用于存储请求开始时间
 const requestStartTimeKey = "api_key_request_start_time"
 
-// APIKeyAuth API Key认证中间件
-func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		apiKey := c.GetHeader("X-API-Key")
-		if apiKey == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "未授权：缺少API Key"})
-			c.Abort()
-			return
-		}
-
-		// 获取客户端IP
-		clientIP := c.ClientIP()
-
-		// 查询API Key
-		var key models.APIKey
-		err := db.Preload("User").Preload("User.Role").Where("key = ?", apiKey).First(&key).Error
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "无效的API Key"})
-			c.Abort()
-			return
-		}
-
-		// 检查状态
-		if !key.IsActive || key.IsExpired() {
-			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "API Key已失效"})
-			c.Abort()
-			return
-		}
-
-		// 检查用户状态
-		if !key.User.IsActive {
-			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "用户已被禁用"})
-			c.Abort()
-			return
-		}
-
-		// 检查IP白名单
-		if !key.IsIPAllowed(clientIP) {
-			c.JSON(http.StatusForbidden, gin.H{"code": response.CodeForbidden, "message": "IP地址不在白名单中"})
-			c.Abort()
-			return
-		}
-
-		// 更新最后使用时间
-		now := time.Now()
-		key.LastUsedAt = &now
-		db.Save(&key)
-
-		// 将用户信息存入context
-		c.Set("user_id", key.UserID)
-		c.Set("username", key.User.Username)
-		c.Set("role_id", key.User.RoleID)
-		c.Set("api_key_id", key.ID)
-		c.Set("auth_type", "apikey")
-
-		// 设置作用域和权限继承信息
-		c.Set("scopes", key.GetScopeList())
-		c.Set("inherit_perms", key.InheritPerms)
-
-		// 如果继承权限，设置用户权限信息
-		if key.InheritPerms && key.User.Role != nil {
-			var permissions []string
-			for _, perm := range key.User.Role.Permissions {
-				permStr := perm.Resource + ":" + perm.Action
-				permissions = append(permissions, permStr)
-			}
-			c.Set("permissions", permissions)
-			c.Set("is_admin", key.User.Role.Name == models.RoleAdmin)
-		}
-
-		// 记录请求开始时间
-		c.Set(requestStartTimeKey, time.Now())
-
-		// 使用响应写入器来捕获状态码
-		writer := &responseWriter{ResponseWriter: c.Writer, status: http.StatusOK}
-		c.Writer = writer
-
-		c.Next()
-
-		// 请求完成后记录使用日志
-		logAPIKeyUsage(c, db, key.ID, key.UserID, writer.status, time.Since(getContextTime(c, requestStartTimeKey)))
-	}
-}
-
 // logAPIKeyUsage 记录 API Key 使用日志
 func logAPIKeyUsage(c *gin.Context, db *gorm.DB, apiKeyID, userID uint, statusCode int, duration time.Duration) {
 	// 在 goroutine 启动前提取所有数据，避免在请求完成后访问被回收的 Context
@@ -165,87 +81,97 @@ func getContextTime(c *gin.Context, key string) time.Time {
 
 // MultiAuth 支持多种认证方式（SM4 Token或API Key）
 func MultiAuth(db *gorm.DB, tokenService *auth.SM4TokenService) gin.HandlerFunc {
+	// 预创建 SM4 认证 handler，避免每次请求都分配新闭包
+	sm4Handler := SM4Auth(tokenService)
+
 	return func(c *gin.Context) {
 		// 先尝试API Key认证
-		apiKey := c.GetHeader("X-API-Key")
-		if apiKey != "" {
-			// 执行API Key认证逻辑
-			var key models.APIKey
-			clientIP := c.ClientIP()
-			err := db.Preload("User").Preload("User.Role").Where("key = ?", apiKey).First(&key).Error
-			if err == nil {
-				// 验证通过
-				if !key.IsActive || key.IsExpired() {
-					c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "API Key已失效"})
-					c.Abort()
-					return
-				}
-				if !key.User.IsActive {
-					c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "用户已被禁用"})
-					c.Abort()
-					return
-				}
-				if !key.IsIPAllowed(clientIP) {
-					c.JSON(http.StatusForbidden, gin.H{"code": response.CodeForbidden, "message": "IP地址不在白名单中"})
-					c.Abort()
-					return
-				}
-
-				// 更新最后使用时间
-				now := time.Now()
-				key.LastUsedAt = &now
-				db.Save(&key)
-
-				// 将用户信息存入context
-				c.Set("user_id", key.UserID)
-				c.Set("username", key.User.Username)
-				c.Set("role_id", key.User.RoleID)
-				c.Set("api_key_id", key.ID)
-				c.Set("auth_type", "apikey")
-
-				// 设置作用域和权限继承信息
-				c.Set("scopes", key.GetScopeList())
-				c.Set("inherit_perms", key.InheritPerms)
-
-				// 如果继承权限，设置用户权限信息
-				if key.InheritPerms && key.User.Role != nil {
-					var permissions []string
-					for _, perm := range key.User.Role.Permissions {
-						permStr := perm.Resource + ":" + perm.Action
-						permissions = append(permissions, permStr)
-					}
-					c.Set("permissions", permissions)
-					c.Set("is_admin", key.User.Role.Name == models.RoleAdmin)
-				}
-
-				// 记录请求开始时间
-				c.Set(requestStartTimeKey, time.Now())
-
-				// 使用响应写入器来捕获状态码
-				writer := &responseWriter{ResponseWriter: c.Writer, status: http.StatusOK}
-				c.Writer = writer
-
-				c.Next()
-
-				// 请求完成后记录使用日志
-				logAPIKeyUsage(c, db, key.ID, key.UserID, writer.status, time.Since(getContextTime(c, requestStartTimeKey)))
-				return
-			}
+		if handleAPIKeyAuth(c, db) {
+			return
 		}
 
-		// 再尝试SM4 Token认证
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" {
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) == 2 && parts[0] == "Bearer" {
-				SM4Auth(tokenService)(c)
-				return
-			}
+		// 再尝试SM4 Token认证（extractToken 统一处理 Authorization 头和下载端点的 ?token= 查询参数）
+		// SM4Auth 内部会再次调用 extractToken 获取同样的 token
+		if extractToken(c) != "" {
+			sm4Handler(c)
+			return
 		}
 
 		c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "未授权"})
 		c.Abort()
 	}
+}
+
+// handleAPIKeyAuth 处理 API Key 认证，返回 true 表示已处理（成功或失败），false 表示跳过
+func handleAPIKeyAuth(c *gin.Context, db *gorm.DB) bool {
+	apiKey := c.GetHeader("X-API-Key")
+	if apiKey == "" {
+		return false
+	}
+
+	var key models.APIKey
+	clientIP := c.ClientIP()
+	err := db.Preload("User").Preload("User.Role").Where("key = ?", apiKey).First(&key).Error
+	if err != nil {
+		// API Key 格式不对或不存在，继续尝试其他认证方式
+		return false
+	}
+
+	if !key.IsActive || key.IsExpired() {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "API Key已失效"})
+		c.Abort()
+		return true
+	}
+	if !key.User.IsActive {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "用户已被禁用"})
+		c.Abort()
+		return true
+	}
+	if !key.IsIPAllowed(clientIP) {
+		c.JSON(http.StatusForbidden, gin.H{"code": response.CodeForbidden, "message": "IP地址不在白名单中"})
+		c.Abort()
+		return true
+	}
+
+	// 更新最后使用时间
+	now := time.Now()
+	key.LastUsedAt = &now
+	db.Save(&key)
+
+	// 将用户信息存入context
+	c.Set("user_id", key.UserID)
+	c.Set("username", key.User.Username)
+	c.Set("role_id", key.User.RoleID)
+	c.Set("api_key_id", key.ID)
+	c.Set("auth_type", "apikey")
+
+	// 设置作用域和权限继承信息
+	c.Set("scopes", key.GetScopeList())
+	c.Set("inherit_perms", key.InheritPerms)
+
+	// 如果继承权限，设置用户权限信息
+	if key.InheritPerms && key.User.Role != nil {
+		var permissions []string
+		for _, perm := range key.User.Role.Permissions {
+			permStr := perm.Resource + ":" + perm.Action
+			permissions = append(permissions, permStr)
+		}
+		c.Set("permissions", permissions)
+		c.Set("is_admin", key.User.Role.Name == models.RoleAdmin)
+	}
+
+	// 记录请求开始时间
+	c.Set(requestStartTimeKey, time.Now())
+
+	// 使用响应写入器来捕获状态码
+	writer := &responseWriter{ResponseWriter: c.Writer, status: http.StatusOK}
+	c.Writer = writer
+
+	c.Next()
+
+	// 请求完成后记录使用日志
+	logAPIKeyUsage(c, db, key.ID, key.UserID, writer.status, time.Since(getContextTime(c, requestStartTimeKey)))
+	return true
 }
 
 // RequireScope 验证 API Key 是否具有所需作用域
