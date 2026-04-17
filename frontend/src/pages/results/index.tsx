@@ -11,6 +11,8 @@ import {
   message,
   Popconfirm,
   Modal,
+  Tabs,
+  Dropdown,
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -18,12 +20,15 @@ import {
   RedoOutlined,
   MergeCellsOutlined,
   DeleteOutlined,
+  CloudOutlined,
+  LaptopOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import PPTPreview from '../../components/PPTPreview'
 import PPTGalleryStrip from '../../components/PPTGalleryStrip'
 import MergeSelectionBar from '../../components/MergeSelectionBar'
+import TextContentTab from '../../components/TextContentTab'
 import {
   getPptsByVideo,
   getSlides,
@@ -31,14 +36,18 @@ import {
   deletePpt,
   getPptDownloadUrl,
 } from '../../api/ppt'
+import {
+  submitTranscription,
+  submitTranscriptionWithMode,
+} from '../../api/transcription'
 import type {
   PPTResult,
   SlideImage,
   SelectedSlide,
   MergeSlideItem,
 } from '../../types/ppt'
+import type { TranscriptionMode } from '../../types/transcription'
 import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
-import { submitTranscription } from '../../api/transcription'
 
 // 格式化文件大小
 const formatFileSize = (bytes: number): string => {
@@ -74,6 +83,7 @@ export default function ResultDetailPage() {
 
   // Re-transcribe modal state
   const [retranscribeModalOpen, setRetranscribeModalOpen] = useState(false)
+  const [retranscribeMode, setRetranscribeMode] = useState<TranscriptionMode>('local')
 
   // 当前选中的 PPT
   const currentPpt = ppts.find((p) => p.id === currentPptId)
@@ -284,9 +294,20 @@ export default function ResultDetailPage() {
   }, [currentPptId])
 
   // 重新转录
-  const handleRetranscribe = useCallback(() => {
-    setRetranscribeModalOpen(true)
-  }, [])
+  const handleRetranscribeWithMode = useCallback(async (mode: TranscriptionMode) => {
+    setRetranscribeMode(mode)
+    try {
+      if (mode === 'cloud') {
+        // Per D-03: cloud mode starts immediately, no sampling_rate
+        await submitTranscriptionWithMode(videoFileIdNum, 'cloud')
+      } else {
+        await submitTranscriptionWithMode(videoFileIdNum, 'local', 0.5)
+      }
+      setRetranscribeModalOpen(true)
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '提交转录任务失败')
+    }
+  }, [videoFileIdNum])
 
   // 转录完成回调
   const handleTranscriptionCompleted = useCallback(
@@ -406,26 +427,43 @@ export default function ResultDetailPage() {
 
         {/* 右列 - 信息面板 (30%) */}
         <Col span={7}>
-          {/* 基本信息卡片 */}
-          <Card title="基本信息" size="small" style={{ marginBottom: 16 }}>
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label="视频名称">
-                {videoName}
-              </Descriptions.Item>
-              <Descriptions.Item label="转录时间">
-                {currentPpt ? dayjs(currentPpt.created_at).format('YYYY-MM-DD HH:mm') : '—'}
-              </Descriptions.Item>
-              <Descriptions.Item label="页数">
-                {currentPpt?.page_count || 0} 页
-              </Descriptions.Item>
-              <Descriptions.Item label="文件大小">
-                {formatFileSize(currentPpt?.file_size || 0)}
-              </Descriptions.Item>
-              <Descriptions.Item label="类型">
-                {currentPpt?.source_type === 'merge' ? '合并' : '转录'}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
+          {/* Tabbed info panel per D-09 */}
+          <Tabs
+            defaultActiveKey="info"
+            style={{ marginBottom: 16 }}
+            items={[
+              {
+                key: 'info',
+                label: '基本信息',
+                children: (
+                  <Descriptions column={1} size="small">
+                    <Descriptions.Item label="视频名称">
+                      {videoName}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="转录时间">
+                      {currentPpt ? dayjs(currentPpt.created_at).format('YYYY-MM-DD HH:mm') : '—'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="页数">
+                      {currentPpt?.page_count || 0} 页
+                    </Descriptions.Item>
+                    <Descriptions.Item label="文件大小">
+                      {formatFileSize(currentPpt?.file_size || 0)}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="类型">
+                      {currentPpt?.source_type === 'merge' ? '合并' : '转录'}
+                    </Descriptions.Item>
+                  </Descriptions>
+                ),
+              },
+              {
+                key: 'text',
+                label: '文字内容',
+                children: (
+                  <TextContentTab videoFileId={videoFileIdNum} />
+                ),
+              },
+            ]}
+          />
 
           {/* 操作按钮卡片 */}
           <Card title="操作" size="small" style={{ marginBottom: 16 }}>
@@ -437,13 +475,29 @@ export default function ResultDetailPage() {
               >
                 下载PPT
               </Button>
-              <Button
-                block
-                icon={<RedoOutlined />}
-                onClick={handleRetranscribe}
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'local',
+                      icon: <LaptopOutlined />,
+                      label: '本地转录',
+                      onClick: () => handleRetranscribeWithMode('local'),
+                    },
+                    {
+                      key: 'cloud',
+                      icon: <CloudOutlined />,
+                      label: '云端转录（通义听悟）',
+                      onClick: () => handleRetranscribeWithMode('cloud'),
+                    },
+                  ],
+                }}
+                trigger={['click']}
               >
-                重新转录
-              </Button>
+                <Button block icon={<RedoOutlined />}>
+                  重新转录
+                </Button>
+              </Dropdown>
               <Button
                 block
                 type="primary"
@@ -485,6 +539,7 @@ export default function ResultDetailPage() {
         videoFileId={videoFileIdNum}
         fileName={videoName}
         samplingRate={0.5}
+        mode={retranscribeMode}
         onCompleted={handleTranscriptionCompleted}
       />
     </div>
