@@ -54,10 +54,11 @@ type MinimalApp struct {
 	huaweiConnector    *video_recording.HuaweiConferenceConnector
 	videoTaskService   *services.VideoRecordingTaskService
 	videoFileService   *services.VideoFileService
-	conversionService  services.ConversionService
-	splittingService   *services.SplittingService
-	snapshotService    *services.SnapshotService
-	rateLimiter        *services.RateLimiter
+	conversionService    services.ConversionService
+	splittingService     *services.SplittingService
+	snapshotService      *services.SnapshotService
+	transcriptionService *services.TranscriptionService
+	rateLimiter          *services.RateLimiter
 }
 
 // Handlers 处理器集合
@@ -72,8 +73,9 @@ type Handlers struct {
 	Audit        *handlers.AuditHandler
 	Notification *handlers.NotificationHandler
 	System       *handlers.SystemHandler
-	APIKey       *handlers.APIKeyHandler
-	Split        *handlers.SplitHandler
+	APIKey        *handlers.APIKeyHandler
+	Split         *handlers.SplitHandler
+	Transcription *handlers.TranscriptionHandler
 }
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
@@ -494,6 +496,16 @@ func (a *MinimalApp) initHandlers() error {
 	a.splittingService = services.NewSplittingService(a.db, a.logger, a.config, a.videoFileService)
 	a.snapshotService = services.NewSnapshotService(a.db, a.logger, a.config, a.videoFileService)
 
+	// 转录服务（需要 frame extractor, similarity detector, pptx generator）
+	frameExtractor := services.NewFrameExtractor(a.config.FFmpeg.Path, a.logger)
+	similarityDetector := services.NewSimilarityDetector(a.logger)
+	pptxGenerator := services.NewPPTXGenerator(a.logger)
+	a.transcriptionService = services.NewTranscriptionService(
+		a.db, a.logger, a.config,
+		frameExtractor, similarityDetector, pptxGenerator,
+		a.videoFileService,
+	)
+
 	// 华为管理器（使用数据库配置动态创建客户端）
 	dbAdapter := &huaweiDBAdapter{db: a.db}
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
@@ -513,6 +525,7 @@ func (a *MinimalApp) initHandlers() error {
 		System:       handlers.NewSystemHandler(a.db, a.logger, a.config),
 		APIKey:       apikeyHandler,
 		Split:        handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
+		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, a.logger),
 	}
 
 	return nil
@@ -666,6 +679,8 @@ func (a *MinimalApp) registerRoutes() error {
 		videos.POST("/:id/split", a.handlers.Split.SubmitSplit)            // 提交分割任务
 		videos.GET("/:id/split-status", a.handlers.Split.GetSplitStatus)  // 获取分割状态
 		videos.GET("/:id/segments", a.handlers.Split.GetSegments)          // 获取分割段落列表
+		videos.POST("/:id/transcribe", a.handlers.Transcription.SubmitTranscription)    // 提交转录任务
+		videos.GET("/:id/transcription-status", a.handlers.Transcription.GetTranscriptionStatus) // 获取转录状态
 	}
 
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
