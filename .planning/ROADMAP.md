@@ -32,9 +32,9 @@
 **Plans**: 5 plans
 
 Plans:
-- [ ] 01-00-PLAN.md — Wave 0: Test stubs for SplittingService, SnapshotService, SplitHandler, VideoFileService
-- [ ] 01-01-PLAN.md — Database model extension (parent_id, source_type) + VideoFileService segment creation
-- [ ] 01-02-PLAN.md — SplittingService, SnapshotService, SplitHandler backend + app.go wiring
+- [x] 01-00-PLAN.md — Wave 0: Test stubs for SplittingService, SnapshotService, SplitHandler, VideoFileService
+- [x] 01-01-PLAN.md — Database model extension (parent_id, source_type) + VideoFileService segment creation
+- [x] 01-02-PLAN.md — SplittingService, SnapshotService, SplitHandler backend + app.go wiring
 - [ ] 01-03-PLAN.md — Frontend split page with TimelineWithMarkers + split API client
 - [ ] 01-04-PLAN.md — Task list snapshot button + file list source column + auto-refresh
 
