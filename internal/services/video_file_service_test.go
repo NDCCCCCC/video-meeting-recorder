@@ -877,3 +877,53 @@ func BenchmarkListFiles(b *testing.B) {
 		service.ListFiles(req)
 	}
 }
+
+// --- CreateSegmentFile and auto-scan test stubs (Wave 0) ---
+
+func TestVideoFileService_CreateSegmentFile(t *testing.T) {
+	t.Skip("waiting for CreateSegmentFile implementation")
+	// SCAN-01: Create segment file record with parent_id and source_type
+	// Setup: create test service and DB, create a parent VideoFile record
+	// Action: call CreateSegmentFile(segmentPath, &parentID, "split", userID)
+	// Assert: VideoFile record created with parent_id set, source_type="split"
+}
+
+func TestVideoFileService_CreateSegmentFile_Snapshot(t *testing.T) {
+	t.Skip("waiting for CreateSegmentFile implementation")
+	// SCAN-01: Create snapshot file record
+	// Setup: create test service and DB, create a parent VideoFile record
+	// Action: call CreateSegmentFile(segmentPath, &parentID, "snapshot", userID)
+	// Assert: VideoFile record created with source_type="snapshot"
+}
+
+func TestVideoFileService_CreateSegmentFile_Duplicate(t *testing.T) {
+	t.Skip("waiting for CreateSegmentFile implementation")
+	// SCAN-01: Duplicate segment path returns existing record
+	// Setup: create test service, create first segment file record
+	// Action: call CreateSegmentFile with same path again
+	// Assert: returns existing record without error, no duplicate created
+}
+
+func TestVideoFileService_GetSegmentsByParentID(t *testing.T) {
+	t.Skip("waiting for GetSegmentsByParentID implementation")
+	// SPLIT-04: Retrieve all child segments of a parent video
+	// Setup: create test service, create parent + 3 child VideoFile records
+	// Action: call GetSegmentsByParentID(parentID)
+	// Assert: returns 3 segments ordered by ID ASC
+}
+
+func TestVideoFileService_ListFiles_SourceTypeFilter(t *testing.T) {
+	t.Skip("waiting for source_type filter implementation")
+	// SCAN-01: List files filtered by source_type
+	// Setup: create test service, create files with source_type recording/snapshot/split
+	// Action: call ListFiles with SourceType="split"
+	// Assert: only split files returned
+}
+
+func TestVideoFileService_AutoScan_SplitCallback(t *testing.T) {
+	t.Skip("waiting for auto-scan callback implementation")
+	// SCAN-01: SplittingService calls CreateSegmentFile on completion
+	// This test verifies the callback pattern: after split completes,
+	// CreateSegmentFile is called for each segment, and all segments
+	// appear in the database with correct parent_id and source_type
+}
