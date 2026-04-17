@@ -617,6 +617,7 @@ func (a *MinimalApp) registerRoutes() error {
 	tasks := api.Group("/tasks")
 	{
 		tasks.POST("/clear-stuck", a.handlers.VideoTask.ClearStuckTasks) // 清理卡住的任务
+			tasks.POST("/:id/snapshot", a.handlers.Split.GenerateSnapshot)   // 生成录制快照
 	}
 
 	// 华为配置管理
@@ -665,10 +666,6 @@ func (a *MinimalApp) registerRoutes() error {
 		videos.POST("/:id/split", a.handlers.Split.SubmitSplit)            // 提交分割任务
 		videos.GET("/:id/split-status", a.handlers.Split.GetSplitStatus)  // 获取分割状态
 		videos.GET("/:id/segments", a.handlers.Split.GetSegments)          // 获取分割段落列表
-	}
-	tasks := api.Group("/tasks")
-	{
-		tasks.POST("/:id/snapshot", a.handlers.Split.GenerateSnapshot)     // 生成录制快照
 	}
 
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
