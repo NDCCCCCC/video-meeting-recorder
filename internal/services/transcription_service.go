@@ -416,27 +416,35 @@ func (s *TranscriptionService) updateProgress(
 	s.statusMu.Lock()
 	defer s.statusMu.Unlock()
 
-	if progress, ok := s.statusMap[videoFileID]; ok {
-		if stage != "" {
-			progress.CurrentStage = stage
+	// Get or create progress entry atomically
+	progress, ok := s.statusMap[videoFileID]
+	if !ok {
+		progress = &TranscriptionProgress{
+			Status: models.TranscriptionStatusProcessing,
 		}
-		if processed > 0 {
-			progress.FramesProcessed = processed
-		}
-		if total > 0 {
-			progress.TotalFrames = total
-		}
-		if percentage > 0 {
-			progress.Percentage = percentage
-		}
-		if errorMsg != "" {
-			progress.Status = models.TranscriptionStatusFailed
-			progress.ErrorMessage = errorMsg
-		}
-		if resultPPTFileID != nil {
-			progress.Status = models.TranscriptionStatusCompleted
-			progress.ResultPPTFileID = resultPPTFileID
-		}
+		s.statusMap[videoFileID] = progress
+	}
+
+	// Now update all fields atomically while holding lock
+	if stage != "" {
+		progress.CurrentStage = stage
+	}
+	if processed > 0 {
+		progress.FramesProcessed = processed
+	}
+	if total > 0 {
+		progress.TotalFrames = total
+	}
+	if percentage > 0 {
+		progress.Percentage = percentage
+	}
+	if errorMsg != "" {
+		progress.Status = models.TranscriptionStatusFailed
+		progress.ErrorMessage = errorMsg
+	}
+	if resultPPTFileID != nil {
+		progress.Status = models.TranscriptionStatusCompleted
+		progress.ResultPPTFileID = resultPPTFileID
 	}
 }
 
