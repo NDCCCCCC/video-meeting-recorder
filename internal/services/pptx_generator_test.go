@@ -24,7 +24,7 @@ func TestPPTXGenerator(t *testing.T) {
 		validPaths, errs := generator.ValidateImageFiles([]string{})
 
 		assert.Equal(t, []string{}, validPaths)
-		assert.Equal(t, []error(nil), errs)
+		assert.Empty(t, errs)
 	})
 
 	t.Run("ValidateImageFilesNonExistent", func(t *testing.T) {
