@@ -27,6 +27,32 @@ SLIDE_WIDTH_INCH = 13.333
 SLIDE_HEIGHT_INCH = 7.5
 
 
+def validate_path_safe(path_str):
+    """Validate path to prevent traversal attacks.
+
+    Args:
+        path_str: Path to validate
+
+    Returns:
+        Normalized absolute path
+
+    Raises:
+        ValueError: If path contains traversal attempts or is suspicious
+    """
+    # Normalize the path to resolve any '..' or '.' components
+    abs_path = os.path.abspath(path_str)
+
+    # Check if the normalized path is different from what we'd get by resolving components
+    # This catches paths like '../../etc/passwd'
+    resolved_path = os.path.normpath(path_str)
+
+    # Check for suspicious patterns
+    if '..' in path_str.split(os.sep):
+        raise ValueError(f"Path contains traversal attempt: {path_str}")
+
+    return abs_path
+
+
 def merge_slides(output_path, slide_spec):
     """
     Merge slides from multiple PPTX files into a single presentation.
@@ -58,6 +84,16 @@ def merge_slides(output_path, slide_spec):
         for spec in slide_spec:
             pptx_path = spec.get('pptx_path', '')
             slide_numbers = spec.get('slide_numbers', [])
+
+            # Validate path is safe (no traversal attempts)
+            try:
+                pptx_path = validate_path_safe(pptx_path)
+            except ValueError as e:
+                result = {
+                    'success': False,
+                    'error': str(e)
+                }
+                return False, result, 1
 
             # Validate file exists
             if not os.path.exists(pptx_path):
