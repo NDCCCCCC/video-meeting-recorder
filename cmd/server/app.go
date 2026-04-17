@@ -51,10 +51,12 @@ type MinimalApp struct {
 	scheduler         *scheduler.VideoSimpleScheduler
 	coordinator       *recorder.SimpleRecordingCoordinator
 	huaweiManager     *huaweiapi.Manager
-	huaweiConnector   *video_recording.HuaweiConferenceConnector
-	videoTaskService  *services.VideoRecordingTaskService
-	videoFileService  *services.VideoFileService
-	conversionService services.ConversionService
+	huaweiConnector    *video_recording.HuaweiConferenceConnector
+	videoTaskService   *services.VideoRecordingTaskService
+	videoFileService   *services.VideoFileService
+	conversionService  services.ConversionService
+	splittingService   *services.SplittingService
+	snapshotService    *services.SnapshotService
 	rateLimiter        *services.RateLimiter
 }
 
@@ -71,6 +73,7 @@ type Handlers struct {
 	Notification *handlers.NotificationHandler
 	System       *handlers.SystemHandler
 	APIKey       *handlers.APIKeyHandler
+	Split        *handlers.SplitHandler
 }
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
@@ -487,6 +490,10 @@ func (a *MinimalApp) initHandlers() error {
 	// 转换服务（需要 videoFileService）
 	a.conversionService = services.NewFFmpegConversionService(a.db, a.logger, a.config, a.videoFileService)
 
+	// 分割服务（需要 videoFileService）
+	a.splittingService = services.NewSplittingService(a.db, a.logger, a.config, a.videoFileService)
+	a.snapshotService = services.NewSnapshotService(a.db, a.logger, a.config, a.videoFileService)
+
 	// 华为管理器（使用数据库配置动态创建客户端）
 	dbAdapter := &huaweiDBAdapter{db: a.db}
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
@@ -505,6 +512,7 @@ func (a *MinimalApp) initHandlers() error {
 		Notification: notificationHandler,
 		System:       handlers.NewSystemHandler(a.db, a.logger, a.config),
 		APIKey:       apikeyHandler,
+		Split:        handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
 	}
 
 	return nil
@@ -651,6 +659,18 @@ func (a *MinimalApp) registerRoutes() error {
 	a.router.GET("/api/v1/files/download/:token", a.handlers.File.Download)
 	a.router.GET("/api/v1/files/share/:token", a.handlers.File.ShareDownload)
 
+	// 视频分割和快照
+	videos := api.Group("/videos")
+	{
+		videos.POST("/:id/split", a.handlers.Split.SubmitSplit)            // 提交分割任务
+		videos.GET("/:id/split-status", a.handlers.Split.GetSplitStatus)  // 获取分割状态
+		videos.GET("/:id/segments", a.handlers.Split.GetSegments)          // 获取分割段落列表
+	}
+	tasks := api.Group("/tasks")
+	{
+		tasks.POST("/:id/snapshot", a.handlers.Split.GenerateSnapshot)     // 生成录制快照
+	}
+
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
 	a.router.GET("/api/v1/recordings/:id/preview/stream/:file", a.handlers.VideoTask.ServeHLSStream)
 
@@ -724,6 +744,14 @@ func (a *MinimalApp) registerServices() error {
 			return fmt.Errorf("failed to start conversion service: %w", err)
 		}
 		a.logger.Info("转换服务启动成功")
+	}
+
+	// 启动分割服务
+	if a.splittingService != nil {
+		if err := a.splittingService.Start(); err != nil {
+			return fmt.Errorf("failed to start splitting service: %w", err)
+		}
+		a.logger.Info("分割服务启动成功")
 	}
 
 	a.logger.Info("服务注册完成")
@@ -899,6 +927,12 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 	if a.conversionService != nil {
 		a.logger.Info("正在停止转换服务...")
 		a.conversionService.Stop()
+	}
+
+	// 停止分割服务
+	if a.splittingService != nil {
+		a.logger.Info("正在停止分割服务...")
+		a.splittingService.Stop()
 	}
 
 	// 停止速率限制器
