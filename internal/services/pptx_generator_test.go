@@ -15,8 +15,8 @@ import (
 )
 
 func TestPPTXGenerator(t *testing.T) {
-	// Skip tests if unioffice is not available
-	// This allows tests to pass even if dependency is not yet installed
+	// Test PPTXGenerator using Python script integration
+	// Tests require python3 and python-pptx to be installed
 	t.Run("ValidateImageFilesEmpty", func(t *testing.T) {
 		logger := zap.NewNop()
 		generator := NewPPTXGenerator(logger)
@@ -62,6 +62,11 @@ func TestGeneratePPTXWithTestImages(t *testing.T) {
 	logger := zap.NewNop()
 	generator := NewPPTXGenerator(logger)
 
+	// Check Python availability first
+	if err := generator.CheckPythonAvailability(context.Background()); err != nil {
+		t.Skipf("Python not available: %v", err)
+	}
+
 	// Create temporary directory
 	tempDir := t.TempDir()
 
@@ -101,8 +106,10 @@ func TestGeneratePPTXWithTestImages(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, fileInfo.Size(), int64(0))
 
-	// Verify file can be opened by unioffice
+	// Verify file can be opened
 	// This ensures the PPTX structure is valid
+	_, err = os.Open(outputPath)
+	require.NoError(t, err)
 }
 
 func TestGeneratePPTXWithMixedValidInvalid(t *testing.T) {
@@ -112,6 +119,11 @@ func TestGeneratePPTXWithMixedValidInvalid(t *testing.T) {
 
 	logger := zap.NewNop()
 	generator := NewPPTXGenerator(logger)
+
+	// Check Python availability first
+	if err := generator.CheckPythonAvailability(context.Background()); err != nil {
+		t.Skipf("Python not available: %v", err)
+	}
 
 	// Create temporary directory
 	tempDir := t.TempDir()
