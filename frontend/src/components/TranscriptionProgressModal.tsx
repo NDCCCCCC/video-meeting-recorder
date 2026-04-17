@@ -76,7 +76,7 @@ export default function TranscriptionProgressModal({
           setStatus(data.status)
           setStage(data.current_stage)
           setFramesProcessed(data.frames_processed)
-          setTotalFrames(data.totalFrames)
+          setTotalFrames(data.total_frames)
           setPercentage(data.percentage)
           setErrorMessage(data.error_message)
           setPptFileId(data.result_ppt_file_id)
