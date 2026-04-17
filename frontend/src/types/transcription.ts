@@ -35,3 +35,49 @@ export interface SamplingRateOption {
   secondsPerFrame: number  // display: 1, 2, 5
   description: string
 }
+
+// === Cloud transcription additions ===
+
+// Transcription mode (per D-01, D-02)
+export type TranscriptionMode = 'local' | 'cloud'
+
+// Cloud transcription stages (per D-06)
+export type CloudTranscriptionStage = 'uploading' | 'queued' | 'cloud_processing' | 'downloading'
+
+// Combined stage type (local OR cloud)
+export type AnyTranscriptionStage = TranscriptionStage | CloudTranscriptionStage
+
+// Extended status response that includes cloud fields
+export interface TranscriptionStatusResponseExtended extends TranscriptionStatusResponse {
+  mode?: TranscriptionMode
+  current_stage: AnyTranscriptionStage | ''
+  error_message: string
+  result_ppt_file_id: number | null
+}
+
+// Text segment with timestamps (per D-10, TRAN-05)
+export interface TextSegment {
+  text: string
+  begin_time: number  // milliseconds
+  end_time: number    // milliseconds
+  segment_index: number
+}
+
+// Text content response
+export interface TranscriptionTextResponse {
+  segments: TextSegment[]
+  total_count: number
+}
+
+// Extended trigger request with mode parameter (per D-01, D-03)
+export interface TranscriptionTriggerRequestExtended {
+  sampling_rate?: number  // Only for local mode -- NOT sent for cloud per D-03
+  mode?: TranscriptionMode  // 'local' or 'cloud'
+}
+
+// Extended trigger response with mode
+export interface TranscriptionTriggerResponseExtended {
+  video_file_id: number
+  status: string
+  mode: TranscriptionMode
+}
