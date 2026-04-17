@@ -1,6 +1,6 @@
 // PPT 结果详情页
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Button,
   Card,
@@ -63,6 +63,9 @@ export default function ResultDetailPage() {
   const [videoName, setVideoName] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Ref to track cleanup function for polling
+  const slidesPollCleanupRef = useRef<(() => void) | null>(null)
+
   // Re-transcribe modal state
   const [retranscribeModalOpen, setRetranscribeModalOpen] = useState(false)
 
@@ -100,25 +103,45 @@ export default function ResultDetailPage() {
         const response = await getSlides(pptId)
         if (response.data) {
           if (response.data.status === 'extracting') {
-            // 轮询等待提取完成
-            const pollInterval = setInterval(async () => {
-              const pollResponse = await getSlides(pptId)
-              if (pollResponse.data && pollResponse.data.status === 'ready') {
-                clearInterval(pollInterval)
-                setSlides(pollResponse.data.slides)
-                setIsLoadingSlides(false)
-              }
-            }, 2000)
+            // 轮询等待提取完成 - 使用取消标志
+            let cancelled = false
+            let intervalId: NodeJS.Timeout | null = null
 
-            // 清理定时器
-            return () => clearInterval(pollInterval)
+            const poll = async () => {
+              if (cancelled) return
+
+              try {
+                const pollResponse = await getSlides(pptId)
+                if (cancelled) return
+
+                if (pollResponse.data && pollResponse.data.status === 'ready') {
+                  if (intervalId) clearInterval(intervalId)
+                  if (!cancelled) {
+                    setSlides(pollResponse.data.slides)
+                    setIsLoadingSlides(false)
+                  }
+                }
+              } catch (error) {
+                if (!cancelled) {
+                  console.error('Polling error:', error)
+                }
+              }
+            }
+
+            intervalId = setInterval(poll, 2000)
+
+            // 存储清理函数到 ref
+            return () => {
+              cancelled = true
+              if (intervalId) clearInterval(intervalId)
+            }
           } else {
             setSlides(response.data.slides)
+            setIsLoadingSlides(false)
           }
         }
       } catch (error) {
         message.error(error instanceof Error ? error.message : '加载幻灯片失败')
-      } finally {
         setIsLoadingSlides(false)
       }
     },
@@ -140,9 +163,29 @@ export default function ResultDetailPage() {
 
   // 当 currentPptId 变化时加载幻灯片
   useEffect(() => {
+    // 清理之前的轮询
+    if (slidesPollCleanupRef.current) {
+      slidesPollCleanupRef.current()
+      slidesPollCleanupRef.current = null
+    }
+
     if (currentPptId > 0) {
-      loadSlides(currentPptId)
       setCurrentSlide(0)
+
+      // 异步加载幻灯片（可能返回清理函数）
+      loadSlides(currentPptId).then((cleanup) => {
+        if (cleanup) {
+          slidesPollCleanupRef.current = cleanup
+        }
+      })
+    }
+
+    // 清理函数
+    return () => {
+      if (slidesPollCleanupRef.current) {
+        slidesPollCleanupRef.current()
+        slidesPollCleanupRef.current = null
+      }
     }
   }, [currentPptId, loadSlides])
 
