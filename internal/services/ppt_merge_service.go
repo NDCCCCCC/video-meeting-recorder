@@ -74,6 +74,12 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	var slideSpecs []map[string]interface{}
 	sourcePptIDs := make([]uint, 0)
 
+	// Size validation constants
+	const MAX_MERGE_SIZE_MB = 500
+	const MAX_MERGE_SIZE_BYTES = MAX_MERGE_SIZE_MB * 1024 * 1024
+
+	var totalSize int64
+
 	for pptFileID := range sourcePptMap {
 		var pptFile models.PPTFile
 		if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
@@ -85,6 +91,9 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 			return nil, fmt.Errorf("PPT file %d does not belong to video %d", pptFileID, req.VideoFileID)
 		}
 
+		// Accumulate total file size
+		totalSize += pptFile.FileSize
+
 		// Deduplicate and sort slide numbers per source
 		slideNumbers := sourcePptMap[pptFileID]
 		uniqueSlides := uniqueInts(slideNumbers)
@@ -94,6 +103,11 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 			"slide_numbers": uniqueSlides,
 		})
 		sourcePptIDs = append(sourcePptIDs, pptFileID)
+	}
+
+	// Check total size limit (500 MB)
+	if totalSize > MAX_MERGE_SIZE_BYTES {
+		return nil, fmt.Errorf("合并文件总大小超过 %d MB 限制 (当前: %.1f MB)", MAX_MERGE_SIZE_MB, float64(totalSize)/(1024*1024))
 	}
 
 	// 5. Execute merge: Call Python merge script
