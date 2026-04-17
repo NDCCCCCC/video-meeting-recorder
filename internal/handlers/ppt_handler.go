@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // PPThandler handles PPT-related API requests
@@ -186,15 +188,25 @@ func (h *PPThandler) DownloadPPT(c *gin.Context) {
 	}
 
 	// Verify ownership via SourceVideoFileID
-	if pptFile.SourceVideoFileID != nil {
-		videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
-		if err == nil {
-			userID := middleware.GetUserID(c)
-			if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
-				response.GinError(c, response.CodeForbidden, "无权下载此PPT文件")
-				return
-			}
+	if pptFile.SourceVideoFileID == nil {
+		response.GinError(c, response.CodeForbidden, "PPT文件没有关联视频，无法验证权限")
+		return
+	}
+
+	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.GinError(c, response.CodeForbidden, "关联视频不存在")
+		} else {
+			response.GinError(c, response.CodeInternalError, "获取视频信息失败")
 		}
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
+		response.GinError(c, response.CodeForbidden, "无权下载此PPT文件")
+		return
 	}
 
 	// Serve file
@@ -218,15 +230,25 @@ func (h *PPThandler) DeletePPT(c *gin.Context) {
 	}
 
 	// Verify ownership via SourceVideoFileID
-	if pptFile.SourceVideoFileID != nil {
-		videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
-		if err == nil {
-			userID := middleware.GetUserID(c)
-			if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
-				response.GinError(c, response.CodeForbidden, "无权删除此PPT文件")
-				return
-			}
+	if pptFile.SourceVideoFileID == nil {
+		response.GinError(c, response.CodeForbidden, "PPT文件没有关联视频，无法验证权限")
+		return
+	}
+
+	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.GinError(c, response.CodeForbidden, "关联视频不存在")
+		} else {
+			response.GinError(c, response.CodeInternalError, "获取视频信息失败")
 		}
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
+		response.GinError(c, response.CodeForbidden, "无权删除此PPT文件")
+		return
 	}
 
 	// Delete PPT file
