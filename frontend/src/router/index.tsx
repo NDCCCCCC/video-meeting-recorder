@@ -35,6 +35,10 @@ export default [
         Component: lazy(() => import('../pages/split')),
       },
       {
+        path: 'results/:videoFileId',
+        Component: lazy(() => import('../pages/results')),
+      },
+      {
         path: 'audit',
         Component: lazy(() => import('../pages/audit')),
       },
