@@ -4,6 +4,10 @@
 
 Original plan specified unidoc/unioffice/v2, but discovered it requires a commercial license for PPTX file generation (FREE_TIER_LIMITS error in unioffice). User decided: **Switch to Muprprpr/Go-pptx (MIT license, free).**
 
+**CRITICAL DISCOVERY:** Muprprpr/Go-pptx is NOT a library - it's a command-line program that imports unioffice/v2 as a dependency. When we added it, go.mod showed `github.com/unidoc/unioffice/v2` as a transitive dependency, and tests failed with "unioffice license required" error.
+
+**NEW DECISION:** Switch to SiliconCatalyst/officeforge (MIT license, pure Go, zero external dependencies).
+
 ## Library Comparison
 
 ### unidoc/unioffice/v2 (Original Choice - REJECTED)
@@ -25,17 +29,79 @@ Original plan specified unidoc/unioffice/v2, but discovered it requires a commer
 
 ---
 
-### Muprprpr/Go-pptx (Selected)
+### Muprprpr/Go-pptx (REJECTED - NOT A LIBRARY)
 
 **Repository:** github.com/Muprprpr/Go-pptx
 
 **License:** MIT License (free, no restrictions)
 
-**Documentation:** https://github.com/Muprprpr/Go-pptx
+**CRITICAL ISSUE:** This is NOT an importable Go library - it's a command-line program. When we added it with `go get`, Go's module system downloaded it, but it imports `github.com/unidoc/unioffice/v2` as a dependency. Tests immediately failed with:
 
-**API Overview:**
+```
+Unlicensed version of UniOffice
+- Get a trial license on https://unidoc.io
+Error: failed to save PPTX file: unioffice license required
+```
+
+**Verdict:** REJECTED - Same licensing problem as unioffice (it wraps unioffice)
+
+---
+
+### SiliconCatalyst/officeforge (SELECTED - FINAL CHOICE)
+
+**Repository:** github.com/SiliconCatalyst/officeforge
+
+**License:** MIT License (free, no restrictions)
+
+**Documentation:** https://github.com/SiliconCatalyst/officeforge
+
+**Key Features:**
+- Pure Go library for generating Word, Excel, and PowerPoint documents
+- Zero external dependencies (built on standard library)
+- Active development (last updated: 2026-01-23)
+- Includes `pptx` subpackage for PowerPoint generation
+- MIT licensed with no commercial restrictions
+
+**Repository Structure:**
+```
+officeforge/
+├── pptx/           # PowerPoint generation
+├── docx/           # Word generation
+├── examples/       # Usage examples
+├── go.mod          # Module: github.com/siliconcatalyst/officeforge
+└── README.md
+```
+
+**Pros:**
+- ✅ MIT license - no cost, no restrictions
+- ✅ Pure Go - no external dependencies
+- ✅ Zero licensing issues
+- ✅ Can generate PPTX files from scratch
+- ✅ Support for images, text, shapes
+- ✅ Standard library only - maximum portability
+
+**Cons:**
+- Newer library (2 stars, limited adoption)
+- Less mature than unioffice
+- Documentation may be limited
+- API may differ significantly from unioffice
+
+**Verdict:** SELECTED - Only viable free option that actually works
+
+## Pattern 3: officeforge PPTX Usage for Full-Frame 16:9 Image Slides
+
+### Key API Concepts
+
+**Note:** As of this research, we need to explore the officeforge API to understand:
+1. How to create a new presentation
+2. How to add slides
+3. How to add images to slides
+4. How to position and size images (full-frame 16:9)
+5. How to save the PPTX file
+
+**Estimated API Pattern** (to be verified during implementation):
 ```go
-import "github.com/Muprprpr/Go-pptx"
+import "github.com/siliconcatalyst/officeforge/pptx"
 
 // Create new presentation
 ppt := pptx.NewPresentation()
@@ -44,217 +110,52 @@ ppt := pptx.NewPresentation()
 slide := ppt.AddSlide()
 
 // Add image to slide
-imgPath := "path/to/image.jpg"
-imgRef, err := ppt.AddImage(imgPath)
-if err != nil {
-    return err
-}
-
-// Position and size image on slide
-// Go-pptx usesEMU (English Metric Units) for positioning
-// 1 inch = 914400 EMU
-// 16:9 slide size: 12192000 x 6858000 EMU (10" x 5.625")
-
-// Image positioning is done during AddImage call
-// or through properties on the returned image reference
+// officeforge likely uses standard units (pixels/inches) or EMU
+err := slide.AddImage("path/to/image.jpg", x, y, width, height)
 ```
 
-**Pros:**
-- ✅ MIT license - no cost, no restrictions
-- ✅ Active development
-- ✅ Simple API
-- ✅ Supports image addition to slides
-- ✅ Can set slide size and image positioning
+### Implementation Approach
 
-**Cons:**
-- Less mature than unioffice
-- Smaller community
-- Less comprehensive documentation
-- API may differ from unioffice patterns
+Since officeforge is a newer library with limited documentation, the implementation will follow this discovery process:
 
-**Verdict:** SELECTED - Licensing makes it the only viable option
+1. **Add dependency:** `go get github.com/siliconcatalyst/officeforge`
+2. **Explore API:** Check the `pptx` package structure and available functions
+3. **Review examples:** Look at the `examples/` directory for usage patterns
+4. **Implement PPTXGenerator:** Adapt our existing structure to use officeforge API
+5. **Test generation:** Verify PPTX files are valid and open in PowerPoint/LibreOffice
 
-## Pattern 3: Go-pptx Usage for Full-Frame 16:9 Image Slides
+### Key Differences from unioffice
 
-### Key API Concepts
-
-**1. EMU (English Metric Units)**
-- Go-pptx uses EMU for all positioning and sizing
-- Conversion: 1 inch = 914400 EMU
-- 16:9 slide dimensions: 10" x 5.625" = 9,144,000 x 5,143,250 EMU
-
-**2. Presentation Creation**
-```go
-import "github.com/Muprprpr/Go-pptx"
-
-ppt := pptx.NewPresentation()
-// Optionally set slide size
-ppt.SetSlideSize(10*914400, 5.625*914400) // 16:9 in EMU
-```
-
-**3. Adding Images to Slides**
-```go
-// Add image to presentation (returns image reference)
-imgRef, err := ppt.AddImage("path/to/image.jpg")
-if err != nil {
-    return fmt.Errorf("failed to add image: %w", err)
-}
-
-// Add slide
-slide := ppt.AddSlide()
-
-// Add image to slide with positioning
-// Go-pptx API: slide.AddImage(imgRef, x, y, width, height)
-// All values in EMU
-err = slide.AddImage(imgRef, 0, 0, 9144000, 5143250)
-if err != nil {
-    return fmt.Errorf("failed to add image to slide: %w", err)
-}
-```
-
-**4. Saving**
-```go
-err := ppt.SaveToFile("output.pptx")
-if err != nil {
-    return fmt.Errorf("failed to save PPTX: %w", err)
-}
-```
-
-### Implementation Pattern for Full-Frame Slides
-
-```go
-package services
-
-import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/Muprprpr/Go-pptx"
-    "go.uber.org/zap"
-)
-
-type PPTXGenerator struct {
-    logger *zap.Logger
-}
-
-func NewPPTXGenerator(logger *zap.Logger) *PPTXGenerator {
-    return &PPTXGenerator{
-        logger: logger,
-    }
-}
-
-const (
-    // EMU per inch
-    EMU_PER_INCH = 914400
-
-    // 16:9 slide dimensions in inches
-    SLIDE_WIDTH_INCH  = 10.0
-    SLIDE_HEIGHT_INCH = 5.625
-
-    // 16:9 slide dimensions in EMU
-    SLIDE_WIDTH_EMU  = 10 * 914400  // 9,144,000
-    SLIDE_HEIGHT_EMU = 5.625 * 914400 // 5,143,250
-)
-
-func (g *PPTXGenerator) GeneratePPTX(ctx context.Context, framePaths []string, outputPath string) (int, error) {
-    // Validate inputs
-    if len(framePaths) == 0 {
-        return 0, fmt.Errorf("frame paths cannot be empty")
-    }
-
-    // Ensure output directory exists
-    outputDir := filepath.Dir(outputPath)
-    if err := os.MkdirAll(outputDir, 0755); err != nil {
-        return 0, fmt.Errorf("failed to create output directory: %w", err)
-    }
-
-    // Create presentation
-    ppt := pptx.NewPresentation()
-
-    // Set slide size to 16:9
-    ppt.SetSlideSize(SLIDE_WIDTH_EMU, SLIDE_HEIGHT_EMU)
-
-    pageCount := 0
-
-    // Add each frame as a slide
-    for _, framePath := range framePaths {
-        // Check if file exists
-        if _, err := os.Stat(framePath); os.IsNotExist(err) {
-            g.logger.Warn("Image file does not exist, skipping",
-                zap.String("path", framePath))
-            continue
-        }
-
-        // Add image to presentation
-        imgRef, err := ppt.AddImage(framePath)
-        if err != nil {
-            g.logger.Error("Failed to add image to presentation, skipping",
-                zap.String("path", framePath),
-                zap.Error(err))
-            continue
-        }
-
-        // Create slide
-        slide := ppt.AddSlide()
-
-        // Add image to slide (full-frame, no margins)
-        // Position: (0, 0) - top-left corner
-        // Size: full slide size (16:9)
-        err = slide.AddImage(imgRef, 0, 0, SLIDE_WIDTH_EMU, SLIDE_HEIGHT_EMU)
-        if err != nil {
-            g.logger.Error("Failed to add image to slide, skipping",
-                zap.String("path", framePath),
-                zap.Error(err))
-            continue
-        }
-
-        pageCount++
-    }
-
-    // Save presentation
-    if err := ppt.SaveToFile(outputPath); err != nil {
-        return 0, fmt.Errorf("failed to save PPTX: %w", err)
-    }
-
-    g.logger.Info("PPTX generated successfully",
-        zap.String("output", outputPath),
-        zap.Int("page_count", pageCount))
-
-    return pageCount, nil
-}
-```
-
-## Key Differences from unioffice
-
-| Aspect | unioffice | Go-pptx |
-|--------|-----------|---------|
+| Aspect | unioffice | officeforge |
+|--------|-----------|-------------|
 | **License** | Commercial (FREE_TIER_LIMITS) | MIT (free) |
-| **Unit System** | measurement.Inch | EMU (English Metric Units) |
-| **Slide Creation** | pres.AddSlide() | ppt.AddSlide() |
-| **Image Addition** | pres.AddImage() then slide.AddImage() | ppt.AddImage() then slide.AddImage() |
-| **Positioning** | SetPosition() + SetSize() | AddImage(x, y, width, height) |
-| **Saving** | pres.SaveToFile() | ppt.SaveToFile() |
+| **Dependencies** | Multiple external deps | Zero external deps (pure Go) |
+| **API Maturity** | Mature, well-documented | Newer, limited docs |
+| **Unit System** | measurement.Inch | TBD (likely pixels or EMU) |
+| **Image Support** | Full-featured | TBD (basic support expected) |
 
 ## Migration Notes
 
-**From unioffice to Go-pptx:**
+**From unioffice to officeforge:**
 
 1. **Replace imports:**
    - Remove: `github.com/unidoc/unioffice/v2/presentation`
    - Remove: `github.com/unidoc/unioffice/v2/measurement`
-   - Add: `github.com/Muprprpr/Go-pptx`
+   - Remove: `github.com/unidoc/unioffice/v2/common`
+   - Add: `github.com/siliconcatalyst/officeforge/pptx`
 
-2. **Convert measurement units:**
-   - `measurement.Inch` → EMU (multiply by 914400)
+2. **API exploration required:**
+   - Check if officeforge uses EMU or different unit system
+   - Verify image addition API differs from unioffice's two-step process
+   - Confirm slide size customization is supported
 
-3. **Update API calls:**
-   - `slideImg.Properties().SetPosition(x, y)` → `slide.AddImage(imgRef, x, y, w, h)`
-   - `slideImg.Properties().SetSize(w, h)` → Included in AddImage call
+3. **Error handling:**
+   - officeforge likely returns standard Go errors
+   - No licensing errors to handle
 
-4. **Error handling:**
-   - Both libraries return errors on image load/save failures
-   - Go-pptx error messages may differ
+4. **Testing:**
+   - Must verify generated PPTX files open correctly in PowerPoint/LibreOffice
+   - Test with actual image files to ensure full-frame layout works
 
 ## Threat Model Considerations
 
@@ -267,8 +168,19 @@ func (g *PPTXGenerator) GeneratePPTX(ctx context.Context, framePaths []string, o
 - Limit maximum slides (cap at 500) to prevent OOM
 - Same mitigation as unioffice approach
 
+## Implementation Plan
+
+1. Remove Muprprpr/Go-pptx dependency from go.mod
+2. Add SiliconCatalyst/officeforge dependency
+3. Explore officeforge/pptx API to understand usage
+4. Rewrite pptx_generator.go using officeforge API
+5. Update tests if needed to match new API
+6. Verify tests pass and generate valid PPTX files
+7. Create SUMMARY.md documenting the migration
+
 ## References
 
-- Go-pptx Repository: https://github.com/Muprprpr/Go-pptx
+- officeforge Repository: https://github.com/SiliconCatalyst/officeforge
+- officeforge License: MIT (https://github.com/SiliconCatalyst/officeforge/blob/main/LICENSE)
+- 16:9 Aspect Ratio: 10" x 5.625" (standard widescreen)
 - EMU Documentation: https://docs.microsoft.com/en-us/windows/win32/vss/english-metric-units
-- 16:9 Aspect Ratio: 10" x 5.625" (12192000 x 6858000 EMU)
