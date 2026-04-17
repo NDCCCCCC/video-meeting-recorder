@@ -504,11 +504,23 @@ func (a *MinimalApp) initHandlers() error {
 	frameExtractor := services.NewFrameExtractor(a.config.FFmpeg.Path, a.logger)
 	similarityDetector := services.NewSimilarityDetector(a.logger)
 	pptxGenerator := services.NewPPTXGenerator(a.logger)
+
+	// Cloud transcription services (Phase 4)
+	ossService, err := services.NewOSSService(&a.config.OSS, a.logger)
+	if err != nil {
+		a.logger.Warn("OSS服务初始化失败，云端转录不可用", zap.Error(err))
+	}
+	tingwuClient := services.NewTingwuClient(&a.config.Tingwu, a.logger)
+
 	a.transcriptionService = services.NewTranscriptionService(
 		a.db, a.logger, a.config,
 		frameExtractor, similarityDetector, pptxGenerator,
 		a.videoFileService,
+		ossService, tingwuClient,
 	)
+
+	// Start OSS cleanup scheduler
+	a.transcriptionService.StartOSSCleanupScheduler()
 
 	// PPT管理服务
 	slideExtractor := services.NewSlideExtractor(a.logger)
@@ -692,6 +704,7 @@ func (a *MinimalApp) registerRoutes() error {
 		videos.GET("/:id/segments", a.handlers.Split.GetSegments)          // 获取分割段落列表
 		videos.POST("/:id/transcribe", a.handlers.Transcription.SubmitTranscription)    // 提交转录任务
 		videos.GET("/:id/transcription-status", a.handlers.Transcription.GetTranscriptionStatus) // 获取转录状态
+		videos.GET("/:id/transcription-text", a.handlers.Transcription.GetTranscriptionText) // 获取转录文字内容
 		videos.GET("/:id/ppts", a.handlers.PPT.GetPptsByVideo)             // 获取视频的所有PPT结果
 	}
 
