@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -27,6 +28,7 @@ type SlideCacheService struct {
 	logger          *zap.Logger
 	config          *config.Config
 	slideExtractor  *SlideExtractor
+	cacheMutexes    sync.Map // map[uint]*sync.Mutex for per-PPT mutexes
 }
 
 // NewSlideCacheService creates a new SlideCacheService instance
@@ -47,7 +49,14 @@ func (s *SlideCacheService) GetOrExtractSlides(pptFileID uint) ([]SlideImageData
 		return nil, fmt.Errorf("PPT file not found: %w", err)
 	}
 
-	// Check if cache exists and is valid
+	// Get or create mutex for this PPT (double-checked locking pattern)
+	mutex, _ := s.cacheMutexes.LoadOrStore(pptFileID, &sync.Mutex{})
+	mu := mutex.(*sync.Mutex)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Check if cache exists and is valid (double-checked after acquiring lock)
 	cacheDir := filepath.Join(s.config.Storage.RecordingsPath, "ppts", fmt.Sprintf("%d", pptFileID), "slides")
 	thumbnailDir := filepath.Join(cacheDir, "thumbnails")
 
