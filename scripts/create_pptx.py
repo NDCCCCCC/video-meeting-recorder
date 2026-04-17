@@ -57,7 +57,7 @@ def create_pptx_from_images(image_paths, output_path):
             try:
                 # Check if file exists
                 if not os.path.exists(img_path):
-                    sys.stderr.write(f"Warning: Image file does not exist: {img_path}\n")
+                    # Skip silently - don't output warnings to stdout
                     skipped.append(img_path)
                     continue
 
@@ -78,8 +78,7 @@ def create_pptx_from_images(image_paths, output_path):
                 page_count += 1
 
             except Exception as e:
-                # Log error but continue with other images
-                sys.stderr.write(f"Error adding image {img_path}: {str(e)}\n")
+                # Skip silently - don't output errors to stdout
                 skipped.append(img_path)
                 continue
 
