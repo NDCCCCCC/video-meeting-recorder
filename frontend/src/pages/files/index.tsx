@@ -17,6 +17,7 @@ import {
   Col,
   Tooltip,
   Radio,
+  Dropdown,
 } from 'antd'
 import {
   SearchOutlined,
@@ -31,12 +32,14 @@ import {
   ScissorsOutlined,
   FileTextOutlined,
   FilePptOutlined,
+  CloudOutlined,
+  LaptopOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import * as videoFileApi from '../../api/video-file'
-import { submitTranscription } from '../../api/transcription'
+import { submitTranscription, submitTranscriptionWithMode } from '../../api/transcription'
 import { getPptsByVideo } from '../../api/ppt'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
@@ -48,7 +51,7 @@ import type {
   VideoFileStats,
   VideoFileStatus,
 } from '../../types/video-file'
-import type { SamplingRateOption } from '../../types/transcription'
+import type { SamplingRateOption, TranscriptionMode } from '../../types/transcription'
 
 // 状态配置
 const STATUS_CONFIG: Record<VideoFileStatus, { label: string; color: string }> = {
@@ -103,6 +106,7 @@ export default function FileManagement() {
   const [triggerModalOpen, setTriggerModalOpen] = useState(false)
   const [selectedSamplingRate, setSelectedSamplingRate] = useState<number>(0.5) // default 2s per D-02
   const [triggerLoading, setTriggerLoading] = useState(false)
+  const [cloudTranscriptionMode, setCloudTranscriptionMode] = useState<TranscriptionMode>('local')
 
   // PPT results cache - track which videos have PPT results
   const [videosWithPpt, setVideosWithPpt] = useState<Set<number>>(new Set())
@@ -299,6 +303,7 @@ export default function FileManagement() {
   const handleTranscribeClick = useCallback((record: VideoFile) => {
     setTranscriptionVideoFile(record)
     setSelectedSamplingRate(0.5) // reset to default 2s per D-02
+    setCloudTranscriptionMode('local') // Set mode to local
     setTriggerModalOpen(true)
   }, [])
 
@@ -307,7 +312,7 @@ export default function FileManagement() {
     if (!transcriptionVideoFile) return
     setTriggerLoading(true)
     try {
-      await submitTranscription(transcriptionVideoFile.id, selectedSamplingRate)
+      await submitTranscriptionWithMode(transcriptionVideoFile.id, 'local', selectedSamplingRate)
       setTriggerModalOpen(false)
       setTranscriptionModalOpen(true) // open progress modal
     } catch (err) {
@@ -316,6 +321,20 @@ export default function FileManagement() {
       setTriggerLoading(false)
     }
   }, [transcriptionVideoFile, selectedSamplingRate])
+
+  // 云端转录处理 (per D-01, D-03)
+  // Per D-03: cloud mode starts immediately -- no sampling rate step
+  // submitTranscriptionWithMode with mode='cloud' does NOT send sampling_rate
+  const handleCloudTranscribe = useCallback(async (record: VideoFile) => {
+    setTranscriptionVideoFile(record)
+    setCloudTranscriptionMode('cloud')
+    try {
+      await submitTranscriptionWithMode(record.id, 'cloud')
+      setTranscriptionModalOpen(true) // Open progress modal directly (no sampling rate step per D-03)
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '提交云端转录任务失败')
+    }
+  }, [])
 
   // 转录完成回调
   const handleTranscriptionCompleted = useCallback(() => {
@@ -355,16 +374,29 @@ export default function FileManagement() {
       )}
       {record.format === 'mp4' && record.status === 'ready' && (
         <PermissionGuard permission={PERMISSIONS.FILE_TRANSCRIBE}>
-          <Tooltip title="转录">
-            <Button
-              type="link"
-              size="small"
-              icon={<FileTextOutlined />}
-              onClick={() => handleTranscribeClick(record)}
-            >
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'local',
+                  icon: <LaptopOutlined />,
+                  label: '本地转录',
+                  onClick: () => handleTranscribeClick(record),
+                },
+                {
+                  key: 'cloud',
+                  icon: <CloudOutlined />,
+                  label: '云端转录（通义听悟）',
+                  onClick: () => handleCloudTranscribe(record),
+                },
+              ],
+            }}
+            trigger={['click']}
+          >
+            <Button type="primary" size="small" icon={<CloudOutlined />}>
               转录
             </Button>
-          </Tooltip>
+          </Dropdown>
         </PermissionGuard>
       )}
       {/* 预览 PPT 按钮 - 如果视频有 PPT 结果则显示 */}
@@ -409,7 +441,7 @@ export default function FileManagement() {
         </Popconfirm>
       </PermissionGuard>
     </Space>
-  ), [viewDetail, handleDownload, handleDelete, navigate, handleTranscribeClick, videosWithPpt])
+  ), [viewDetail, handleDownload, handleDelete, navigate, handleTranscribeClick, handleCloudTranscribe, videosWithPpt])
 
   // 表格列定义
   const columns: ColumnsType<VideoFile> = useMemo(() => [
@@ -735,6 +767,7 @@ export default function FileManagement() {
         videoFileId={transcriptionVideoFile?.id || 0}
         fileName={transcriptionVideoFile?.file_name || ''}
         samplingRate={selectedSamplingRate}
+        mode={cloudTranscriptionMode}
         onCompleted={handleTranscriptionCompleted}
       />
     </div>
