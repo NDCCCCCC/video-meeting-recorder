@@ -58,10 +58,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Foundation: TranscriptionTask model + migration, SimilarityDetector (SSIM/pHash/edge), FrameExtractor
-- [ ] 02-02-PLAN.md — PPTX generator using unioffice with 16:9 full-frame slides
-- [ ] 02-03-PLAN.md — TranscriptionService worker pool + TranscriptionHandler + app.go wiring
-- [ ] 02-04-PLAN.md — Frontend: types, API client, TranscriptionProgressModal, file list transcription button
+- [x] 02-01-PLAN.md — Foundation: TranscriptionTask model + migration, SimilarityDetector (SSIM/pHash/edge), FrameExtractor
+- [x] 02-02-PLAN.md — PPTX generator using unioffice with 16:9 full-frame slides
+- [x] 02-03-PLAN.md — TranscriptionService worker pool + TranscriptionHandler + app.go wiring
+- [x] 02-04-PLAN.md — Frontend: types, API client, TranscriptionProgressModal, file list transcription button
 
 ---
 
