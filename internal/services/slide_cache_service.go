@@ -15,6 +15,12 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	slideFilenamePattern = `^slide_\d{3}\.jpg$`
+	slideFilenamePrefix   = "slide_"
+	slideFilenameExt     = ".jpg"
+)
+
 // SlideImageData represents slide image metadata for API responses
 type SlideImageData struct {
 	SlideNumber  int    `json:"slide_number"`
@@ -143,19 +149,18 @@ func (s *SlideCacheService) readCachedSlides(thumbnailDir string, pptFileID uint
 
 // isValidSlideFilename validates filename matches slide_\d{3}\.jpg pattern
 func (s *SlideCacheService) isValidSlideFilename(filename string) bool {
-	// Strict whitelist: slide_XXX.jpg format
-	matched, _ := regexp.MatchString(`^slide_\d{3}\.jpg$`, filename)
+	matched, _ := regexp.MatchString(slideFilenamePattern, filename)
 	return matched
 }
 
 // extractSlideNumber extracts slide number from filename (e.g., "slide_001.jpg" -> 1)
 func (s *SlideCacheService) extractSlideNumber(filename string) (int, error) {
-	// Remove extension
-	base := filename[:len(filename)-4]
+	// Remove extension using constant
+	base := filename[:len(filename)-len(slideFilenameExt)]
 
 	// Split by underscore
 	parts := strings.Split(base, "_")
-	if len(parts) != 2 {
+	if len(parts) != 2 || parts[0] != slideFilenamePrefix[:len(slideFilenamePrefix)-1] {
 		return 0, fmt.Errorf("invalid filename format")
 	}
 
