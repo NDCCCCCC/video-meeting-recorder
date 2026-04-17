@@ -18,6 +18,7 @@ export const PERMISSIONS = {
   FILE_SCAN: 'files:scan',
   FILE_SPLIT: 'files:split',
   FILE_TRANSCRIBE: 'files:transcribe',
+  FILE_PPT_VIEW: 'files:ppt_view',
 
   // 审计日志
   AUDIT_VIEW: 'audit:view',
@@ -51,6 +52,7 @@ export const MENU_PERMISSIONS: Record<string, string> = {
   '/dashboard': PERMISSIONS.DASHBOARD_VIEW,
   '/tasks': PERMISSIONS.TASK_VIEW,
   '/files': PERMISSIONS.FILE_VIEW,
+  '/results': PERMISSIONS.FILE_PPT_VIEW,
   '/audit': PERMISSIONS.AUDIT_VIEW,
   '/system/users': PERMISSIONS.USER_VIEW,
   '/system/roles': PERMISSIONS.ROLE_VIEW,
