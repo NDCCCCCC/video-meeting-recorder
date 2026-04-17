@@ -315,7 +315,7 @@ func (a *MinimalApp) seedDatabase() error {
 		}
 		a.logger.Info("Created default admin user",
 			zap.String("username", "admin"),
-			zap.String("password", "admin123"),
+			zap.String("note", "请及时修改默认密码"),
 		)
 	}
 
@@ -434,8 +434,18 @@ func (a *MinimalApp) initRouter() error {
 
 // corsMiddleware CORS中间件
 func corsMiddleware() gin.HandlerFunc {
+	allowedOrigins := []string{
+		"http://localhost:5173", // dev
+		"http://localhost:8080", // production
+	}
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				c.Header("Access-Control-Allow-Origin", allowed)
+				break
+			}
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-API-Key, Authorization, Range")
 

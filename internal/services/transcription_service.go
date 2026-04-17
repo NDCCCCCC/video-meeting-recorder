@@ -125,6 +125,9 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(videoFileID uint, sam
 		if s.ossService == nil || !s.ossService.IsEnabled() {
 			return fmt.Errorf("云端转录不可用: OSS服务未配置")
 		}
+		if s.ossService.IsStub() {
+			return fmt.Errorf("云端转录暂不可用: OSS服务尚未完全集成")
+		}
 		if s.tingwuClient == nil || !s.tingwuClient.IsEnabled() {
 			return fmt.Errorf("云端转录不可用: Tingwu服务未配置")
 		}
@@ -292,6 +295,15 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 	s.logger.Info("帧提取完成",
 		zap.Uint("video_file_id", task.VideoFileID),
 		zap.Int("frame_count", len(frames)))
+
+	// Guard against empty frame extraction (corrupted video, very short clip, etc.)
+	if len(frames) == 0 {
+		s.logger.Error("帧提取返回空结果",
+			zap.Uint("video_file_id", task.VideoFileID))
+		s.updateProgress(task.VideoFileID, "", 0, 0, 0, "帧提取返回空结果", nil)
+		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "帧提取返回空结果", 0, nil)
+		return
+	}
 
 	// Update task with total frames
 	s.updateTaskStatus(task.ID, models.TranscriptionStatusProcessing, "", len(frames), nil)
