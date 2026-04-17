@@ -100,42 +100,42 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SPLIT-01 | — | Pending |
-| SPLIT-02 | — | Pending |
-| SPLIT-03 | — | Pending |
-| SPLIT-04 | — | Pending |
-| SPLIT-05 | — | Pending |
-| SNAP-01 | — | Pending |
-| SNAP-02 | — | Pending |
-| SCAN-01 | — | Pending |
-| SCAN-02 | — | Pending |
-| TRAN-01 | — | Pending |
-| TRAN-02 | — | Pending |
-| TRAN-03 | — | Pending |
-| TRAN-04 | — | Pending |
-| TRAN-05 | — | Pending |
-| TRAN-06 | — | Pending |
-| LCL-01 | — | Pending |
-| LCL-02 | — | Pending |
-| LCL-03 | — | Pending |
-| LCL-04 | — | Pending |
-| PPT-01 | — | Pending |
-| PPT-02 | — | Pending |
-| PPT-03 | — | Pending |
-| PPT-04 | — | Pending |
-| PPT-05 | — | Pending |
-| PPT-06 | — | Pending |
-| OSS-01 | — | Pending |
-| OSS-02 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
+| SPLIT-01 | Phase 1 | Pending |
+| SPLIT-02 | Phase 1 | Pending |
+| SPLIT-03 | Phase 1 | Pending |
+| SPLIT-04 | Phase 1 | Pending |
+| SPLIT-05 | Phase 1 | Pending |
+| SNAP-01 | Phase 1 | Pending |
+| SNAP-02 | Phase 1 | Pending |
+| SCAN-01 | Phase 1 | Pending |
+| SCAN-02 | Phase 1 | Pending |
+| UI-01 | Phase 1 | Pending |
+| LCL-01 | Phase 2 | Pending |
+| LCL-02 | Phase 2 | Pending |
+| LCL-03 | Phase 2 | Pending |
+| LCL-04 | Phase 2 | Pending |
+| TRAN-01 | Phase 2/4 | Pending |
+| TRAN-04 | Phase 2 | Pending |
+| TRAN-06 | Phase 2 | Pending |
+| PPT-01 | Phase 3 | Pending |
+| PPT-02 | Phase 3 | Pending |
+| PPT-03 | Phase 3 | Pending |
+| PPT-04 | Phase 3 | Pending |
+| PPT-05 | Phase 3 | Pending |
+| PPT-06 | Phase 3 | Pending |
+| UI-03 | Phase 3 | Pending |
+| OSS-01 | Phase 4 | Pending |
+| OSS-02 | Phase 4 | Pending |
+| TRAN-02 | Phase 4 | Pending |
+| TRAN-03 | Phase 4 | Pending |
+| TRAN-05 | Phase 4 | Pending |
+| UI-02 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 30 total
-- Mapped to phases: 0
-- Unmapped: 30 ⚠️
+- Mapped to phases: 30 (100%)
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-17*
-*Last updated: 2026-04-17 after initial definition*
+*Last updated: 2026-04-17 after roadmap creation*
