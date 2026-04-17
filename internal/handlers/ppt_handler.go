@@ -41,6 +41,30 @@ func NewPPThandler(
 	}
 }
 
+// verifyPPTOwnership verifies that the current user owns the PPT file
+// via its associated SourceVideoFileID. Returns an error if ownership
+// cannot be verified or if the user doesn't have access.
+func (h *PPThandler) verifyPPTOwnership(c *gin.Context, pptFile *models.PPTFile) error {
+	if pptFile.SourceVideoFileID == nil {
+		return fmt.Errorf("PPT文件没有关联视频")
+	}
+
+	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("关联视频不存在")
+		}
+		return err
+	}
+
+	userID := middleware.GetUserID(c)
+	if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
+		return fmt.Errorf("无权访问此PPT文件")
+	}
+
+	return nil
+}
+
 // GetSlides handles GET /api/v1/ppts/:id/slides (per D-09)
 func (h *PPThandler) GetSlides(c *gin.Context) {
 	idStr := c.Param("id")
@@ -201,25 +225,9 @@ func (h *PPThandler) DownloadPPT(c *gin.Context) {
 		return
 	}
 
-	// Verify ownership via SourceVideoFileID
-	if pptFile.SourceVideoFileID == nil {
-		response.GinError(c, response.CodeForbidden, "PPT文件没有关联视频，无法验证权限")
-		return
-	}
-
-	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.GinError(c, response.CodeForbidden, "关联视频不存在")
-		} else {
-			response.GinError(c, response.CodeInternalError, "获取视频信息失败")
-		}
-		return
-	}
-
-	userID := middleware.GetUserID(c)
-	if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
-		response.GinError(c, response.CodeForbidden, "无权下载此PPT文件")
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
 		return
 	}
 
@@ -243,25 +251,9 @@ func (h *PPThandler) DeletePPT(c *gin.Context) {
 		return
 	}
 
-	// Verify ownership via SourceVideoFileID
-	if pptFile.SourceVideoFileID == nil {
-		response.GinError(c, response.CodeForbidden, "PPT文件没有关联视频，无法验证权限")
-		return
-	}
-
-	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.GinError(c, response.CodeForbidden, "关联视频不存在")
-		} else {
-			response.GinError(c, response.CodeInternalError, "获取视频信息失败")
-		}
-		return
-	}
-
-	userID := middleware.GetUserID(c)
-	if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
-		response.GinError(c, response.CodeForbidden, "无权删除此PPT文件")
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
 		return
 	}
 
