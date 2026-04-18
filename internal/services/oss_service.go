@@ -3,13 +3,18 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
 
+	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
+	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"go.uber.org/zap"
 )
 
 // OSSService handles Aliyun OSS file operations
 type OSSService struct {
+	client *oss.Client
 	logger *zap.Logger
 	config *config.OSSConfig
 }
@@ -25,19 +30,21 @@ func NewOSSService(cfg *config.OSSConfig, logger *zap.Logger) (*OSSService, erro
 		return nil, fmt.Errorf("OSS配置不完整: endpoint, bucket_name, access_key_id, access_key_secret 不能为空")
 	}
 
-	// TODO: Implement actual OSS client initialization when SDK v2 credentials compatibility is resolved
-	// The alibabacloud-oss-go-sdk-v2 requires a specific credentials provider interface
-	// that is incompatible with the standalone credentials-go package
-	//
-	// For now, we create a service with stub implementations that validate inputs
-	// and log operations. Full OSS integration will be completed in a follow-up task.
+	// Use OSS SDK v2's own credentials package (NOT the standalone credentials-go)
+	provider := credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.AccessKeySecret)
 
-	logger.Info("OSS服务初始化(存根模式)",
+	ossCfg := oss.NewConfig().
+		WithEndpoint(cfg.Endpoint).
+		WithCredentialsProvider(provider)
+
+	client := oss.NewClient(ossCfg)
+
+	logger.Info("OSS服务初始化成功",
 		zap.String("endpoint", cfg.Endpoint),
-		zap.String("bucket", cfg.BucketName),
-		zap.String("note", "实际OSS SDK集成待实现"))
+		zap.String("bucket", cfg.BucketName))
 
 	return &OSSService{
+		client: client,
 		logger: logger,
 		config: cfg,
 	}, nil
@@ -48,9 +55,6 @@ func (s *OSSService) UploadFile(ctx context.Context, localPath string, objectKey
 	if !s.config.Enabled {
 		return "", fmt.Errorf("OSS服务未启用")
 	}
-
-	// TODO: Implement actual OSS upload when credentials package compatibility is resolved
-	// For now, this is a stub that validates inputs
 	if localPath == "" {
 		return "", fmt.Errorf("本地文件路径不能为空")
 	}
@@ -58,13 +62,49 @@ func (s *OSSService) UploadFile(ctx context.Context, localPath string, objectKey
 		return "", fmt.Errorf("OSS对象键不能为空")
 	}
 
-	s.logger.Info("OSS上传(存根实现)",
+	// Open local file
+	file, err := os.Open(localPath)
+	if err != nil {
+		return "", fmt.Errorf("打开本地文件失败: %w", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("获取文件信息失败: %w", err)
+	}
+
+	// Upload to OSS using PutObject
+	_, err = s.client.PutObject(ctx, &oss.PutObjectRequest{
+		Bucket:        oss.Ptr(s.config.BucketName),
+		Key:           oss.Ptr(objectKey),
+		Body:          file,
+		ContentLength: oss.Ptr(fileInfo.Size()),
+	})
+	if err != nil {
+		return "", fmt.Errorf("OSS上传失败: %w", err)
+	}
+
+	s.logger.Info("文件已上传到OSS",
 		zap.String("local_path", localPath),
 		zap.String("object_key", objectKey),
-		zap.String("note", "实际OSS上传功能待实现SDK兼容性解决后启用"))
+		zap.Int64("file_size", fileInfo.Size()))
 
-	// Return a placeholder URL
-	return fmt.Sprintf("https://%s.oss-cn-hangzhou.aliyuncs.com/%s", s.config.BucketName, objectKey), nil
+	// Generate presigned URL for downloading
+	ttl := time.Duration(s.config.PresignedURLTTL) * time.Second
+	if ttl == 0 {
+		ttl = 24 * time.Hour
+	}
+
+	presignResult, err := s.client.Presign(ctx, &oss.GetObjectRequest{
+		Bucket: oss.Ptr(s.config.BucketName),
+		Key:    oss.Ptr(objectKey),
+	}, oss.PresignExpires(ttl))
+	if err != nil {
+		return "", fmt.Errorf("生成预签名URL失败: %w", err)
+	}
+
+	return presignResult.URL, nil
 }
 
 // SetLifecycleRule sets an expiration rule for uploaded files (per OSS-02)
@@ -73,18 +113,30 @@ func (s *OSSService) SetLifecycleRule(ctx context.Context, ruleID string, prefix
 		return fmt.Errorf("OSS服务未启用")
 	}
 
-	// Note: OSS SDK v2 lifecycle rule management is complex
-	// For simplicity, we'll log this and document that lifecycle rules
-	// should be configured via OSS console or using SetBucketLifecycle API
-	s.logger.Info("OSS生命周期规则已记录",
+	daysInt32 := int32(days)
+	_, err := s.client.PutBucketLifecycle(ctx, &oss.PutBucketLifecycleRequest{
+		Bucket: oss.Ptr(s.config.BucketName),
+		LifecycleConfiguration: &oss.LifecycleConfiguration{
+			Rules: []oss.LifecycleRule{
+				{
+					ID:     oss.Ptr(ruleID),
+					Prefix: oss.Ptr(prefix),
+					Status: oss.Ptr("Enabled"),
+					Expiration: &oss.LifecycleRuleExpiration{
+						Days: &daysInt32,
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("设置生命周期规则失败: %w", err)
+	}
+
+	s.logger.Info("OSS生命周期规则已设置",
 		zap.String("rule_id", ruleID),
 		zap.String("prefix", prefix),
-		zap.Int("days", days),
-		zap.String("note", "请在OSS控制台配置生命周期规则或使用SetBucketLifecycle API"))
-
-	// For actual implementation, you would use:
-	// s.client.SetBucketLifecycle(ctx, &oss.SetBucketLifecycleRequest{...})
-	// This requires complex lifecycle rule XML construction
+		zap.Int("days", days))
 
 	return nil
 }
@@ -95,11 +147,15 @@ func (s *OSSService) DeleteFile(ctx context.Context, objectKey string) error {
 		return fmt.Errorf("OSS服务未启用")
 	}
 
-	// TODO: Implement actual OSS deletion when credentials package compatibility is resolved
-	s.logger.Info("OSS文件删除(存根实现)",
-		zap.String("object_key", objectKey),
-		zap.String("note", "实际OSS删除功能待实现SDK兼容性解决后启用"))
+	_, err := s.client.DeleteObject(ctx, &oss.DeleteObjectRequest{
+		Bucket: oss.Ptr(s.config.BucketName),
+		Key:    oss.Ptr(objectKey),
+	})
+	if err != nil {
+		return fmt.Errorf("删除OSS文件失败: %w", err)
+	}
 
+	s.logger.Info("文件已从OSS删除", zap.String("object_key", objectKey))
 	return nil
 }
 
@@ -110,5 +166,5 @@ func (s *OSSService) IsEnabled() bool {
 
 // IsStub returns true when the OSS service is running in stub mode (no actual SDK integration)
 func (s *OSSService) IsStub() bool {
-	return true // TODO: Return false when actual OSS SDK integration is completed
+	return s.client == nil // Stub mode when client is nil (disabled or no real initialization)
 }
