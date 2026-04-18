@@ -142,6 +142,14 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(videoFileID uint, sam
 		}
 	}
 
+	// Prevent duplicate active tasks for the same video file
+	s.statusMu.RLock()
+	existing, exists := s.statusMap[videoFileID]
+	s.statusMu.RUnlock()
+	if exists && existing.Status == models.TranscriptionStatusProcessing {
+		return fmt.Errorf("该视频已有正在进行的转录任务")
+	}
+
 	// Create task with mode
 	task := &models.TranscriptionTask{
 		VideoFileID:  videoFileID,
