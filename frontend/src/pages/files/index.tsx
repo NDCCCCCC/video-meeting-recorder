@@ -143,7 +143,7 @@ export default function FileManagement() {
         setStats(response.data)
       }
     } catch (error) {
-      console.error('加载统计信息失败:', error)
+      // Stats loading failure is non-critical, silently ignore
     }
   }, [])
 
@@ -163,7 +163,7 @@ export default function FileManagement() {
       }
       return false
     } catch (error) {
-      console.error('检查 PPT 结果失败:', error)
+      // PPT check failure is non-critical, silently ignore
       return false
     }
   }, [videosWithPpt])
