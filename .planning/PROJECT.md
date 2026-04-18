@@ -14,26 +14,30 @@
 
 <!-- Shipped and confirmed valuable. -->
 
-- ✓ 华为会议终端自动录制 — 已实现，支持自动/手动录制任务
-- ✓ 视频格式转换（MKV→MP4）— 已实现，基于FFmpeg
-- ✓ HLS实时预览 — 已实现，录制中可观看实时流
-- ✓ RBAC权限系统 — 已实现，支持角色/权限/API密钥
+- ✓ 华为会议终端自动录制 — 已实现
+- ✓ 视频格式转换（MKV→MP4）— 已实现
+- ✓ HLS实时预览 — 已实现
+- ✓ RBAC权限系统 — 已实现
 - ✓ SM4-GCM加密Token认证 — 已实现
-- ✓ 审计日志 — 已实现，记录所有操作
+- ✓ 审计日志 — 已实现
 - ✓ 文件管理（上传/下载/配额/分享）— 已实现
 - ✓ 通知系统 — 已实现
 - ✓ API密钥管理 — 已实现
 - ✓ USB设备扫描 — 已实现
+- ✓ 视频多点分割 — v1.0 (Phase 1)
+- ✓ 录制MP4快照 — v1.0 (Phase 1)
+- ✓ 自动文件扫描 — v1.0 (Phase 1)
+- ✓ 本地转录（SSIM/pHash/边缘检测）— v1.0 (Phase 2)
+- ✓ PPT预览/下载/合并 — v1.0 (Phase 3)
+- ✓ 阿里云OSS文件中转 — v1.0 (Phase 4)
+- ✓ 通义听悟云端转录 — v1.0 (Phase 4)
+- ✓ 云端/本地自动降级 — v1.0 (Phase 4)
 
 ### Active
 
-<!-- Current scope. Building toward these. -->
+<!-- Next milestone scope. -->
 
-- [ ] 视频多点分割 — 用户可在视频上标记多个时间点，将视频拆分为多段
-- [ ] 阿里通义听悟转录集成 — 手动触发视频转录，支持PPT画面提取
-- [ ] 阿里云OSS文件中转 — 上传视频到OSS获取公网URL供通义听悟访问
-- [ ] 转录结果管理 — 转录任务状态跟踪，PPT和文本结果存储
-- [ ] PPT独立下载 — 转录完成后PPT和视频分别下载
+(None — plan next milestone with /gsd-new-milestone)
 
 ### Out of Scope
 
@@ -68,11 +72,11 @@
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| 全Go实现（非Python微服务） | 与现有代码库一致，单进程部署，运维简单 | — Pending |
-| 阿里云OSS替代七牛云 | 七牛测试域名30天过期，OSS有永久域名且与通义听悟同生态 | — Pending |
-| 通义听悟PPT提取（非文字转PPT） | 会议场景中PPT画面提取比文字生成更准确 | — Pending |
-| 视频多点分割用FFmpeg | FFmpeg已集成，seek+copy模式快速无损分割 | — Pending |
-| 转录仅手动触发 | 初期简化流程，避免自动转录的资源消耗和错误处理 | — Pending |
+| 全Go实现（非Python微服务） | 与现有代码库一致，单进程部署，运维简单 | ✓ Good |
+| 阿里云OSS替代七牛云 | 七牛测试域名30天过期，OSS有永久域名且与通义听悟同生态 | ✓ Good |
+| 通义听悟PPT提取（非文字转PPT） | 会议场景中PPT画面提取比文字生成更准确 | ✓ Good |
+| 视频多点分割用FFmpeg | FFmpeg已集成，seek+copy模式快速无损分割 | ✓ Good |
+| 转录仅手动触发 | 初期简化流程，避免自动转录的资源消耗和错误处理 | ✓ Good |
 
 ## Evolution
 
@@ -92,4 +96,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-17 after milestone v1.0 initialization*
+*Last updated: 2026-04-18 after v1.0 milestone completion*
