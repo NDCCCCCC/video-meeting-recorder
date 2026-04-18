@@ -440,7 +440,7 @@ func setDefaults(cfg *Config) {
 		cfg.Huawei.KeepAliveInterval = 300 * time.Second
 	}
 	if cfg.Huawei.MinTLSVersion == "" {
-		cfg.Huawei.MinTLSVersion = "1.0"
+		cfg.Huawei.MinTLSVersion = "1.2"
 	}
 
 	// OSS defaults
@@ -545,7 +545,7 @@ huawei:
   api_timeout: "30s"
   session_timeout: "3600s"
   keep_alive_interval: "300s"
-  min_tls_version: "1.0"
+  min_tls_version: "1.2"
 
 ffmpeg:
   path: "./bin/ffmpeg"  # 使用项目内置的 ffmpeg
