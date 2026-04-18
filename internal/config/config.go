@@ -93,7 +93,7 @@ type HuaweiConfig struct {
 	ConferenceServer   string        `mapstructure:"conference_server" json:"conference_server" yaml:"conference_server"`
 	ConferencePort     int           `mapstructure:"conference_port" json:"conference_port" yaml:"conference_port"`
 	Username           string        `mapstructure:"username" json:"username" yaml:"username"`
-	Password           string        `mapstructure:"password" json:"password" yaml:"password"`
+	Password           string        `mapstructure:"password" json:"-" yaml:"password"`
 	HTTPS              bool          `mapstructure:"https" json:"https" yaml:"https"`
 	InsecureSkipVerify bool          `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 	APITimeout         time.Duration `mapstructure:"api_timeout" json:"api_timeout" yaml:"api_timeout"`
@@ -140,7 +140,7 @@ type OSSConfig struct {
 	Endpoint        string `mapstructure:"endpoint" json:"endpoint" yaml:"endpoint"`
 	BucketName      string `mapstructure:"bucket_name" json:"bucket_name" yaml:"bucket_name"`
 	AccessKeyID     string `mapstructure:"access_key_id" json:"access_key_id" yaml:"access_key_id"`
-	AccessKeySecret string `mapstructure:"access_key_secret" json:"access_key_secret" yaml:"access_key_secret"`
+	AccessKeySecret string `mapstructure:"access_key_secret" json:"-" yaml:"access_key_secret"`
 	Enabled         bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
 	UploadTimeout   int    `mapstructure:"upload_timeout" json:"upload_timeout" yaml:"upload_timeout"`       // seconds
 	PresignedURLTTL int    `mapstructure:"presigned_url_ttl" json:"presigned_url_ttl" yaml:"presigned_url_ttl"` // seconds, default 86400
@@ -149,7 +149,7 @@ type OSSConfig struct {
 // TingwuConfig 阿里通义听悟配置
 type TingwuConfig struct {
 	AppKey    string `mapstructure:"app_key" json:"app_key" yaml:"app_key"`
-	AppSecret string `mapstructure:"app_secret" json:"app_secret" yaml:"app_secret"`
+	AppSecret string `mapstructure:"app_secret" json:"-" yaml:"app_secret"`
 	BaseURL   string `mapstructure:"base_url" json:"base_url" yaml:"base_url"`
 	Enabled   bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
 	APITimeout int   `mapstructure:"api_timeout" json:"api_timeout" yaml:"api_timeout"` // seconds
