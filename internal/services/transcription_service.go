@@ -581,7 +581,9 @@ func (s *TranscriptionService) processCloudTranscription(task *models.Transcript
 	s.db.Model(task).Update("cloud_task_id", cloudTaskID)
 
 	// Stage 3: Poll Tingwu status with exponential backoff (25-90%)
-	s.pollTingwuStatus(ctx, task, cloudTaskID)
+	if !s.pollTingwuStatus(ctx, task, cloudTaskID) {
+		return // Failure already handled by handleCloudFailure
+	}
 
 	// Stage 4: Download results (90-100%)
 	s.updateProgress(task.VideoFileID, models.TranscriptionStageDownloading, 0, 0, 90, "", nil)
@@ -629,7 +631,8 @@ func (s *TranscriptionService) processCloudTranscription(task *models.Transcript
 }
 
 // pollTingwuStatus polls Tingwu task status with exponential backoff (TRAN-04)
-func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *models.TranscriptionTask, cloudTaskID string) {
+// Returns true if Tingwu reported Completed, false if polling failed (failure already handled by handleCloudFailure).
+func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *models.TranscriptionTask, cloudTaskID string) bool {
 	delay := 2 * time.Second
 	maxDelay := 60 * time.Second // TRAN-04: max delay for exponential backoff
 	maxAttempts := 120
@@ -638,7 +641,7 @@ func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *model
 		select {
 		case <-ctx.Done():
 			s.handleCloudFailure(task, ctx.Err(), false)
-			return
+			return false
 		case <-time.After(delay):
 		}
 
@@ -668,11 +671,11 @@ func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *model
 			s.updateProgress(task.VideoFileID, models.TranscriptionStageProcessing, 0, 0, percentage, "", nil)
 			delay = 10 * time.Second
 		case "Completed":
-			return // Done!
+			return true // Done!
 		case "Failed":
 			s.handleCloudFailure(task,
 				fmt.Errorf("Tingwu处理失败: %s", status.ErrorMessage), false)
-			return
+			return false
 		default:
 			s.logger.Warn("未知Tingwu状态",
 				zap.String("status", status.Status))
@@ -682,6 +685,7 @@ func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *model
 
 	// Exhausted attempts
 	s.handleCloudFailure(task, fmt.Errorf("轮询超时: 超过最大尝试次数"), false)
+	return false
 }
 
 // handleCloudFailure handles cloud transcription failures with auto-fallback logic (per D-07, D-08)
