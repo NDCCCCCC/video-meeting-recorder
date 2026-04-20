@@ -244,13 +244,21 @@ export default function ResultDetailPage() {
       }
     }
 
-    // Initial check
-    poll().then(() => {
-      // If still extracting, start polling
-      if (!cancelled && isLoadingSlides) {
-        intervalId = setInterval(poll, 2000)
-      }
-    })
+    // WR-03, WR-04: Add proper error handling for initial poll and prevent race conditions
+    poll()
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Initial poll error:', error)
+          message.error('加载幻灯片失败')
+          setIsLoadingSlides(false)
+        }
+      })
+      .then(() => {
+        // If still extracting, start polling
+        if (!cancelled && isLoadingSlides) {
+          intervalId = setInterval(poll, 2000)
+        }
+      })
 
     return () => {
       cancelled = true
