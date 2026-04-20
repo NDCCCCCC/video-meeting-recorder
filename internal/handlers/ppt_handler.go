@@ -21,6 +21,7 @@ type PPThandler struct {
 	slideCacheService *services.SlideCacheService
 	mergeService      *services.PPTMergeService
 	videoFileService  *services.VideoFileService
+	pptEditorService  *services.PPTEditorService
 	logger            *zap.Logger
 }
 
@@ -30,6 +31,7 @@ func NewPPThandler(
 	slideCacheService *services.SlideCacheService,
 	mergeService *services.PPTMergeService,
 	videoFileService *services.VideoFileService,
+	pptEditorService *services.PPTEditorService,
 	logger *zap.Logger,
 ) *PPThandler {
 	return &PPThandler{
@@ -37,6 +39,7 @@ func NewPPThandler(
 		slideCacheService: slideCacheService,
 		mergeService:      mergeService,
 		videoFileService:  videoFileService,
+		pptEditorService:  pptEditorService,
 		logger:            logger,
 	}
 }
@@ -343,5 +346,201 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 			"file_name":  pptFile.FileName,
 			"file_path":  pptFile.FilePath,
 		},
+	})
+}
+
+// DetectDuplicatesRequest 检测重复幻灯片请求
+type DetectDuplicatesRequest struct {
+	Threshold float64 `form:"threshold"` // 相似度阈值 (可选，默认0.95)
+}
+
+// DetectDuplicatesHandler handles GET /api/v1/ppts/:id/duplicates
+func (h *PPThandler) DetectDuplicatesHandler(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的PPT ID")
+		return
+	}
+
+	// Load PPT file
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		return
+	}
+
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
+		return
+	}
+
+	// Parse threshold parameter (optional)
+	var req DetectDuplicatesRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		req.Threshold = 0.95 // Default threshold
+	}
+
+	// Call service to detect duplicates
+	groups, err := h.pptEditorService.DetectDuplicateSlides(uint(id))
+	if err != nil {
+		h.logger.Error("Failed to detect duplicate slides",
+			zap.String("ppt_id", idStr),
+			zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "检测重复幻灯片失败: "+err.Error())
+		return
+	}
+
+	response.GinSuccess(c, gin.H{
+		"groups":        groups,
+		"total_scanned": pptFile.PageCount,
+		"duplicate_count": len(groups),
+	})
+}
+
+// DeleteSlidesRequest 删除幻灯片请求
+type DeleteSlidesRequest struct {
+	Slides []int `json:"slides" binding:"required,min=1"`
+}
+
+// DeleteSlidesHandler handles DELETE /api/v1/ppts/:id/slides
+func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的PPT ID")
+		return
+	}
+
+	// Parse request body
+	var req DeleteSlidesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的请求参数")
+		return
+	}
+
+	// Validate slides array
+	if len(req.Slides) == 0 {
+		response.GinError(c, response.CodeInvalidRequest, "请选择要删除的幻灯片")
+		return
+	}
+
+	// Load PPT file
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		return
+	}
+
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
+		return
+	}
+
+	// Validate slide numbers are within range
+	for _, slideNum := range req.Slides {
+		if slideNum < 1 || slideNum > pptFile.PageCount {
+			response.GinError(c, response.CodeInvalidRequest,
+				fmt.Sprintf("无效的幻灯片编号: %d (有效范围: 1-%d)", slideNum, pptFile.PageCount))
+			return
+		}
+	}
+
+	// Call service to delete slides
+	if err := h.pptEditorService.DeleteSlides(uint(id), req.Slides); err != nil {
+		h.logger.Error("Failed to delete slides",
+			zap.String("ppt_id", idStr),
+			zap.Ints("slide_numbers", req.Slides),
+			zap.Error(err))
+
+		// Map error messages
+		errMsg := err.Error()
+		switch {
+		case errMsg == "cannot delete all slides":
+			response.GinError(c, response.CodeInvalidRequest, "不能删除所有幻灯片")
+		case errMsg == "no backup exists for rollback":
+			response.GinError(c, response.CodeInternalError, "无法创建备份")
+		default:
+			response.GinError(c, response.CodeInternalError, "删除幻灯片失败: "+err.Error())
+		}
+		return
+	}
+
+	// Get updated PPT file info
+	updatedPPT, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
+		response.GinSuccess(c, gin.H{
+			"message": "幻灯片删除成功",
+			"deleted_slides": req.Slides,
+		})
+		return
+	}
+
+	// Parse deleted slides for response
+	deletedSlides, _ := updatedPPT.GetDeletedSlides()
+
+	response.GinSuccess(c, gin.H{
+		"message":       "幻灯片删除成功",
+		"page_count":    updatedPPT.PageCount,
+		"deleted_slides": deletedSlides,
+		"backup_path":   updatedPPT.BackupPath,
+	})
+}
+
+// RollbackHandler handles POST /api/v1/ppts/:id/rollback
+func (h *PPThandler) RollbackHandler(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的PPT ID")
+		return
+	}
+
+	// Load PPT file
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		return
+	}
+
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
+		return
+	}
+
+	// Check if backup exists
+	if !pptFile.HasBackup() {
+		response.GinError(c, response.CodeInvalidRequest, "没有可用的备份文件")
+		return
+	}
+
+	// Call service to rollback
+	if err := h.pptEditorService.Rollback(uint(id)); err != nil {
+		h.logger.Error("Failed to rollback PPT",
+			zap.String("ppt_id", idStr),
+			zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "回滚失败: "+err.Error())
+		return
+	}
+
+	// Get updated PPT file info
+	updatedPPT, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
+		response.GinSuccess(c, gin.H{
+			"message": "回滚成功",
+			"restored": true,
+		})
+		return
+	}
+
+	response.GinSuccess(c, gin.H{
+		"message": "回滚成功",
+		"restored": true,
+		"page_count": updatedPPT.PageCount,
 	})
 }
