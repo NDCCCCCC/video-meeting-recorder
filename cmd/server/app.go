@@ -576,7 +576,7 @@ func (a *MinimalApp) initHandlers() error {
 	pptFileService := services.NewPPTFileService(a.db, a.logger, a.config)
 
 	// Create PPT editor service (reuse existing similarityDetector and pptxGenerator from transcription service)
-	a.pptEditorService = services.NewPPTEditorService(a.db, a.logger, a.config, a.slideCacheService, similarityDetector, pptxGenerator)
+	a.pptEditorService = services.NewPPTEditorService(a.db, a.logger, a.config, a.slideCacheService, similarityDetector, pptxGenerator, timestampMapper)
 
 	// Create frame capture service for slide capture feature (reuse ffprobe path from earlier)
 	a.frameCaptureService = services.NewFrameCaptureService(a.config.FFmpeg.Path, ffprobePath, a.logger)

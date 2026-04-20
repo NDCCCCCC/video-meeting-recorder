@@ -46,6 +46,7 @@ type PPTEditorService struct {
 	slideCache         *SlideCacheService
 	similarityDetector *SimilarityDetector
 	pptxGenerator      *PPTXGenerator
+	timestampMapper    *TimestampMapper
 }
 
 // NewPPTEditorService creates a new PPTEditorService instance
@@ -56,6 +57,7 @@ func NewPPTEditorService(
 	slideCache *SlideCacheService,
 	similarityDetector *SimilarityDetector,
 	pptxGenerator *PPTXGenerator,
+	timestampMapper *TimestampMapper,
 ) *PPTEditorService {
 	return &PPTEditorService{
 		db:                 db,
@@ -64,6 +66,7 @@ func NewPPTEditorService(
 		slideCache:         slideCache,
 		similarityDetector: similarityDetector,
 		pptxGenerator:      pptxGenerator,
+		timestampMapper:    timestampMapper,
 	}
 }
 
@@ -630,6 +633,14 @@ func (s *PPTEditorService) InsertCapturedFrame(pptFileID uint, frameBytes []byte
 	// Invalidate slide cache
 	if err := s.slideCache.InvalidateCache(pptFileID); err != nil {
 		s.logger.Warn("Failed to invalidate slide cache", zap.Error(err))
+	}
+
+	// Invalidate timestamp cache as well (CR-02 fix)
+	if s.timestampMapper != nil && pptFile.SourceVideoFileID != nil {
+		s.timestampMapper.InvalidateCache(*pptFile.SourceVideoFileID)
+		s.logger.Debug("Timestamp cache invalidated after slide insertion",
+			zap.Uint("ppt_file_id", pptFileID),
+			zap.Uint("video_file_id", *pptFile.SourceVideoFileID))
 	}
 
 	// Update database record
