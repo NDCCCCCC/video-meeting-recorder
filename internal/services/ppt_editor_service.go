@@ -714,8 +714,12 @@ func (s *PPTEditorService) SaveCapturedFrame(pptFileID uint, frameBytes []byte, 
 
 	// Generate thumbnail
 	if err := s.generateThumbnail(fullsizePath, thumbnailPath); err != nil {
+		// WR-05: Return error for critical failures (disk full, permissions)
+		if os.IsNotExist(err) || os.IsPermission(err) {
+			return "", fmt.Errorf("failed to generate thumbnail: %w", err)
+		}
 		s.logger.Warn("Failed to generate thumbnail", zap.Error(err))
-		// Don't fail on thumbnail generation error
+		// Continue for decode errors (non-critical)
 	}
 
 	s.logger.Info("Captured frame saved",
