@@ -20,19 +20,21 @@ type SimilarityDetector struct {
 
 // DetectionResult 检测结果
 type DetectionResult struct {
-	Changed        bool    // 是否检测到变化
-	SSIMScore      float64 // SSIM分数 (0.0-1.0)
-	PHashDistance  int     // pHash汉明距离
-	EdgeChangeRate float64 // 边缘变化率 (0.0-1.0)
+	Changed         bool    // 是否检测到变化
+	SSIMScore       float64 // SSIM分数 (0.0-1.0)
+	PHashDistance   int     // pHash汉明距离
+	EdgeChangeRate  float64 // 边缘变化率 (0.0-1.0)
+	IsBlackFrame    bool    // 当前帧是否为黑色/空白帧
+	PrevIsBlackFrame bool   // 上一帧是否为黑色/空白帧
 }
 
 // NewSimilarityDetector 创建相似度检测器
 func NewSimilarityDetector(logger *zap.Logger) *SimilarityDetector {
 	return &SimilarityDetector{
 		logger:         logger,
-		ssimThreshold:  0.85,  // D-08: SSIM阈值
-		phashThreshold: 10,    // D-08: pHash距离阈值
-		edgeThreshold:  0.25,  // D-08: 边缘变化率阈值
+		ssimThreshold:  0.90, // 提高精度：更严格的SSIM阈值 (从0.85提高到0.90)
+		phashThreshold: 5,    // 提高精度：更严格的pHash距离 (从10降低到5)
+		edgeThreshold:  0.15, // 提高精度：更严格的边缘变化率 (从0.25降低到0.15)
 	}
 }
 
@@ -42,8 +44,32 @@ func (d *SimilarityDetector) IsFrameChanged(prevImg, currImg image.Image) (*Dete
 	prevImg = d.downscaleTo720p(prevImg)
 	currImg = d.downscaleTo720p(currImg)
 
+	// 检测黑色/空白帧 (Fix: 添加黑帧检测以避免误判)
+	prevIsBlack := d.isBlackFrame(prevImg)
+	currIsBlack := d.isBlackFrame(currImg)
+
+	result := &DetectionResult{
+		IsBlackFrame:    currIsBlack,
+		PrevIsBlackFrame: prevIsBlack,
+	}
+
+	// 如果两帧都是黑色帧，认为没有变化 (Fix: 黑帧之间不应检测为变化)
+	if prevIsBlack && currIsBlack {
+		result.Changed = false
+		result.SSIMScore = 1.0 // 完全相同
+		result.PHashDistance = 0
+		result.EdgeChangeRate = 0.0
+
+		d.logger.Debug("两帧均为黑色帧，跳过相似度计算",
+			zap.Bool("prev_is_black", prevIsBlack),
+			zap.Bool("curr_is_black", currIsBlack),
+		)
+		return result, nil
+	}
+
 	// 计算SSIM
 	ssimScore := d.calculateSSIM(prevImg, currImg)
+	result.SSIMScore = ssimScore
 
 	// 计算pHash距离
 	phashDist, err := d.calculatePHashDistance(prevImg, currImg)
@@ -51,25 +77,30 @@ func (d *SimilarityDetector) IsFrameChanged(prevImg, currImg image.Image) (*Dete
 		d.logger.Warn("pHash计算失败，将使用距离0", zap.Error(err))
 		phashDist = 0
 	}
+	result.PHashDistance = phashDist
 
 	// 计算边缘变化率
 	edgeRate := d.calculateEdgeChangeRate(prevImg, currImg)
+	result.EdgeChangeRate = edgeRate
 
 	// OR逻辑: 任一指标超过阈值即认为发生变化 (D-07)
-	changed := ssimScore < d.ssimThreshold || phashDist > d.phashThreshold || edgeRate > d.edgeThreshold
-
-	result := &DetectionResult{
-		Changed:        changed,
-		SSIMScore:      ssimScore,
-		PHashDistance:  phashDist,
-		EdgeChangeRate: edgeRate,
+	// Fix: 如果当前帧是黑色帧而上一帧不是，也不算变化（黑帧应该被过滤掉）
+	if currIsBlack && !prevIsBlack {
+		result.Changed = false
+		d.logger.Debug("当前帧为黑色帧，跳过", zap.Bool("curr_is_black", currIsBlack))
+		return result, nil
 	}
+
+	changed := ssimScore < d.ssimThreshold || phashDist > d.phashThreshold || edgeRate > d.edgeThreshold
+	result.Changed = changed
 
 	d.logger.Debug("帧相似度检测",
 		zap.Bool("changed", changed),
 		zap.Float64("ssim", ssimScore),
 		zap.Int("phash_dist", phashDist),
 		zap.Float64("edge_rate", edgeRate),
+		zap.Bool("prev_is_black", prevIsBlack),
+		zap.Bool("curr_is_black", currIsBlack),
 	)
 
 	return result, nil
@@ -186,7 +217,7 @@ func (d *SimilarityDetector) countEdgePixels(img *image.Gray) int {
 			}
 
 			// 计算梯度幅值
-			magnitude := math.Sqrt(float64(gx*gx+gy*gy))
+			magnitude := math.Sqrt(float64(gx*gx + gy*gy))
 			if magnitude > float64(threshold) {
 				edgeCount++
 			}
@@ -222,6 +253,39 @@ func (d *SimilarityDetector) toGrayscale(img image.Image) *image.Gray {
 	gray := image.NewGray(img.Bounds())
 	draw.Draw(gray, gray.Bounds(), img, img.Bounds().Min, draw.Src)
 	return gray
+}
+
+// isBlackFrame 检测图像是否为黑色/空白帧
+// 判断标准: 平均亮度 < 阈值 (默认15，避免误判噪声)
+func (d *SimilarityDetector) isBlackFrame(img image.Image) bool {
+	gray := d.toGrayscale(img)
+	bounds := gray.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	// 计算平均亮度
+	sum := 0
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			sum += int(gray.GrayAt(x, y).Y)
+		}
+	}
+
+	avgBrightness := float64(sum) / float64(width*height)
+
+	// 阈值设为15 (0-255范围)，可以捕捉非常暗的帧
+	// 纯黑帧的平均亮度为0，正常视频帧通常 > 30
+	const blackThreshold = 15.0
+	isBlack := avgBrightness < blackThreshold
+
+	if isBlack {
+		d.logger.Debug("检测到黑色帧",
+			zap.Float64("avg_brightness", avgBrightness),
+			zap.Float64("threshold", blackThreshold),
+		)
+	}
+
+	return isBlack
 }
 
 // calculateWindowMean 计算窗口内的均值

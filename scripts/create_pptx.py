@@ -51,13 +51,14 @@ def create_pptx_from_images(image_paths, output_path):
 
         page_count = 0
         skipped = []
+        missing_files = []
 
         # Add each image as a slide
-        for img_path in image_paths:
+        for i, img_path in enumerate(image_paths):
             try:
                 # Check if file exists
                 if not os.path.exists(img_path):
-                    # Skip silently - don't output warnings to stdout
+                    missing_files.append((i, img_path))
                     skipped.append(img_path)
                     continue
 
@@ -86,10 +87,19 @@ def create_pptx_from_images(image_paths, output_path):
         if page_count == 0:
             result = {
                 "success": False,
-                "error": f"No valid slides created from {len(image_paths)} input images",
-                "skipped": skipped
+                "error": f"No valid slides created from {len(image_paths)} input images. {len(missing_files)} files were missing.",
+                "skipped": skipped,
+                "missing_files": missing_files,
+                "input_count": len(image_paths)
             }
             return False, result, 1
+
+        # Warn if significant number of files were missing
+        if len(missing_files) > 0:
+            # Use stderr for warnings so stdout remains pure JSON
+            import sys
+            print(f"Warning: {len(missing_files)} out of {len(image_paths)} image files were missing", file=sys.stderr)
+            print(f"Missing files: {[p for _, p in missing_files[:5]]}{'...' if len(missing_files) > 5 else ''}", file=sys.stderr)
 
         # Ensure output directory exists
         output_dir = os.path.dirname(output_path)
@@ -104,15 +114,19 @@ def create_pptx_from_images(image_paths, output_path):
             "success": True,
             "page_count": page_count,
             "output_path": output_path,
-            "skipped_count": len(skipped)
+            "skipped_count": len(skipped),
+            "input_count": len(image_paths),
+            "missing_files": missing_files if len(missing_files) > 0 else None
         }
         return True, result, 0
 
     except Exception as e:
-        # Return error result
+        # Return error result with more details
+        import traceback
         result = {
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "traceback": traceback.format_exc()
         }
         return False, result, 1
 

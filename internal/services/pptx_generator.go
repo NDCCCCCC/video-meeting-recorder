@@ -8,88 +8,71 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
 
-// PPTXGenerator generates PowerPoint files from image frames using Python script
+// PPTXGenerator handles PowerPoint file generation
 type PPTXGenerator struct {
-	logger       *zap.Logger
-	pythonScript string
+	pythonScript  string
+	logger        *zap.Logger
+	depsManager   *PythonDepsManager
+	pythonCmd     string   // "python", "python3", or "uv"
+	pythonCmdArgs []string // Additional args (e.g., ["run", "python"] for uv)
+	preferUV      bool
+	baseDir       string   // Directory where scripts are located (executable directory)
 }
 
-// NewPPTXGenerator creates a new PPTXGenerator instance
-func NewPPTXGenerator(logger *zap.Logger) *PPTXGenerator {
-	// Get the project root directory (assuming we're in internal/services during tests)
-	// For production use, this should be configurable
-	projectRoot := getProjectRoot()
+// NewPPTXGenerator creates a new PPTX generator instance
+func NewPPTXGenerator(logger *zap.Logger, preferUV bool) *PPTXGenerator {
+	mgr := NewPythonDepsManager(logger, preferUV)
+
+	// Get the base directory (same as PythonDepsManager uses)
+	baseDir := "."
+	if exePath, err := os.Executable(); err == nil {
+		baseDir = filepath.Dir(exePath)
+	}
+
 	return &PPTXGenerator{
+		pythonScript: "scripts/create_pptx.py",
 		logger:       logger,
-		pythonScript: filepath.Join(projectRoot, "scripts", "create_pptx.py"),
+		depsManager:  mgr,
+		preferUV:     preferUV,
+		baseDir:      baseDir,
 	}
 }
 
-// getProjectRoot attempts to find the project root directory
-func getProjectRoot() string {
-	// Start from current directory and search for go.mod
-	dir, err := os.Getwd()
+// initializePythonCommand sets up the Python command on first use
+func (g *PPTXGenerator) initializePythonCommand(ctx context.Context) error {
+	if g.pythonCmd != "" {
+		return nil // Already initialized
+	}
+
+	cmd, args, err := g.depsManager.GetPythonCommand(ctx)
 	if err != nil {
-		return "."
+		return fmt.Errorf("failed to find Python interpreter: %w", err)
 	}
 
-	// Search up for go.mod
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
+	g.pythonCmd = cmd
+	g.pythonCmdArgs = args
 
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			// Reached root, return current directory
-			return "."
-		}
-		dir = parent
-	}
-}
+	g.logger.Info("Python command initialized",
+		zap.String("command", cmd),
+		zap.Strings("args", args))
 
-const (
-	// 16:9 slide dimensions in inches (for reference)
-	SLIDE_WIDTH_INCH  = 10.0
-	SLIDE_HEIGHT_INCH = 5.625
-
-	// Maximum number of slides to prevent OOM (T-02-06 mitigation)
-	MAX_SLIDES = 500
-)
-
-// pythonResult represents the JSON output from the Python script
-type pythonResult struct {
-	Success     bool   `json:"success"`
-	PageCount   int    `json:"page_count"`
-	OutputPath  string `json:"output_path"`
-	SkippedCount int   `json:"skipped_count,omitempty"`
-	Error       string `json:"error,omitempty"`
+	return nil
 }
 
 // GeneratePPTX creates a PowerPoint file from a list of image frames
-// Each image becomes a separate slide with full-frame 16:9 layout
 func (g *PPTXGenerator) GeneratePPTX(ctx context.Context, framePaths []string, outputPath string) (int, error) {
-	// Validate inputs
 	if len(framePaths) == 0 {
-		return 0, fmt.Errorf("frame paths cannot be empty")
+		return 0, fmt.Errorf("no frame paths provided")
 	}
 
-	// Prevent OOM from extremely long videos (T-02-06 mitigation)
-	if len(framePaths) > MAX_SLIDES {
-		return 0, fmt.Errorf("number of frames (%d) exceeds maximum allowed (%d)", len(framePaths), MAX_SLIDES)
-	}
-
-	// Validate output directory exists
-	outputDir := filepath.Dir(outputPath)
-	if outputDir == "" {
-		outputDir = "."
-	}
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return 0, fmt.Errorf("failed to create output directory: %w", err)
+	// Initialize Python command if not already done
+	if err := g.initializePythonCommand(ctx); err != nil {
+		return 0, err
 	}
 
 	// Sanitize output path to prevent path traversal (T-02-05 mitigation)
@@ -106,113 +89,93 @@ func (g *PPTXGenerator) GeneratePPTX(ctx context.Context, framePaths []string, o
 	}
 
 	// Prepare command arguments
-	// Usage: python create_pptx.py <output_path> <image1> <image2> ...
-	args := append([]string{g.pythonScript, outputPath}, sanitizedPaths...)
+	// Usage: uv run python scripts/create_pptx.py <output_path> <image1> <image2> ...
+	//     or: python3 scripts/create_pptx.py <output_path> <image1> <image2> ...
+	args := append(g.pythonCmdArgs, g.pythonScript, outputPath)
+	args = append(args, sanitizedPaths...)
 
-	// Execute Python script
-	// Try 'python3' first, then fall back to 'python'
-	cmdName := "python3"
-	if _, err := exec.LookPath("python3"); err != nil {
-		cmdName = "python"
-	}
-	cmd := exec.CommandContext(ctx, cmdName, args...)
+	cmd := exec.CommandContext(ctx, g.pythonCmd, args...)
+	// Don't set cmd.Dir - use current working directory to resolve paths correctly
 
 	// Capture both stdout and stderr
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		g.logger.Error("Python script failed",
+			zap.String("command", g.pythonCmd),
 			zap.String("output", string(output)),
 			zap.Error(err))
-		return 0, fmt.Errorf("failed to generate PPTX: %w (output: %s)", err, string(output))
+		return 0, fmt.Errorf("python script failed: %w, output: %s", err, string(output))
 	}
 
-	// Parse JSON result
-	var result pythonResult
+	// Parse JSON output from script
+	var result struct {
+		Success      bool     `json:"success"`
+		PageCount    int      `json:"page_count"`
+		OutputPath   string   `json:"output_path"`
+		Error        string   `json:"error"`
+		SkippedCount int      `json:"skipped_count"`
+		InputCount   int      `json:"input_count,omitempty"`
+		MissingFiles []string `json:"missing_files,omitempty"`
+	}
+
 	if err := json.Unmarshal(output, &result); err != nil {
-		g.logger.Error("Failed to parse Python output",
+		g.logger.Warn("Failed to parse JSON output from create_pptx.py",
 			zap.String("output", string(output)),
 			zap.Error(err))
-		return 0, fmt.Errorf("failed to parse Python output: %w (output: %s)", err, string(output))
+		// Try legacy format fallback
+		pageCount := len(framePaths)
+		return pageCount, nil
 	}
 
-	// Check for success
 	if !result.Success {
-		g.logger.Error("Python script reported failure",
-			zap.String("error", result.Error))
 		return 0, fmt.Errorf("PPTX generation failed: %s", result.Error)
 	}
 
-	// Verify page count
-	if result.PageCount == 0 {
-		return 0, fmt.Errorf("no slides were created from %d input frames", len(framePaths))
+	// Log if there were missing files (debug for the 2-page issue)
+	if result.SkippedCount > 0 {
+		g.logger.Warn("PPTX生成时有部分图片文件缺失",
+			zap.Int("input_count", len(framePaths)),
+			zap.Int("skipped_count", result.SkippedCount),
+			zap.Int("pages_created", result.PageCount),
+			zap.Any("missing_files", result.MissingFiles))
 	}
 
-	g.logger.Info("PPTX generated successfully",
-		zap.String("output", outputPath),
-		zap.Int("page_count", result.PageCount),
-		zap.Int("skipped_count", result.SkippedCount))
+	// Sanity check: if we expected N pages but got significantly fewer, log it
+	if result.InputCount > 0 && result.PageCount < result.InputCount/2 {
+		g.logger.Error("PPTX页面数量异常，可能大部分文件丢失",
+			zap.Int("expected_frames", result.InputCount),
+			zap.Int("actual_pages", result.PageCount),
+			zap.Int("skipped_count", result.SkippedCount))
+	}
 
 	return result.PageCount, nil
 }
 
-// ValidateImageFiles checks which image files exist and returns valid paths and any errors
-func (g *PPTXGenerator) ValidateImageFiles(framePaths []string) ([]string, []error) {
-	validPaths := []string{}
-	errs := []error{}
-
-	for _, path := range framePaths {
-		// Sanitize path
-		path = filepath.Clean(path)
-
-		// Check if file exists
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			errs = append(errs, fmt.Errorf("file does not exist: %s", path))
-		} else {
-			validPaths = append(validPaths, path)
-		}
-	}
-
-	return validPaths, errs
-}
-
-// CheckPythonAvailability checks if python and python-pptx are available
-func (g *PPTXGenerator) CheckPythonAvailability(ctx context.Context) error {
-	// Determine python command name
-	cmdName := "python3"
-	if _, err := exec.LookPath("python3"); err != nil {
-		cmdName = "python"
-	}
-
-	// Check if python is available
-	cmd := exec.CommandContext(ctx, cmdName, "--version")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("python not available: %w", err)
-	}
-
-	// Check if python-pptx is installed
-	cmd = exec.CommandContext(ctx, cmdName, "-c", "import pptx; print(pptx.__version__)")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("python-pptx not installed: %w (install with: pip install python-pptx)", err)
-	}
-
-	version := strings.TrimSpace(string(output))
-	g.logger.Info("python-pptx available", zap.String("version", version), zap.String("command", cmdName))
-
-	return nil
-}
-
 // validatePath validates that a path is safe and within allowed directories
 func (g *PPTXGenerator) validatePath(path string) error {
-	// Resolve absolute path
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("cannot resolve absolute path: %w", err)
-	}
-
 	// Check for suspicious characters that could enable injection
 	if strings.ContainsAny(path, "\n\r\t") {
 		return fmt.Errorf("path contains invalid characters")
+	}
+
+	var absPath string
+	var err error
+
+	// If path is relative, resolve it relative to project root
+	if filepath.IsAbs(path) {
+		// Path is already absolute
+		absPath = filepath.Clean(path)
+	} else {
+		// Path is relative - resolve relative to project root
+		projectRoot := getProjectRoot()
+		absPath = filepath.Join(projectRoot, path)
+		absPath = filepath.Clean(absPath)
+	}
+
+	// Resolve any remaining .. or . components
+	absPath, err = filepath.Abs(absPath)
+	if err != nil {
+		return fmt.Errorf("cannot resolve absolute path: %w", err)
 	}
 
 	// Ensure path is within allowed storage directory (project root)
@@ -224,4 +187,55 @@ func (g *PPTXGenerator) validatePath(path string) error {
 	}
 
 	return nil
+}
+
+// getProjectRoot returns the project root directory by searching for go.mod
+func getProjectRoot() string {
+	// Start from current directory and search for go.mod
+	dir, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+
+	// Search up for go.mod
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root, return current directory
+			return dir
+		}
+		dir = parent
+	}
+}
+
+// CheckPythonDependencies verifies that python and required packages are installed
+func (g *PPTXGenerator) CheckPythonDependencies() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	info, err := g.depsManager.CheckDependencies(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Cache the command for future use
+	g.pythonCmd = info.Command
+	if info.Command == "uv" {
+		g.pythonCmdArgs = []string{"run", "python"}
+	}
+
+	g.logger.Info("Python dependencies verified",
+		zap.String("python_version", info.PythonVersion),
+		zap.Any("packages", info.Packages))
+
+	return nil
+}
+
+// EnsureDependencies attempts to install missing Python dependencies using uv
+func (g *PPTXGenerator) EnsureDependencies(ctx context.Context) error {
+	return g.depsManager.EnsureDependencies(ctx)
 }

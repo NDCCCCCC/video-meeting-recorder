@@ -1,175 +1,196 @@
 ---
 phase: 03-ppt-management
-verified: 2026-04-17T12:00:00Z
-status: passed
+verified: 2026-04-18T12:00:00Z
+status: human_needed
 score: 7/7 must-haves verified
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 7/7
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 gaps: []
 deferred: []
-human_verification: []
+human_verification:
+  - test: "Click '预览PPT' button in file list, verify navigation to result page and PPT preview renders"
+    expected: "Result page loads at /results/:videoFileId with left-right split layout (70% preview, 30% info panel), sidebar thumbnails visible"
+    why_human: "Visual layout and UI interaction cannot be verified programmatically"
+  - test: "Click sidebar thumbnails to navigate slides, press ArrowLeft/ArrowRight keys, type page number"
+    expected: "Main view updates to show selected slide; keyboard navigation works; page input jumps to specified slide"
+    why_human: "Interactive browser behavior (keyboard events, click responses) requires runtime testing"
+  - test: "Click '全屏演示' button then press Escape to exit"
+    expected: "Sidebar hides, slide fills container, '退出全屏' button appears; Escape key exits fullscreen mode"
+    why_human: "CSS-only fullscreen behavior and keyboard event handling require browser runtime"
+  - test: "If multiple PPT results exist, click gallery strip cards to switch between results"
+    expected: "Preview area updates to show the selected PPT result's slides"
+    why_human: "Multi-result gallery switching is interactive UI behavior"
+  - test: "Click '合并幻灯片' to enter merge mode, select slides, drag to reorder, click '确认合并'"
+    expected: "Thumbnails become selectable with checkmark overlay; bottom bar shows selected slides; drag reorder works; merge completes with toast notification"
+    why_human: "Drag-and-drop interaction (dnd-kit) and merge result feedback require browser runtime"
+  - test: "Click '重新转录' dropdown and select local/cloud mode"
+    expected: "TranscriptionProgressModal opens showing real-time progress; on completion, new PPT appears in gallery"
+    why_human: "Modal interaction and real-time polling feedback require browser runtime"
 ---
 
 # Phase 03: PPT Management Verification Report
 
 **Phase Goal:** Users can preview PPT in browser, manage multiple transcription results, and merge slides from different PPT files
-**Verified:** 2026-04-17T12:00:00Z
-**Status:** passed
-**Re-verification:** No — initial verification
+**Verified:** 2026-04-18T12:00:00Z
+**Status:** human_needed
+**Re-verification:** Yes -- independent verification after previous passed status
 
 ## Goal Achievement
 
 ### Observable Truths
 
-| #   | Truth   | Status     | Evidence       |
-| --- | ------- | ---------- | -------------- |
-| 1   | User can download PPT file independently from original video | ✓ VERIFIED | `DownloadPPT` handler in `internal/handlers/ppt_handler.go:213-236` serves PPTX file with ownership validation; frontend `handleDownloadPpt` in `frontend/src/pages/results/index.tsx:281-284` calls download URL |
-| 2   | PPT files are displayed linked to their source video | ✓ VERIFIED | `GetPptsByVideo` endpoint in `internal/handlers/ppt_handler.go:123-157` queries PPTs by VideoFileID; frontend file list shows "预览PPT" button at `frontend/src/pages/files/index.tsx:373-380` |
-| 3   | User can preview PPT slides in browser via API-served images | ✓ VERIFIED | `GetSlides` endpoint triggers extraction via `SlideCacheService.GetOrExtractSlides`; `ServeSlideImage` at line 95-120 serves dual-resolution JPEGs; `PPTPreview` component renders images with sidebar navigation |
-| 4   | User can re-transcribe from result page (backend supports multiple PPT results per video) | ✓ VERIFIED | `GetPptsByVideo` returns all PPTs ordered DESC; `PPTFile.SourceType` and `MergedFrom` fields support multiple results; frontend `handleRetranscribe` at line 287-289 opens `TranscriptionProgressModal` |
-| 5   | System retains all historical PPT results from multiple transcriptions | ✓ VERIFIED | `PPTFile` model has `SourceVideoFileID` foreign key (no unique constraint); `GetPptsByVideo` in `internal/services/ppt_file_service.go` returns all matching records; frontend gallery strip shows all results |
-| 6   | User can merge selected slides from multiple PPT results into a new PPTX | ✓ VERIFIED | `MergeSlides` handler at line 160-210 validates request and calls `PPTMergeService.MergeSlides`; Python `merge_slides.py` script copies slides with embedded images; frontend `MergeSelectionBar` uses dnd-kit for drag-to-reorder |
-| 7   | User can view transcription results in dedicated page with preview, download, merge | ✓ VERIFIED | Route `/results/:videoFileId` registered in `frontend/src/router/index.tsx:38-39`; `ResultDetailPage` renders left-right split layout (70% preview, 30% info panel) per D-19 |
+| # | Truth | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | User can download PPT file independently from original video | VERIFIED | `DownloadPPT` handler in `ppt_handler.go:213-236` serves PPTX with ownership validation; frontend `handleDownloadPpt` in `results/index.tsx:291-294` opens download URL |
+| 2 | PPT files are displayed linked to their source video | VERIFIED | `GetPptsByVideo` endpoint in `ppt_handler.go:123-157` queries by VideoFileID with ownership check; file list shows "预览PPT" button at `files/index.tsx:402-416` with `videosWithPpt` cache check |
+| 3 | User can preview PPT slides in browser via API-served images | VERIFIED | `GetSlides` at `ppt_handler.go:69-92` triggers `SlideCacheService.GetOrExtractSlides`; `ServeSlideImage` at `ppt_handler.go:95-120` serves JPEGs with path traversal prevention; `PPTPreview.tsx` (229 lines) renders sidebar + main view with keyboard navigation |
+| 4 | User can re-transcribe from result page (backend supports multiple PPT results per video) | VERIFIED | `results/index.tsx:297-310` implements re-transcribe with mode selection (local/cloud) using `submitTranscriptionWithMode`; `TranscriptionProgressModal` reused per D-11; backend `GetPptsByVideo` returns all results ordered DESC |
+| 5 | System retains all historical PPT results from multiple transcriptions | VERIFIED | `PPTFile` model has `SourceVideoFileID` FK with no unique constraint; `GetPptsByVideoFile` in `ppt_file_service.go:43-52` returns all matching records via `Order("created_at DESC")`; frontend gallery strip displays all results |
+| 6 | User can merge selected slides from multiple PPT results into a new PPTX | VERIFIED | `MergeSlides` handler at `ppt_handler.go:160-210` validates and calls `PPTMergeService.MergeSlides`; service validates 200-slide limit (`ppt_merge_service.go:50-51`), ownership, and calls Python `merge_slides.py`; `MergeSelectionBar.tsx` (242 lines) uses @dnd-kit for drag-to-reorder with 200-limit display |
+| 7 | User can view transcription results in dedicated page with preview, download, merge | VERIFIED | Route `/results/:videoFileId` at `router/index.tsx:38-39`; `ResultDetailPage` (547 lines) renders 70/30 split layout with `PPTPreview`, `PPTGalleryStrip`, `MergeSelectionBar`, info panel with tabs, and action buttons |
 
 **Score:** 7/7 truths verified
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
-| -------- | ----------- | ------ | ------- |
-| `internal/models/ppt_file.go` | PPTFile with SlideCachePath, SourceType, MergedFrom fields | ✓ VERIFIED | Lines 17-19 contain all three fields with correct gorm tags and json serialization |
-| `internal/models/slide_merge.go` | MergeRequest struct for merge API | ✓ VERIFIED | Lines 4-14 define MergeRequest and MergeSlideItem structs with required fields |
-| `internal/services/slide_extractor.go` | Slide extraction from PPTX using Python-pptx | ✓ VERIFIED | `ExtractSlides` method at line 51-108 executes `extract_slides.py` via exec.CommandContext |
-| `internal/services/slide_cache_service.go` | Dual-resolution slide image caching | ✓ VERIFIED | `GetOrExtractSlides` at line 51-108 implements on-demand caching; `GetSlideImagePath` at line 206-235 validates path traversal prevention |
-| `internal/services/ppt_merge_service.go` | Merge selected slides into new PPTX | ✓ VERIFIED | `MergeSlides` method at line 48-202 validates 200-slide limit, ownership, and executes `merge_slides.py` |
-| `internal/services/ppt_file_service.go` | PPT file CRUD with multi-result queries | ✓ VERIFIED | `GetPptsByVideoFile` queries all PPTs ordered by CreatedAt DESC (newest first per D-12) |
-| `internal/handlers/ppt_handler.go` | API endpoints for slides, merge, PPT listing | ✓ VERIFIED | 6 endpoints implemented: GetSlides (line 69), ServeSlideImage (95), GetPptsByVideo (123), MergeSlides (160), DownloadPPT (213), DeletePPT (239) |
-| `scripts/extract_slides.py` | Python script extracting embedded images from PPTX | ✓ VERIFIED | Lines 32-165 implement dual-resolution JPEG extraction with placeholder generation for slides without images |
-| `scripts/merge_slides.py` | Python script merging slides from multiple PPTX files | ✓ VERIFIED | Lines 56-193 implement slide merging with path traversal validation and bounds checking |
-| `frontend/src/types/ppt.ts` | TypeScript interfaces for PPT API contracts | ✓ VERIFIED | All required interfaces defined: SlideImage, PPTResult, SlidesResponse, PPTListResponse, MergeRequest, MergeResponse, SelectedSlide |
-| `frontend/src/api/ppt.ts` | API client for PPT endpoints | ✓ VERIFIED | Functions: getSlides, getPptsByVideo, mergeSlides, deletePpt, getPptDownloadUrl, getSlideImageUrl |
-| `frontend/src/components/PPTPreview.tsx` | Main view + sidebar thumbnail preview component | ✓ VERIFIED | 229 lines; implements sidebar thumbnails, main slide view, keyboard navigation, fullscreen mode, single slide download/copy |
-| `frontend/src/components/PPTGalleryStrip.tsx` | Horizontal gallery switcher for multi-result | ✓ VERIFIED | 103 lines; displays time + page count cards with hover effects and accessibility |
-| `frontend/src/components/MergeSelectionBar.tsx` | Drag-to-reorder bottom bar for merge mode | ✓ VERIFIED | 242 lines; uses @dnd-kit for drag-and-drop, shows 200-slide limit, handles confirm/cancel |
-| `frontend/src/components/SlideThumbnail.tsx` | Selectable thumbnail with overlay icon for merge mode | ✓ VERIFIED | 98 lines; supports navigation and selection modes with visual feedback |
-| `frontend/src/pages/results/index.tsx` | Result detail page with left-right split layout | ✓ VERIFIED | 493 lines; implements 70/30 split, info panel, action buttons, gallery integration, merge mode |
-| `frontend/src/router/index.tsx` | Route for /results/:videoFileId | ✓ VERIFIED | Line 38-39 registers lazy-loaded route |
-| `frontend/src/utils/permissions.ts` | FILE_PPT_VIEW permission | ✓ VERIFIED | Line 21 defines permission; line 55 maps to /results route |
+| -------- | -------- | ------ | ------- |
+| `internal/models/ppt_file.go` | PPTFile with SlideCachePath, SourceType, MergedFrom fields | VERIFIED | Lines 17-19: all three fields present with correct gorm tags. Pre-existing TODO in unused `GenerateFromVideo` method is irrelevant to Phase 3 |
+| `internal/models/slide_merge.go` | MergeRequest struct for merge API | VERIFIED | Lines 4-14: MergeRequest with Slides, OutputName, VideoFileID; MergeSlideItem with PptFileID, SlideNumber |
+| `internal/services/slide_extractor.go` | Slide extraction from PPTX using Python-pptx | VERIFIED | 167 lines; `ExtractSlides` validates paths, executes `extract_slides.py` via `exec.CommandContext`, parses JSON result, handles cleanup on failure |
+| `internal/services/slide_cache_service.go` | Dual-resolution slide image caching | VERIFIED | 236 lines; `GetOrExtractSlides` with mutex-based double-checked locking; `GetSlideImagePath` with strict filename validation and path traversal prevention (T-03-01); `InvalidateCache` support |
+| `internal/services/ppt_merge_service.go` | Merge selected slides into new PPTX | VERIFIED | 217 lines; validates 200-slide limit, ownership, PPT-video association; size limit (500MB); executes Python script; creates PPTFile record with SourceType=merge |
+| `internal/services/ppt_file_service.go` | PPT file CRUD with multi-result queries | VERIFIED | 110 lines; `GetPPTFileByID`, `GetPptsByVideoFile` (DESC order), `DeletePPTFile` (cascades to physical file + cache), `CreatePPTFile`, `UpdatePPTFile` |
+| `internal/handlers/ppt_handler.go` | API endpoints for slides, merge, PPT listing | VERIFIED | 273 lines; 6 endpoints with ownership validation via `verifyPPTOwnership` helper: GetSlides, ServeSlideImage, GetPptsByVideo, MergeSlides, DownloadPPT, DeletePPT |
+| `scripts/extract_slides.py` | Python script extracting embedded images from PPTX | VERIFIED | 188 lines; dual-resolution JPEG extraction (1920x1080 fullsize, 200x112 thumbnails); fallback placeholder generation for slides without images; JSON IPC to stdout |
+| `scripts/merge_slides.py` | Python script merging slides from multiple PPTX files | VERIFIED | 225 lines; path traversal validation; widescreen 16:9 layout; copies picture shapes from source slides; JSON IPC |
+| `frontend/src/types/ppt.ts` | TypeScript interfaces for PPT API contracts | VERIFIED | 65 lines; SlideImage, PPTResult, SlidesResponse, PPTListResponse, MergeSlideItem, MergeRequest, MergeResponse, SelectedSlide |
+| `frontend/src/api/ppt.ts` | API client for PPT endpoints | VERIFIED | 46 lines; getSlides, getPptsByVideo, mergeSlides, deletePpt, getPptDownloadUrl, getSlideImageUrl |
+| `frontend/src/components/PPTPreview.tsx` | Main view + sidebar thumbnail preview component | VERIFIED | 229 lines; sidebar thumbnails, main slide view, keyboard navigation (ArrowLeft/Right, Escape), CSS-only fullscreen mode, single slide download/copy |
+| `frontend/src/components/PPTGalleryStrip.tsx` | Horizontal gallery switcher for multi-result | VERIFIED | 103 lines; time + page count cards, hover tooltips, keyboard accessible, active highlight |
+| `frontend/src/components/MergeSelectionBar.tsx` | Drag-to-reorder bottom bar for merge mode | VERIFIED | 242 lines; @dnd-kit DndContext + SortableContext with horizontalListSortingStrategy; 200-slide limit indicator; confirm/cancel buttons |
+| `frontend/src/components/SlideThumbnail.tsx` | Selectable thumbnail with overlay icon for merge mode | VERIFIED | 98 lines; navigation and selection modes; checkmark overlay; accessibility attributes |
+| `frontend/src/pages/results/index.tsx` | Result detail page with left-right split layout | VERIFIED | 547 lines; 70/30 Col layout; tabbed info panel (basic info + text content via TextContentTab); action buttons (download, re-transcribe with dropdown, merge, delete); gallery strip; merge mode; slide polling for extracting status |
+| `frontend/src/router/index.tsx` | Route for /results/:videoFileId | VERIFIED | Line 38-39: lazy-loaded route registered under ProtectedLayout |
+| `frontend/src/utils/permissions.ts` | FILE_PPT_VIEW permission | VERIFIED | Line 21: permission constant; line 55: route mapping to /results |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | ---- | --- | --- | ------ | ------- |
-| `internal/handlers/ppt_handler.go` | `internal/services/slide_cache_service.go` | handler calls ExtractSlides via SlideCacheService | ✓ WIRED | Line 78: `slides, err := h.slideCacheService.GetOrExtractSlides(uint(id))` |
-| `internal/handlers/ppt_handler.go` | `internal/services/ppt_merge_service.go` | handler calls MergeSlides | ✓ WIRED | Line 195: `pptFile, err := h.mergeService.MergeSlides(c.Request.Context(), &req, userID)` |
-| `internal/services/slide_extractor.go` | `scripts/extract_slides.py` | exec.CommandContext with python3 | ✓ WIRED | Line 86: `cmd := exec.CommandContext(ctx, cmdName, args...)` where args includes python script path |
-| `internal/services/ppt_merge_service.go` | `scripts/merge_slides.py` | exec.CommandContext with python3 | ✓ WIRED | Line 143: `cmd := exec.CommandContext(ctx, cmdName, args...)` executes merge script |
-| `cmd/server/app.go` | `internal/handlers/ppt_handler.go` | route registration | ✓ WIRED | Lines 694, 700-704 register 6 routes: videos.GET("/:id/ppts"), ppts.GET("/:id/slides"), ppts.GET("/:id/slides/:resolution/:filename"), ppts.POST("/merge"), ppts.GET("/:id/download"), ppts.DELETE("/:id") |
-| `frontend/src/pages/results/index.tsx` | `frontend/src/api/ppt.ts` | imports getSlides, getPptsByVideo, mergeSlides | ✓ WIRED | Lines 27-33 import all required API functions |
-| `frontend/src/pages/results/index.tsx` | `frontend/src/components/PPTPreview.tsx` | renders PPTPreview with slides prop | ✓ WIRED | Line 379: `<PPTPreview slides={slides} currentSlide={currentSlide} ... />` |
-| `frontend/src/pages/files/index.tsx` | `frontend/src/pages/results/index.tsx` | navigate to /results/:videoFileId | ✓ WIRED | Line 378: `onClick={() => navigate(\`/results/\${record.id}\`)}` |
-| `frontend/src/router/index.tsx` | `frontend/src/pages/results/index.tsx` | lazy route import | ✓ WIRED | Line 39: `Component: lazy(() => import('../pages/results'))` |
+| `internal/handlers/ppt_handler.go` | `internal/services/slide_cache_service.go` | handler calls GetOrExtractSlides | WIRED | Line 78: `slides, err := h.slideCacheService.GetOrExtractSlides(uint(id))` |
+| `internal/handlers/ppt_handler.go` | `internal/services/ppt_merge_service.go` | handler calls MergeSlides | WIRED | Line 195: `pptFile, err := h.mergeService.MergeSlides(...)` |
+| `internal/services/slide_extractor.go` | `scripts/extract_slides.py` | exec.CommandContext with python3 | WIRED | Line 86: `cmd := exec.CommandContext(ctx, cmdName, args...)` with script path in args |
+| `internal/services/ppt_merge_service.go` | `scripts/merge_slides.py` | exec.CommandContext with python3 | WIRED | Line 143: `cmd := exec.CommandContext(ctx, cmdName, args...)` with merge script path |
+| `cmd/server/app.go` | `internal/handlers/ppt_handler.go` | route registration | WIRED | Lines 538-541: service init; line 563: handler init; lines 720, 724-730: 6 route registrations |
+| `frontend/src/pages/results/index.tsx` | `frontend/src/api/ppt.ts` | imports API functions | WIRED | Lines 33-37: imports getSlides, getPptsByVideo, mergeSlides, deletePpt, getPptDownloadUrl |
+| `frontend/src/pages/results/index.tsx` | `frontend/src/components/PPTPreview.tsx` | renders PPTPreview | WIRED | Line 400: `<PPTPreview slides={slides} currentSlide={currentSlide} ... />` |
+| `frontend/src/pages/files/index.tsx` | `frontend/src/pages/results/index.tsx` | navigate to /results/:videoFileId | WIRED | Line 410: `onClick={() => navigate(\`/results/${record.id}\`)}` |
+| `frontend/src/router/index.tsx` | `frontend/src/pages/results/index.tsx` | lazy route import | WIRED | Line 39: `Component: lazy(() => import('../pages/results'))` |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 | -------- | ------------- | ------ | ------------------ | ------ |
-| PPTPreview | slides | loadSlides() → getSlides() API → SlideCacheService.GetOrExtractSlides() → Python extract_slides.py | ✓ FLOWING | SlideCacheService reads cached thumbnails or calls Python script to extract from PPTX; returns array of SlideImageData with thumbnail_url/fullsize_url |
-| ResultDetailPage | ppts | loadPpts() → getPptsByVideo() API → PPTFileService.GetPptsByVideoFile() → GORM query | ✓ FLOWING | Queries database for PPTFiles where SourceVideoFileID matches, ordered DESC by CreatedAt; returns real PPT records |
-| MergeSelectionBar | selectedSlides | handleToggleSelect() → setState with slide data from API | ✓ FLOWING | Selected slides built from real API slide data; merge API call sends real slide IDs to backend |
-| PPTGalleryStrip | ppts | Same as ResultDetailPage.ppts | ✓ FLOWING | Displays real PPT results from API with timestamps and page counts |
+| PPTPreview | `slides` | `loadSlides()` -> `getSlides(pptId)` -> `SlideCacheService.GetOrExtractSlides()` -> Python `extract_slides.py` | FLOWING | Extracts real images from PPTX files, returns SlideImageData with thumbnail_url/fullsize_url |
+| ResultDetailPage | `ppts` | `loadPpts()` -> `getPptsByVideo(videoFileId)` -> `PPTFileService.GetPptsByVideoFile()` -> GORM DB query | FLOWING | Queries real PPTFile records ordered DESC by CreatedAt |
+| MergeSelectionBar | `selectedSlides` | `handleToggleSelect()` builds from API slide data; `handleConfirmMerge()` sends to `mergeSlides` API | FLOWING | Sends real slide IDs to merge endpoint; backend creates PPTFile record |
+| PPTGalleryStrip | `ppts` | Same data as ResultDetailPage.ppts | FLOWING | Renders real PPT results with timestamps and page counts |
+| FileList button | `videosWithPpt` Set | `checkHasPpt()` -> `getPptsByVideo()` API -> backend GORM query | FLOWING | Queries actual PPT existence per video, caches results in Set |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
-| Backend compiles | cd D:/CODE/ClaudeCode/record_V2 && go build ./cmd/server/... | Exit code 0 | ✓ PASS |
-| No TypeScript errors in PPT files | cd frontend && npx tsc --noEmit | No errors related to ppt.ts, PPTPreview, PPTGalleryStrip, MergeSelectionBar, SlideThumbnail, results | ✓ PASS |
-| Python scripts have executable shebang | head -1 scripts/extract_slides.py && head -1 scripts/merge_slides.py | Both show "#!/usr/bin/env python3" | ✓ PASS |
-| dnd-kit dependencies installed | grep "@dnd-kit" frontend/package.json | Lines 16-18 show @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities | ✓ PASS |
-| Route registered | grep "results/:videoFileId" frontend/src/router/index.tsx | Line 38 shows route path | ✓ PASS |
-| Permission defined | grep "FILE_PPT_VIEW" frontend/src/utils/permissions.ts | Line 21 shows permission definition | ✓ PASS |
+| Backend compiles | `cd D:/CODE/ClaudeCode/record_V2 && go build ./cmd/server/...` | Exit code 0, no output | PASS |
+| TypeScript compilation (phase 3 files) | `cd frontend && npx tsc --noEmit` | Only pre-existing split page errors; no PPT-related errors | PASS |
+| dnd-kit dependencies installed | `grep "@dnd-kit" frontend/package.json` | 3 packages found: core ^6.3.1, sortable ^10.0.0, utilities ^3.2.2 | PASS |
+| Route registered | `grep "results/:videoFileId" frontend/src/router/index.tsx` | Line 38 confirmed | PASS |
+| Permission defined | `grep "FILE_PPT_VIEW" frontend/src/utils/permissions.ts` | Line 21 permission + line 55 route mapping | PASS |
+| Migration registered | `grep "AddPPTCacheFieldsMigration" internal/migrations/...go` | Struct definition + registration in GetRegisteredMigrations confirmed | PASS |
+| Python scripts have main entry | Both scripts have `#!/usr/bin/env python3` and `if __name__` blocks | Confirmed | PASS |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | ----------- | ---------- | ----------- | ------ | -------- |
-| PPT-01 | 03-01, 03-02 | 转录完成后用户可独立下载PPT文件 | ✓ SATISFIED | DownloadPPT endpoint (ppt_handler.go:213-236) + frontend download button (results/index.tsx:433-438) |
-| PPT-02 | 03-01, 03-02 | PPT文件与原视频关联显示在文件列表中 | ✓ SATISFIED | GetPptsByVideo endpoint (ppt_handler.go:123-157) + file list "预览PPT" button (files/index.tsx:373-380) |
-| PPT-03 | 03-01, 03-02 | 用户可在浏览器中在线预览PPT内容（逐页浏览） | ✓ SATISFIED | GetSlides + ServeSlideImage endpoints (ppt_handler.go:69-120) + PPTPreview component (PPTPreview.tsx:1-229) |
-| PPT-04 | 03-01, 03-02 | 如果PPT缺少页数，用户可重新提交转录任务 | ✓ SATISFIED | Re-transcribe button (results/index.tsx:440-445) opens TranscriptionProgressModal for new transcription |
-| PPT-05 | 03-01, 03-02 | 同一视频保留多次转录的多个PPT结果 | ✓ SATISFIED | PPTFile.SourceVideoFileID foreign key allows multiple PPTs per video; GetPptsByVideo returns all results |
-| PPT-06 | 03-01, 03-02 | 用户可从多个PPT结果中选择页面合并，生成最终PPT | ✓ SATISFIED | MergeSlides endpoint (ppt_handler.go:160-210) + MergeSelectionBar component (MergeSelectionBar.tsx:1-242) |
-| UI-03 | 03-02 | 转录结果详情页面（文字内容 + PPT在线预览 + 下载/重试/合并操作） | ✓ SATISFIED | ResultDetailPage (results/index.tsx:1-493) with 70/30 split layout, info panel, action buttons per D-19/D-21 |
+| PPT-01 | 03-01, 03-02 | User can download PPT file independently | SATISFIED | DownloadPPT endpoint (ppt_handler.go:213-236) + frontend download button (results/index.tsx:471-477) |
+| PPT-02 | 03-01, 03-02 | PPT files linked to source video in file list | SATISFIED | GetPptsByVideo endpoint (ppt_handler.go:123-157) + file list "预览PPT" button (files/index.tsx:402-416) |
+| PPT-03 | 03-01, 03-02 | User can preview PPT slides in browser | SATISFIED | GetSlides + ServeSlideImage endpoints (ppt_handler.go:69-120) + PPTPreview component (229 lines) with sidebar + main view |
+| PPT-04 | 03-01, 03-02 | User can re-transcribe if PPT lacks pages | SATISFIED | Re-transcribe dropdown (results/index.tsx:478-500) with local/cloud mode selection; TranscriptionProgressModal reused |
+| PPT-05 | 03-01, 03-02 | System retains all historical PPT results | SATISFIED | PPTFile.SourceVideoFileID FK (no unique constraint); GetPptsByVideoFile returns all; gallery strip displays all |
+| PPT-06 | 03-01, 03-02 | User can merge slides from multiple PPT results | SATISFIED | MergeSlides API + PPTMergeService + Python merge script + MergeSelectionBar with dnd-kit drag-to-reorder |
+| UI-03 | 03-02 | Result detail page with preview, actions, text content | SATISFIED | ResultDetailPage (547 lines) with 70/30 split, tabbed info panel, action buttons per D-19/D-21 |
 
 **All 7 requirements satisfied.**
 
 ### Anti-Patterns Found
 
-None. Scanned all critical files:
-- Backend: `internal/handlers/ppt_handler.go`, `internal/services/slide_cache_service.go`, `internal/services/ppt_merge_service.go`, `internal/services/slide_extractor.go`, `internal/services/ppt_file_service.go`
-- Frontend: `frontend/src/components/PPTPreview.tsx`, `frontend/src/components/PPTGalleryStrip.tsx`, `frontend/src/components/MergeSelectionBar.tsx`, `frontend/src/components/SlideThumbnail.tsx`, `frontend/src/pages/results/index.tsx`
-- Python: `scripts/extract_slides.py`, `scripts/merge_slides.py`
-
-No TODO/FIXME/XXX/HACK/PLACEHOLDER comments found. No empty returns that flow to UI. All data paths produce real values from APIs or database queries.
+| File | Line | Pattern | Severity | Impact |
+| ---- | ---- | ------- | -------- | ------ |
+| `internal/models/ppt_file.go` | 31 | TODO in `GenerateFromVideo` | Info | Pre-existing placeholder method not used in Phase 3 flow. PPT generation handled by Phase 2's PPTXGenerator. No impact on Phase 3 goals. |
+| `scripts/extract_slides.py` | 111 | "placeholder" comment | Info | Refers to creating fallback slide images when no embedded picture is found -- intended behavior, not a stub. |
+| `internal/services/slide_cache_service.go` | 85 | `ExtractSlides(nil, ...)` passes nil context | Info | Request context not propagated to extraction. Minor robustness concern; Python script has internal cleanup on failure. |
+| `frontend/src/pages/results/index.tsx` | 169-172 | `loadVideoName` uses generic `视频 ${videoFileIdNum}` | Warning | Video name not fetched from actual API; displays generic "视频 N" instead of real filename. Minor UX degradation, does not block any Phase 3 goal. |
 
 ### Human Verification Required
 
-None. All verification criteria are programmatically checkable:
-- Code compilation verified
-- TypeScript compilation verified
-- File existence verified
-- Key links verified via grep
-- Data flow verified via code tracing
-- Requirements coverage verified via code analysis
+### 1. PPT Preview Rendering
 
-The implementation is complete and can be verified through automated testing. Future manual testing may be desirable for UX polish but is not required to confirm goal achievement.
+**Test:** Click "预览PPT" button in file list for a video with completed transcription
+**Expected:** Navigates to /results/:videoFileId; page loads with left-right split (70% preview + 30% info panel); sidebar thumbnails visible; main slide displays
+**Why human:** Visual layout and component rendering require browser runtime
+
+### 2. Slide Navigation (Keyboard + Click)
+
+**Test:** Click different thumbnails in sidebar; press ArrowLeft/ArrowRight keys; type a page number in input field
+**Expected:** Main view updates to selected slide; keyboard navigation moves between slides; page input jumps to specified page
+**Why human:** Interactive keyboard and click events require browser runtime
+
+### 3. Fullscreen Mode
+
+**Test:** Click "全屏演示" button; press Escape to exit
+**Expected:** Sidebar hides, slide fills container, "退出全屏" button appears; Escape exits fullscreen mode
+**Why human:** CSS-only fullscreen behavior and keyboard events require browser runtime
+
+### 4. Gallery Strip Multi-Result Switching
+
+**Test:** For a video with multiple PPT results, click different gallery strip cards
+**Expected:** Preview area updates to show selected PPT result's slides; active card highlights; slide count updates
+**Why human:** Multi-result gallery switching is interactive UI behavior
+
+### 5. Merge Mode (Select + Drag + Confirm)
+
+**Test:** Click "合并幻灯片"; select slides by clicking thumbnails; drag to reorder in bottom bar; click "确认合并"
+**Expected:** Thumbnails show checkmark overlay; bottom bar lists selected slides; drag reorder works; merge completes with success toast; new PPT appears in gallery
+**Why human:** dnd-kit drag-and-drop interaction and merge API result feedback require browser runtime
+
+### 6. Re-transcribe Flow
+
+**Test:** Click "重新转录" dropdown; select local or cloud mode
+**Expected:** TranscriptionProgressModal opens showing real-time progress; on completion, new PPT appears in gallery strip
+**Why human:** Modal interaction and real-time polling progress feedback require browser runtime
 
 ### Gaps Summary
 
-**No gaps found.** All must-haves from both plans (03-01 and 03-02) are satisfied:
+No functional gaps found. All backend services, API endpoints, frontend components, and wiring are substantively implemented and connected with real data flows.
 
-**Backend (Plan 03-01):**
-- ✓ PPTFile model extended with SlideCachePath, SourceType, MergedFrom
-- ✓ MergeRequest and MergeSlideItem types defined
-- ✓ Migration 005_add_ppt_cache_fields registered
-- ✓ Python extract_slides.py extracts dual-resolution JPEGs
-- ✓ Python merge_slides.py merges selected slides
-- ✓ SlideExtractor service calls Python scripts
-- ✓ SlideCacheService implements on-demand caching with path traversal prevention
-- ✓ PPTMergeService validates 200-slide limit and ownership
-- ✓ PPTFileService provides GetPptsByVideoFile (newest first)
-- ✓ PPThandler implements all 6 endpoints with ownership validation
-- ✓ Routes registered in app.go under /api/v1/ppts and /api/v1/videos/:id/ppts
+One UX note: the video name display on the result page uses a generic placeholder instead of fetching the actual filename from the API. This is a minor UX issue but does not block any Phase 3 goal.
 
-**Frontend (Plan 03-02):**
-- ✓ PPT types defined in frontend/src/types/ppt.ts
-- ✓ PPT API client functions in frontend/src/api/ppt.ts
-- ✓ PPTPreview component with sidebar thumbnails, keyboard nav, fullscreen mode
-- ✓ PPTGalleryStrip component for multi-result switching
-- ✓ MergeSelectionBar component with dnd-kit drag-to-reorder
-- ✓ SlideThumbnail component supporting navigation and selection modes
-- ✓ ResultDetailPage with left-right split layout (70/30)
-- ✓ File list "预览PPT" button navigates to results page
-- ✓ Route /results/:videoFileId registered
-- ✓ FILE_PPT_VIEW permission and route mapping
+All 7 roadmap success criteria are supported by verified code. All 7 requirement IDs (PPT-01 through PPT-06, UI-03) are satisfied with implementation evidence.
 
-**Threat Mitigations:**
-- ✓ T-03-01: Path traversal prevention via strict filename whitelist and prefix check (slide_cache_service.go:206-235)
-- ✓ T-03-02: 200-slide merge limit enforced server-side (ppt_merge_service.go:50-52)
-- ✓ T-03-03, T-03-04: Ownership validation on all endpoints using middleware.GetUserID pattern (ppt_handler.go:47-66, 132-142, 229-232, 254-258)
-- ✓ T-03-05: Generic error messages, no paths exposed in responses
-- ✓ T-03-06: Path validation from PPTXGenerator reused (slide_extractor.go)
-- ✓ T-03-08, T-03-09, T-03-10: Frontend follows existing security patterns
-
-All success criteria from ROADMAP.md Phase 3 satisfied:
-1. ✓ User can download PPT independently (DownloadPPT endpoint + download button)
-2. ✓ PPT files displayed linked to source video (GetPptsByVideo + file list button)
-3. ✓ User can click "预览PPT" to browse slides (PPTPreview + sidebar navigation)
-4. ✓ User can click "重新转录" to resubmit (re-transcribe button + TranscriptionProgressModal)
-5. ✓ System retains all historical PPT results (multiple PPTFiles per VideoFile, GetPptsByVideo returns all)
-6. ✓ User can merge slides from multiple results (MergeSlides API + MergeSelectionBar with drag-to-reorder)
-7. ✓ User can view results in dedicated page (ResultDetailPage with preview, info panel, actions)
+Threat mitigations verified:
+- T-03-01: Path traversal prevention via strict filename whitelist (`slide_\d{3}\.jpg`) and prefix check in `GetSlideImagePath` (slide_cache_service.go:206-235)
+- T-03-02: 200-slide merge limit enforced server-side (ppt_merge_service.go:50-51) and client-side (MergeSelectionBar.tsx:188-189, results/index.tsx:224-227)
+- T-03-03/T-03-04: Ownership validation on all endpoints via `verifyPPTOwnership` helper and `middleware.GetUserID` pattern (ppt_handler.go:47-66)
+- T-03-05: Generic error messages in responses, no filesystem paths exposed
+- T-03-06: Path validation from PPTXGenerator pattern reused in SlideExtractor
 
 ---
-**Verified:** 2026-04-17T12:00:00Z
-**Verifier:** Claude (gsd-verifier)
+_Verified: 2026-04-18T12:00:00Z_
+_Verifier: Claude (gsd-verifier)_

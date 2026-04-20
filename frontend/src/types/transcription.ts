@@ -2,7 +2,7 @@
 
 // 转录触发请求
 export interface TranscriptionTriggerRequest {
-  sampling_rate: number  // 1.0 (1s), 0.5 (2s), 0.2 (5s)
+  sampling_rate: number  // 1.0 (1s), 0.5 (2s), 0.2 (5s), 0.1 (10s), 0.05 (20s)
 }
 
 // 转录触发响应
@@ -31,8 +31,8 @@ export interface TranscriptionStatusResponse {
 // 采样率选项
 export interface SamplingRateOption {
   label: string
-  value: number  // fps value: 1.0, 0.5, 0.2
-  secondsPerFrame: number  // display: 1, 2, 5
+  value: number  // fps value: 1.0, 0.5, 0.2, 0.1, 0.05
+  secondsPerFrame: number  // display: 1, 0.5, 0.2, 0.1, 0.05
   description: string
 }
 
@@ -80,4 +80,24 @@ export interface TranscriptionTriggerResponseExtended {
   video_file_id: number
   status: string
   mode: TranscriptionMode
+}
+
+// Active transcription task
+export interface ActiveTranscriptionTask {
+  id: number
+  video_file_id: number
+  status: TranscriptionTaskStatus
+  mode: TranscriptionMode
+  sampling_rate: number
+  current_stage: AnyTranscriptionStage | ''
+  percentage: number
+  error_message: string
+  created_at: string
+  video_file_name: string
+}
+
+// Active tasks list response
+export interface ActiveTranscriptionTasksResponse {
+  tasks: ActiveTranscriptionTask[]
+  total: number
 }

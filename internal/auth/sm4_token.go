@@ -21,13 +21,13 @@ import (
 // Token格式: base64url(nonce[12] + SM4-GCM(claims_json) + authTag[16])
 // SM4-GCM同时提供加密（payload不可读）和认证（防篡改）。
 type SM4TokenService struct {
-	gcm            cipher.AEAD // 预初始化的SM4-GCM实例，避免每次加解密重复创建
-	issuer         string
-	expireHours    int
-	refreshExpire  int
-	maxSession     int
-	db             *gorm.DB
-	logger         *zap.Logger
+	gcm           cipher.AEAD // 预初始化的SM4-GCM实例，避免每次加解密重复创建
+	issuer        string
+	expireHours   int
+	refreshExpire int
+	maxSession    int
+	db            *gorm.DB
+	logger        *zap.Logger
 }
 
 // Claims Token声明

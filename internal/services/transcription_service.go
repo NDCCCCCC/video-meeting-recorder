@@ -19,14 +19,14 @@ import (
 
 // TranscriptionProgress represents the progress of a transcription task per D-17
 type TranscriptionProgress struct {
-	Status          string  // pending, processing, completed, failed
-	CurrentStage    string  // extracting, detecting, generating
-	FramesProcessed int     // Number of frames processed
-	TotalFrames     int     // Total frames to process
-	Percentage      int     // Progress percentage (0-100)
-	ErrorMessage    string  // Error message if failed
-	ResultPPTFileID *uint   // ID of the generated PPT file
-	Mode            string  // local, cloud
+	Status          string // pending, processing, completed, failed
+	CurrentStage    string // extracting, detecting, generating
+	FramesProcessed int    // Number of frames processed
+	TotalFrames     int    // Total frames to process
+	Percentage      int    // Progress percentage (0-100)
+	ErrorMessage    string // Error message if failed
+	ResultPPTFileID *uint  // ID of the generated PPT file
+	Mode            string // local, cloud
 }
 
 // TranscriptionService handles video transcription with worker pool
@@ -135,10 +135,11 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(videoFileID uint, sam
 
 	// Per D-03: cloud mode skips sampling rate validation entirely
 	// Only validate sampling rate for local mode
+	// 支持更高精度的采样率选项 (0.05s=20fps, 0.1s=10fps, 0.2s=5fps, 0.5s=2fps, 1.0s=1fps)
 	if mode == models.TranscriptionModeLocal {
-		validRates := map[float64]bool{1.0: true, 0.5: true, 0.2: true}
+		validRates := map[float64]bool{1.0: true, 0.5: true, 0.2: true, 0.1: true, 0.05: true}
 		if !validRates[samplingRate] {
-			return fmt.Errorf("无效的采样率: %.1f", samplingRate)
+			return fmt.Errorf("无效的采样率: %.2f (支持: 0.05, 0.1, 0.2, 0.5, 1.0)", samplingRate)
 		}
 	}
 
@@ -198,14 +199,14 @@ func (s *TranscriptionService) GetTranscriptionStatus(videoFileID uint) *Transcr
 	if progress, ok := s.statusMap[videoFileID]; ok {
 		// Return a copy to avoid concurrent access issues
 		return &TranscriptionProgress{
-			Status:           progress.Status,
-			CurrentStage:     progress.CurrentStage,
-			FramesProcessed:  progress.FramesProcessed,
-			TotalFrames:      progress.TotalFrames,
-			Percentage:       progress.Percentage,
-			ErrorMessage:     progress.ErrorMessage,
-			ResultPPTFileID:  progress.ResultPPTFileID,
-			Mode:             progress.Mode,
+			Status:          progress.Status,
+			CurrentStage:    progress.CurrentStage,
+			FramesProcessed: progress.FramesProcessed,
+			TotalFrames:     progress.TotalFrames,
+			Percentage:      progress.Percentage,
+			ErrorMessage:    progress.ErrorMessage,
+			ResultPPTFileID: progress.ResultPPTFileID,
+			Mode:            progress.Mode,
 		}
 	}
 	return nil
@@ -320,7 +321,7 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 	s.updateProgress(task.VideoFileID, models.TranscriptionStageDetecting, 0, len(frames), 0, "", nil)
 
 	uniqueFrames := make([]ExtractedFrame, 0, len(frames))
-	uniqueFrames = append(uniqueFrames, frames[0]) // Keep first frame as reference
+	blackFrameCount := 0 // Track black frames for debugging
 
 	// For decoding images
 	decodeImage := func(filePath string) (image.Image, error) {
@@ -347,6 +348,15 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		return
 	}
 
+	// Check if first frame is black - if so, don't add it to unique frames
+	firstFrameResult, err := s.similarityDetector.IsFrameChanged(prevImg, prevImg)
+	if err == nil && firstFrameResult.IsBlackFrame {
+		blackFrameCount++
+		s.logger.Info("首帧为黑色帧，跳过", zap.Int("black_frame_count", blackFrameCount))
+	} else {
+		uniqueFrames = append(uniqueFrames, frames[0])
+	}
+
 	// Process each subsequent frame
 	for i := 1; i < len(frames); i++ {
 		// Decode current frame
@@ -368,8 +378,13 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			continue
 		}
 
-		// If changed, add to unique frames
-		if result.Changed {
+		// Track black frames
+		if result.IsBlackFrame {
+			blackFrameCount++
+		}
+
+		// If changed AND not a black frame, add to unique frames
+		if result.Changed && !result.IsBlackFrame {
 			uniqueFrames = append(uniqueFrames, frames[i])
 		}
 
@@ -384,13 +399,25 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 	s.logger.Info("相似度检测完成",
 		zap.Uint("video_file_id", task.VideoFileID),
 		zap.Int("total_frames", len(frames)),
-		zap.Int("unique_frames", len(uniqueFrames)))
+		zap.Int("unique_frames", len(uniqueFrames)),
+		zap.Int("black_frames", blackFrameCount))
+
+	// Check if video is entirely black or has too few unique frames
+	if len(uniqueFrames) == 0 {
+		s.logger.Warn("视频无有效内容（全黑或无变化）",
+			zap.Uint("video_file_id", task.VideoFileID),
+			zap.Int("total_frames", len(frames)),
+			zap.Int("black_frames", blackFrameCount))
+		s.updateProgress(task.VideoFileID, "", len(frames), len(frames), 100, "", nil)
+		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "视频无有效内容，无法生成PPT", 0, nil)
+		return
+	}
 
 	// Stage 3: PPTX Generation per D-04, D-09
 	s.updateProgress(task.VideoFileID, models.TranscriptionStageGenerating, len(frames), len(frames), 90, "", nil)
 
 	// Re-extract unique frames at original resolution per D-04
-	highResFramePaths := make([]string, len(uniqueFrames))
+	highResFramePaths := make([]string, 0, len(uniqueFrames))
 	for i, frame := range uniqueFrames {
 		outputPath := filepath.Join(tempDir, fmt.Sprintf("highres_%04d.jpg", i))
 		if err := s.frameExtractor.ExtractFrameAtTimestamp(ctx, videoFile.FilePath, frame.Timestamp, outputPath); err != nil {
@@ -402,8 +429,30 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 			return
 		}
-		highResFramePaths[i] = outputPath
+		// Verify the file was actually created
+		if _, err := os.Stat(outputPath); os.IsNotExist(err) {
+			s.logger.Error("高分辨率帧文件未创建",
+				zap.Int("frame_index", i),
+				zap.String("output_path", outputPath))
+			continue
+		}
+		highResFramePaths = append(highResFramePaths, outputPath)
 	}
+
+	// Verify we have at least some valid frames
+	if len(highResFramePaths) == 0 {
+		s.logger.Error("所有高分辨率帧提取失败，无法生成PPT",
+			zap.Uint("video_file_id", task.VideoFileID),
+			zap.Int("unique_frames", len(uniqueFrames)))
+		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, "所有帧提取失败", nil)
+		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "所有帧提取失败", 0, nil)
+		return
+	}
+
+	s.logger.Info("高分辨率帧提取完成",
+		zap.Uint("video_file_id", task.VideoFileID),
+		zap.Int("unique_frames", len(uniqueFrames)),
+		zap.Int("highres_frames_created", len(highResFramePaths)))
 
 	// Generate PPTX
 	timestamp := time.Now().Unix()
@@ -834,4 +883,13 @@ func (s *TranscriptionService) cleanupOrphanedOSSFiles() {
 // GetDB returns the database instance for handlers to use in queries
 func (s *TranscriptionService) GetDB() *gorm.DB {
 	return s.db
+}
+
+// GetActiveTasks returns all active transcription tasks (pending or processing)
+func (s *TranscriptionService) GetActiveTasks() ([]models.TranscriptionTask, error) {
+	var tasks []models.TranscriptionTask
+	err := s.db.Where("status IN ?", []string{models.TranscriptionStatusPending, models.TranscriptionStatusProcessing}).
+		Order("created_at DESC").
+		Find(&tasks).Error
+	return tasks, err
 }

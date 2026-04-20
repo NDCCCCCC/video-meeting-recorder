@@ -22,9 +22,9 @@ type FrameExtractor struct {
 
 // ExtractedFrame 提取的帧信息
 type ExtractedFrame struct {
-	FilePath  string    // JPEG文件路径
-	Timestamp float64   // 时间戳（秒）
-	Index     int       // 帧索引
+	FilePath  string  // JPEG文件路径
+	Timestamp float64 // 时间戳（秒）
+	Index     int     // 帧索引
 }
 
 // NewFrameExtractor 创建帧提取器

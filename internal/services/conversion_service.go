@@ -296,6 +296,37 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 		zap.Uint("task_id", taskID),
 		zap.String("mp4_file", outputPath),
 	)
+
+	// 自动扫描视频文件
+	// 使用服务 context 控制 goroutine 生命周期
+	if s.videoFileService != nil {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+
+			// 从服务 context 派生，确保服务停止时取消扫描
+			scanCtx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+			defer cancel()
+
+			// 检查服务是否已停止
+			select {
+			case <-s.ctx.Done():
+				s.logger.Info("服务停止中，跳过自动扫描", zap.Uint("task_id", taskID))
+				return
+			default:
+			}
+
+			_, err := s.videoFileService.ScanFiles()
+			if err != nil {
+				// 只在非取消错误时记录警告
+				if scanCtx.Err() == nil {
+					s.logger.Warn("转换完成后自动扫描失败", zap.Error(err))
+				}
+			} else {
+				s.logger.Info("转换完成后自动扫描成功", zap.Uint("task_id", taskID))
+			}
+		}()
+	}
 }
 
 // convertMKVToMP4 执行MKV到MP4的转换

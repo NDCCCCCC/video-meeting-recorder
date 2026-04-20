@@ -20,11 +20,11 @@
 <details>
 <summary>🔄 v1.1 文件管理与编辑增强 (Phases 5-6) — IN PROGRESS</summary>
 
-- [ ] Phase 5: File Rename & Smart Cleanup (2/2 plans)
+- [x] Phase 5: File Rename & Smart Cleanup (2/2 plans) — **completed 2026-04-20**
     - [x] 05-01-PLAN.md — File rename API and UI for split videos and PPTs
     - [x] 05-02-PLAN.md — Smart cleanup logic for re-splitting videos
-- [ ] Phase 6: PPT Editor (3/3 plans)
-    - [ ] 06-01-PLAN.md — Duplicate slide detection and deletion
+- [~] Phase 6: PPT Editor (1/3 plans complete)
+    - [x] 06-01-PLAN.md — Duplicate slide detection and deletion — **completed 2026-04-20**
     - [ ] 06-02-PLAN.md — Video preview integration with timestamp sync
     - [ ] 06-03-PLAN.md — Slide capture from video and insertion
 
@@ -38,9 +38,9 @@
 | 2. Local Transcription | v1.0 | 4/4 | Complete | 2026-04-18 |
 | 3. PPT Management | v1.0 | 2/2 | Complete | 2026-04-18 |
 | 4. Cloud Services | v1.0 | 5/5 | Complete | 2026-04-18 |
-| 5. File Rename & Smart Cleanup | v1.1 | 0/2 | Planning | - |
-| 6. PPT Editor | v1.1 | 0/3 | Planning | - |
+| 5. File Rename & Smart Cleanup | v1.1 | 2/2 | **Complete** | 2026-04-20 |
+| 6. PPT Editor | v1.1 | 1/3 | In Progress | - |
 
 ---
 *Roadmap created: 2026-04-17*
-*Last updated: 2026-04-20 for Phase 6 planning*
+*Last updated: 2026-04-20 - Phase 5 complete, Phase 06-01 complete*

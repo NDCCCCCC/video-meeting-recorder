@@ -67,7 +67,7 @@ func (s *APIKeyService) logAudit(userID uint, resourceID uint, action, newData s
 // CreateAPIKeyRequest 创建API密钥请求
 type CreateAPIKeyRequest struct {
 	Name         string   `json:"name" binding:"required,min=1,max=100"`
-	ExpiresAt    *string  `json:"expires_at"`    // ISO 8601格式，null表示永久
+	ExpiresAt    *string  `json:"expires_at"` // ISO 8601格式，null表示永久
 	Scopes       []string `json:"scopes" binding:"required"`
 	InheritPerms bool     `json:"inherit_perms"`
 	IPWhitelist  []string `json:"ip_whitelist"`
@@ -93,8 +93,8 @@ type ListAPIKeysRequest struct {
 
 // ListAPIKeysResponse 列表响应
 type ListAPIKeysResponse struct {
-	Total int64             `json:"total"`
-	Items []models.APIKey   `json:"items"`
+	Total int64           `json:"total"`
+	Items []models.APIKey `json:"items"`
 }
 
 // CreateAPIKey 创建API密钥
@@ -348,24 +348,24 @@ func (s *APIKeyService) ValidateAPIKey(key string, clientIP string) (*models.API
 
 // ListUsageLogsRequest 使用日志查询请求
 type ListUsageLogsRequest struct {
-	Page         int    `form:"page" binding:"min=1"`
-	PageSize     int    `form:"page_size" binding:"min=1,max=100"`
-	APIKeyID     *uint  `form:"api_key_id"`     // 可选，筛选特定密钥
-	Success      *bool  `form:"success"`        // 可选，筛选成功/失败
-	StartTime    string `form:"start_time"`     // 可选，开始时间 ISO 8601
-	EndTime      string `form:"end_time"`       // 可选，结束时间 ISO 8601
-	Method       string `form:"method"`         // 可选，HTTP 方法
+	Page      int    `form:"page" binding:"min=1"`
+	PageSize  int    `form:"page_size" binding:"min=1,max=100"`
+	APIKeyID  *uint  `form:"api_key_id"` // 可选，筛选特定密钥
+	Success   *bool  `form:"success"`    // 可选，筛选成功/失败
+	StartTime string `form:"start_time"` // 可选，开始时间 ISO 8601
+	EndTime   string `form:"end_time"`   // 可选，结束时间 ISO 8601
+	Method    string `form:"method"`     // 可选，HTTP 方法
 }
 
 // UsageLogSummary 使用日志统计
 type UsageLogSummary struct {
-	TotalRequests    int64 `json:"total_requests"`
-	SuccessRequests  int64 `json:"success_requests"`
-	FailedRequests   int64 `json:"failed_requests"`
-	AvgDuration      int64 `json:"avg_duration"`    // 毫秒
-	MaxDuration      int64 `json:"max_duration"`    // 毫秒
-	UniqueIPs        int64 `json:"unique_ips"`
-	TodayRequests    int64 `json:"today_requests"`
+	TotalRequests   int64 `json:"total_requests"`
+	SuccessRequests int64 `json:"success_requests"`
+	FailedRequests  int64 `json:"failed_requests"`
+	AvgDuration     int64 `json:"avg_duration"` // 毫秒
+	MaxDuration     int64 `json:"max_duration"` // 毫秒
+	UniqueIPs       int64 `json:"unique_ips"`
+	TodayRequests   int64 `json:"today_requests"`
 }
 
 // ListUsageLogs 获取 API Key 使用日志

@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons'
 import type { TranscriptionTaskStatus, TranscriptionStage, TranscriptionMode, CloudTranscriptionStage } from '../types/transcription'
 import { getTranscriptionStatus } from '../api/transcription'
+import { getToken } from '../api/apiClient'
 
 interface TranscriptionProgressModalProps {
   open: boolean
@@ -103,12 +104,17 @@ export default function TranscriptionProgressModal({
     const interval = setInterval(fetchStatus, pollInterval)
 
     return () => clearInterval(interval) // 清理定时器
-  }, [open, videoFileId, onCompleted, pollInterval, mode])
+  }, [open, videoFileId, mode]) // 移除 onCompleted 和 pollInterval 避免不必要的重新渲染
 
   // 下载 PPT
   const handleDownloadPpt = useCallback(() => {
     if (!pptFileId) return
-    window.location.href = `/api/v1/files/${pptFileId}/download`
+    const token = getToken()
+    // 使用正确的 PPT 下载路径 /api/v1/ppts/:id/download
+    const url = token
+      ? `/api/v1/ppts/${pptFileId}/download?token=${token}`
+      : `/api/v1/ppts/${pptFileId}/download`
+    window.location.href = url
   }, [pptFileId])
 
   // 重新转录 (关闭进度模态框，让用户重新触发)

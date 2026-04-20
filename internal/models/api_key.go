@@ -2,8 +2,8 @@ package models
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"net"
 	"strings"
 	"time"
@@ -22,10 +22,10 @@ type APIKey struct {
 	ExpiresAt    *time.Time `json:"expires_at"`
 	LastUsedAt   *time.Time `json:"last_used_at"`
 	IsActive     bool       `gorm:"default:true" json:"is_active"`
-	Scopes       string     `gorm:"type:text" json:"scopes"`           // JSON数组字符串
-	IPWhitelist  string     `gorm:"type:text" json:"ip_whitelist"`     // JSON数组字符串
+	Scopes       string     `gorm:"type:text" json:"scopes"`              // JSON数组字符串
+	IPWhitelist  string     `gorm:"type:text" json:"ip_whitelist"`        // JSON数组字符串
 	Description  string     `gorm:"type:varchar(500)" json:"description"` // 描述
-	InheritPerms bool       `gorm:"default:true" json:"inherit_perms"` // 是否继承用户权限
+	InheritPerms bool       `gorm:"default:true" json:"inherit_perms"`    // 是否继承用户权限
 }
 
 // 作用域定义

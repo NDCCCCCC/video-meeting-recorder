@@ -21,6 +21,7 @@ import {
   DeleteOutlined,
   CloudOutlined,
   LaptopOutlined,
+  ScanOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import dayjs from 'dayjs'
@@ -28,6 +29,7 @@ import PPTPreview from '../../components/PPTPreview'
 import PPTGalleryStrip from '../../components/PPTGalleryStrip'
 import MergeSelectionBar from '../../components/MergeSelectionBar'
 import TextContentTab from '../../components/TextContentTab'
+import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import {
   getPptsByVideo,
   getSlides,
@@ -76,6 +78,9 @@ export default function ResultDetailPage() {
   // Re-transcribe modal state
   const [retranscribeModalOpen, setRetranscribeModalOpen] = useState(false)
   const [retranscribeMode, setRetranscribeMode] = useState<TranscriptionMode>('local')
+
+  // Duplicate detection panel state
+  const [duplicateDetectionOpen, setDuplicateDetectionOpen] = useState(false)
 
   // 当前选中的 PPT
   const currentPpt = ppts.find((p) => p.id === currentPptId)
@@ -338,6 +343,16 @@ export default function ResultDetailPage() {
     }
   }, [currentPptId, ppts, navigate])
 
+  // 处理幻灯片删除后的回调
+  const handleSlidesDeleted = useCallback(async () => {
+    // 刷新 PPT 列表以获取更新的页数
+    await loadPpts()
+    // 重新加载当前 PPT 的幻灯片
+    if (currentPptId > 0) {
+      await loadSlides(currentPptId)
+    }
+  }, [loadPpts, loadSlides, currentPptId])
+
   if (loading) {
     return <div style={{ padding: 24, textAlign: 'center' }}>加载中...</div>
   }
@@ -498,6 +513,13 @@ export default function ResultDetailPage() {
               >
                 {isMergeMode ? '取消合并' : '合并幻灯片'}
               </Button>
+              <Button
+                block
+                icon={<ScanOutlined />}
+                onClick={() => setDuplicateDetectionOpen(true)}
+              >
+                检测重复幻灯片
+              </Button>
               <Popconfirm
                 title="确定要删除此PPT文件吗？删除后无法恢复。"
                 onConfirm={handleDeletePpt}
@@ -533,6 +555,14 @@ export default function ResultDetailPage() {
         samplingRate={0.5}
         mode={retranscribeMode}
         onCompleted={handleTranscriptionCompleted}
+      />
+
+      {/* 重复幻灯片检测面板 */}
+      <DuplicateDetectionPanel
+        pptFileId={currentPptId}
+        visible={duplicateDetectionOpen}
+        onClose={() => setDuplicateDetectionOpen(false)}
+        onSlidesDeleted={handleSlidesDeleted}
       />
     </div>
   )

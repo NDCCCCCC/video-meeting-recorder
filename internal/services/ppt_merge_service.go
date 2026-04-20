@@ -99,7 +99,7 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 		uniqueSlides := uniqueInts(slideNumbers)
 
 		slideSpecs = append(slideSpecs, map[string]interface{}{
-			"pptx_path":    pptFile.FilePath,
+			"pptx_path":     pptFile.FilePath,
 			"slide_numbers": uniqueSlides,
 		})
 		sourcePptIDs = append(sourcePptIDs, pptFileID)
@@ -175,13 +175,13 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	fileSize := fileInfo.Size()
 
 	pptFile := &models.PPTFile{
-		FileName:       outputName,
-		FilePath:       outputPath,
-		FileSize:       fileSize,
-		PageCount:      result.SlidesMerged,
-		Format:         "pptx",
-		SourceType:     models.PPTSourceTypeMerge,
-		MergedFrom:     string(mergedFromJSON),
+		FileName:          outputName,
+		FilePath:          outputPath,
+		FileSize:          fileSize,
+		PageCount:         result.SlidesMerged,
+		Format:            "pptx",
+		SourceType:        models.PPTSourceTypeMerge,
+		MergedFrom:        string(mergedFromJSON),
 		SourceVideoFileID: &req.VideoFileID,
 	}
 

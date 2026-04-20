@@ -28,7 +28,7 @@ func TestCreateTempDir(t *testing.T) {
 
 	// Verify naming pattern contains transcription_ prefix and videoFileID
 	baseName := filepath.Base(tempDir)
-	if !contains(baseName, "transcription_") {
+	if !containsString(baseName, "transcription_") {
 		t.Errorf("Temp directory name should contain 'transcription_', got: %s", baseName)
 	}
 
@@ -80,9 +80,9 @@ func TestCleanupTempDir_NonExistent(t *testing.T) {
 // TestSamplingRateConversion tests fps conversion from sampling rate
 func TestSamplingRateConversion(t *testing.T) {
 	tests := []struct {
-		name               string
-		samplingRateSecs   float64
-		expectedFPS        float64
+		name             string
+		samplingRateSecs float64
+		expectedFPS      float64
 	}{
 		{"1 second interval", 1.0, 1.0},
 		{"2 second interval", 2.0, 0.5},
@@ -116,7 +116,7 @@ func TestExtractFramesInvalidVideo(t *testing.T) {
 }
 
 // Helper function
-func contains(s, substr string) bool {
+func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && findSubstring(s, substr)
 }
 

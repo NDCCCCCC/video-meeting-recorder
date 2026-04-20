@@ -22,6 +22,7 @@ type Config struct {
 	FFmpeg   FFmpegConfig   `mapstructure:"ffmpeg" json:"ffmpeg" yaml:"ffmpeg"`
 	OSS      OSSConfig      `mapstructure:"oss" json:"oss" yaml:"oss"`
 	Tingwu   TingwuConfig   `mapstructure:"tingwu" json:"tingwu" yaml:"tingwu"`
+	Python   PythonConfig   `mapstructure:"python" json:"python" yaml:"python"`
 }
 
 // ServerConfig 服务器配置
@@ -142,17 +143,22 @@ type OSSConfig struct {
 	AccessKeyID     string `mapstructure:"access_key_id" json:"access_key_id" yaml:"access_key_id"`
 	AccessKeySecret string `mapstructure:"access_key_secret" json:"-" yaml:"access_key_secret"`
 	Enabled         bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
-	UploadTimeout   int    `mapstructure:"upload_timeout" json:"upload_timeout" yaml:"upload_timeout"`       // seconds
+	UploadTimeout   int    `mapstructure:"upload_timeout" json:"upload_timeout" yaml:"upload_timeout"`          // seconds
 	PresignedURLTTL int    `mapstructure:"presigned_url_ttl" json:"presigned_url_ttl" yaml:"presigned_url_ttl"` // seconds, default 86400
 }
 
 // TingwuConfig 阿里通义听悟配置
 type TingwuConfig struct {
-	AppKey    string `mapstructure:"app_key" json:"app_key" yaml:"app_key"`
-	AppSecret string `mapstructure:"app_secret" json:"-" yaml:"app_secret"`
-	BaseURL   string `mapstructure:"base_url" json:"base_url" yaml:"base_url"`
-	Enabled   bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
-	APITimeout int   `mapstructure:"api_timeout" json:"api_timeout" yaml:"api_timeout"` // seconds
+	AppKey     string `mapstructure:"app_key" json:"app_key" yaml:"app_key"`
+	AppSecret  string `mapstructure:"app_secret" json:"-" yaml:"app_secret"`
+	BaseURL    string `mapstructure:"base_url" json:"base_url" yaml:"base_url"`
+	Enabled    bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	APITimeout int    `mapstructure:"api_timeout" json:"api_timeout" yaml:"api_timeout"` // seconds
+}
+
+// PythonConfig Python依赖配置
+type PythonConfig struct {
+	PreferUV bool `mapstructure:"prefer_uv" json:"prefer_uv" yaml:"prefer_uv"` // 优先使用uv管理Python依赖
 }
 
 // expandEnvWithDefault 展开环境变量，支持 ${VAR:default} 格式
@@ -593,6 +599,10 @@ tingwu:
   base_url: "https://tingwu.cn-beijing.aliyuncs.com"
   enabled: true
   api_timeout: 30
+
+# Python依赖配置
+python:
+  prefer_uv: true  # 优先使用uv管理Python依赖（需要安装uv）
 `
 
 	// 写入配置文件
