@@ -26,6 +26,7 @@ import * as splitApi from '../../api/split'
 import { TimelineWithMarkers } from '../../components/TimelineWithMarkers'
 import { getToken } from '../../api/apiClient'
 import type { VideoFile } from '../../types/video-file'
+import styles from './SplitPage.module.css'
 
 // ==================== 常量 ====================
 
@@ -66,6 +67,8 @@ export default function SplitPage() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [splitting, setSplitting] = useState(false)
   const [splitProgress, setSplitProgress] = useState<string | null>(null)
+  const [existingSplits, setExistingSplits] = useState<VideoFile[]>([])
+  const [checkingSplits, setCheckingSplits] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -188,14 +191,50 @@ export default function SplitPage() {
   // ==================== 分割执行 ====================
 
   const handleSplit = useCallback(async () => {
-    if (!id || markers.length < 2) {
-      message.warning('请至少添加 2 个标记点')
+    if (!id || markers.length < 1) {
+      message.warning('请至少添加 1 个标记点')
       return
     }
 
+    // Check for existing splits before showing confirmation
+    setCheckingSplits(true)
+    try {
+      const response = await videoFileApi.getVideoSegments(parseInt(id, 10))
+      setExistingSplits(response.data || [])
+    } catch (error) {
+      console.error('Failed to check existing splits:', error)
+      setExistingSplits([])
+    } finally {
+      setCheckingSplits(false)
+    }
+
+    // Show confirmation modal
     Modal.confirm({
-      title: '确认分割',
-      content: `确认将视频分割为 ${markers.length + 1} 个段落？`,
+      title: existingSplits.length > 0 ? '重新分割视频' : '确认分割',
+      content: existingSplits.length > 0 ? (
+        <div>
+          <Alert
+            message="检测到现有分割"
+            description={`此视频已有 ${existingSplits.length} 个分割段，重新分割将自动删除这些文件。`}
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+          <p>将被删除的文件：</p>
+          <ul style={{ maxHeight: 200, overflow: 'auto', paddingLeft: 20 }}>
+            {existingSplits.map(split => (
+              <li key={split.id}>
+                {split.file_name} ({(split.file_size / 1024 / 1024).toFixed(2)} MB)
+              </li>
+            ))}
+          </ul>
+          <p style={{ color: '#ff4d4f', fontWeight: 'bold' }}>
+            ⚠️ 此操作不可撤销，确认要继续吗？
+          </p>
+        </div>
+      ) : (
+        `确认将视频分割为 ${markers.length + 1} 个段落？`
+      ),
       okText: '确认分割',
       cancelText: '取消',
       onOk: async () => {
@@ -245,7 +284,7 @@ export default function SplitPage() {
         }
       },
     })
-  }, [id, markers, navigate])
+  }, [id, markers, navigate, existingSplits])
 
   // ==================== 表格列定义 ====================
 
@@ -281,7 +320,7 @@ export default function SplitPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: '24px', textAlign: 'center' }}>
+      <div className={styles.loadingContainer}>
         <Spin size="large" tip="加载中..." />
       </div>
     )
@@ -289,7 +328,7 @@ export default function SplitPage() {
 
   if (error || !videoFile) {
     return (
-      <div style={{ padding: '24px' }}>
+      <div className={styles.errorContainer}>
         <Alert
           type="error"
           message="加载失败"
@@ -306,9 +345,9 @@ export default function SplitPage() {
   }
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div className={styles.pageContainer}>
       {/* 页面标题 */}
-      <div style={{ marginBottom: '24px' }}>
+      <div className={styles.headerSection}>
         <Space>
           <Button
             icon={<ArrowLeftOutlined />}
@@ -320,136 +359,160 @@ export default function SplitPage() {
         </Space>
       </div>
 
-      {/* 视频播放器 */}
-      <Card title="视频预览" style={{ marginBottom: '24px' }}>
-        <div style={{ position: 'relative', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            style={{ width: '100%', maxHeight: '500px', display: 'block' }}
-            preload="metadata"
-            onLoadedMetadata={() => {
-              const video = videoRef.current
-              if (video) {
-                setDuration(video.duration)
-              }
-            }}
-            onTimeUpdate={() => {
-              const video = videoRef.current
-              if (video) setCurrentTime(video.currentTime)
-            }}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-          />
-
-          {/* 播放控制条 */}
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
-              padding: '12px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '16px',
-            }}
+      {/* 左右布局：左侧视频 + 右侧操作 */}
+      <div className={styles.mainLayout}>
+        {/* 左侧：视频播放器 */}
+        <div className={styles.videoSection}>
+          <Card
+            title="视频预览"
+            className={styles.videoCard}
+            styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 0 } }}
           >
-            <Space>
-              <Button
-                type="text"
-                icon={isPlaying ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
-                onClick={handlePlayPause}
-                style={{ color: '#fff' }}
+            <div className={styles.videoContainer}>
+              <video
+                ref={videoRef}
+                src={videoUrl}
+                className={styles.videoElement}
+                preload="metadata"
+                onLoadedMetadata={() => {
+                  const video = videoRef.current
+                  if (video) {
+                    setDuration(video.duration)
+                  }
+                }}
+                onTimeUpdate={() => {
+                  const video = videoRef.current
+                  if (video) setCurrentTime(video.currentTime)
+                }}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
               />
-              <Button
-                type="text"
-                icon={<StepBackwardOutlined />}
-                onClick={() => handleSkip(-SKIP_SECONDS)}
-                title={`快退${SKIP_SECONDS}秒`}
-                style={{ color: '#fff' }}
-              />
-              <Button
-                type="text"
-                icon={<StepForwardOutlined />}
-                onClick={() => handleSkip(SKIP_SECONDS)}
-                title={`快进${SKIP_SECONDS}秒`}
-                style={{ color: '#fff' }}
-              />
-            </Space>
 
-            <span style={{ color: '#fff', marginLeft: 'auto' }}>
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
+              {/* 进度条 */}
+              <div
+                className={styles.progressBar}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+                  if (duration) handleSeek(ratio * duration)
+                }}
+              >
+                {/* 已播放进度 */}
+                <div
+                  className={styles.progressBarFill}
+                  style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
+                />
+                {/* 标记点 */}
+                {markers.map((m) => (
+                  <div
+                    key={m}
+                    className={styles.marker}
+                    style={{ left: duration ? `${(m / duration) * 100}%` : 0 }}
+                  />
+                ))}
+              </div>
+
+              {/* 播放控制条 */}
+              <div className={styles.controlsBar}>
+                <Space>
+                  <Button
+                    type="text"
+                    icon={isPlaying ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+                    onClick={handlePlayPause}
+                    style={{ color: '#fff' }}
+                  />
+                  <Button
+                    type="text"
+                    icon={<StepBackwardOutlined />}
+                    onClick={() => handleSkip(-SKIP_SECONDS)}
+                    title={`快退${SKIP_SECONDS}秒`}
+                    style={{ color: '#fff' }}
+                  />
+                  <Button
+                    type="text"
+                    icon={<StepForwardOutlined />}
+                    onClick={() => handleSkip(SKIP_SECONDS)}
+                    title={`快进${SKIP_SECONDS}秒`}
+                    style={{ color: '#fff' }}
+                  />
+                </Space>
+
+                <span className={styles.timeDisplay}>
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </span>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* 右侧：时间线、段落预览、操作 */}
+        <div className={styles.sidebar}>
+          {/* 时间线与标记 */}
+          <Card title="添加分割标记" className={styles.card}>
+            <TimelineWithMarkers
+              duration={duration}
+              markers={markers}
+              currentTime={currentTime}
+              onMarkerAdd={handleMarkerAdd}
+              onMarkerRemove={handleMarkerRemove}
+              onSeek={handleSeek}
+            />
+
+            <Alert
+              type="warning"
+              message="快速分割模式可能有±2秒误差"
+              description="FFmpeg 快速分割模式基于关键帧定位，实际分割点可能与标记点略有偏差。如需精确分割，请在分割后使用重新编码模式。"
+              showIcon
+              style={{ marginTop: 16 }}
+            />
+          </Card>
+
+          {/* 段落预览 */}
+          <Card
+            title={
+              <Space>
+                <span>段落预览</span>
+                {markers.length > 0 && (
+                  <Tag color="blue">将生成 {markers.length + 1} 个段落</Tag>
+                )}
+              </Space>
+            }
+            className={styles.segmentCard}
+            styles={{ body: { flex: 1, overflow: 'auto' } }}
+          >
+            {segmentPreviews.length > 0 ? (
+              <Table
+                columns={columns}
+                dataSource={segmentPreviews}
+                rowKey="index"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Alert
+                type="info"
+                message="暂无分割标记"
+                description={'点击视频时间线添加分割点，或输入时间精确定位。添加标记后点击"确认分割"开始处理。'}
+                showIcon
+              />
+            )}
+          </Card>
+
+          {/* 操作按钮 */}
+          <div className={styles.actionButtons}>
+            <Button onClick={() => navigate('/files')}>
+              取消
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleSplit}
+              disabled={markers.length < 1 || splitting || checkingSplits}
+              loading={splitting || checkingSplits}
+            >
+              {checkingSplits ? '检查中...' : splitting ? splitProgress : '确认分割'}
+            </Button>
           </div>
         </div>
-      </Card>
-
-      {/* 时间线与标记 */}
-      <Card title="添加分割标记" style={{ marginBottom: '24px' }}>
-        <TimelineWithMarkers
-          duration={duration}
-          markers={markers}
-          currentTime={currentTime}
-          onMarkerAdd={handleMarkerAdd}
-          onMarkerRemove={handleMarkerRemove}
-          onSeek={handleSeek}
-        />
-
-        {/* 警告提示 */}
-        <Alert
-          type="warning"
-          message="快速分割模式可能有±2秒误差"
-          description="FFmpeg 快速分割模式基于关键帧定位，实际分割点可能与标记点略有偏差。如需精确分割，请在分割后使用重新编码模式。"
-          showIcon
-          style={{ marginTop: 16 }}
-        />
-      </Card>
-
-      {/* 段落预览 */}
-      <Card
-        title={
-          <Space>
-            <span>段落预览</span>
-            {markers.length > 0 && (
-              <Tag color="blue">将生成 {markers.length + 1} 个段落</Tag>
-            )}
-          </Space>
-        }
-        style={{ marginBottom: '24px' }}
-      >
-        {segmentPreviews.length > 0 ? (
-          <Table
-            columns={columns}
-            dataSource={segmentPreviews}
-            rowKey="index"
-            pagination={false}
-            size="small"
-          />
-        ) : (
-          <Alert
-            type="info"
-            message="暂无分割标记"
-            description={'点击视频时间线添加分割点，或输入时间精确定位。添加标记后点击"确认分割"开始处理。'}
-            showIcon
-          />
-        )}
-      </Card>
-
-      {/* 操作按钮 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-        <Button onClick={() => navigate('/files')}>
-          取消
-        </Button>
-        <Button
-          type="primary"
-          onClick={handleSplit}
-          disabled={markers.length < 2 || splitting}
-          loading={splitting}
-        >
-          {splitting ? splitProgress : '确认分割'}
-        </Button>
       </div>
     </div>
   )
