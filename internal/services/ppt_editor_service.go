@@ -783,3 +783,154 @@ func (s *PPTEditorService) generateThumbnail(inputPath, outputPath string) error
 
 	return nil
 }
+
+// ReorderSlides reorders slides in a PPT file according to the new slide order
+// Returns the new slide order after successful reordering
+func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int, error) {
+	s.logger.Info("Reordering slides",
+		zap.Uint("ppt_file_id", pptFileID),
+		zap.Ints("new_order", newOrder))
+
+	// Get PPT file
+	var pptFile models.PPTFile
+	if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
+		return nil, fmt.Errorf("PPT file not found: %w", err)
+	}
+
+	// Get current slides to verify all slide numbers exist
+	slides, err := s.slideCache.GetOrExtractSlides(pptFileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get slides: %w", err)
+	}
+
+	// Create a map of current slide numbers for quick lookup
+	currentSlideMap := make(map[int]bool)
+	for _, slide := range slides {
+		currentSlideMap[slide.SlideNumber] = true
+	}
+
+	// Validate all slide numbers in new order exist
+	for _, slideNum := range newOrder {
+		if !currentSlideMap[slideNum] {
+			return nil, fmt.Errorf("slide number %d does not exist in PPT", slideNum)
+		}
+	}
+
+	// Check if order actually changed
+	orderChanged := false
+	for i, slideNum := range newOrder {
+		if slideNum != i+1 {
+			orderChanged = true
+			break
+		}
+	}
+
+	if !orderChanged {
+		s.logger.Info("Slide order unchanged, skipping reordering")
+		return newOrder, nil
+	}
+
+	// Get slide image directory
+	slideDir := filepath.Join(filepath.Dir(pptFile.FilePath), "slides")
+	fullsizeDir := filepath.Join(slideDir, "fullsize")
+	thumbnailDir := filepath.Join(slideDir, "thumbnails")
+
+	// Backup current slides before reordering
+	backupDir := filepath.Join(slideDir, fmt.Sprintf("backup_before_reorder_%s", time.Now().Format("20060102_150405")))
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create backup directory: %w", err)
+	}
+
+	// Copy current slides to backup
+	for _, slide := range slides {
+		srcFullsize := filepath.Join(fullsizeDir, fmt.Sprintf("slide_%03d.jpg", slide.SlideNumber))
+		srcThumbnail := filepath.Join(thumbnailDir, fmt.Sprintf("slide_%03d.jpg", slide.SlideNumber))
+		dstFullsize := filepath.Join(backupDir, fmt.Sprintf("slide_%03d_fullsize.jpg", slide.SlideNumber))
+		dstThumbnail := filepath.Join(backupDir, fmt.Sprintf("slide_%03d_thumbnail.jpg", slide.SlideNumber))
+
+		if err := copyFile(srcFullsize, dstFullsize); err != nil {
+			s.logger.Warn("Failed to backup fullsize slide", zap.Error(err))
+		}
+		if err := copyFile(srcThumbnail, dstThumbnail); err != nil {
+			s.logger.Warn("Failed to backup thumbnail slide", zap.Error(err))
+		}
+	}
+
+	// Create temp directory for reordered slides
+	tempDir := filepath.Join(slideDir, "temp_reorder")
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Copy slides to new positions in temp directory
+	for newPosition, oldSlideNum := range newOrder {
+		newSlideNum := newPosition + 1
+
+		srcFullsize := filepath.Join(fullsizeDir, fmt.Sprintf("slide_%03d.jpg", oldSlideNum))
+		srcThumbnail := filepath.Join(thumbnailDir, fmt.Sprintf("slide_%03d.jpg", oldSlideNum))
+		dstFullsize := filepath.Join(tempDir, fmt.Sprintf("slide_%03d.jpg", newSlideNum))
+		dstThumbnail := filepath.Join(tempDir, fmt.Sprintf("thumb_%03d.jpg", newSlideNum))
+
+		if err := copyFile(srcFullsize, dstFullsize); err != nil {
+			return nil, fmt.Errorf("failed to copy slide %d: %w", oldSlideNum, err)
+		}
+		if err := copyFile(srcThumbnail, dstThumbnail); err != nil {
+			return nil, fmt.Errorf("failed to copy thumbnail: %w", err)
+		}
+	}
+
+	// Move reordered slides from temp to final directories
+	for newPosition := range newOrder {
+		newSlideNum := newPosition + 1
+
+		srcFullsize := filepath.Join(tempDir, fmt.Sprintf("slide_%03d.jpg", newSlideNum))
+		srcThumbnail := filepath.Join(tempDir, fmt.Sprintf("thumb_%03d.jpg", newSlideNum))
+		dstFullsize := filepath.Join(fullsizeDir, fmt.Sprintf("slide_%03d.jpg", newSlideNum))
+		dstThumbnail := filepath.Join(thumbnailDir, fmt.Sprintf("slide_%03d.jpg", newSlideNum))
+
+		if err := os.Rename(srcFullsize, dstFullsize); err != nil {
+			return nil, fmt.Errorf("failed to move fullsize slide: %w", err)
+		}
+		if err := os.Rename(srcThumbnail, dstThumbnail); err != nil {
+			return nil, fmt.Errorf("failed to move thumbnail: %w", err)
+		}
+	}
+
+	// Update backup path in PPT file
+	oldBackupPath := pptFile.BackupPath
+	pptFile.BackupPath = backupDir
+	if err := s.db.Save(&pptFile).Error; err != nil {
+		// Rollback backup path change
+		pptFile.BackupPath = oldBackupPath
+		s.db.Save(&pptFile)
+		return nil, fmt.Errorf("failed to update backup path: %w", err)
+	}
+
+	// Clear cache to force re-extraction with new order
+	s.slideCache.ClearCache(pptFileID)
+
+	s.logger.Info("Successfully reordered slides",
+		zap.Uint("ppt_file_id", pptFileID),
+		zap.String("backup_dir", backupDir))
+
+	return newOrder, nil
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	return err
+}

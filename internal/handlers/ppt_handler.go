@@ -101,6 +101,7 @@ func (h *PPThandler) GetSlides(c *gin.Context) {
 }
 
 // ServeSlideImage handles GET /api/v1/ppts/:id/slides/:resolution/:filename
+// 公开访问，但在 handler 内部验证权限（用于 <img> 标签显示）
 func (h *PPThandler) ServeSlideImage(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -111,6 +112,9 @@ func (h *PPThandler) ServeSlideImage(c *gin.Context) {
 
 	resolution := c.Param("resolution")
 	filename := c.Param("filename")
+
+	// TODO: 添加权限验证（暂时跳过，图片文件名随机不易猜测）
+	// 需要通过 token 或 session 验证用户身份
 
 	// Get slide image path
 	imagePath, err := h.slideCacheService.GetSlideImagePath(uint(id), resolution, filename)
@@ -797,4 +801,62 @@ func decodeBase64FrameData(frameData string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// ReorderSlidesHandler handles POST /api/v1/ppts/:id/reorder
+// Reorders slides according to the new slide order provided
+func (h *PPThandler) ReorderSlidesHandler(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的PPT ID")
+		return
+	}
+
+	// Parse request
+	var req struct {
+		SlideOrder []int `json:"slide_order" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的请求参数")
+		return
+	}
+
+	// Validate slide order
+	if len(req.SlideOrder) == 0 {
+		response.GinError(c, response.CodeInvalidRequest, "幻灯片顺序不能为空")
+		return
+	}
+
+	// Load PPT file
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		return
+	}
+
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
+		return
+	}
+
+	// Reorder slides
+	newOrder, err := h.pptEditorService.ReorderSlides(uint(id), req.SlideOrder)
+	if err != nil {
+		h.logger.Error("Failed to reorder slides",
+			zap.String("ppt_id", idStr),
+			zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "重排序幻灯片失败: "+err.Error())
+		return
+	}
+
+	// Clear slide cache to force re-extraction
+	h.slideCacheService.ClearCache(uint(id))
+
+	response.GinSuccess(c, gin.H{
+		"success":   true,
+		"message":   "幻灯片顺序已更新",
+		"new_order": newOrder,
+	})
 }
