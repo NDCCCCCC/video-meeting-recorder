@@ -55,3 +55,19 @@ a:hover {
 .toolbar {
   margin-bottom: 16px;
 }
+
+/* PPT Results Page - Side-by-Side Preview Layout */
+.ppt-preview-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Responsive breakpoint: Stack vertically on screens < 1200px */
+@media (max-width: 1200px) {
+  .ppt-preview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
