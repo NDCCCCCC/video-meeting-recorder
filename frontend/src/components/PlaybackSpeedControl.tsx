@@ -10,6 +10,8 @@ export const SPEED_OPTIONS = [
   { label: '1.25x', value: 1.25 },
   { label: '1.5x', value: 1.5 },
   { label: '2x', value: 2.0 },
+  { label: '3x', value: 3.0 },
+  { label: '5x', value: 5.0 },
 ]
 
 // ==================== Hook ====================
