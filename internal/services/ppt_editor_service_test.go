@@ -34,7 +34,7 @@ func setupPPTEditorServiceTest(t *testing.T) (*PPTEditorService, *gorm.DB, strin
 	slideExtractor := NewSlideExtractor(logger)
 	slideCache := NewSlideCacheService(db, logger, cfg, slideExtractor)
 	similarityDetector := NewSimilarityDetector(logger)
-	pptxGenerator := NewPPTXGenerator(logger, cfg)
+	pptxGenerator := NewPPTXGenerator(logger, true) // preferUV=true for testing
 
 	service := NewPPTEditorService(db, logger, cfg, slideCache, similarityDetector, pptxGenerator)
 	return service, db, tempDir
