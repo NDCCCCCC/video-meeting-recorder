@@ -501,10 +501,13 @@ export default function ResultDetailPage() {
   useEffect(() => {
     if (thumbnailContainerRef.current && currentSlide >= 0) {
       const container = thumbnailContainerRef.current
-      const thumbnailList = container.children[0] as HTMLElement
-      if (thumbnailList && thumbnailList.children[currentSlide]) {
-        const currentThumbnail = thumbnailList.children[currentSlide] as HTMLElement
-        currentThumbnail.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      const thumbnailList = container.children[0]
+      // WR-01, WR-02: Add proper null checks and type validation
+      if (thumbnailList instanceof HTMLElement &&
+          currentSlide >= 0 &&
+          currentSlide < thumbnailList.children.length &&
+          thumbnailList.children[currentSlide] instanceof HTMLElement) {
+        thumbnailList.children[currentSlide].scrollIntoView({ behavior: 'smooth', block: 'nearest' })
       }
     }
   }, [currentSlide])
