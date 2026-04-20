@@ -95,6 +95,9 @@ export default function ResultDetailPage() {
   // Ref for thumbnail container (for auto-scroll to current slide)
   const thumbnailContainerRef = useRef<HTMLDivElement>(null)
 
+  // Video ref for direct capture access
+  const videoRef = useRef<HTMLVideoElement>(null)
+
   // Re-transcribe modal state
   const [retranscribeModalOpen, setRetranscribeModalOpen] = useState(false)
   const [retranscribeMode, setRetranscribeMode] = useState<TranscriptionMode>('local')
@@ -412,6 +415,18 @@ export default function ResultDetailPage() {
     setCurrentSlide(newSlideNumber - 1) // Convert to 0-based index
   }, [loadPpts, loadSlides, currentPptId])
 
+  // Handle direct slide capture (no modal)
+  const handleDirectCapture = useCallback(async (newSlideNumber: number) => {
+    // Refresh PPT list to get updated page count
+    await loadPpts()
+    // Reload current PPT slides
+    if (currentPptId > 0) {
+      await loadSlides(currentPptId)
+    }
+    // Update current slide to newly inserted slide
+    setCurrentSlide(newSlideNumber - 1) // Convert to 0-based index
+  }, [loadPpts, loadSlides, currentPptId])
+
   // 处理视频->幻灯片同步回调（反向同步）
   const handleVideoSlideChange = useCallback((slideNumber: number) => {
     // VideoPreviewPanel uses 1-based slide numbers
@@ -536,6 +551,7 @@ export default function ResultDetailPage() {
         {isVideoPanelVisible && (
           <div style={previewBoxStyle}>
             <VideoPreviewPanel
+              videoRef={videoRef}
               videoFileId={videoFileIdNum}
               currentSlide={currentSlide + 1}
               onSlideClick={handleVideoSlideChange}
@@ -631,12 +647,25 @@ export default function ResultDetailPage() {
                   >
                     检测重复幻灯片
                   </Button>
+
+                  {/* Direct capture button - replaces old modal-only capture */}
+                  <DirectCaptureButton
+                    pptFileId={currentPptId}
+                    videoFileId={videoFileIdNum}
+                    currentSlide={currentSlide}
+                    onCaptureComplete={handleDirectCapture}
+                    videoRef={videoRef}
+                    disabled={!isVideoPanelVisible || slides.length === 0}
+                  />
+
+                  {/* Advanced capture with preview modal */}
                   <Button
                     block
                     icon={<CameraOutlined />}
                     onClick={() => setIsCapturePanelOpen(true)}
+                    style={{ marginTop: 8 }}
                   >
-                    捕获幻灯片
+                    高级捕获（带预览）
                   </Button>
                   <Popconfirm
                     title="确定要删除此PPT文件吗？删除后无法恢复。"
