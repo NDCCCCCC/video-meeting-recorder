@@ -26,7 +26,7 @@
 - [~] Phase 6: PPT Editor (1/3 plans complete)
     - [x] 06-01-PLAN.md — Duplicate slide detection and deletion — **completed 2026-04-20**
     - [ ] 06-02-PLAN.md — Video preview integration with timestamp sync
-    - [ ] 06-03-PLAN.md — Slide capture from video and insertion
+    - [x] 06-03-PLAN.md — Slide capture from video and insertion
 
 </details>
 
