@@ -1,6 +1,7 @@
 // 幻灯片缩略图组件 - 用于侧边栏和合并选择
 // 支持导航模式和选择模式
 
+import React, { memo } from 'react'
 import { Image, Skeleton } from 'antd'
 import type { SlideImage } from '../types/ppt'
 
@@ -14,7 +15,7 @@ interface SlideThumbnailProps {
   onClick: () => void
 }
 
-export default function SlideThumbnail({
+export default memo(function SlideThumbnail({
   slide,
   slideNumber,
   totalSlides,
@@ -36,7 +37,19 @@ export default function SlideThumbnail({
         borderRadius: 4,
         overflow: 'hidden',
         opacity: isCurrent ? 1 : 0.6,
-        transition: 'opacity 0.2s',
+        transition: 'opacity 0.2s, transform 0.2s',
+      }}
+      onMouseEnter={(e) => {
+        if (!isCurrent) {
+          e.currentTarget.style.opacity = '0.8'
+          e.currentTarget.style.transform = 'scale(1.02)'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isCurrent) {
+          e.currentTarget.style.opacity = '0.6'
+          e.currentTarget.style.transform = 'scale(1)'
+        }
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
