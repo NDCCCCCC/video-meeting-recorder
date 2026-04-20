@@ -101,3 +101,15 @@ export interface ActiveTranscriptionTasksResponse {
   tasks: ActiveTranscriptionTask[]
   total: number
 }
+
+// Slide timestamp for video preview synchronization (per 06-02)
+export interface SlideTimestamp {
+  slide_number: number
+  timestamp: number  // Video timestamp in seconds
+}
+
+// Timestamp map response
+export interface TimestampMapResponse {
+  success: boolean
+  slide_timestamps: SlideTimestamp[]
+}

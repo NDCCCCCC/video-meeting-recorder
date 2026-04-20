@@ -7,6 +7,7 @@ import type {
   TranscriptionTriggerResponseExtended,
   TranscriptionTextResponse,
   TranscriptionMode,
+  TimestampMapResponse,
 } from '../types/transcription'
 import { apiRequest } from './apiClient'
 
@@ -92,5 +93,14 @@ export async function getActiveTranscriptionTasks(): Promise<ApiResponse<{ tasks
     video_file_name: string
   }>, total: number }>(
     '/api/v1/transcriptions/active'
+  )
+}
+
+// Get timestamp map for video preview synchronization (per 06-02)
+export async function getTimestampMap(
+  videoFileId: number
+): Promise<ApiResponse<TimestampMapResponse>> {
+  return apiRequest<TimestampMapResponse>(
+    `/api/v1/transcriptions/${videoFileId}/timestamps`
   )
 }
