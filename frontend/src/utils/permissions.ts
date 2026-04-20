@@ -14,6 +14,7 @@ export const PERMISSIONS = {
 
   // 视频文件
   FILE_VIEW: 'files:view',
+  FILE_EDIT: 'files:edit',
   FILE_DELETE: 'files:delete',
   FILE_SCAN: 'files:scan',
   FILE_SPLIT: 'files:split',
