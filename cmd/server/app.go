@@ -62,6 +62,7 @@ type MinimalApp struct {
 	slideCacheService    *services.SlideCacheService
 	pptMergeService      *services.PPTMergeService
 	pptEditorService     *services.PPTEditorService
+	frameCaptureService  *services.FrameCaptureService
 }
 
 // Handlers 处理器集合
@@ -574,6 +575,9 @@ func (a *MinimalApp) initHandlers() error {
 	// Create PPT editor service (reuse existing similarityDetector and pptxGenerator from transcription service)
 	a.pptEditorService = services.NewPPTEditorService(a.db, a.logger, a.config, a.slideCacheService, similarityDetector, pptxGenerator)
 
+	// Create frame capture service for slide capture feature (reuse ffprobe path from earlier)
+	a.frameCaptureService = services.NewFrameCaptureService(a.config.FFmpeg.Path, ffprobePath, a.logger)
+
 	// 华为管理器（使用数据库配置动态创建客户端）
 	dbAdapter := &huaweiDBAdapter{db: a.db}
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
@@ -594,7 +598,7 @@ func (a *MinimalApp) initHandlers() error {
 		APIKey:        apikeyHandler,
 		Split:         handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
 		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, a.logger),
-		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.logger),
+		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.frameCaptureService, a.logger),
 	}
 
 	return nil
