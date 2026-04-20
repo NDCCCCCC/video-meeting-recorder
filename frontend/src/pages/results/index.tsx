@@ -27,14 +27,12 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import PPTPreview from '../../components/PPTPreview'
-import PPTGalleryStrip from '../../components/PPTGalleryStrip'
 import MergeSelectionBar from '../../components/MergeSelectionBar'
 import TextContentTab from '../../components/TextContentTab'
 import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import SlideCapturePanel, { DirectCaptureButton } from '../../components/SlideCapturePanel'
 import { VideoPreviewPanel } from '../../components/VideoPreviewPanel'
 import SlideThumbnail from '../../components/SlideThumbnail'
-import { PPTResultsDropdown } from '../../components/PPTResultsDropdown'
 import {
   getPptsByVideo,
   getSlides,
@@ -452,13 +450,6 @@ export default function ResultDetailPage() {
     }
   }, [slides.length])
 
-  // 处理 PPT 结果切换
-  const handlePptChange = useCallback(async (pptId: number) => {
-    setCurrentPptId(pptId)
-    setCurrentSlide(0)
-    await loadSlides(pptId)
-  }, [loadSlides])
-
   // 拖拽排序处理函数
   const handleDragStart = useCallback((slideNumber: number) => {
     setDraggedSlide(slideNumber)
@@ -567,13 +558,6 @@ export default function ResultDetailPage() {
           </Button>
           <h2 style={{ margin: 0 }}>PPT结果 - {videoName}</h2>
         </div>
-        {ppts.length > 1 && (
-          <PPTResultsDropdown
-            ppts={ppts}
-            currentPptId={currentPptId}
-            onPptChange={handlePptChange}
-          />
-        )}
       </div>
 
       {/* Preview Area with Side-by-Side Layout */}
@@ -587,7 +571,7 @@ export default function ResultDetailPage() {
             borderRight: '1px solid #f0f0f0',
             padding: 8,
             background: '#fafafa',
-            maxHeight: 'calc(100vh - 200px)',
+            maxHeight: 'calc((100vw - 32px - 160px - 32px) / 2 * 9 / 16)',
             scrollBehavior: 'smooth',
           }}
         >
@@ -774,17 +758,6 @@ export default function ResultDetailPage() {
           }}
           isMerging={isMerging}
         />
-      )}
-
-      {/* Multiple PPT Results Gallery */}
-      {ppts.length > 1 && (
-        <Card title="多个转录结果" size="small">
-          <PPTGalleryStrip
-            ppts={ppts}
-            currentPptId={currentPptId}
-            onSelect={setCurrentPptId}
-          />
-        </Card>
       )}
 
       {/* 重新转录模态框 */}
