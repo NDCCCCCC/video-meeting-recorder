@@ -38,22 +38,22 @@ import (
 
 // MinimalApp 应用程序结构
 type MinimalApp struct {
-	config     *config.Config
-	logger     *zap.Logger
-	db         *gorm.DB
-	httpServer *http.Server
-	router     *gin.Engine
+	config       *config.Config
+	logger       *zap.Logger
+	db           *gorm.DB
+	httpServer   *http.Server
+	router       *gin.Engine
 	tokenService *auth.SM4TokenService
-	handlers   *Handlers
-	services   map[string]common.Service
-	wg         sync.WaitGroup
+	handlers     *Handlers
+	services     map[string]common.Service
+	wg           sync.WaitGroup
 	// 调度器和协调器
-	scheduler         *scheduler.VideoSimpleScheduler
-	coordinator       *recorder.SimpleRecordingCoordinator
-	huaweiManager     *huaweiapi.Manager
-	huaweiConnector    *video_recording.HuaweiConferenceConnector
-	videoTaskService   *services.VideoRecordingTaskService
-	videoFileService   *services.VideoFileService
+	scheduler            *scheduler.VideoSimpleScheduler
+	coordinator          *recorder.SimpleRecordingCoordinator
+	huaweiManager        *huaweiapi.Manager
+	huaweiConnector      *video_recording.HuaweiConferenceConnector
+	videoTaskService     *services.VideoRecordingTaskService
+	videoFileService     *services.VideoFileService
 	conversionService    services.ConversionService
 	splittingService     *services.SplittingService
 	snapshotService      *services.SnapshotService
@@ -65,16 +65,16 @@ type MinimalApp struct {
 
 // Handlers 处理器集合
 type Handlers struct {
-	Auth         *handlers.AuthHandler
-	User         *handlers.UserHandler
-	Role         *handlers.RoleHandler
-	VideoTask    *handlers.VideoRecordingTaskHandler
-	HuaweiConfig *handlers.HuaweiConfigHandler
-	VideoFile    *handlers.VideoFileHandler
-	File         *handlers.FileHandler
-	Audit        *handlers.AuditHandler
-	Notification *handlers.NotificationHandler
-	System       *handlers.SystemHandler
+	Auth          *handlers.AuthHandler
+	User          *handlers.UserHandler
+	Role          *handlers.RoleHandler
+	VideoTask     *handlers.VideoRecordingTaskHandler
+	HuaweiConfig  *handlers.HuaweiConfigHandler
+	VideoFile     *handlers.VideoFileHandler
+	File          *handlers.FileHandler
+	Audit         *handlers.AuditHandler
+	Notification  *handlers.NotificationHandler
+	System        *handlers.SystemHandler
 	APIKey        *handlers.APIKeyHandler
 	Split         *handlers.SplitHandler
 	Transcription *handlers.TranscriptionHandler
@@ -126,6 +126,12 @@ func (a *MinimalApp) Initialize() error {
 	// 初始化Gin路由
 	if err := a.initRouter(); err != nil {
 		return fmt.Errorf("failed to initialize router: %w", err)
+	}
+
+	// 检查Python依赖
+	if err := a.checkPythonDependencies(); err != nil {
+		a.logger.Warn("Python依赖检查失败，PPT功能可能不可用", zap.Error(err))
+		// 不阻止启动，仅记录警告
 	}
 
 	// 初始化处理器
@@ -419,6 +425,30 @@ func (a *MinimalApp) seedPermissions() error {
 	return nil
 }
 
+// checkPythonDependencies 检查Python依赖是否已安装
+func (a *MinimalApp) checkPythonDependencies() error {
+	a.logger.Info("检查Python依赖...")
+
+	// 创建Python依赖管理器
+	depsManager := services.NewPythonDepsManager(a.logger, a.config.Python.PreferUV)
+
+	// 检查依赖
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	info, err := depsManager.CheckDependencies(ctx)
+	if err != nil {
+		return fmt.Errorf("Python依赖检查失败: %w", err)
+	}
+
+	a.logger.Info("Python依赖检查通过",
+		zap.String("python_version", info.PythonVersion),
+		zap.String("command", info.Command),
+		zap.Any("packages", info.Packages))
+
+	return nil
+}
+
 // initRouter 初始化路由
 func (a *MinimalApp) initRouter() error {
 	// 设置Gin为发布模式
@@ -515,7 +545,7 @@ func (a *MinimalApp) initHandlers() error {
 	// 转录服务（需要 frame extractor, similarity detector, pptx generator）
 	frameExtractor := services.NewFrameExtractor(a.config.FFmpeg.Path, a.logger)
 	similarityDetector := services.NewSimilarityDetector(a.logger)
-	pptxGenerator := services.NewPPTXGenerator(a.logger)
+	pptxGenerator := services.NewPPTXGenerator(a.logger, a.config.Python.PreferUV)
 
 	// Cloud transcription services (Phase 4)
 	ossService, err := services.NewOSSService(&a.config.OSS, a.logger)
@@ -547,20 +577,20 @@ func (a *MinimalApp) initHandlers() error {
 
 	// 创建handlers
 	a.handlers = &Handlers{
-		Auth:         handlers.NewAuthHandler(authService, a.logger),
-		User:         handlers.NewUserHandler(userService, a.logger),
-		Role:         handlers.NewRoleHandler(roleService, a.logger),
-		VideoTask:    handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
-		HuaweiConfig: handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
-		VideoFile:    handlers.NewVideoFileHandler(a.videoFileService, a.logger),
-		File:         fileHandler,
-		Audit:        auditHandler,
-		Notification: notificationHandler,
-		System:       handlers.NewSystemHandler(a.db, a.logger, a.config),
-		APIKey:       apikeyHandler,
-		Split:        handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
+		Auth:          handlers.NewAuthHandler(authService, a.logger),
+		User:          handlers.NewUserHandler(userService, a.logger),
+		Role:          handlers.NewRoleHandler(roleService, a.logger),
+		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
+		HuaweiConfig:  handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
+		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, a.logger),
+		File:          fileHandler,
+		Audit:         auditHandler,
+		Notification:  notificationHandler,
+		System:        handlers.NewSystemHandler(a.db, a.logger, a.config),
+		APIKey:        apikeyHandler,
+		Split:         handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
 		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, a.logger),
-		PPT:          handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.logger),
+		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.logger),
 	}
 
 	return nil
@@ -629,14 +659,14 @@ func (a *MinimalApp) registerRoutes() error {
 	// API密钥管理
 	apikeys := api.Group("/apikeys")
 	{
-		apikeys.GET("", a.handlers.APIKey.ListAPIKeys)                      // 获取API密钥列表
-		apikeys.POST("", a.handlers.APIKey.CreateAPIKey)                    // 创建API密钥
-		apikeys.GET("/:id", a.handlers.APIKey.GetAPIKey)                    // 获取API密钥详情
-		apikeys.PUT("/:id", a.handlers.APIKey.UpdateAPIKey)                 // 更新API密钥
-		apikeys.DELETE("/:id", a.handlers.APIKey.DeleteAPIKey)              // 删除API密钥
-		apikeys.POST("/:id/toggle", a.handlers.APIKey.ToggleAPIKeyStatus)  // 切换状态
-		apikeys.GET("/:id/logs", a.handlers.APIKey.ListUsageLogs)           // 获取使用日志
-		apikeys.GET("/:id/summary", a.handlers.APIKey.GetUsageLogSummary)  // 获取使用统计
+		apikeys.GET("", a.handlers.APIKey.ListAPIKeys)                    // 获取API密钥列表
+		apikeys.POST("", a.handlers.APIKey.CreateAPIKey)                  // 创建API密钥
+		apikeys.GET("/:id", a.handlers.APIKey.GetAPIKey)                  // 获取API密钥详情
+		apikeys.PUT("/:id", a.handlers.APIKey.UpdateAPIKey)               // 更新API密钥
+		apikeys.DELETE("/:id", a.handlers.APIKey.DeleteAPIKey)            // 删除API密钥
+		apikeys.POST("/:id/toggle", a.handlers.APIKey.ToggleAPIKeyStatus) // 切换状态
+		apikeys.GET("/:id/logs", a.handlers.APIKey.ListUsageLogs)         // 获取使用日志
+		apikeys.GET("/:id/summary", a.handlers.APIKey.GetUsageLogSummary) // 获取使用统计
 	}
 
 	// 录制任务管理 (使用 /recordings 路径符合API文档规范)
@@ -645,7 +675,7 @@ func (a *MinimalApp) registerRoutes() error {
 		recordings.GET("", a.handlers.VideoTask.ListTasks)                 // 获取任务列表
 		recordings.GET("/:id", a.handlers.VideoTask.GetTask)               // 获取任务详情
 		recordings.POST("", a.handlers.VideoTask.CreateTask)               // 创建任务
-		recordings.POST("/auto", a.handlers.VideoTask.CreateTaskAuto)       // 自动创建任务（固定华为配置）
+		recordings.POST("/auto", a.handlers.VideoTask.CreateTaskAuto)      // 自动创建任务（固定华为配置）
 		recordings.PUT("/:id", a.handlers.VideoTask.UpdateTask)            // 更新任务
 		recordings.DELETE("/:id", a.handlers.VideoTask.DeleteTask)         // 删除任务
 		recordings.DELETE("/batch", a.handlers.VideoTask.BatchDeleteTasks) // 批量删除任务
@@ -665,7 +695,7 @@ func (a *MinimalApp) registerRoutes() error {
 	tasks := api.Group("/tasks")
 	{
 		tasks.POST("/clear-stuck", a.handlers.VideoTask.ClearStuckTasks) // 清理卡住的任务
-			tasks.POST("/:id/snapshot", a.handlers.Split.GenerateSnapshot)   // 生成录制快照
+		tasks.POST("/:id/snapshot", a.handlers.Split.GenerateSnapshot)   // 生成录制快照
 	}
 
 	// 华为配置管理
@@ -711,23 +741,31 @@ func (a *MinimalApp) registerRoutes() error {
 	// 视频分割和快照
 	videos := api.Group("/videos")
 	{
-		videos.POST("/:id/split", a.handlers.Split.SubmitSplit)            // 提交分割任务
-		videos.GET("/:id/split-status", a.handlers.Split.GetSplitStatus)  // 获取分割状态
-		videos.GET("/:id/segments", a.handlers.Split.GetSegments)          // 获取分割段落列表
-		videos.POST("/:id/transcribe", a.handlers.Transcription.SubmitTranscription)    // 提交转录任务
+		videos.POST("/:id/split", a.handlers.Split.SubmitSplit)                                  // 提交分割任务
+		videos.GET("/:id/split-status", a.handlers.Split.GetSplitStatus)                         // 获取分割状态
+		videos.GET("/:id/segments", a.handlers.Split.GetSegments)                                // 获取分割段落列表
+		videos.POST("/:id/transcribe", a.handlers.Transcription.SubmitTranscription)             // 提交转录任务
 		videos.GET("/:id/transcription-status", a.handlers.Transcription.GetTranscriptionStatus) // 获取转录状态
-		videos.GET("/:id/transcription-text", a.handlers.Transcription.GetTranscriptionText) // 获取转录文字内容
-		videos.GET("/:id/ppts", a.handlers.PPT.GetPptsByVideo)             // 获取视频的所有PPT结果
+		videos.GET("/:id/transcription-text", a.handlers.Transcription.GetTranscriptionText)     // 获取转录文字内容
+		videos.GET("/:id/ppts", a.handlers.PPT.GetPptsByVideo)                                   // 获取视频的所有PPT结果
+		videos.POST("/:id/rename", a.handlers.VideoFile.RenameFile)                              // 重命名视频文件
+	}
+
+	// 转录任务管理
+	transcriptions := api.Group("/transcriptions")
+	{
+		transcriptions.GET("/active", a.handlers.Transcription.ListActiveTasks) // 获取活跃的转录任务列表
 	}
 
 	// PPT管理
 	ppts := api.Group("/ppts")
 	{
-		ppts.GET("/:id/slides", a.handlers.PPT.GetSlides)                         // 获取幻灯片图片列表
+		ppts.GET("/:id/slides", a.handlers.PPT.GetSlides)                             // 获取幻灯片图片列表
 		ppts.GET("/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage) // 服务幻灯片图片
-		ppts.POST("/merge", a.handlers.PPT.MergeSlides)                           // 合并幻灯片
-		ppts.GET("/:id/download", a.handlers.PPT.DownloadPPT)                      // 下载PPT文件
-		ppts.DELETE("/:id", a.handlers.PPT.DeletePPT)                              // 删除PPT
+		ppts.POST("/merge", a.handlers.PPT.MergeSlides)                               // 合并幻灯片
+		ppts.GET("/:id/download", a.handlers.PPT.DownloadPPT)                         // 下载PPT文件
+		ppts.DELETE("/:id", a.handlers.PPT.DeletePPT)                                 // 删除PPT
+		ppts.POST("/:id/rename", a.handlers.PPT.RenamePPT)                            // 重命名PPT文件
 	}
 
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
@@ -811,6 +849,14 @@ func (a *MinimalApp) registerServices() error {
 			return fmt.Errorf("failed to start splitting service: %w", err)
 		}
 		a.logger.Info("分割服务启动成功")
+	}
+
+	// 启动转录服务
+	if a.transcriptionService != nil {
+		if err := a.transcriptionService.Start(); err != nil {
+			return fmt.Errorf("failed to start transcription service: %w", err)
+		}
+		a.logger.Info("转录服务启动成功")
 	}
 
 	a.logger.Info("服务注册完成")

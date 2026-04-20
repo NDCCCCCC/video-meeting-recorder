@@ -270,3 +270,78 @@ func (h *PPThandler) DeletePPT(c *gin.Context) {
 		"message": "PPT文件已删除",
 	})
 }
+
+// RenamePPTRequest 重命名PPT请求
+type RenamePPTRequest struct {
+	NewName string `json:"new_name" binding:"required,min=1,max=200"`
+}
+
+// RenamePPT handles POST /api/v1/ppts/:id/rename
+func (h *PPThandler) RenamePPT(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的PPT ID")
+		return
+	}
+
+	var req RenamePPTRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误")
+		return
+	}
+
+	// Trim whitespace and validate
+	newName := trimString(req.NewName)
+	if newName == "" {
+		response.GinError(c, response.CodeInvalidRequest, "新文件名不能为空")
+		return
+	}
+
+	// Reject path separators
+	if containsPathSeparator(newName) {
+		response.GinError(c, response.CodeInvalidRequest, "文件名不能包含路径分隔符")
+		return
+	}
+
+	// Get user ID from context
+	userID := middleware.GetUserID(c)
+
+	// Call service to rename
+	if err := h.pptFileService.RenamePPTFile(uint(id), newName, userID); err != nil {
+		h.logger.Warn("重命名PPT文件失败",
+			zap.String("ppt_id", idStr),
+			zap.String("new_name", newName),
+			zap.Error(err))
+
+		// Map service errors to HTTP status codes
+		switch {
+		case err.Error() == "文件不存在" || errors.Is(err, gorm.ErrRecordNotFound):
+			response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		case err.Error() == "无权操作此文件":
+			response.GinError(c, response.CodeForbidden, "无权操作此文件")
+		default:
+			response.GinError(c, response.CodeInternalError, "重命名失败: "+err.Error())
+		}
+		return
+	}
+
+	// Get updated PPT file info
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err))
+		response.GinSuccess(c, gin.H{
+			"message": "重命名成功",
+		})
+		return
+	}
+
+	response.GinSuccess(c, gin.H{
+		"message": "重命名成功",
+		"data": gin.H{
+			"id":         pptFile.ID,
+			"file_name":  pptFile.FileName,
+			"file_path":  pptFile.FilePath,
+		},
+	})
+}

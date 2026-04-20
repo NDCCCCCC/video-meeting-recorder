@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,4 +27,14 @@ func parseUintParam(c *gin.Context, key string) (uint, error) {
 	}
 
 	return uint(id64), nil
+}
+
+// trimString 去除字符串首尾空白字符
+func trimString(s string) string {
+	return strings.TrimSpace(s)
+}
+
+// containsPathSeparator 检查字符串是否包含路径分隔符
+func containsPathSeparator(s string) bool {
+	return strings.ContainsAny(s, "/\\")
 }

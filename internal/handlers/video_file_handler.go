@@ -11,6 +11,7 @@ import (
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // VideoFileHandler 视频文件处理器
@@ -226,4 +227,80 @@ func (h *VideoFileHandler) ScanFiles(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, result)
+}
+
+// RenameFileRequest 重命名请求
+type RenameFileRequest struct {
+	NewName string `json:"new_name" binding:"required,min=1,max=200"`
+}
+
+// RenameFile 重命名视频文件
+func (h *VideoFileHandler) RenameFile(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的文件ID")
+		return
+	}
+
+	var req RenameFileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误")
+		return
+	}
+
+	// Trim whitespace and validate
+	newName := trimString(req.NewName)
+	if newName == "" {
+		response.GinError(c, response.CodeInvalidRequest, "新文件名不能为空")
+		return
+	}
+
+	// Reject path separators
+	if containsPathSeparator(newName) {
+		response.GinError(c, response.CodeInvalidRequest, "文件名不能包含路径分隔符")
+		return
+	}
+
+	// Get user ID from context
+	userID := middleware.GetUserID(c)
+
+	// Call service to rename
+	if err := h.fileService.RenameVideoFile(id, newName, userID); err != nil {
+		h.logger.Warn("重命名视频文件失败",
+			zap.Uint("file_id", id),
+			zap.String("new_name", newName),
+			zap.Error(err))
+
+		// Map service errors to HTTP status codes
+		switch {
+		case err.Error() == "文件不存在" || err == gorm.ErrRecordNotFound:
+			response.GinError(c, response.CodeNotFound, "文件不存在")
+		case err.Error() == "无权操作此文件":
+			response.GinError(c, response.CodeForbidden, "无权操作此文件")
+		case err.Error() == "不能重命名原始录制文件":
+			response.GinError(c, response.CodeInvalidRequest, "不能重命名原始录制文件")
+		default:
+			response.GinError(c, response.CodeInternalError, "重命名失败: "+err.Error())
+		}
+		return
+	}
+
+	// Get updated file info
+	file, err := h.fileService.GetFileByID(id)
+	if err != nil {
+		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err))
+		response.GinSuccess(c, gin.H{
+			"message": "重命名成功",
+		})
+		return
+	}
+
+	response.GinSuccess(c, gin.H{
+		"message": "重命名成功",
+		"data": gin.H{
+			"id":         file.ID,
+			"file_name":  file.FileName,
+			"file_path":  file.FilePath,
+		},
+	})
 }
