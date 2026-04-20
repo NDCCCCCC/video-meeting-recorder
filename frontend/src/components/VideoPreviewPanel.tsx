@@ -45,7 +45,7 @@ interface VideoPreviewPanelProps {
   style?: React.CSSProperties
   autoPlay?: boolean  // Auto-play video when seeking to slide
   showControls?: boolean  // Show custom playback controls
-  videoRef?: React.RefObject<HTMLVideoElement>  // Optional external videoRef
+  videoRef?: React.RefObject<HTMLVideoElement | null>  // Optional external videoRef
 }
 
 // ==================== 主组件 ====================

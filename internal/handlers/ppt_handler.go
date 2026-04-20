@@ -852,7 +852,7 @@ func (h *PPThandler) ReorderSlidesHandler(c *gin.Context) {
 	}
 
 	// Clear slide cache to force re-extraction
-	h.slideCacheService.ClearCache(uint(id))
+	h.slideCacheService.InvalidateCache(uint(id))
 
 	response.GinSuccess(c, gin.H{
 		"success":   true,

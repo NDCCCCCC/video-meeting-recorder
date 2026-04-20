@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"go.uber.org/zap"
@@ -16,14 +15,17 @@ import (
 type SlideExtractor struct {
 	logger       *zap.Logger
 	pythonScript string
+	depsManager  *PythonDepsManager
+	preferUV     bool
 }
 
 // NewSlideExtractor creates a new SlideExtractor instance
-func NewSlideExtractor(logger *zap.Logger) *SlideExtractor {
-	projectRoot := getProjectRoot()
+func NewSlideExtractor(logger *zap.Logger, preferUV bool) *SlideExtractor {
 	return &SlideExtractor{
 		logger:       logger,
-		pythonScript: filepath.Join(projectRoot, "scripts", "extract_slides.py"),
+		pythonScript: "scripts/extract_slides.py", // 相对路径，确保从项目根目录启动
+		depsManager:  NewPythonDepsManager(logger, preferUV),
+		preferUV:     preferUV,
 	}
 }
 
@@ -51,13 +53,13 @@ func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath string, out
 	default:
 	}
 
-	// Validate pptxPath
-	if err := e.validatePath(pptxPath); err != nil {
+	// Validate pptxPath (input file must exist)
+	if err := e.validateInputPath(pptxPath); err != nil {
 		return 0, fmt.Errorf("invalid pptx path: %w", err)
 	}
 
-	// Validate outputDir
-	if err := e.validatePath(outputDir); err != nil {
+	// Validate outputDir format (directory doesn't need to exist yet)
+	if err := e.validateOutputPath(outputDir); err != nil {
 		return 0, fmt.Errorf("invalid output directory: %w", err)
 	}
 
@@ -73,22 +75,31 @@ func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath string, out
 	default:
 	}
 
-	// Prepare command arguments: python3 extract_slides.py <pptxPath> <outputDir>
-	args := []string{e.pythonScript, pptxPath, outputDir}
-
-	// Determine python command name
-	cmdName := "python3"
-	if _, err := exec.LookPath("python3"); err != nil {
-		cmdName = "python"
+	// Get Python command (uses PythonDepsManager like PPTXGenerator)
+	pythonCmd, pythonCmdArgs, err := e.depsManager.GetPythonCommand(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to find Python interpreter: %w", err)
 	}
 
+	// Prepare command arguments: python3 extract_slides.py <pptxPath> <outputDir>
+	// Prepend pythonCmdArgs (e.g., ["run", "python"] for uv)
+	args := append(pythonCmdArgs, e.pythonScript, pptxPath, outputDir)
+
+	e.logger.Info("Executing Python slide extraction script",
+		zap.String("python_cmd", pythonCmd),
+		zap.String("script", e.pythonScript),
+		zap.String("pptx_path", pptxPath),
+		zap.String("output_dir", outputDir))
+
 	// Execute Python script
-	cmd := exec.CommandContext(ctx, cmdName, args...)
+	cmd := exec.CommandContext(ctx, pythonCmd, args...)
 
 	// Capture output (stdout only, per Phase 2 D-14 decision)
 	output, err := cmd.Output()
 	if err != nil {
 		e.logger.Error("Python extract script failed",
+			zap.String("command", pythonCmd),
+			zap.String("script", e.pythonScript),
 			zap.String("output", string(output)),
 			zap.Error(err))
 
@@ -141,25 +152,26 @@ func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath string, out
 	return result.SlideCount, nil
 }
 
-// validatePath validates that a path is safe and within allowed directories
-// Reuses the pattern from PPTXGenerator
-func (e *SlideExtractor) validatePath(path string) error {
-	// Resolve absolute path
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("cannot resolve absolute path: %w", err)
-	}
-
+// validateInputPath validates that an input file path is safe and exists
+func (e *SlideExtractor) validateInputPath(path string) error {
 	// Check for suspicious characters that could enable injection
 	if strings.ContainsAny(path, "\n\r\t") {
 		return fmt.Errorf("path contains invalid characters")
 	}
 
-	// Ensure path is within allowed storage directory (project root)
-	projectRoot := getProjectRoot()
-	allowedDir := filepath.Clean(projectRoot)
-	if !strings.HasPrefix(absPath, allowedDir) {
-		return fmt.Errorf("path outside allowed directory: %s", path)
+	// Validate the path exists and is accessible
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("path not accessible: %w", err)
+	}
+
+	return nil
+}
+
+// validateOutputPath validates that an output directory path is safe (doesn't need to exist yet)
+func (e *SlideExtractor) validateOutputPath(path string) error {
+	// Check for suspicious characters that could enable injection
+	if strings.ContainsAny(path, "\n\r\t") {
+		return fmt.Errorf("path contains invalid characters")
 	}
 
 	return nil

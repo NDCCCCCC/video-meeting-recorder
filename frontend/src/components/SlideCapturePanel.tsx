@@ -12,10 +12,9 @@ interface VideoRefState {
 
 interface DirectCaptureButtonProps {
   pptFileId: number
-  videoFileId: number
   currentSlide: number
   onCaptureComplete: (newSlideNumber: number) => void
-  videoRef: React.RefObject<HTMLVideoElement>
+  videoRef: React.RefObject<HTMLVideoElement | null>
   disabled?: boolean
 }
 
@@ -319,7 +318,6 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
 // Direct capture button - captures current video frame and inserts as next slide
 export const DirectCaptureButton: React.FC<DirectCaptureButtonProps> = ({
   pptFileId,
-  videoFileId,
   currentSlide,
   onCaptureComplete,
   videoRef,
