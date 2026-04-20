@@ -3,7 +3,17 @@
  * Following industry standards (YouTube/VLC patterns)
  */
 
-export const KEYBOARD_SHORTCUTS = {
+/**
+ * Keyboard shortcut definition with optional modifier keys
+ */
+export interface KeyboardShortcut {
+  readonly key: string
+  readonly description: string
+  readonly shiftKey?: boolean
+  readonly ctrlKey?: boolean
+}
+
+export const KEYBOARD_SHORTCUTS: { readonly [key: string]: KeyboardShortcut } = {
   PLAY_PAUSE: { key: ' ', description: '播放/暂停' },
   SEEK_BACK_10: { key: 'ArrowLeft', description: '快退10秒' },
   SEEK_FORWARD_10: { key: 'ArrowRight', description: '快进10秒' },
@@ -18,10 +28,7 @@ export const KEYBOARD_SHORTCUTS = {
   SPEED_DOWN: { key: '<', shiftKey: true, description: '播放速度-' },
   SEEK_TO_START: { key: 'Home', description: '跳转到开始' },
   SEEK_TO_END: { key: 'End', description: '跳转到结束' },
-} as const
-
-// Export type for TypeScript inference
-export type KeyboardShortcut = typeof KEYBOARD_SHORTCUTS[keyof typeof KEYBOARD_SHORTCUTS]
+}
 
 /**
  * Helper function to check if event matches shortcut
