@@ -242,11 +242,17 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     if (!container) return
 
     if (!document.fullscreenElement) {
-      container.requestFullscreen().catch(() => {
-        message.error('进入全屏失败')
+      container.requestFullscreen().catch((err: Error) => {
+        if (err.name === 'NotAllowedError') {
+          message.error('请在浏览器设置中允许全屏权限')
+        } else {
+          message.error(`进入全屏失败: ${err.message}`)
+        }
       })
     } else {
-      document.exitFullscreen()
+      document.exitFullscreen().catch((err: Error) => {
+        message.error(`退出全屏失败: ${err.message}`)
+      })
     }
   }, [])
 
