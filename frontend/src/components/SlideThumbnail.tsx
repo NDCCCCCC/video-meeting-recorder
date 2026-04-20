@@ -1,7 +1,7 @@
 // 幻灯片缩略图组件 - 用于侧边栏和合并选择
 // 支持导航模式和选择模式
 
-import { Image } from 'antd'
+import { Image, Skeleton } from 'antd'
 import type { SlideImage } from '../types/ppt'
 
 interface SlideThumbnailProps {
@@ -45,17 +45,30 @@ export default function SlideThumbnail({
         }
       }}
     >
-      <Image
-        src={slide.thumbnail_url}
-        alt={`幻灯片 ${slideNumber}`}
-        width={160}
-        height={88}
-        preview={false}
-        style={{
-          objectFit: 'cover',
-          display: 'block',
-        }}
-      />
+      {slide.thumbnail_url ? (
+        <Image
+          src={slide.thumbnail_url}
+          alt={`幻灯片 ${slideNumber}`}
+          width={160}
+          height={90}
+          preview={false}
+          loading="lazy"
+          onError={(e) => {
+            // Fallback to placeholder on error
+            const target = e.target as HTMLImageElement
+            target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiNmMGYwZjAiLz48dGV4dCB4PSI4MCIgeT0iNDUiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM4YzhjOGMiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFByZXZpZXc8L3RleHQ+PC9zdmc+'
+          }}
+          style={{
+            objectFit: 'cover',
+            display: 'block',
+          }}
+        />
+      ) : (
+        <Skeleton.Image
+          active
+          style={{ width: 160, height: 90 }}
+        />
+      )}
 
       {/* 选中标记（合并模式） */}
       {isSelected && (
