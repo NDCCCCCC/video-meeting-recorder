@@ -641,7 +641,7 @@ export default function ResultDetailPage() {
 
       {/* Info & Operations Bar - Inline layout without tabs */}
       <Card size="small" style={{ marginBottom: 16 }}>
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Space direction="vertical" style={{ width: '100%' }} size="middle" className="info-section">
           {/* Basic Info - displayed inline without tabs */}
           <Descriptions column={2} size="small">
             <Descriptions.Item label="视频名称">{videoName}</Descriptions.Item>
@@ -658,7 +658,7 @@ export default function ResultDetailPage() {
           <Divider style={{ margin: '8px 0' }} />
 
           {/* Operation buttons - horizontal layout with wrapping */}
-          <Space wrap>
+          <Space wrap className="operations-bar">
             <Button
               icon={<DownloadOutlined />}
               onClick={handleDownloadPpt}
