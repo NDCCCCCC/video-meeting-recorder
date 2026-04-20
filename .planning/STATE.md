@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-last_updated: "2026-04-18T12:42:23.724Z"
+last_updated: "2026-04-20T04:37:56.013Z"
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 4
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  total_plans: 21
+  completed_plans: 17
+  percent: 81
 ---
 
 # STATE.md - Project Memory
@@ -38,12 +38,12 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 
 ## Current Position
 
-Phase: 04 (cloud-services) — EXECUTING
-Plan: 1 of 5
-**Phase:** 04
-**Plan:** Not started
-**Status:** v1.0 milestone complete
-**Progress:** ▱▱▱▱▱▱▱▱▱▱ 0/4 phases (0%)
+Phase: 05 (file-rename) — EXECUTING
+Plan: 1 of 2 complete
+**Phase:** 05
+**Plan:** 02 (next)
+**Status:** In progress - file rename API and UI complete
+**Progress:** [████████░░] 81%
 
 ### Blockers
 
@@ -97,6 +97,21 @@ None identified.
 6. **Manual Transcription Trigger Only**
    - Rationale: Cost control, user choice, simplified error handling
    - Status: Pending validation
+
+7. **Atomic File Rename with Transaction Rollback** (Phase 05)
+   - Rationale: Ensure data consistency when updating both DB records and physical files
+   - Pattern: Start DB transaction → os.Range physical file → update DB → commit on success, rollback on failure
+   - Status: Implemented and tested (12 test cases passing)
+
+8. **Original Recording Immutability** (Phase 05)
+   - Rationale: Original recordings are source of truth; splits/snapshots are derived copies
+   - Pattern: Check source_type='recording' && parent_id=NULL to reject rename operations
+   - Status: Enforced at service layer
+
+9. **File Extension Preservation at Service Layer** (Phase 05)
+   - Rationale: Prevent malicious extension changes; maintain file type consistency
+   - Pattern: Extract extension from current file path, append to user-provided name
+   - Status: Implemented for both VideoFile (.mp4) and PPTFile (.pptx)
 
 ### Tech Stack Context
 
