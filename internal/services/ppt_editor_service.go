@@ -908,7 +908,7 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 	}
 
 	// Clear cache to force re-extraction with new order
-	s.slideCache.ClearCache(pptFileID)
+	s.slideCache.InvalidateCache(pptFileID)
 
 	s.logger.Info("Successfully reordered slides",
 		zap.Uint("ppt_file_id", pptFileID),
@@ -917,20 +917,3 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 	return newOrder, nil
 }
 
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, sourceFile)
-	return err
-}

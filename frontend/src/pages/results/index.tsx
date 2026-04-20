@@ -577,7 +577,7 @@ export default function ResultDetailPage() {
                 isSelectable={isMergeMode}
                 isDraggable={isDragMode}
                 isDragging={draggedSlide === slide.slide_number}
-                onDragStart={isDragMode ? (e) => handleDragStart(slide.slide_number) : undefined}
+                onDragStart={isDragMode ? () => handleDragStart(slide.slide_number) : undefined}
                 onDragOver={isDragMode ? handleDragOver : undefined}
                 onDrop={isDragMode ? (e, num) => handleDrop(e, num) : undefined}
                 onDragEnd={isDragMode ? handleDragEnd : undefined}
@@ -717,7 +717,6 @@ export default function ResultDetailPage() {
                   {/* Direct capture button - replaces old modal-only capture */}
                   <DirectCaptureButton
                     pptFileId={currentPptId}
-                    videoFileId={videoFileIdNum}
                     currentSlide={currentSlide}
                     onCaptureComplete={handleDirectCapture}
                     videoRef={videoRef}

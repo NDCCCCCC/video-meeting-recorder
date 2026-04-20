@@ -16,7 +16,7 @@ export const SPEED_OPTIONS = [
 
 // ==================== Hook ====================
 
-export function usePlaybackSpeed(videoRef: React.RefObject<HTMLVideoElement>) {
+export function usePlaybackSpeed(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const [playbackRate, setPlaybackRate] = useState(1.0)
 
   const changeSpeed = useCallback((rate: number) => {
