@@ -34,6 +34,7 @@ import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import SlideCapturePanel, { DirectCaptureButton } from '../../components/SlideCapturePanel'
 import { VideoPreviewPanel } from '../../components/VideoPreviewPanel'
 import SlideThumbnail from '../../components/SlideThumbnail'
+import { PPTResultsDropdown } from '../../components/PPTResultsDropdown'
 import {
   getPptsByVideo,
   getSlides,
@@ -443,6 +444,13 @@ export default function ResultDetailPage() {
     }
   }, [slides.length])
 
+  // 处理 PPT 结果切换
+  const handlePptChange = useCallback(async (pptId: number) => {
+    setCurrentPptId(pptId)
+    setCurrentSlide(0)
+    await loadSlides(pptId)
+  }, [loadSlides])
+
   // 拖拽排序处理函数
   const handleDragStart = useCallback((slideNumber: number) => {
     setDraggedSlide(slideNumber)
@@ -536,16 +544,25 @@ export default function ResultDetailPage() {
           marginBottom: 16,
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          justifyContent: 'space-between',
         }}
       >
-        <Button
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/files')}
-        >
-          返回
-        </Button>
-        <h2 style={{ margin: 0 }}>PPT结果 - {videoName}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/files')}
+          >
+            返回
+          </Button>
+          <h2 style={{ margin: 0 }}>PPT结果 - {videoName}</h2>
+        </div>
+        {ppts.length > 1 && (
+          <PPTResultsDropdown
+            ppts={ppts}
+            currentPptId={currentPptId}
+            onPptChange={handlePptChange}
+          />
+        )}
       </div>
 
       {/* Preview Area with Side-by-Side Layout */}
