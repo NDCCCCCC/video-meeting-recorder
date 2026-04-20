@@ -781,10 +781,11 @@ func (a *MinimalApp) registerRoutes() error {
 		ppts.GET("/:id/duplicates", a.handlers.PPT.DetectDuplicatesHandler)                // 检测重复幻灯片
 		ppts.DELETE("/:id/slides", a.handlers.PPT.DeleteSlidesHandler)                     // 删除指定幻灯片
 		ppts.POST("/:id/rollback", a.handlers.PPT.RollbackHandler)                         // 回滚到备份版本
-t		ppts.POST("/:id/reorder", a.handlers.PPT.ReorderSlidesHandler)				// 重排序幻灯片
-			ppts.POST("/:id/capture", a.handlers.PPT.CaptureFrameHandler)				// 捕获视频帧
-			ppts.POST("/:id/slides", a.handlers.PPT.InsertSlideHandler)				// 插入幻灯片
-	}
+			ppts.POST(":id/reorder", a.handlers.PPT.ReorderSlidesHandler)					// 重排序幻灯片
+			ppts.POST(":id/capture", a.handlers.PPT.CaptureFrameHandler)					// 捕获视频帧
+			ppts.POST(":id/slides", a.handlers.PPT.InsertSlideHandler)					// 插入幻灯片
+		}
+
 
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
 	a.router.GET("/api/v1/recordings/:id/preview/stream/:file", a.handlers.VideoTask.ServeHLSStream)
@@ -1316,6 +1317,3 @@ func getContentType(filename string) string {
 		return "application/octet-stream"
 	}
 }
-			ppts.POST("/:id/reorder", a.handlers.PPT.ReorderSlidesHandler)					// 重排序幻灯片
-			ppts.POST("/:id/capture", a.handlers.PPT.CaptureFrameHandler)					// 捕获视频帧
-			ppts.POST("/:id/slides", a.handlers.PPT.InsertSlideHandler)					// 插入幻灯片
