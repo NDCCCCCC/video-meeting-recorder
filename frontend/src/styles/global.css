@@ -81,3 +81,32 @@ a:hover {
   }
 }
 
+/* Operations bar - modern button styling */
+.operations-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.operations-bar .ant-btn {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.operations-bar .ant-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Info section styling */
+.info-section .ant-descriptions-item-label {
+  font-weight: 500;
+  color: #666;
+}
+
+.info-section .ant-descriptions-item-content {
+  color: #333;
+}
+
