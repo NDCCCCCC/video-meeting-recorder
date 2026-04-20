@@ -436,6 +436,7 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
                     onClick={() => handleSkip(SKIP_SECONDS)}
                     title={`快进${SKIP_SECONDS}秒`}
                   />
+                  <FrameNavigation videoRef={videoRef} disabled={!duration || loading} />
                   <Button
                     type="text"
                     onClick={handlePlaybackRate}
@@ -450,13 +451,18 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
                 </Space>
 
                 <Space>
+                  <ControlButton
+                    icon={<SoundOutlined />}
+                    onClick={handleMuteToggle}
+                    title={muted ? '取消静音 (M)' : '静音 (M)'}
+                    disabled={!duration || loading}
+                  />
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <SoundOutlined style={STYLES.controlBtn} />
                     <Slider
                       min={0}
                       max={1}
                       step={0.1}
-                      value={volume}
+                      value={actualVolume}
                       onChange={handleVolumeChange}
                       style={{ width: '80px' }}
                     />
@@ -464,7 +470,8 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
                   <ControlButton
                     icon={<FullscreenOutlined />}
                     onClick={handleFullscreen}
-                    title="全屏"
+                    title="全屏 (F)"
+                    disabled={!duration || loading}
                   />
                   <ControlButton
                     icon={<DownloadOutlined />}
