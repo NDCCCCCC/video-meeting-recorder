@@ -61,6 +61,7 @@ type MinimalApp struct {
 	rateLimiter          *services.RateLimiter
 	slideCacheService    *services.SlideCacheService
 	pptMergeService      *services.PPTMergeService
+	pptEditorService     *services.PPTEditorService
 }
 
 // Handlers 处理器集合
@@ -570,6 +571,9 @@ func (a *MinimalApp) initHandlers() error {
 	a.pptMergeService = services.NewPPTMergeService(a.db, a.logger, a.config, a.slideCacheService)
 	pptFileService := services.NewPPTFileService(a.db, a.logger, a.config)
 
+	// Create PPT editor service (reuse existing similarityDetector and pptxGenerator from transcription service)
+	a.pptEditorService = services.NewPPTEditorService(a.db, a.logger, a.config, a.slideCacheService, similarityDetector, pptxGenerator)
+
 	// 华为管理器（使用数据库配置动态创建客户端）
 	dbAdapter := &huaweiDBAdapter{db: a.db}
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
@@ -590,7 +594,7 @@ func (a *MinimalApp) initHandlers() error {
 		APIKey:        apikeyHandler,
 		Split:         handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
 		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, a.logger),
-		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.logger),
+		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.logger),
 	}
 
 	return nil
@@ -760,12 +764,15 @@ func (a *MinimalApp) registerRoutes() error {
 	// PPT管理
 	ppts := api.Group("/ppts")
 	{
-		ppts.GET("/:id/slides", a.handlers.PPT.GetSlides)                             // 获取幻灯片图片列表
-		ppts.GET("/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage) // 服务幻灯片图片
-		ppts.POST("/merge", a.handlers.PPT.MergeSlides)                               // 合并幻灯片
-		ppts.GET("/:id/download", a.handlers.PPT.DownloadPPT)                         // 下载PPT文件
-		ppts.DELETE("/:id", a.handlers.PPT.DeletePPT)                                 // 删除PPT
-		ppts.POST("/:id/rename", a.handlers.PPT.RenamePPT)                            // 重命名PPT文件
+		ppts.GET("/:id/slides", a.handlers.PPT.GetSlides)                                  // 获取幻灯片图片列表
+		ppts.GET("/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage)      // 服务幻灯片图片
+		ppts.POST("/merge", a.handlers.PPT.MergeSlides)                                    // 合并幻灯片
+		ppts.GET("/:id/download", a.handlers.PPT.DownloadPPT)                              // 下载PPT文件
+		ppts.DELETE("/:id", a.handlers.PPT.DeletePPT)                                      // 删除PPT
+		ppts.POST("/:id/rename", a.handlers.PPT.RenamePPT)                                 // 重命名PPT文件
+		ppts.GET("/:id/duplicates", a.handlers.PPT.DetectDuplicatesHandler)                // 检测重复幻灯片
+		ppts.DELETE("/:id/slides", a.handlers.PPT.DeleteSlidesHandler)                     // 删除指定幻灯片
+		ppts.POST("/:id/rollback", a.handlers.PPT.RollbackHandler)                         // 回滚到备份版本
 	}
 
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
