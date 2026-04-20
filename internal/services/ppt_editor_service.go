@@ -740,7 +740,6 @@ func (s *PPTEditorService) generateThumbnail(inputPath, outputPath string) error
 	// Simple resize (nearest neighbor for speed)
 	// For better quality, consider using a resizing library
 	srcBounds := img.Bounds()
-	dstBounds := thumbnail.Bounds()
 
 	for y := 0; y < thumbnailHeight; y++ {
 		for x := 0; x < thumbnailWidth; x++ {
