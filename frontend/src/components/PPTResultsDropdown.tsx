@@ -1,6 +1,5 @@
 import { Dropdown, Button, Tag, Space } from 'antd'
 import { CheckCircleOutlined, DownOutlined } from '@ant-design/icons'
-import dayjs from 'dayjs'
 import type { PPTResult } from '../types/ppt'
 import type { MenuProps } from 'antd'
 

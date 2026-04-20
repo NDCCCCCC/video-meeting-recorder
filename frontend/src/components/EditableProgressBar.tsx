@@ -1,5 +1,4 @@
 import { InputNumber, Space } from 'antd'
-import { useState } from 'react'
 
 interface EditableProgressBarProps {
   currentTime: number
@@ -34,11 +33,8 @@ function parseTimeToSeconds(timeStr: string): number {
 }
 
 export default function EditableProgressBar({ currentTime, duration, onSeek }: EditableProgressBarProps) {
-  const [inputTime, setInputTime] = useState(currentTime)
-
   const handleTimeChange = (value: number | null) => {
     if (value === null || value < 0 || value > duration) return
-    setInputTime(value)
     onSeek(value)
   }
 
