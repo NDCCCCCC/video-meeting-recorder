@@ -3,7 +3,6 @@
 import type { ApiResponse } from '../types/auth'
 import type { SlidesResponse, PPTListResponse, MergeRequest, MergeResponse } from '../types/ppt'
 import { apiRequest, getToken } from './apiClient'
-import axios from 'axios'
 
 // Frame capture and slide insertion types
 export interface CaptureFrameRequest {

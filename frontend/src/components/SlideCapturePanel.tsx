@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Modal, Button, Space, InputNumber, Image, message, Spin, Progress, Select } from 'antd'
+import { Modal, Button, Space, InputNumber, Image, message, Progress, Select } from 'antd'
 import { CameraOutlined, PlayCircleOutlined, PauseCircleOutlined, CheckOutlined } from '@ant-design/icons'
 import type { SlideCapturePanelProps } from '../types/ppt'
 import { captureFrame, insertSlide } from '../api/ppt'
@@ -99,7 +99,7 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
     try {
       const response = await captureFrame(pptFileId, videoState.currentTime)
 
-      if (response.data.success && response.data.frame_data) {
+      if (response.data?.success && response.data?.frame_data) {
         setCapturedFrame(response.data.frame_data)
         message.success('帧捕获成功')
       } else {
@@ -130,7 +130,7 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
         videoState.currentTime
       )
 
-      if (response.data.success) {
+      if (response.data?.success) {
         message.success(`幻灯片插入成功，位置: ${response.data.inserted_slide_number}`)
 
         // Call callback with new slide number
