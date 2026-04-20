@@ -45,7 +45,7 @@ func logAPIKeyUsage(c *gin.Context, db *gorm.DB, apiKeyID, userID uint, statusCo
 // responseWriter 用于捕获响应状态码
 type responseWriter struct {
 	gin.ResponseWriter
-	status     int
+	status      int
 	wroteHeader bool
 }
 

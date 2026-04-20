@@ -17,7 +17,7 @@ import (
 
 const (
 	slideFilenamePattern = `^slide_\d{3}\.jpg$`
-	slideFilenamePrefix   = "slide_"
+	slideFilenamePrefix  = "slide_"
 	slideFilenameExt     = ".jpg"
 )
 
@@ -30,11 +30,11 @@ type SlideImageData struct {
 
 // SlideCacheService manages slide image caching and retrieval
 type SlideCacheService struct {
-	db              *gorm.DB
-	logger          *zap.Logger
-	config          *config.Config
-	slideExtractor  *SlideExtractor
-	cacheMutexes    sync.Map // map[uint]*sync.Mutex for per-PPT mutexes
+	db             *gorm.DB
+	logger         *zap.Logger
+	config         *config.Config
+	slideExtractor *SlideExtractor
+	cacheMutexes   sync.Map // map[uint]*sync.Mutex for per-PPT mutexes
 }
 
 // NewSlideCacheService creates a new SlideCacheService instance

@@ -29,17 +29,17 @@ func NewSlideExtractor(logger *zap.Logger) *SlideExtractor {
 
 // pythonSlideResult represents the JSON output from the Python script
 type pythonSlideResult struct {
-	Success    bool                    `json:"success"`
-	SlideCount int                     `json:"slide_count"`
-	Slides     []pythonSlideImageData  `json:"slides,omitempty"`
-	Error      string                  `json:"error,omitempty"`
+	Success    bool                   `json:"success"`
+	SlideCount int                    `json:"slide_count"`
+	Slides     []pythonSlideImageData `json:"slides,omitempty"`
+	Error      string                 `json:"error,omitempty"`
 }
 
 // pythonSlideImageData represents slide image data from Python script
 type pythonSlideImageData struct {
-	SlideNumber  int    `json:"slide_number"`
+	SlideNumber   int    `json:"slide_number"`
 	ThumbnailPath string `json:"thumbnail_path"`
-	FullsizePath string `json:"fullsize_path"`
+	FullsizePath  string `json:"fullsize_path"`
 }
 
 // ExtractSlides extracts slide images from a PPTX file

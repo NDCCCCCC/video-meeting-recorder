@@ -196,3 +196,73 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 		"total_count": len(segments),
 	})
 }
+
+// ListActiveTasks handles GET /api/v1/transcriptions/active
+// Returns all active transcription tasks (pending or processing)
+func (h *TranscriptionHandler) ListActiveTasks(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	isAdmin := middleware.GetIsAdmin(c)
+
+	tasks, err := h.transcriptionService.GetActiveTasks()
+	if err != nil {
+		response.GinError(c, response.CodeInternalError, "获取活跃任务失败")
+		return
+	}
+
+	// 优化：批量查询避免 N+1 问题
+	if len(tasks) == 0 {
+		response.GinSuccess(c, gin.H{
+			"tasks": []gin.H{},
+			"total": 0,
+		})
+		return
+	}
+
+	// 1. 收集所有 VideoFileID
+	videoFileIDs := make([]uint, len(tasks))
+	for i, task := range tasks {
+		videoFileIDs[i] = task.VideoFileID
+	}
+
+	// 2. 一次性查询所有 VideoFile
+	var videoFiles []models.VideoFile
+	h.transcriptionService.GetDB().Where("id IN ?", videoFileIDs).Find(&videoFiles)
+
+	// 3. 创建 map 快速查找
+	vfMap := make(map[uint]models.VideoFile, len(videoFiles))
+	for _, vf := range videoFiles {
+		vfMap[vf.ID] = vf
+	}
+
+	// 4. 过滤和构建响应
+	filteredTasks := make([]gin.H, 0, len(tasks))
+	for _, task := range tasks {
+		videoFile, ok := vfMap[task.VideoFileID]
+		if !ok {
+			continue // Skip if video file not found
+		}
+
+		// Only show tasks owned by user (or all if admin)
+		if !isAdmin && videoFile.CreatedBy != userID {
+			continue
+		}
+
+		filteredTasks = append(filteredTasks, gin.H{
+			"id":              task.ID,
+			"video_file_id":   task.VideoFileID,
+			"status":          task.Status,
+			"mode":            task.Mode,
+			"sampling_rate":   task.SamplingRate,
+			"current_stage":   task.CurrentStage,
+			"percentage":      task.Percentage,
+			"error_message":   task.ErrorMessage,
+			"created_at":      task.CreatedAt,
+			"video_file_name": videoFile.FileName,
+		})
+	}
+
+	response.GinSuccess(c, gin.H{
+		"tasks": filteredTasks,
+		"total": len(filteredTasks),
+	})
+}

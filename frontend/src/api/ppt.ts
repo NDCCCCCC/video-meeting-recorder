@@ -4,6 +4,38 @@ import type { ApiResponse } from '../types/auth'
 import type { SlidesResponse, PPTListResponse, MergeRequest, MergeResponse } from '../types/ppt'
 import { apiRequest, getToken } from './apiClient'
 
+// Duplicate detection types
+export interface DuplicateGroup {
+  slides: number[]
+  similarity: number
+  ssim_score: number
+  phash_distance: number
+  edge_change_rate: number
+}
+
+export interface DuplicateDetectionResponse {
+  groups: DuplicateGroup[]
+  total_scanned: number
+  duplicate_count: number
+}
+
+export interface DeleteSlidesRequest {
+  slides: number[]
+}
+
+export interface DeleteSlidesResponse {
+  message: string
+  page_count: number
+  deleted_slides: number[]
+  backup_path: string
+}
+
+export interface RollbackResponse {
+  message: string
+  restored: boolean
+  page_count: number
+}
+
 // 获取 PPT 幻灯片列表
 export async function getSlides(pptFileId: number): Promise<ApiResponse<SlidesResponse>> {
   return apiRequest<SlidesResponse>(`/api/v1/ppts/${pptFileId}/slides`)
@@ -68,5 +100,36 @@ export async function renamePptFile(
   return apiRequest<{ message: string; data: PPTFile }>(`/api/v1/ppts/${id}/rename`, {
     method: 'POST',
     body: JSON.stringify({ new_name: newName }),
+  })
+}
+
+// 检测重复幻灯片
+export async function detectDuplicates(
+  pptFileId: number,
+  threshold?: number
+): Promise<ApiResponse<DuplicateDetectionResponse>> {
+  const url = threshold
+    ? `/api/v1/ppts/${pptFileId}/duplicates?threshold=${threshold}`
+    : `/api/v1/ppts/${pptFileId}/duplicates`
+  return apiRequest<DuplicateDetectionResponse>(url)
+}
+
+// 删除幻灯片
+export async function deleteSlides(
+  pptFileId: number,
+  slides: number[]
+): Promise<ApiResponse<DeleteSlidesResponse>> {
+  return apiRequest<DeleteSlidesResponse>(`/api/v1/ppts/${pptFileId}/slides`, {
+    method: 'DELETE',
+    body: JSON.stringify({ slides }),
+  })
+}
+
+// 回滚 PPT 到备份版本
+export async function rollbackPPT(
+  pptFileId: number
+): Promise<ApiResponse<RollbackResponse>> {
+  return apiRequest<RollbackResponse>(`/api/v1/ppts/${pptFileId}/rollback`, {
+    method: 'POST',
   })
 }

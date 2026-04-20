@@ -93,9 +93,11 @@ func OptionalSM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 	}
 }
 
-// isVideoDownloadEndpoint 检查是否是视频下载端点
+// isVideoDownloadEndpoint 检查是否是文件/PPT下载端点
+// 支持通过URL查询参数传递token（用于文件下载）
 func isVideoDownloadEndpoint(path string) bool {
-	return strings.Contains(path, "/files/") && strings.Contains(path, "/download")
+	return strings.Contains(path, "/download") &&
+		   (strings.Contains(path, "/files/") || strings.Contains(path, "/ppts/"))
 }
 
 // extractToken 从多个来源提取token

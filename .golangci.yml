@@ -1,0 +1,90 @@
+run:
+  timeout: 5m
+  tests: true
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters:
+  disable-all: true
+  enable:
+    # 必须启用的检查器
+    - gofmt
+    - goimports
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+
+    # 错误处理
+    - errorlint
+    - errname
+
+    # 代码风格
+    - gocritic
+    - misspell
+    - whitespace
+    - gofumpt
+
+    # 复杂度
+    - cyclop
+    - gocyclo
+
+    # 性能
+    - prealloc
+    - unconvert
+
+    # 安全
+    - gosec
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/NDCCCCCC/video-meeting-recorder
+
+  gofumpt:
+    extra-rules: true
+
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+
+  errorlint:
+    errorf: true
+
+  cyclop:
+    max-complexity: 25
+    skip-tests: true
+
+  gocyclo:
+    min-complexity: 25
+
+  gosec:
+    excludes:
+      - G104
+
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    # 排除测试文件的某些检查
+    - path: _test\.go
+      linters:
+        - cyclop
+        - gocyclo
+
+    # 允许 main 包中更长的函数
+    - path: cmd/
+      linters:
+        - cyclop
+        - gocyclo
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-use-default: false

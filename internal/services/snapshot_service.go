@@ -76,6 +76,40 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 		)
 	}
 
+	// 4.5. Calculate current recording duration
+	// For active recordings, calculate duration from StartTime to now
+	// For completed recordings, use the stored RecordingDuration
+	var recordingDuration float64
+	if task.Status == models.VideoStatusRecording {
+		// Calculate current duration based on elapsed time since recording started
+		recordingDuration = time.Since(task.StartTime).Seconds()
+		s.logger.Info("录制进行中，计算当前时长",
+			zap.Uint("task_id", taskID),
+			zap.Float64("duration", recordingDuration),
+		)
+	} else {
+		// Use stored duration for completed/failed recordings
+		recordingDuration = float64(task.RecordingDuration)
+	}
+
+	// Validate recording duration is positive
+	if recordingDuration <= 0 {
+		return nil, fmt.Errorf("录制时长无效: %.0f秒，无法生成快照", recordingDuration)
+	}
+
+	// Validate seek offset doesn't exceed recording duration
+	if seekOffset >= recordingDuration {
+		return nil, fmt.Errorf("快照偏移量 %.2f 秒超过或等于录制时长 %.2f 秒", seekOffset, recordingDuration)
+	}
+
+	// Log snapshot parameters for debugging
+	s.logger.Info("快照参数验证通过",
+		zap.Uint("task_id", taskID),
+		zap.Float64("recording_duration", recordingDuration),
+		zap.Float64("seek_offset", seekOffset),
+		zap.Float64("snapshot_duration", recordingDuration-seekOffset),
+	)
+
 	// 5. Copy partial MKV to temp file (avoid locking issues with active recording)
 	tempDir := filepath.Join(filepath.Dir(task.MKVFilePath), "snapshots")
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
@@ -97,13 +131,19 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	// recordingDuration is already validated above (line 86-88)
+	// CRITICAL: Use validated recordingDuration to capture video up to NOW, not file end
+
 	// Build FFmpeg args with -ss for incremental seeking
 	args := []string{"-y"}
 	if seekOffset > 0 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", seekOffset))
 	}
+	// CRITICAL FIX: Add -to parameter to limit output to current recording time
+	// This ensures snapshot captures only video up to the moment button was clicked
 	args = append(args,
 		"-i", tempMKV,
+		"-to", fmt.Sprintf("%.3f", recordingDuration),
 		"-c", "copy",
 		"-movflags", "+faststart",
 		outputMP4,
@@ -122,14 +162,19 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 
 	// 8. Find the parent VideoFile for this task
 	var parentFile models.VideoFile
-	parentID := uint(0)
+	var parentID *uint // Use pointer to allow nil when no parent exists
 	if err := s.db.Where("task_id = ? AND source_type = ?", taskID, models.SourceTypeRecording).First(&parentFile).Error; err == nil {
-		parentID = parentFile.ID
+		parentID = &parentFile.ID
+	} else {
+		s.logger.Warn("快照未找到父录制文件，将创建无父级的快照记录",
+			zap.Uint("task_id", taskID),
+			zap.Error(err),
+		)
 	}
 
 	// 9. Register snapshot file via VideoFileService callback (D-10, D-13)
 	// Pass seekOffset as SnapshotOffset so it's stored on the VideoFile record
-	snapshotFile, err := s.videoFileService.CreateSegmentFile(outputMP4, &parentID, models.SourceTypeSnapshot, createdBy, seekOffset)
+	snapshotFile, err := s.videoFileService.CreateSegmentFile(outputMP4, parentID, models.SourceTypeSnapshot, createdBy, seekOffset)
 	if err != nil {
 		return nil, fmt.Errorf("注册快照文件失败: %w", err)
 	}

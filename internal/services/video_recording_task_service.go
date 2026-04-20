@@ -296,14 +296,14 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 func (s *VideoRecordingTaskService) CreateTaskAuto(req *CreateTaskAutoRequest, createdBy uint) (*models.VideoRecordingTask, error) {
 	// 构造标准创建请求，固定华为配置ID为1
 	standardReq := &CreateTaskRequest{
-		Name:             req.Name,
-		Description:      req.Description,
-		StartTime:        req.StartTime,
-		EndTime:          req.EndTime,
-		PreJoinMinutes:   req.PreJoinMinutes,
+		Name:               req.Name,
+		Description:        req.Description,
+		StartTime:          req.StartTime,
+		EndTime:            req.EndTime,
+		PreJoinMinutes:     req.PreJoinMinutes,
 		RecordDelayMinutes: req.RecordDelayMinutes,
-		ConferenceNumber: req.ConferenceNumber,
-		HuaweiConfigID:   1,
+		ConferenceNumber:   req.ConferenceNumber,
+		HuaweiConfigID:     1,
 	}
 	return s.CreateTask(standardReq, createdBy)
 }

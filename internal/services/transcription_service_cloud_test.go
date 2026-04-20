@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestSubmitTranscriptionWithModeValidation tests mode parameter validation
@@ -54,8 +54,8 @@ func TestCloudModeSkipsSamplingRateValidation(t *testing.T) {
 // TestPollingBackoffParameters tests TRAN-04 exponential backoff configuration
 func TestPollingBackoffParameters(t *testing.T) {
 	// Verify the polling backoff constants exist and are correct
-	initialDelay := 2    // seconds
-	maxDelay := 60       // seconds (TRAN-04: retry.MaxDelay)
+	initialDelay := 2 // seconds
+	maxDelay := 60    // seconds (TRAN-04: retry.MaxDelay)
 	maxAttempts := 120
 	multiplier := 1.5
 

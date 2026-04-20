@@ -1,0 +1,170 @@
+/* Split Page Styles */
+
+.pageContainer {
+  padding: 24px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.headerSection {
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.mainLayout {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.videoSection {
+  flex: 3;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.videoCard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.videoCardBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.videoContainer {
+  position: relative;
+  background-color: #000;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.videoElement {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.progressBar {
+  position: absolute;
+  bottom: 52px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: height 0.15s;
+  z-index: 10;
+}
+
+.progressBar:hover {
+  height: 8px;
+}
+
+.progressBarFill {
+  height: 100%;
+  background: #1677ff;
+  border-radius: 0 2px 2px 0;
+  pointer-events: none;
+}
+
+.marker {
+  position: absolute;
+  top: -2px;
+  width: 3px;
+  height: calc(100% + 4px);
+  background: #ff4d4f;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.controlsBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.timeDisplay {
+  color: #fff;
+  margin-left: auto;
+}
+
+.sidebar {
+  flex: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  flex-shrink: 0;
+}
+
+.segmentCard {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.segmentCardBody {
+  flex: 1;
+  overflow: auto;
+}
+
+.actionButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.loadingContainer {
+  padding: 24px;
+  text-align: center;
+}
+
+.errorContainer {
+  padding: 24px;
+  text-align: center;
+}
+
+.errorIcon {
+  font-size: 48px;
+  color: #ff4d4f;
+  margin-bottom: 16px;
+}
+
+.errorText {
+  color: #ff4d4f;
+  margin-bottom: 16px;
+}
+
+.emptyIcon {
+  font-size: 48px;
+  color: #999;
+  margin-bottom: 16px;
+}
+
+.emptyText {
+  color: #999;
+}

@@ -65,3 +65,32 @@ export async function getTranscriptionText(
     `/api/v1/videos/${videoFileId}/transcription-text`
   )
 }
+
+// Get active transcription tasks
+export async function getActiveTranscriptionTasks(): Promise<ApiResponse<{ tasks: Array<{
+  id: number
+  video_file_id: number
+  status: string
+  mode: string
+  sampling_rate: number
+  current_stage: string
+  percentage: number
+  error_message: string
+  created_at: string
+  video_file_name: string
+}>, total: number }>> {
+  return apiRequest<{ tasks: Array<{
+    id: number
+    video_file_id: number
+    status: string
+    mode: string
+    sampling_rate: number
+    current_stage: string
+    percentage: number
+    error_message: string
+    created_at: string
+    video_file_name: string
+  }>, total: number }>(
+    '/api/v1/transcriptions/active'
+  )
+}
