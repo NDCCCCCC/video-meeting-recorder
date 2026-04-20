@@ -21,6 +21,7 @@ interface PPTPreviewProps {
   onToggleSelect: (slide: SlideImage, index: number) => void
   isLoading: boolean
   currentPptId?: number
+  containerStyle?: React.CSSProperties  // NEW: Allow custom container style
 }
 
 export default function PPTPreview({
@@ -32,6 +33,7 @@ export default function PPTPreview({
   onToggleSelect,
   isLoading,
   currentPptId = 0,
+  containerStyle,  // NEW
 }: PPTPreviewProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -89,11 +91,11 @@ export default function PPTPreview({
   }, [currentSlide, slides])
 
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 400 }}>
+    <div style={{ display: 'flex', height: '100%', minHeight: 400, ...containerStyle }}>
       {/* 侧边栏缩略图 */}
       <div
         style={{
-          width: 200,
+          width: 160,  // Changed from 200 to 160 per UI-SPEC
           overflowY: 'auto',
           borderRight: '1px solid #f0f0f0',
           padding: 8,
