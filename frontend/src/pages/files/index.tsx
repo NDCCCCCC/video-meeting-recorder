@@ -1,6 +1,6 @@
 // 文件管理页面
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import {
   Table,
   Button,
@@ -18,6 +18,7 @@ import {
   Tooltip,
   Radio,
   Dropdown,
+  Spin,
 } from 'antd'
 import {
   SearchOutlined,
@@ -33,17 +34,18 @@ import {
   FilePptOutlined,
   CloudOutlined,
   LaptopOutlined,
+  EditOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import * as videoFileApi from '../../api/video-file'
-import { submitTranscriptionWithMode } from '../../api/transcription'
+import { submitTranscriptionWithMode, getActiveTranscriptionTasks } from '../../api/transcription'
 import { getPptsByVideo } from '../../api/ppt'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
 import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
-import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
+const TranscriptionProgressModal = lazy(() => import('../../components/TranscriptionProgressModal'))
 import type {
   VideoFile,
   VideoFileListParams,
@@ -70,11 +72,13 @@ const DEFAULT_PAGE_SIZE = 20
 // 默认文件格式筛选
 const DEFAULT_FORMAT = 'mp4'
 
-// 采样率选项 (per D-02)
+// 采样率选项 (per D-02, 增加更高精度选项)
 const samplingRateOptions: SamplingRateOption[] = [
-  { label: '1秒/帧', value: 1.0, secondsPerFrame: 1, description: '高精度, 文件较大' },
-  { label: '2秒/帧', value: 0.5, secondsPerFrame: 2, description: '推荐' },
-  { label: '5秒/帧', value: 0.2, secondsPerFrame: 5, description: '快速, 可能遗漏画面' },
+  { label: '0.05秒/帧', value: 0.05, secondsPerFrame: 0.05, description: '极高精度 (20fps), 文件很大' },
+  { label: '0.1秒/帧', value: 0.1, secondsPerFrame: 0.1, description: '很高精度 (10fps), 文件较大' },
+  { label: '0.2秒/帧', value: 0.2, secondsPerFrame: 0.2, description: '高精度 (5fps)' },
+  { label: '0.5秒/帧', value: 0.5, secondsPerFrame: 0.5, description: '推荐 (2fps)' },
+  { label: '1秒/帧', value: 1.0, secondsPerFrame: 1, description: '标准 (1fps), 文件较小' },
 ]
 
 // 格式化文件大小
@@ -109,6 +113,15 @@ export default function FileManagement() {
 
   // PPT results cache - track which videos have PPT results
   const [videosWithPpt, setVideosWithPpt] = useState<Set<number>>(new Set())
+
+  // Active transcription tasks cache - track which videos have active tasks
+  const [activeTranscriptions, setActiveTranscriptions] = useState<Map<number, { mode: string; samplingRate: number }>>(new Map())
+
+  // Rename modal state
+  const [renameModalVisible, setRenameModalVisible] = useState(false)
+  const [renamingFile, setRenamingFile] = useState<VideoFile | null>(null)
+  const [newFileName, setNewFileName] = useState('')
+  const [renameLoading, setRenameLoading] = useState(false)
 
   const [params, setParams] = useState<VideoFileListParams>({
     page: 1,
@@ -167,10 +180,29 @@ export default function FileManagement() {
     }
   }, [videosWithPpt])
 
-  // 初始加载 - 并行执行 loadFiles 和 loadStats (async-parallel 优化)
+  // 加载活跃的转录任务
+  const loadActiveTranscriptions = useCallback(async () => {
+    try {
+      const response = await getActiveTranscriptionTasks()
+      if (response.data && response.data.tasks) {
+        const activeMap = new Map<number, { mode: string; samplingRate: number }>()
+        for (const task of response.data.tasks) {
+          activeMap.set(task.video_file_id, {
+            mode: task.mode,
+            samplingRate: task.sampling_rate,
+          })
+        }
+        setActiveTranscriptions(activeMap)
+      }
+    } catch (error) {
+      // 静默失败
+    }
+  }, [])
+
+  // 初始加载 - 并行执行 loadFiles、loadStats 和 loadActiveTranscriptions
   useEffect(() => {
-    Promise.all([loadFiles(), loadStats()])
-  }, [loadFiles, loadStats])
+    Promise.all([loadFiles(), loadStats(), loadActiveTranscriptions()])
+  }, [loadFiles, loadStats, loadActiveTranscriptions])
 
   // 检查当前页面的视频是否有 PPT 结果
   useEffect(() => {
@@ -275,6 +307,43 @@ export default function FileManagement() {
     setDetailVisible(true)
   }, [])
 
+  // 重命名文件
+  const handleRename = useCallback((file: VideoFile) => {
+    setRenamingFile(file)
+    // Strip extension from filename for editing
+    const nameWithoutExt = file.file_name.replace(/\.[^/.]+$/, '')
+    setNewFileName(nameWithoutExt)
+    setRenameModalVisible(true)
+  }, [])
+
+  const confirmRename = useCallback(async () => {
+    if (!renamingFile || !newFileName.trim()) {
+      message.warning('请输入文件名')
+      return
+    }
+
+    // Check if name hasn't changed
+    const nameWithoutExt = renamingFile.file_name.replace(/\.[^/.]+$/, '')
+    if (newFileName.trim() === nameWithoutExt) {
+      message.info('文件名未改变')
+      setRenameModalVisible(false)
+      return
+    }
+
+    setRenameLoading(true)
+    try {
+      await videoFileApi.renameVideoFile(renamingFile.id, newFileName.trim())
+      message.success('重命名成功')
+      setRenameModalVisible(false)
+      loadFiles(false) // Refresh list without loading indicator
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '重命名失败')
+    } finally {
+      setRenameLoading(false)
+    }
+  }, [renamingFile, newFileName, loadFiles])
+
+
   // 扫描导入
   const handleScan = useCallback(async () => {
     setScanning(true)
@@ -341,109 +410,141 @@ export default function FileManagement() {
     loadStats()
   }, [loadFiles, loadStats])
 
-  // 渲染状态标签
-  const renderStatus = useCallback((status: VideoFileStatus) => {
+  // 渲染状态标签 - 简单渲染函数不需要 memoization
+  function renderStatus(status: VideoFileStatus) {
     const config = STATUS_CONFIG[status]
     return <Tag color={config.color}>{config.label}</Tag>
-  }, [])
+  }
 
-  // 渲染操作按钮
-  const renderActions = useCallback((record: VideoFile) => (
-    <Space size="small">
-      <RenderVideoPreview {...record} />
-      <Button
-        type="link"
-        size="small"
-        icon={<EyeOutlined />}
-        onClick={() => viewDetail(record)}
-      >
-        详情
-      </Button>
-      {record.format === 'mp4' && (
-        <PermissionGuard permission={PERMISSIONS.FILE_SPLIT}>
-          <Tooltip title="视频分割">
+  // 渲染操作按钮 - 作为 Table column 的 render prop 不需要 useCallback
+  function renderActions(record: VideoFile) {
+    return (
+      <Space size="small">
+        <RenderVideoPreview {...record} />
+        <Button
+          type="link"
+          size="small"
+          icon={<EyeOutlined />}
+          onClick={() => viewDetail(record)}
+        >
+          详情
+        </Button>
+        {record.format === 'mp4' && (
+          <PermissionGuard permission={PERMISSIONS.FILE_SPLIT}>
+            <Tooltip title="视频分割">
+              <Button
+                type="link"
+                size="small"
+                icon={<ScissorOutlined />}
+                onClick={() => navigate(`/split/${record.id}`)}
+              />
+            </Tooltip>
+          </PermissionGuard>
+        )}
+        {record.format === 'mp4' && record.status === 'ready' && (
+          <PermissionGuard permission={PERMISSIONS.FILE_TRANSCRIBE}>
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'local',
+                    icon: <LaptopOutlined />,
+                    label: '本地转录',
+                    onClick: () => handleTranscribeClick(record),
+                  },
+                  {
+                    key: 'cloud',
+                    icon: <CloudOutlined />,
+                    label: '云端转录（通义听悟）',
+                    onClick: () => handleCloudTranscribe(record),
+                  },
+                ],
+              }}
+              trigger={['click']}
+            >
+              <Button type="primary" size="small" icon={<CloudOutlined />}>
+                转录
+              </Button>
+            </Dropdown>
+          </PermissionGuard>
+        )}
+        {activeTranscriptions.has(record.id) && (
+          <PermissionGuard permission={PERMISSIONS.FILE_TRANSCRIBE}>
             <Button
               type="link"
               size="small"
-              icon={<ScissorOutlined />}
-              onClick={() => navigate(`/split/${record.id}`)}
-            />
-          </Tooltip>
-        </PermissionGuard>
-      )}
-      {record.format === 'mp4' && record.status === 'ready' && (
-        <PermissionGuard permission={PERMISSIONS.FILE_TRANSCRIBE}>
-          <Dropdown
-            menu={{
-              items: [
-                {
-                  key: 'local',
-                  icon: <LaptopOutlined />,
-                  label: '本地转录',
-                  onClick: () => handleTranscribeClick(record),
-                },
-                {
-                  key: 'cloud',
-                  icon: <CloudOutlined />,
-                  label: '云端转录（通义听悟）',
-                  onClick: () => handleCloudTranscribe(record),
-                },
-              ],
-            }}
-            trigger={['click']}
-          >
-            <Button type="primary" size="small" icon={<CloudOutlined />}>
-              转录
-            </Button>
-          </Dropdown>
-        </PermissionGuard>
-      )}
-      {/* 预览 PPT 按钮 - 如果视频有 PPT 结果则显示 */}
-      {videosWithPpt.has(record.id) && (
-        <PermissionGuard permission={PERMISSIONS.FILE_PPT_VIEW}>
-          <Tooltip title="预览PPT">
-            <Button
-              type="primary"
-              size="small"
-              icon={<FilePptOutlined />}
-              onClick={() => navigate(`/results/${record.id}`)}
+              icon={<CloudOutlined />}
+              onClick={() => {
+                const taskInfo = activeTranscriptions.get(record.id)!
+                setTranscriptionVideoFile(record)
+                setCloudTranscriptionMode(taskInfo.mode as TranscriptionMode)
+                setSelectedSamplingRate(taskInfo.samplingRate)
+                setTranscriptionModalOpen(true)
+              }}
             >
-              预览PPT
+              查看转录
             </Button>
-          </Tooltip>
-        </PermissionGuard>
-      )}
-      <Button
-        type="link"
-        size="small"
-        icon={<DownloadOutlined />}
-        onClick={() => handleDownload(record.id, record.file_name)}
-        disabled={record.status !== 'ready'}
-      >
-        下载
-      </Button>
-      <PermissionGuard permission={PERMISSIONS.FILE_DELETE}>
-        <Popconfirm
-          title="确定要删除这个文件吗？"
-          onConfirm={() => handleDelete(record.id)}
-          disabled={record.status === 'processing'}
+          </PermissionGuard>
+        )}
+        {videosWithPpt.has(record.id) && (
+          <PermissionGuard permission={PERMISSIONS.FILE_PPT_VIEW}>
+            <Tooltip title="预览PPT">
+              <Button
+                type="primary"
+                size="small"
+                icon={<FilePptOutlined />}
+                onClick={() => navigate(`/results/${record.id}`)}
+              >
+                预览PPT
+              </Button>
+            </Tooltip>
+          </PermissionGuard>
+        )}
+        <Button
+          type="link"
+          size="small"
+          icon={<DownloadOutlined />}
+          onClick={() => handleDownload(record.id, record.file_name)}
+          disabled={record.status !== 'ready'}
         >
+          下载
+        </Button>
+        <PermissionGuard permission={PERMISSIONS.FILE_EDIT}>
           <Button
             type="link"
             size="small"
-            danger
-            icon={<DeleteOutlined />}
+            icon={<EditOutlined />}
+            onClick={() => handleRename(record)}
+            disabled={record.status !== 'ready'}
+            // Only show rename for split/snapshot files (not original recordings)
+            style={{ display: record.source_type === 'recording' && !record.parent_id ? 'none' : 'inline-block' }}
+          >
+            重命名
+          </Button>
+        </PermissionGuard>
+        <PermissionGuard permission={PERMISSIONS.FILE_DELETE}>
+          <Popconfirm
+            title="确定要删除这个文件吗？"
+            onConfirm={() => handleDelete(record.id)}
             disabled={record.status === 'processing'}
           >
-            删除
-          </Button>
-        </Popconfirm>
-      </PermissionGuard>
-    </Space>
-  ), [viewDetail, handleDownload, handleDelete, navigate, handleTranscribeClick, handleCloudTranscribe, videosWithPpt])
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              disabled={record.status === 'processing'}
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </PermissionGuard>
+      </Space>
+    )
+  }
 
-  // 表格列定义
-  const columns: ColumnsType<VideoFile> = useMemo(() => [
+  // 表格列定义 - 移除 useMemo，因为 renderActions 依赖的值频繁变化
+  const columns: ColumnsType<VideoFile> = [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -530,7 +631,7 @@ export default function FileManagement() {
       fixed: 'right' as const,
       render: renderActions,
     },
-  ], [renderStatus, viewDetail, handleDownload, handleDelete, navigate])
+  ]
 
   const isReady = viewingFile?.status === 'ready'
 
@@ -759,16 +860,44 @@ export default function FileManagement() {
         </div>
       </Modal>
 
-      {/* 转录进度模态框 */}
-      <TranscriptionProgressModal
-        open={transcriptionModalOpen}
-        onClose={() => setTranscriptionModalOpen(false)}
-        videoFileId={transcriptionVideoFile?.id || 0}
-        fileName={transcriptionVideoFile?.file_name || ''}
-        samplingRate={selectedSamplingRate}
-        mode={cloudTranscriptionMode}
-        onCompleted={handleTranscriptionCompleted}
-      />
+      {/* 转录进度模态框 - 使用 Suspense 包裹动态导入 */}
+      <Suspense fallback={<Spin tip="加载中..." />}>
+        <TranscriptionProgressModal
+          open={transcriptionModalOpen}
+          onClose={() => setTranscriptionModalOpen(false)}
+          videoFileId={transcriptionVideoFile?.id || 0}
+          fileName={transcriptionVideoFile?.file_name || ''}
+          samplingRate={selectedSamplingRate}
+          mode={cloudTranscriptionMode}
+          onCompleted={handleTranscriptionCompleted}
+        />
+      </Suspense>
+
+      {/* 重命名文件对话框 */}
+      <Modal
+        title="重命名文件"
+        open={renameModalVisible}
+        onOk={confirmRename}
+        onCancel={() => setRenameModalVisible(false)}
+        confirmLoading={renameLoading}
+        okButtonProps={{ disabled: !newFileName.trim() || newFileName.trim() === renamingFile?.file_name.replace(/\.[^/.]+$/, '') }}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Input
+            value={newFileName}
+            onChange={(e) => setNewFileName(e.target.value)}
+            placeholder="请输入新文件名"
+            maxLength={200}
+            autoFocus
+            onPressEnter={confirmRename}
+          />
+          {renamingFile && (
+            <div style={{ color: '#888', fontSize: 12 }}>
+              文件扩展名.{renamingFile.file_name.split('.').pop()} 将自动添加
+            </div>
+          )}
+        </Space>
+      </Modal>
     </div>
   )
 }
