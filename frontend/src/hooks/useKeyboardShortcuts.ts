@@ -11,7 +11,7 @@ import { message } from 'antd'
 /**
  * Available playback speeds for video player
  */
-const PLAYBACK_SPEEDS = [0.5, 1, 1.25, 1.5, 2] as const
+const PLAYBACK_SPEEDS = [0.5, 1, 1.25, 1.5, 2]
 
 // ==================== Hook Interface ====================
 
