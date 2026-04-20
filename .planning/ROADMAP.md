@@ -42,7 +42,7 @@
     - [x] 08-01-PLAN.md — Snapshot service: concurrent safety, enhanced naming, validation
     - [x] 08-02-PLAN.md — Keyboard shortcuts hook and utility constants
     - [x] 08-03-PLAN.md — Frame-level navigation hook and component
-    - [ ] 08-04-PLAN.md — VideoPlayerModal integration of all enhancements
+    - [x] 08-04-PLAN.md — VideoPlayerModal integration of all enhancements
 
 </details>
 
