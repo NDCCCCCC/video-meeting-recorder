@@ -8,7 +8,7 @@ import {
   Space,
   message,
   Popconfirm,
-  Tabs,
+  Divider,
   Dropdown,
 } from 'antd'
 import {
@@ -639,132 +639,115 @@ export default function ResultDetailPage() {
         )}
       </div>
 
-      {/* Info/Text/Operations Bar - Below Preview */}
+      {/* Info & Operations Bar - Inline layout without tabs */}
       <Card size="small" style={{ marginBottom: 16 }}>
-        <Tabs
-          defaultActiveKey="info"
-          items={[
-            {
-              key: 'info',
-              label: '基本信息',
-              children: (
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label="视频名称">{videoName}</Descriptions.Item>
-                  <Descriptions.Item label="转录时间">
-                    {currentPpt ? dayjs(currentPpt.created_at).format('YYYY-MM-DD HH:mm') : '—'}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="页数">{currentPpt?.page_count || 0} 页</Descriptions.Item>
-                  <Descriptions.Item label="文件大小">{formatFileSize(currentPpt?.file_size || 0)}</Descriptions.Item>
-                  <Descriptions.Item label="类型">
-                    {currentPpt?.source_type === 'merge' ? '合并' : '转录'}
-                  </Descriptions.Item>
-                </Descriptions>
-              ),
-            },
-            {
-              key: 'text',
-              label: '文字内容',
-              children: <TextContentTab videoFileId={videoFileIdNum} />,
-            },
-            {
-              key: 'operations',
-              label: '操作',
-              children: (
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <Button
-                    block
-                    icon={<DownloadOutlined />}
-                    onClick={handleDownloadPpt}
-                  >
-                    下载PPT
-                  </Button>
-                  <Dropdown
-                    menu={{
-                      items: [
-                        {
-                          key: 'local',
-                          icon: <LaptopOutlined />,
-                          label: '本地转录',
-                          onClick: () => handleRetranscribeWithMode('local'),
-                        },
-                        {
-                          key: 'cloud',
-                          icon: <CloudOutlined />,
-                          label: '云端转录（通义听悟）',
-                          onClick: () => handleRetranscribeWithMode('cloud'),
-                        },
-                      ],
-                    }}
-                    trigger={['click']}
-                  >
-                    <Button block icon={<RedoOutlined />}>
-                      重新转录
-                    </Button>
-                  </Dropdown>
-                  <Button
-                    block
-                    type="primary"
-                    icon={<MergeCellsOutlined />}
-                    onClick={() => setIsMergeMode(!isMergeMode)}
-                  >
-                    {isMergeMode ? '取消合并' : '合并幻灯片'}
-                  </Button>
-                  <Button
-                    block
-                    icon={<VideoCameraOutlined />}
-                    onClick={() => setIsVideoPanelVisible(!isVideoPanelVisible)}
-                  >
-                    {isVideoPanelVisible ? '隐藏视频预览' : '显示视频预览'}
-                  </Button>
-                  <Button
-                    block
-                    icon={<DragOutlined />}
-                    onClick={() => setIsDragMode(!isDragMode)}
-                    type={isDragMode ? 'primary' : 'default'}
-                  >
-                    {isDragMode ? '完成排序' : '拖拽排序'}
-                  </Button>
-                  <Button
-                    block
-                    icon={<ScanOutlined />}
-                    onClick={() => setDuplicateDetectionOpen(true)}
-                  >
-                    检测重复幻灯片
-                  </Button>
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          {/* Basic Info - displayed inline without tabs */}
+          <Descriptions column={2} size="small">
+            <Descriptions.Item label="视频名称">{videoName}</Descriptions.Item>
+            <Descriptions.Item label="转录时间">
+              {currentPpt ? dayjs(currentPpt.created_at).format('YYYY-MM-DD HH:mm') : '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="页数">{currentPpt?.page_count || 0} 页</Descriptions.Item>
+            <Descriptions.Item label="文件大小">{formatFileSize(currentPpt?.file_size || 0)}</Descriptions.Item>
+            <Descriptions.Item label="类型">
+              {currentPpt?.source_type === 'merge' ? '合并' : '转录'}
+            </Descriptions.Item>
+          </Descriptions>
 
-                  {/* Direct capture button - replaces old modal-only capture */}
-                  <DirectCaptureButton
-                    pptFileId={currentPptId}
-                    currentSlide={currentSlide}
-                    onCaptureComplete={handleDirectCapture}
-                    videoRef={videoRef}
-                    disabled={!isVideoPanelVisible || slides.length === 0}
-                  />
+          <Divider style={{ margin: '8px 0' }} />
 
-                  {/* Advanced capture with preview modal */}
-                  <Button
-                    block
-                    icon={<CameraOutlined />}
-                    onClick={() => setIsCapturePanelOpen(true)}
-                    style={{ marginTop: 8 }}
-                  >
-                    高级捕获（带预览）
-                  </Button>
-                  <Popconfirm
-                    title="确定要删除此PPT文件吗？删除后无法恢复。"
-                    onConfirm={handleDeletePpt}
-                    okText="确定"
-                    cancelText="取消"
-                  >
-                    <Button block danger icon={<DeleteOutlined />}>
-                      删除PPT
-                    </Button>
-                  </Popconfirm>
-                </Space>
-              ),
-            },
-          ]}
-        />
+          {/* Operation buttons - horizontal layout with wrapping */}
+          <Space wrap>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={handleDownloadPpt}
+            >
+              下载PPT
+            </Button>
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'local',
+                    icon: <LaptopOutlined />,
+                    label: '本地转录',
+                    onClick: () => handleRetranscribeWithMode('local'),
+                  },
+                  {
+                    key: 'cloud',
+                    icon: <CloudOutlined />,
+                    label: '云端转录（通义听悟）',
+                    onClick: () => handleRetranscribeWithMode('cloud'),
+                  },
+                ],
+              }}
+              trigger={['click']}
+            >
+              <Button icon={<RedoOutlined />}>
+                重新转录
+              </Button>
+            </Dropdown>
+            <Button
+              type="primary"
+              icon={<MergeCellsOutlined />}
+              onClick={() => setIsMergeMode(!isMergeMode)}
+            >
+              {isMergeMode ? '取消合并' : '合并幻灯片'}
+            </Button>
+            <Button
+              icon={<VideoCameraOutlined />}
+              onClick={() => setIsVideoPanelVisible(!isVideoPanelVisible)}
+            >
+              {isVideoPanelVisible ? '隐藏视频预览' : '显示视频预览'}
+            </Button>
+            <Button
+              icon={<DragOutlined />}
+              onClick={() => setIsDragMode(!isDragMode)}
+              type={isDragMode ? 'primary' : 'default'}
+            >
+              {isDragMode ? '完成排序' : '拖拽排序'}
+            </Button>
+            <Button
+              icon={<ScanOutlined />}
+              onClick={() => setDuplicateDetectionOpen(true)}
+            >
+              检测重复幻灯片
+            </Button>
+
+            {/* Direct capture button - replaces old modal-only capture */}
+            <DirectCaptureButton
+              pptFileId={currentPptId}
+              currentSlide={currentSlide}
+              onCaptureComplete={handleDirectCapture}
+              videoRef={videoRef}
+              disabled={!isVideoPanelVisible || slides.length === 0}
+            />
+
+            {/* Advanced capture with preview modal */}
+            <Button
+              icon={<CameraOutlined />}
+              onClick={() => setIsCapturePanelOpen(true)}
+            >
+              高级捕获（带预览）
+            </Button>
+            <Popconfirm
+              title="确定要删除此PPT文件吗？删除后无法恢复。"
+              onConfirm={handleDeletePpt}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                删除PPT
+              </Button>
+            </Popconfirm>
+          </Space>
+
+          <Divider style={{ margin: '8px 0' }} />
+
+          {/* Text Content - displayed inline without tabs */}
+          <TextContentTab videoFileId={videoFileIdNum} />
+        </Space>
       </Card>
 
       {/* Merge Selection Bar - Below Info Bar */}
