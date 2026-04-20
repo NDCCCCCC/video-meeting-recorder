@@ -22,6 +22,7 @@ import {
   ScanOutlined,
   CameraOutlined,
   VideoCameraOutlined,
+  DragOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import dayjs from 'dayjs'
@@ -39,6 +40,7 @@ import {
   mergeSlides,
   deletePpt,
   getPptDownloadUrl,
+  reorderSlides,
 } from '../../api/ppt'
 import {
   submitTranscriptionWithMode,
@@ -110,6 +112,10 @@ export default function ResultDetailPage() {
 
   // Video preview panel state
   const [isVideoPanelVisible, setIsVideoPanelVisible] = useState(true)
+
+  // Drag reorder mode state
+  const [isDragMode, setIsDragMode] = useState(false)
+  const [draggedSlide, setDraggedSlide] = useState<number | null>(null)
 
   // 当前选中的 PPT
   const currentPpt = ppts.find((p) => p.id === currentPptId)
@@ -437,6 +443,52 @@ export default function ResultDetailPage() {
     }
   }, [slides.length])
 
+  // 拖拽排序处理函数
+  const handleDragStart = useCallback((slideNumber: number) => {
+    setDraggedSlide(slideNumber)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault() // 允许放置
+  }, [])
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetSlideNumber: number) => {
+    e.preventDefault()
+    if (draggedSlide === null || draggedSlide === targetSlideNumber) {
+      setDraggedSlide(null)
+      return
+    }
+
+    // 创建新的幻灯片顺序
+    const newSlideOrder = slides.map(s => s.slide_number)
+    const draggedIndex = newSlideOrder.indexOf(draggedSlide)
+    const targetIndex = newSlideOrder.indexOf(targetSlideNumber)
+
+    // 移除被拖拽的幻灯片
+    newSlideOrder.splice(draggedIndex, 1)
+    // 在目标位置插入
+    newSlideOrder.splice(targetIndex, 0, draggedSlide)
+
+    try {
+      const response = await reorderSlides(currentPptId, newSlideOrder)
+      if (response.data?.success) {
+        message.success('幻灯片顺序已更新')
+        // 重新加载幻灯片
+        await loadSlides(currentPptId)
+      } else {
+        message.error('更新幻灯片顺序失败')
+      }
+    } catch (error) {
+      message.error('更新幻灯片顺序失败: ' + (error as Error).message)
+    } finally {
+      setDraggedSlide(null)
+    }
+  }, [draggedSlide, slides, currentPptId, loadSlides])
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedSlide(null)
+  }, [])
+
   // 自动滚动到当前幻灯片缩略图
   useEffect(() => {
     if (thumbnailContainerRef.current && currentSlide >= 0) {
@@ -523,6 +575,12 @@ export default function ResultDetailPage() {
                   selectedSlides.some((s) => s.id === `${currentPptId}_${slide.slide_number}`)
                 }
                 isSelectable={isMergeMode}
+                isDraggable={isDragMode}
+                isDragging={draggedSlide === slide.slide_number}
+                onDragStart={isDragMode ? (e) => handleDragStart(slide.slide_number) : undefined}
+                onDragOver={isDragMode ? handleDragOver : undefined}
+                onDrop={isDragMode ? (e, num) => handleDrop(e, num) : undefined}
+                onDragEnd={isDragMode ? handleDragEnd : undefined}
                 onClick={() =>
                   isMergeMode ? handleToggleSelect(slide, idx) : handleSlideChange(idx)
                 }
@@ -639,6 +697,14 @@ export default function ResultDetailPage() {
                     onClick={() => setIsVideoPanelVisible(!isVideoPanelVisible)}
                   >
                     {isVideoPanelVisible ? '隐藏视频预览' : '显示视频预览'}
+                  </Button>
+                  <Button
+                    block
+                    icon={<DragOutlined />}
+                    onClick={() => setIsDragMode(!isDragMode)}
+                    type={isDragMode ? 'primary' : 'default'}
+                  >
+                    {isDragMode ? '完成排序' : '拖拽排序'}
                   </Button>
                   <Button
                     block

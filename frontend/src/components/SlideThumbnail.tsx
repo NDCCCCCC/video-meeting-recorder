@@ -1,8 +1,10 @@
 // 幻灯片缩略图组件 - 用于侧边栏和合并选择
 // 支持导航模式和选择模式
+// 支持拖拽排序
 
 import React, { memo } from 'react'
 import { Image, Skeleton } from 'antd'
+import { HolderOutlined } from '@ant-design/icons'
 import type { SlideImage } from '../types/ppt'
 
 interface SlideThumbnailProps {
@@ -13,6 +15,13 @@ interface SlideThumbnailProps {
   isSelectable: boolean
   isCurrent: boolean
   onClick: () => void
+  // 拖拽排序相关
+  isDraggable?: boolean
+  isDragging?: boolean
+  onDragStart?: (e: React.DragEvent, slideNumber: number) => void
+  onDragOver?: (e: React.DragEvent) => void
+  onDrop?: (e: React.DragEvent, slideNumber: number) => void
+  onDragEnd?: () => void
 }
 
 export default memo(function SlideThumbnail({
@@ -23,6 +32,12 @@ export default memo(function SlideThumbnail({
   isSelectable,
   isCurrent,
   onClick,
+  isDraggable = false,
+  isDragging = false,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: SlideThumbnailProps) {
   return (
     <div
@@ -30,23 +45,45 @@ export default memo(function SlideThumbnail({
       role="button"
       aria-label={`幻灯片${slideNumber}，共${totalSlides}页${isCurrent ? '，当前幻灯片' : ''}`}
       tabIndex={0}
+      draggable={isDraggable}
+      onDragStart={(e) => {
+        if (isDraggable && onDragStart) {
+          onDragStart(e, slideNumber)
+        }
+      }}
+      onDragOver={(e) => {
+        if (isDraggable && onDragOver) {
+          onDragOver(e)
+        }
+      }}
+      onDrop={(e) => {
+        if (isDraggable && onDrop) {
+          onDrop(e, slideNumber)
+        }
+      }}
+      onDragEnd={() => {
+        if (isDraggable && onDragEnd) {
+          onDragEnd()
+        }
+      }}
       style={{
         position: 'relative',
-        cursor: isSelectable ? 'pointer' : 'default',
+        cursor: isDraggable ? 'move' : isSelectable ? 'pointer' : 'default',
         border: isCurrent || isSelected ? '2px solid #1890ff' : '2px solid transparent',
         borderRadius: 4,
         overflow: 'hidden',
-        opacity: isCurrent ? 1 : 0.6,
+        opacity: isDragging ? 0.3 : isCurrent ? 1 : 0.6,
         transition: 'opacity 0.2s, transform 0.2s',
+        transform: isDragging ? 'scale(0.95)' : 'scale(1)',
       }}
       onMouseEnter={(e) => {
-        if (!isCurrent) {
+        if (!isCurrent && !isDragging) {
           e.currentTarget.style.opacity = '0.8'
           e.currentTarget.style.transform = 'scale(1.02)'
         }
       }}
       onMouseLeave={(e) => {
-        if (!isCurrent) {
+        if (!isCurrent && !isDragging) {
           e.currentTarget.style.opacity = '0.6'
           e.currentTarget.style.transform = 'scale(1)'
         }
@@ -103,6 +140,28 @@ export default memo(function SlideThumbnail({
           }}
         >
           ✓
+        </div>
+      )}
+
+      {/* 拖拽手柄（拖拽模式） */}
+      {isDraggable && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: 4,
+            background: 'rgba(0, 0, 0, 0.6)',
+            color: 'white',
+            borderRadius: 4,
+            width: 24,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'move',
+          }}
+        >
+          <HolderOutlined style={{ fontSize: 12 }} />
         </div>
       )}
 
