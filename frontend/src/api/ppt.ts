@@ -2,7 +2,7 @@
 
 import type { ApiResponse } from '../types/auth'
 import type { SlidesResponse, PPTListResponse, MergeRequest, MergeResponse } from '../types/ppt'
-import { apiRequest } from './apiClient'
+import { apiRequest, getToken } from './apiClient'
 
 // 获取 PPT 幻灯片列表
 export async function getSlides(pptFileId: number): Promise<ApiResponse<SlidesResponse>> {
@@ -31,7 +31,7 @@ export async function deletePpt(pptFileId: number): Promise<ApiResponse<{ messag
 
 // 下载 PPT 文件（使用 window.open 因为返回二进制文件）
 export function getPptDownloadUrl(pptFileId: number): string {
-  const token = localStorage.getItem('token') || ''
+  const token = getToken() || ''
   return `/api/v1/ppts/${pptFileId}/download?token=${token}`
 }
 
@@ -42,4 +42,31 @@ export function getSlideImageUrl(
   filename: string
 ): string {
   return `/api/v1/ppts/${pptFileId}/slides/${resolution}/${filename}`
+}
+
+// PPT 文件类型
+export interface PPTFile {
+  id: number
+  file_name: string
+  file_path: string
+  file_size: number
+  page_count: number
+  source_type: string
+  created_at: string
+}
+
+// 重命名请求
+export interface RenameRequest {
+  new_name: string
+}
+
+// 重命名 PPT 文件
+export async function renamePptFile(
+  id: number,
+  newName: string
+): Promise<ApiResponse<{ message: string; data: PPTFile }>> {
+  return apiRequest<{ message: string; data: PPTFile }>(`/api/v1/ppts/${id}/rename`, {
+    method: 'POST',
+    body: JSON.stringify({ new_name: newName }),
+  })
 }

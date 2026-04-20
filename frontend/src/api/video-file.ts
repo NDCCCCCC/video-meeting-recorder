@@ -101,3 +101,19 @@ export async function batchDeleteFiles(
     body: JSON.stringify({ ids }),
   })
 }
+
+// 重命名请求
+export interface RenameRequest {
+  new_name: string
+}
+
+// 重命名视频文件
+export async function renameVideoFile(
+  id: number,
+  newName: string
+): Promise<ApiResponse<VideoFile>> {
+  return apiRequest<VideoFile>(`/api/v1/videos/${id}/rename`, {
+    method: 'POST',
+    body: JSON.stringify({ new_name: newName }),
+  })
+}
