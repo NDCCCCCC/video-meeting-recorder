@@ -48,7 +48,7 @@ export type CloudTranscriptionStage = 'uploading' | 'queued' | 'cloud_processing
 export type AnyTranscriptionStage = TranscriptionStage | CloudTranscriptionStage
 
 // Extended status response that includes cloud fields
-export interface TranscriptionStatusResponseExtended extends TranscriptionStatusResponse {
+export interface TranscriptionStatusResponseExtended extends Omit<TranscriptionStatusResponse, 'current_stage'> {
   mode?: TranscriptionMode
   current_stage: AnyTranscriptionStage | ''
   error_message: string

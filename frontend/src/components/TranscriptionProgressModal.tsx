@@ -1,7 +1,7 @@
 // 本地转录进度模态框
 
 import { useState, useEffect, useCallback } from 'react'
-import { Modal, Progress, message, Button, Space, Alert } from 'antd'
+import { Modal, Progress, Button, Space, Alert } from 'antd'
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -127,11 +127,10 @@ export default function TranscriptionProgressModal({
           const config = STAGE_CONFIG[s]
           const isCompleted = index < stageIndex
           const isActive = index === stageIndex && status === 'processing'
-          const isPending = index > stageIndex
 
           let icon: React.ReactNode
           let text: string
-          let textStyle: React.CSSObject = {}
+          let textStyle: React.CSSProperties = {}
 
           if (isCompleted) {
             icon = <CheckCircleOutlined style={{ color: '#52c41a' }} />
@@ -175,11 +174,10 @@ export default function TranscriptionProgressModal({
           const config = CLOUD_STAGE_CONFIG[s]
           const isCompleted = index < stageIndex
           const isActive = index === stageIndex && status === 'processing'
-          const isPending = index > stageIndex
 
           let icon: React.ReactNode
           let text: string
-          let textStyle: React.CSSObject = {}
+          let textStyle: React.CSSProperties = {}
 
           if (isCompleted) {
             icon = <CheckCircleOutlined style={{ color: '#52c41a' }} />
@@ -328,7 +326,7 @@ export default function TranscriptionProgressModal({
         {stage && totalFrames > 0 && stage === 'detecting'
           ? ` 画面检测中 (${framesProcessed}/${totalFrames})`
           : stage
-          ? ` ${STAGE_CONFIG[stage]?.label || CLOUD_STAGE_CONFIG[stage as CloudTranscriptionStage]?.label || stage}...`
+          ? ` ${STAGE_CONFIG[stage as TranscriptionStage]?.label || CLOUD_STAGE_CONFIG[stage as CloudTranscriptionStage]?.label || stage}...`
           : ' 排队中...'}
       </div>
 

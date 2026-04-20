@@ -12,7 +12,7 @@ import type {
   TranscriptionStatusResponseExtended,
   TranscriptionTriggerRequestExtended,
   TranscriptionTriggerResponseExtended,
-} from '../../transcription'
+} from '../transcription'
 
 // Validate TranscriptionMode values
 const localMode: TranscriptionMode = 'local'
