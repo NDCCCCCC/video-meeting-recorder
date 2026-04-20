@@ -18,6 +18,11 @@ import { FrameNavigation } from './FrameNavigation'
 
 // ==================== 常量 ====================
 const PLAYBACK_RATES: readonly number[] = [0.5, 1, 1.25, 1.5, 2]
+
+/**
+ * Number of seconds to skip when using skip buttons
+ * Also used for keyboard shortcuts (J/L keys and Arrow keys without Shift)
+ */
 const SKIP_SECONDS = 10
 
 // 样式常量
