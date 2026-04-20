@@ -553,6 +553,7 @@ export default function ResultDetailPage() {
         {/* Left: Thumbnail Sidebar (160px) */}
         <div
           ref={thumbnailContainerRef}
+          className="thumbnail-sidebar"
           style={{
             overflowY: 'auto',
             borderRight: '1px solid #f0f0f0',
