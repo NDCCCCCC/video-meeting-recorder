@@ -133,7 +133,21 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 
 	// Validate seek offset doesn't exceed recording duration
 	if seekOffset >= recordingDuration {
+		s.logger.Warn("快照偏移量超过录制时长",
+			zap.Uint("task_id", taskID),
+			zap.Float64("seek_offset", seekOffset),
+			zap.Float64("recording_duration", recordingDuration),
+		)
 		return nil, fmt.Errorf("快照偏移量 %.2f 秒超过或等于录制时长 %.2f 秒", seekOffset, recordingDuration)
+	}
+
+	// Validate minimum snapshot duration (at least 1 second)
+	if recordingDuration-seekOffset < 1.0 {
+		s.logger.Warn("快照时长不足",
+			zap.Uint("task_id", taskID),
+			zap.Float64("remaining_duration", recordingDuration-seekOffset),
+		)
+		return nil, fmt.Errorf("快照时长不足 1 秒（剩余时长: %.2f 秒）", recordingDuration-seekOffset)
 	}
 
 	// Log snapshot parameters for debugging
@@ -178,6 +192,18 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 	// 6. Convert temp MKV to MP4 with incremental offset (D-15)
 	outputMP4 = filepath.Join(tempDir, filename)
 
+	// Re-validate task status before starting FFmpeg to catch race conditions
+	var currentTask models.VideoRecordingTask
+	if err := s.db.First(&currentTask, taskID).Error; err == nil {
+		if currentTask.Status != models.VideoStatusRecording {
+			s.logger.Warn("录制任务状态变更，无法生成快照",
+				zap.Uint("task_id", taskID),
+				zap.String("status", string(currentTask.Status)),
+			)
+			return nil, fmt.Errorf("录制任务已停止或失败，无法生成快照")
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -202,12 +228,19 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		s.logger.Error("FFmpeg快照转换失败",
+			zap.Uint("task_id", taskID),
+			zap.Error(err),
+			zap.String("output", string(output)),
+		)
 		return nil, fmt.Errorf("FFmpeg快照转换失败: %w, output: %s", err, string(output))
 	}
 
-	// 7. Verify output file
-	if _, err := os.Stat(outputMP4); err != nil {
-		return nil, fmt.Errorf("快照文件未生成: %w", err)
+	// 7. Verify output file exists and has content
+	if info, err := os.Stat(outputMP4); err != nil {
+		return nil, fmt.Errorf("快照文件生成失败: %w", err)
+	} else if info.Size() == 0 {
+		return nil, fmt.Errorf("快照文件为空，可能录制已中断")
 	}
 
 	// 8. Find the parent VideoFile for this task
