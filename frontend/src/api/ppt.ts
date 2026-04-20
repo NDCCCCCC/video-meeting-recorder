@@ -3,6 +3,33 @@
 import type { ApiResponse } from '../types/auth'
 import type { SlidesResponse, PPTListResponse, MergeRequest, MergeResponse } from '../types/ppt'
 import { apiRequest, getToken } from './apiClient'
+import axios from 'axios'
+
+// Frame capture and slide insertion types
+export interface CaptureFrameRequest {
+  timestamp: number
+}
+
+export interface CaptureFrameResponse {
+  success: boolean
+  frame_data: string // base64 data URL
+  timestamp: number
+  preview_url: string
+}
+
+export interface InsertSlideRequest {
+  frame_data: string // base64 data URL
+  insert_position: number
+  timestamp: number
+}
+
+export interface InsertSlideResponse {
+  success: boolean
+  page_count: number
+  inserted_slide_number: number
+  new_slide_url: string
+  backup_path: string
+}
 
 // Duplicate detection types
 export interface DuplicateGroup {
@@ -132,4 +159,38 @@ export async function rollbackPPT(
   return apiRequest<RollbackResponse>(`/api/v1/ppts/${pptFileId}/rollback`, {
     method: 'POST',
   })
+}
+
+// 捕获视频帧
+export async function captureFrame(
+  pptFileId: number,
+  timestamp: number
+): Promise<ApiResponse<CaptureFrameResponse>> {
+  return apiRequest<CaptureFrameResponse>(`/api/v1/ppts/${pptFileId}/capture`, {
+    method: 'POST',
+    body: JSON.stringify({ timestamp }),
+  })
+}
+
+// 插入捕获的帧作为新幻灯片
+export async function insertSlide(
+  pptFileId: number,
+  frameData: string,
+  insertPosition: number,
+  timestamp: number
+): Promise<ApiResponse<InsertSlideResponse>> {
+  return apiRequest<InsertSlideResponse>(`/api/v1/ppts/${pptFileId}/slides`, {
+    method: 'POST',
+    body: JSON.stringify({
+      frame_data: frameData,
+      insert_position: insertPosition,
+      timestamp,
+    }),
+  })
+}
+
+// 获取捕获帧预览 URL
+export function getCapturedPreviewUrl(pptFileId: number, timestamp: number): string {
+  const token = getToken() || ''
+  return `/api/v1/ppts/${pptFileId}/captured-preview?ts=${timestamp}&token=${token}`
 }
