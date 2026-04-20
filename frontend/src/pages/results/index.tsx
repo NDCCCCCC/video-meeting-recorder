@@ -60,14 +60,7 @@ const formatFileSize = (bytes: number): string => {
 
 // Side-by-side preview layout styles
 const previewAreaStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '160px 1fr 1fr',  // Thumbnails | PPT | Video
-  gap: '16px',
-  marginBottom: '16px',
-  // Responsive: Stack on screens < 1200px
-  '@media (max-width: 1200px)': {
-    gridTemplateColumns: '1fr',  // Stack vertically
-  },
+  // CSS class 'ppt-preview-grid' handles grid layout and responsive breakpoint
 }
 
 const previewBoxStyle: React.CSSProperties = {
@@ -474,7 +467,7 @@ export default function ResultDetailPage() {
       </div>
 
       {/* Preview Area with Side-by-Side Layout */}
-      <div style={previewAreaStyle}>
+      <div className="ppt-preview-grid" style={previewAreaStyle}>
         {/* Left: Thumbnail Sidebar (160px) */}
         <div style={{
           overflowY: 'auto',
