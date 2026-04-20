@@ -45,6 +45,7 @@ interface VideoPreviewPanelProps {
   style?: React.CSSProperties
   autoPlay?: boolean  // Auto-play video when seeking to slide
   showControls?: boolean  // Show custom playback controls
+  videoRef?: React.RefObject<HTMLVideoElement>  // Optional external videoRef
 }
 
 // ==================== 主组件 ====================
@@ -56,9 +57,12 @@ export function VideoPreviewPanel({
   style,
   autoPlay = false,
   showControls = true,
+  videoRef: externalVideoRef,
 }: VideoPreviewPanelProps) {
   // ==================== 状态 ====================
-  const videoRef = useRef<HTMLVideoElement>(null)
+  // Use external videoRef if provided, otherwise create internal ref
+  const internalVideoRef = useRef<HTMLVideoElement>(null)
+  const videoRef = externalVideoRef || internalVideoRef
   const containerRef = useRef<HTMLDivElement>(null)
 
   const [isLoading, setIsLoading] = useState(true)
@@ -232,17 +236,17 @@ export function VideoPreviewPanel({
 
   // ==================== 全屏控制 ====================
   const handleFullscreen = useCallback(() => {
-    const container = containerRef.current
-    if (!container) return
+    const video = videoRef.current
+    if (!video) return
 
     if (!document.fullscreenElement) {
-      container.requestFullscreen().catch(() => {
+      video.parentElement?.requestFullscreen().catch(() => {
         message.error('进入全屏失败')
       })
     } else {
       document.exitFullscreen()
     }
-  }, [])
+  }, [videoRef])
 
   // ==================== 视频事件处理 ====================
   const handleLoadedMetadata = useCallback(() => {
