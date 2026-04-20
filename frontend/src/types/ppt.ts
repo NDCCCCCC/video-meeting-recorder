@@ -62,3 +62,14 @@ export interface SelectedSlide {
   thumbnail_url: string
   source_name: string   // Display name for source PPT
 }
+
+// SlideCapturePanel props
+export interface SlideCapturePanelProps {
+  pptFileId: number
+  videoFileId: number
+  currentSlide: number
+  totalSlides: number
+  onSlideInserted?: (newSlideNumber: number) => void
+  onCancel?: () => void
+  open?: boolean
+}
