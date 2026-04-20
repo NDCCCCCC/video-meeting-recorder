@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/cpic/record_v2/internal/middleware"
 	"github.com/cpic/record_v2/internal/models"
@@ -17,12 +20,13 @@ import (
 
 // PPThandler handles PPT-related API requests
 type PPThandler struct {
-	pptFileService    *services.PPTFileService
-	slideCacheService *services.SlideCacheService
-	mergeService      *services.PPTMergeService
-	videoFileService  *services.VideoFileService
-	pptEditorService  *services.PPTEditorService
-	logger            *zap.Logger
+	pptFileService     *services.PPTFileService
+	slideCacheService  *services.SlideCacheService
+	mergeService       *services.PPTMergeService
+	videoFileService   *services.VideoFileService
+	pptEditorService   *services.PPTEditorService
+	frameCaptureService *services.FrameCaptureService
+	logger             *zap.Logger
 }
 
 // NewPPThandler creates a new PPT handler
@@ -32,15 +36,17 @@ func NewPPThandler(
 	mergeService *services.PPTMergeService,
 	videoFileService *services.VideoFileService,
 	pptEditorService *services.PPTEditorService,
+	frameCaptureService *services.FrameCaptureService,
 	logger *zap.Logger,
 ) *PPThandler {
 	return &PPThandler{
-		pptFileService:    pptFileService,
-		slideCacheService: slideCacheService,
-		mergeService:      mergeService,
-		videoFileService:  videoFileService,
-		pptEditorService:  pptEditorService,
-		logger:            logger,
+		pptFileService:     pptFileService,
+		slideCacheService:  slideCacheService,
+		mergeService:       mergeService,
+		videoFileService:   videoFileService,
+		pptEditorService:   pptEditorService,
+		frameCaptureService: frameCaptureService,
+		logger:             logger,
 	}
 }
 
@@ -543,4 +549,252 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 		"restored": true,
 		"page_count": updatedPPT.PageCount,
 	})
+}
+
+// CaptureFrameRequest captures frame request
+type CaptureFrameRequest struct {
+	Timestamp float64 `json:"timestamp" binding:"required,min=0"`
+}
+
+// CaptureFrameHandler handles POST /api/v1/ppts/:id/capture
+func (h *PPThandler) CaptureFrameHandler(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的PPT ID")
+		return
+	}
+
+	// Parse request body
+	var req CaptureFrameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的请求参数")
+		return
+	}
+
+	// Load PPT file
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		return
+	}
+
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
+		return
+	}
+
+	// Get source video file
+	if pptFile.SourceVideoFileID == nil {
+		response.GinError(c, response.CodeInvalidRequest, "PPT文件没有关联视频")
+		return
+	}
+
+	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "关联视频不存在")
+		return
+	}
+
+	// Capture frame at timestamp
+	frameData, mimeType, err := h.frameCaptureService.CaptureFrameToBytes(c.Request.Context(), videoFile.FilePath, req.Timestamp)
+	if err != nil {
+		h.logger.Error("Failed to capture frame",
+			zap.String("ppt_id", idStr),
+			zap.Float64("timestamp", req.Timestamp),
+			zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "捕获帧失败: "+err.Error())
+		return
+	}
+
+	// Encode to base64
+	// Note: In production, you might want to save this to disk and return a URL
+	// For preview, we'll return a base64 data URL
+	base64Data := "data:" + mimeType + ";base64," + encodeBase64(frameData)
+
+	response.GinSuccess(c, gin.H{
+		"success":     true,
+		"frame_data":  base64Data,
+		"timestamp":   req.Timestamp,
+		"preview_url": fmt.Sprintf("/api/v1/ppts/%d/captured-preview?ts=%.3f", uint(id), req.Timestamp),
+	})
+}
+
+// InsertSlideRequest inserts slide request
+type InsertSlideRequest struct {
+	FrameData      string  `json:"frame_data" binding:"required"`
+	InsertPosition int     `json:"insert_position" binding:"required,min=1"`
+	Timestamp      float64 `json:"timestamp" binding:"required,min=0"`
+}
+
+// InsertSlideHandler handles POST /api/v1/ppts/:id/slides
+func (h *PPThandler) InsertSlideHandler(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的PPT ID")
+		return
+	}
+
+	// Parse request body
+	var req InsertSlideRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的请求参数")
+		return
+	}
+
+	// Load PPT file
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		return
+	}
+
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
+		return
+	}
+
+	// Validate insert position
+	if req.InsertPosition < 1 || req.InsertPosition > pptFile.PageCount+1 {
+		response.GinError(c, response.CodeInvalidRequest,
+			fmt.Sprintf("无效的插入位置: %d (有效范围: 1-%d)", req.InsertPosition, pptFile.PageCount+1))
+		return
+	}
+
+	// Decode base64 frame data
+	frameBytes, err := decodeBase64FrameData(req.FrameData)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的帧数据: "+err.Error())
+		return
+	}
+
+	// Insert captured frame
+	if err := h.pptEditorService.InsertCapturedFrame(uint(id), frameBytes, req.InsertPosition, req.Timestamp); err != nil {
+		h.logger.Error("Failed to insert slide",
+			zap.String("ppt_id", idStr),
+			zap.Int("insert_position", req.InsertPosition),
+			zap.Error(err))
+
+		// Map error messages
+		errMsg := err.Error()
+		switch {
+		case errMsg == "frame bytes cannot be empty":
+			response.GinError(c, response.CodeInvalidRequest, "帧数据不能为空")
+		case strings.Contains(errMsg, "frame bytes too large"):
+			response.GinError(c, response.CodeInvalidRequest, "帧数据过大")
+		default:
+			response.GinError(c, response.CodeInternalError, "插入幻灯片失败: "+err.Error())
+		}
+		return
+	}
+
+	// Get updated PPT file info
+	updatedPPT, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
+		response.GinSuccess(c, gin.H{
+			"success":              true,
+			"page_count":           pptFile.PageCount + 1,
+			"inserted_slide_number": req.InsertPosition,
+		})
+		return
+	}
+
+	response.GinSuccess(c, gin.H{
+		"success":              true,
+		"page_count":           updatedPPT.PageCount,
+		"inserted_slide_number": req.InsertPosition,
+		"new_slide_url":        fmt.Sprintf("/api/v1/ppts/%d/slides/fullsize/slide_%03d_captured.jpg", uint(id), req.InsertPosition),
+		"backup_path":          updatedPPT.BackupPath,
+	})
+}
+
+// CapturedPreviewHandler handles GET /api/v1/ppts/:id/captured-preview
+func (h *PPThandler) CapturedPreviewHandler(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的PPT ID")
+		return
+	}
+
+	// Parse timestamp query parameter
+	timestampStr := c.Query("ts")
+	timestamp, err := strconv.ParseFloat(timestampStr, 64)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的时间戳参数")
+		return
+	}
+
+	// Load PPT file
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		return
+	}
+
+	// Verify ownership
+	if err := h.verifyPPTOwnership(c, pptFile); err != nil {
+		response.GinError(c, response.CodeForbidden, err.Error())
+		return
+	}
+
+	// Get source video file
+	if pptFile.SourceVideoFileID == nil {
+		response.GinError(c, response.CodeInvalidRequest, "PPT文件没有关联视频")
+		return
+	}
+
+	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "关联视频不存在")
+		return
+	}
+
+	// Capture frame to temp file
+	tempFile := fmt.Sprintf("/tmp/capture_preview_%d_%.3f.jpg", uint(id), timestamp)
+	if err := h.frameCaptureService.CaptureFrame(c.Request.Context(), videoFile.FilePath, timestamp, tempFile); err != nil {
+		h.logger.Error("Failed to capture preview frame",
+			zap.String("ppt_id", idStr),
+			zap.Float64("timestamp", timestamp),
+			zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "捕获预览帧失败: "+err.Error())
+		return
+	}
+
+	// Serve file and clean up
+	defer func() {
+		os.Remove(tempFile)
+	}()
+
+	c.File(tempFile)
+}
+
+// encodeBase64 encodes bytes to base64 string
+func encodeBase64(data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
+}
+
+// decodeBase64FrameData decodes base64 frame data from request
+// Handles both "data:image/jpeg;base64,..." and raw base64 formats
+func decodeBase64FrameData(frameData string) ([]byte, error) {
+	// Remove data URL prefix if present
+	if strings.HasPrefix(frameData, "data:") {
+		parts := strings.SplitN(frameData, ",", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid data URL format")
+		}
+		frameData = parts[1]
+	}
+
+	// Decode base64
+	data, err := base64.StdEncoding.DecodeString(frameData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64: %w", err)
+	}
+
+	return data, nil
 }
