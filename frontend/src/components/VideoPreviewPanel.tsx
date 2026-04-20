@@ -296,8 +296,8 @@ export function VideoPreviewPanel({
                 icon={<SyncOutlined />}
                 size="small"
                 onClick={() => {
-                  // WR-08: Use explicit undefined check instead of falsy check
-                  if (currentSlide !== undefined) {
+                  // WR-08: Use explicit undefined check and has() for better defensive programming
+                  if (currentSlide !== undefined && timestampMap.has(currentSlide)) {
                     const timestamp = timestampMap.get(currentSlide)
                     if (timestamp !== undefined && videoRef.current) {
                       videoRef.current.currentTime = timestamp
@@ -423,7 +423,8 @@ export function VideoPreviewPanel({
           )}
         </div>
 
-        {timestampMap.size > 0 && currentSlide && (
+        {/* WR-07: Only show timestamp if it exists for current slide */}
+        {timestampMap.size > 0 && currentSlide && timestampMap.has(currentSlide) && (
           <div style={{ marginTop: 12, fontSize: '12px', color: '#666' }}>
             当前幻灯片: {currentSlide} | 时间戳: {formatTime(timestampMap.get(currentSlide) || 0)}
           </div>
