@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image/jpeg"
 	_ "image/jpeg"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cpic/record_v2/internal/config"
@@ -526,4 +529,238 @@ func contains(slice []int, item int) bool {
 		}
 	}
 	return false
+}
+
+// InsertCapturedFrame inserts a captured frame as a new slide into the PPT
+// Creates backup before insertion, saves frame to cache, regenerates PPT
+func (s *PPTEditorService) InsertCapturedFrame(pptFileID uint, frameBytes []byte, insertPosition int, timestamp float64) error {
+	s.logger.Info("Inserting captured frame",
+		zap.Uint("ppt_file_id", pptFileID),
+		zap.Int("insert_position", insertPosition),
+		zap.Float64("timestamp", timestamp))
+
+	// Load PPT file
+	var pptFile models.PPTFile
+	if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
+		return fmt.Errorf("PPT file not found: %w", err)
+	}
+
+	// Create backup if not exists
+	if !pptFile.HasBackup() {
+		if err := s.CreateBackup(pptFileID); err != nil {
+			return fmt.Errorf("failed to create backup: %w", err)
+		}
+		// Reload to get backup path
+		s.db.First(&pptFile, pptFileID)
+	}
+
+	// Validate insert position
+	if insertPosition < 1 || insertPosition > pptFile.PageCount+1 {
+		return fmt.Errorf("invalid insert position: %d (valid range: 1-%d)", insertPosition, pptFile.PageCount+1)
+	}
+
+	// Validate frame bytes
+	if len(frameBytes) == 0 {
+		return fmt.Errorf("frame bytes cannot be empty")
+	}
+	if len(frameBytes) > 10*1024*1024 { // 10MB limit (T-06-17 mitigation)
+		return fmt.Errorf("frame bytes too large: %d bytes (max 10MB)", len(frameBytes))
+	}
+
+	// Get all existing slides
+	allSlides, err := s.slideCache.GetOrExtractSlides(pptFileID)
+	if err != nil {
+		return fmt.Errorf("failed to get slides: %w", err)
+	}
+
+	// Determine new slide number (insertPosition becomes the new slide number)
+	newSlideNumber := insertPosition
+
+	// Save captured frame to slide cache
+	framePath, err := s.SaveCapturedFrame(pptFileID, frameBytes, newSlideNumber)
+	if err != nil {
+		return fmt.Errorf("failed to save captured frame: %w", err)
+	}
+
+	// Build list of all slide paths including new slide
+	allSlidePaths := make([]string, 0, len(allSlides)+1)
+	inserted := false
+
+	for _, slide := range allSlides {
+		if !inserted && slide.SlideNumber >= insertPosition {
+			// Insert new slide before current slide
+			allSlidePaths = append(allSlidePaths, framePath)
+			inserted = true
+		}
+		// Add existing slide path
+		resolution := "fullsize"
+		filename := fmt.Sprintf("slide_%03d.jpg", slide.SlideNumber)
+		path, err := s.slideCache.GetSlideImagePath(pptFileID, resolution, filename)
+		if err != nil {
+			return fmt.Errorf("failed to get slide %d path: %w", slide.SlideNumber, err)
+		}
+		allSlidePaths = append(allSlidePaths, path)
+	}
+
+	// If inserting at the end, add new slide after all existing slides
+	if !inserted {
+		allSlidePaths = append(allSlidePaths, framePath)
+	}
+
+	// Generate new PPTX with inserted slide
+	outputPath := fmt.Sprintf("%s.new.pptx", pptFile.FilePath)
+	slideCount, err := s.pptxGenerator.GeneratePPTX(context.Background(), allSlidePaths, outputPath)
+	if err != nil {
+		// Clean up captured frame on failure
+		os.Remove(framePath)
+		thumbnailPath := strings.Replace(framePath, "/fullsize/", "/thumbnails/", 1)
+		os.Remove(thumbnailPath)
+		return fmt.Errorf("failed to generate new PPTX: %w", err)
+	}
+
+	// Replace old PPTX with new one
+	if err := os.Remove(pptFile.FilePath); err != nil {
+		return fmt.Errorf("failed to remove old PPTX: %w", err)
+	}
+
+	if err := os.Rename(outputPath, pptFile.FilePath); err != nil {
+		return fmt.Errorf("failed to rename new PPTX: %w", err)
+	}
+
+	// Invalidate slide cache
+	if err := s.slideCache.InvalidateCache(pptFileID); err != nil {
+		s.logger.Warn("Failed to invalidate slide cache", zap.Error(err))
+	}
+
+	// Update database record
+	tx := s.db.Begin()
+	if err := tx.Error; err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+
+	// Update page count
+	if err := tx.Model(&pptFile).Update("page_count", slideCount).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to update page count: %w", err)
+	}
+
+	// Reload to record insertion
+	if err := tx.First(&pptFile, pptFileID).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to reload PPT file: %w", err)
+	}
+
+	// Record insertion in edit history
+	if err := pptFile.AddEditOperation("insert", []int{newSlideNumber}); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to record insertion: %w", err)
+	}
+
+	// Save changes
+	if err := tx.Save(&pptFile).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to save PPT file: %w", err)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	s.logger.Info("Captured frame inserted successfully",
+		zap.Uint("ppt_file_id", pptFileID),
+		zap.Int("insert_position", insertPosition),
+		zap.Int("new_slide_number", newSlideNumber),
+		zap.Int("new_page_count", slideCount))
+
+	return nil
+}
+
+// SaveCapturedFrame saves captured frame bytes to slide cache directory
+// Returns path to full-size image
+func (s *PPTEditorService) SaveCapturedFrame(pptFileID uint, frameBytes []byte, slideNumber int) (string, error) {
+	// Build cache directory paths
+	cacheDir := filepath.Join(s.config.Storage.RecordingsPath, "ppts", fmt.Sprintf("%d", pptFileID), "slides")
+	fullsizeDir := filepath.Join(cacheDir, "fullsize")
+	thumbnailDir := filepath.Join(cacheDir, "thumbnails")
+
+	// Create directories if they don't exist
+	if err := os.MkdirAll(fullsizeDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create fullsize directory: %w", err)
+	}
+	if err := os.MkdirAll(thumbnailDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create thumbnail directory: %w", err)
+	}
+
+	// Generate filename
+	filename := fmt.Sprintf("slide_%03d_captured.jpg", slideNumber)
+	fullsizePath := filepath.Join(fullsizeDir, filename)
+	thumbnailPath := filepath.Join(thumbnailDir, filename)
+
+	// Save full-size image
+	if err := os.WriteFile(fullsizePath, frameBytes, 0644); err != nil {
+		return "", fmt.Errorf("failed to write full-size image: %w", err)
+	}
+
+	// Generate thumbnail
+	if err := s.generateThumbnail(fullsizePath, thumbnailPath); err != nil {
+		s.logger.Warn("Failed to generate thumbnail", zap.Error(err))
+		// Don't fail on thumbnail generation error
+	}
+
+	s.logger.Info("Captured frame saved",
+		zap.Uint("ppt_file_id", pptFileID),
+		zap.Int("slide_number", slideNumber),
+		zap.String("fullsize_path", fullsizePath))
+
+	return fullsizePath, nil
+}
+
+// generateThumbnail creates a thumbnail from full-size image
+// Uses JPEG encoding with quality 85, size 200x112 (16:9 aspect ratio)
+func (s *PPTEditorService) generateThumbnail(inputPath, outputPath string) error {
+	// Open input image
+	file, err := os.Open(inputPath)
+	if err != nil {
+		return fmt.Errorf("failed to open image: %w", err)
+	}
+	defer file.Close()
+
+	img, err := jpeg.Decode(file)
+	if err != nil {
+		return fmt.Errorf("failed to decode JPEG: %w", err)
+	}
+
+	// Calculate thumbnail dimensions maintaining aspect ratio
+	thumbnailWidth := 200
+	thumbnailHeight := 112
+
+	// Create thumbnail image
+	thumbnail := image.NewRGBA(image.Rect(0, 0, thumbnailWidth, thumbnailHeight))
+
+	// Simple resize (nearest neighbor for speed)
+	// For better quality, consider using a resizing library
+	srcBounds := img.Bounds()
+	dstBounds := thumbnail.Bounds()
+
+	for y := 0; y < thumbnailHeight; y++ {
+		for x := 0; x < thumbnailWidth; x++ {
+			// Map destination coordinates to source coordinates
+			srcX := x * srcBounds.Dx() / thumbnailWidth
+			srcY := y * srcBounds.Dy() / thumbnailHeight
+			thumbnail.Set(x, y, img.At(srcX, srcY))
+		}
+	}
+
+	// Save thumbnail
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create thumbnail file: %w", err)
+	}
+	defer outFile.Close()
+
+	if err := jpeg.Encode(outFile, thumbnail, &jpeg.Options{Quality: 85}); err != nil {
+		return fmt.Errorf("failed to encode thumbnail: %w", err)
+	}
+
+	return nil
 }
