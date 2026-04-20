@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,6 +43,26 @@ func NewSnapshotService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, vid
 func (s *SnapshotService) getMutex(taskID uint) *sync.Mutex {
 	mutex, _ := s.snapshotMutexes.LoadOrStore(taskID, &sync.Mutex{})
 	return mutex.(*sync.Mutex)
+}
+
+// generateSnapshotFilename creates a sanitized filename with task name and sequence
+func (s *SnapshotService) generateSnapshotFilename(task models.VideoRecordingTask, sequence int) string {
+	// Sanitize task name for filename use (replace invalid chars with underscore)
+	sanitizedName := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, task.Name)
+
+	// Limit name length to avoid excessively long filenames (max 30 chars)
+	if len(sanitizedName) > 30 {
+		sanitizedName = sanitizedName[:30]
+	}
+
+	// Format: {sanitized_name}_snapshot_{seq:03d}_{timestamp}.mp4
+	timestamp := time.Now().Format("20060102_150405")
+	return fmt.Sprintf("%s_snapshot_%03d_%s.mp4", sanitizedName, sequence, timestamp)
 }
 
 // GenerateSnapshot generates an MP4 snapshot from an active recording task's MKV file.
@@ -129,6 +150,22 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 		return nil, fmt.Errorf("创建快照目录失败: %w", err)
 	}
 
+	// Count existing snapshots for this task to determine sequence number
+	var snapshotCount int64
+	s.db.Model(&models.VideoFile{}).
+		Where("task_id = ? AND source_type = ?", taskID, models.SourceTypeSnapshot).
+		Count(&snapshotCount)
+	sequence := int(snapshotCount) + 1
+
+	// Generate filename with task context
+	filename := s.generateSnapshotFilename(task, sequence)
+
+	s.logger.Info("生成快照文件名",
+		zap.Uint("task_id", taskID),
+		zap.String("filename", filename),
+		zap.Int("sequence", sequence),
+	)
+
 	timestamp := time.Now().Format("20060102_150405")
 	tempMKV := filepath.Join(tempDir, fmt.Sprintf("snapshot_%s.mkv", timestamp))
 
@@ -139,7 +176,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 	defer os.Remove(tempMKV) // Clean up temp MKV after conversion
 
 	// 6. Convert temp MKV to MP4 with incremental offset (D-15)
-	outputMP4 := filepath.Join(tempDir, fmt.Sprintf("snapshot_%s.mp4", timestamp))
+	outputMP4 = filepath.Join(tempDir, filename)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
