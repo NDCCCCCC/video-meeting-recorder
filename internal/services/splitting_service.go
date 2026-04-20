@@ -84,6 +84,25 @@ func (s *SplittingService) Stop() {
 
 // SubmitSplit submits a split task
 func (s *SplittingService) SubmitSplit(videoFileID uint, markers []float64, reEncode bool, createdBy uint) error {
+	// 1. Smart cleanup: delete existing segments before creating new ones
+	deletedCount, err := s.videoFileService.DeleteSplitSegmentsByParentID(videoFileID, createdBy)
+	if err != nil {
+		s.logger.Error("清理旧分割段失败",
+			zap.Uint("video_file_id", videoFileID),
+			zap.Uint("user_id", createdBy),
+			zap.Error(err),
+		)
+		return fmt.Errorf("清理旧分割段失败: %w", err)
+	}
+	if deletedCount > 0 {
+		s.logger.Info("清理旧分割段完成，重新分割",
+			zap.Uint("video_file_id", videoFileID),
+			zap.Uint("user_id", createdBy),
+			zap.Int("deleted_count", deletedCount),
+		)
+	}
+
+	// 2. Submit new split task
 	task := &SplitTask{
 		VideoFileID: videoFileID,
 		Markers:     markers,
@@ -97,7 +116,11 @@ func (s *SplittingService) SubmitSplit(videoFileID uint, markers []float64, reEn
 
 	select {
 	case s.taskQueue <- task:
-		s.logger.Info("分割任务已提交", zap.Uint("video_file_id", videoFileID), zap.Int("markers", len(markers)))
+		s.logger.Info("分割任务已提交",
+			zap.Uint("video_file_id", videoFileID),
+			zap.Int("markers", len(markers)),
+			zap.Uint("user_id", createdBy),
+		)
 		return nil
 	default:
 		s.statusMu.Lock()
