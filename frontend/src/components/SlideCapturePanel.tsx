@@ -4,16 +4,6 @@ import { CameraOutlined, PlayCircleOutlined, PauseCircleOutlined, CheckOutlined 
 import type { SlideCapturePanelProps } from '../types/ppt'
 import { captureFrame, insertSlide } from '../api/ppt'
 
-interface SlideCapturePanelProps {
-  pptFileId: number
-  videoFileId: number
-  currentSlide: number
-  totalSlides: number
-  onSlideInserted?: (newSlideNumber: number) => void
-  onCancel?: () => void
-  open?: boolean
-}
-
 interface VideoRefState {
   currentTime: number
   duration: number
