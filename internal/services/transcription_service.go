@@ -402,6 +402,36 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		zap.Int("unique_frames", len(uniqueFrames)),
 		zap.Int("black_frames", blackFrameCount))
 
+	// Record slide timestamps from extracted frames (after similarity detection)
+	slideTimestamps := make([]models.SlideTimestamp, 0, len(uniqueFrames))
+	for i, frame := range uniqueFrames {
+		slideTimestamps = append(slideTimestamps, models.SlideTimestamp{
+			SlideNumber: i + 1, // 1-based slide numbers
+			Timestamp:   frame.Timestamp,
+		})
+	}
+
+	// Store timestamps in TranscriptionTask
+	if err := task.SetSlideTimestamps(slideTimestamps); err != nil {
+		s.logger.Error("设置时间戳失败",
+			zap.Uint("video_file_id", task.VideoFileID),
+			zap.Error(err))
+		// Don't fail the task for timestamp recording errors
+	} else {
+		// Update task in database
+		if err := s.db.Model(task).Update("slide_timestamps", task.SlideTimestamps).Error; err != nil {
+			s.logger.Warn("保存时间戳到数据库失败",
+				zap.Uint("video_file_id", task.VideoFileID),
+				zap.Error(err))
+		} else {
+			s.logger.Info("时间戳已记录",
+				zap.Uint("video_file_id", task.VideoFileID),
+				zap.Int("timestamp_count", len(slideTimestamps)),
+				zap.Float64("first_timestamp", slideTimestamps[0].Timestamp),
+				zap.Float64("last_timestamp", slideTimestamps[len(slideTimestamps)-1].Timestamp))
+		}
+	}
+
 	// Check if video is entirely black or has too few unique frames
 	if len(uniqueFrames) == 0 {
 		s.logger.Warn("视频无有效内容（全黑或无变化）",
