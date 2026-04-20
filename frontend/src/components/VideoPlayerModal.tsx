@@ -192,14 +192,15 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     const video = videoRef.current
     if (!video) return
 
+    // Batch state updates together (React 18 automatic batching)
+    const newMutedState = value > 0 ? false : muted
     setVolume(value)
     setActualVolume(value)
-    video.volume = value
-
-    // Auto-unmute if volume increased from 0
-    if (value > 0 && muted) {
-      setMuted(false)
+    if (newMutedState !== muted) {
+      setMuted(newMutedState)
     }
+
+    video.volume = value
   }, [muted])
 
   const handleMuteToggle = useCallback(() => {
