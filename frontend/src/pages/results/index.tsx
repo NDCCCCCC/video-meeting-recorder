@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Button,
   Card,
-  Row,
-  Col,
   Descriptions,
   Space,
   message,
@@ -34,6 +32,7 @@ import TextContentTab from '../../components/TextContentTab'
 import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import SlideCapturePanel from '../../components/SlideCapturePanel'
 import { VideoPreviewPanel } from '../../components/VideoPreviewPanel'
+import SlideThumbnail from '../../components/SlideThumbnail'
 import {
   getPptsByVideo,
   getSlides,
@@ -57,6 +56,27 @@ import TranscriptionProgressModal from '../../components/TranscriptionProgressMo
 const formatFileSize = (bytes: number): string => {
   if (!bytes || bytes === 0) return '0 MB'
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
+
+// Side-by-side preview layout styles
+const previewAreaStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '160px 1fr 1fr',  // Thumbnails | PPT | Video
+  gap: '16px',
+  marginBottom: '16px',
+  // Responsive: Stack on screens < 1200px
+  '@media (max-width: 1200px)': {
+    gridTemplateColumns: '1fr',  // Stack vertically
+  },
+}
+
+const previewBoxStyle: React.CSSProperties = {
+  position: 'relative',
+  width: '100%',
+  aspectRatio: '16 / 9',  // Maintain 16:9 aspect ratio
+  backgroundColor: '#000',
+  borderRadius: '8px',
+  overflow: 'hidden',
 }
 
 export default function ResultDetailPage() {
@@ -453,177 +473,199 @@ export default function ResultDetailPage() {
         <h2 style={{ margin: 0 }}>PPT结果 - {videoName}</h2>
       </div>
 
-      <Row gutter={24}>
-        {/* 左列 - 预览区域 (70%) */}
-        <Col span={17}>
-          <Card bodyStyle={{ padding: 0 }}>
-            <PPTPreview
-              slides={slides}
-              currentSlide={currentSlide}
-              onSlideChange={handleSlideChange}
-              isMergeMode={isMergeMode}
-              selectedSlides={selectedSlides}
-              onToggleSelect={handleToggleSelect}
-              isLoading={isLoadingSlides}
-              currentPptId={currentPptId}
-            />
-          </Card>
+      {/* Preview Area with Side-by-Side Layout */}
+      <div style={previewAreaStyle}>
+        {/* Left: Thumbnail Sidebar (160px) */}
+        <div style={{
+          overflowY: 'auto',
+          borderRight: '1px solid #f0f0f0',
+          padding: 8,
+          background: '#fafafa',
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {slides.map((slide, idx) => (
+              <SlideThumbnail
+                key={slide.slide_number}
+                slide={slide}
+                slideNumber={slide.slide_number}
+                totalSlides={slides.length}
+                isCurrent={idx === currentSlide}
+                isSelected={
+                  isMergeMode &&
+                  selectedSlides.some((s) => s.id === `${currentPptId}_${slide.slide_number}`)
+                }
+                isSelectable={isMergeMode}
+                onClick={() =>
+                  isMergeMode ? handleToggleSelect(slide, idx) : handleSlideChange(idx)
+                }
+              />
+            ))}
+          </div>
+        </div>
 
-          {/* 视频预览面板 */}
-          {isVideoPanelVisible && (
+        {/* Center: PPT Preview (16:9) */}
+        <div style={previewBoxStyle}>
+          <PPTPreview
+            slides={slides}
+            currentSlide={currentSlide}
+            onSlideChange={handleSlideChange}
+            isMergeMode={isMergeMode}
+            selectedSlides={selectedSlides}
+            onToggleSelect={handleToggleSelect}
+            isLoading={isLoadingSlides}
+            currentPptId={currentPptId}
+            containerStyle={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+          />
+        </div>
+
+        {/* Right: Video Preview (16:9) */}
+        {isVideoPanelVisible && (
+          <div style={previewBoxStyle}>
             <VideoPreviewPanel
               videoFileId={videoFileIdNum}
-              currentSlide={currentSlide + 1} // Convert to 1-based
+              currentSlide={currentSlide + 1}
               onSlideClick={handleVideoSlideChange}
-              style={{ marginTop: 16 }}
+              style={{ height: '100%', border: 'none', boxShadow: 'none' }}
               autoPlay={false}
               showControls={true}
             />
-          )}
+          </div>
+        )}
+      </div>
 
-          {/* 合并选择栏 - 仅在合并模式显示 */}
-          {isMergeMode && (
-            <MergeSelectionBar
-              selectedSlides={selectedSlides}
-              onReorder={setSelectedSlides}
-              onRemove={handleRemoveSlide}
-              onConfirm={handleConfirmMerge}
-              onCancel={() => {
-                setIsMergeMode(false)
-                setSelectedSlides([])
-              }}
-              isMerging={isMerging}
-            />
-          )}
-        </Col>
+      {/* Info/Text/Operations Bar - Below Preview */}
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Tabs
+          defaultActiveKey="info"
+          items={[
+            {
+              key: 'info',
+              label: '基本信息',
+              children: (
+                <Descriptions column={1} size="small">
+                  <Descriptions.Item label="视频名称">{videoName}</Descriptions.Item>
+                  <Descriptions.Item label="转录时间">
+                    {currentPpt ? dayjs(currentPpt.created_at).format('YYYY-MM-DD HH:mm') : '—'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="页数">{currentPpt?.page_count || 0} 页</Descriptions.Item>
+                  <Descriptions.Item label="文件大小">{formatFileSize(currentPpt?.file_size || 0)}</Descriptions.Item>
+                  <Descriptions.Item label="类型">
+                    {currentPpt?.source_type === 'merge' ? '合并' : '转录'}
+                  </Descriptions.Item>
+                </Descriptions>
+              ),
+            },
+            {
+              key: 'text',
+              label: '文字内容',
+              children: <TextContentTab videoFileId={videoFileIdNum} />,
+            },
+            {
+              key: 'operations',
+              label: '操作',
+              children: (
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Button
+                    block
+                    icon={<DownloadOutlined />}
+                    onClick={handleDownloadPpt}
+                  >
+                    下载PPT
+                  </Button>
+                  <Dropdown
+                    menu={{
+                      items: [
+                        {
+                          key: 'local',
+                          icon: <LaptopOutlined />,
+                          label: '本地转录',
+                          onClick: () => handleRetranscribeWithMode('local'),
+                        },
+                        {
+                          key: 'cloud',
+                          icon: <CloudOutlined />,
+                          label: '云端转录（通义听悟）',
+                          onClick: () => handleRetranscribeWithMode('cloud'),
+                        },
+                      ],
+                    }}
+                    trigger={['click']}
+                  >
+                    <Button block icon={<RedoOutlined />}>
+                      重新转录
+                    </Button>
+                  </Dropdown>
+                  <Button
+                    block
+                    type="primary"
+                    icon={<MergeCellsOutlined />}
+                    onClick={() => setIsMergeMode(!isMergeMode)}
+                  >
+                    {isMergeMode ? '取消合并' : '合并幻灯片'}
+                  </Button>
+                  <Button
+                    block
+                    icon={<VideoCameraOutlined />}
+                    onClick={() => setIsVideoPanelVisible(!isVideoPanelVisible)}
+                  >
+                    {isVideoPanelVisible ? '隐藏视频预览' : '显示视频预览'}
+                  </Button>
+                  <Button
+                    block
+                    icon={<ScanOutlined />}
+                    onClick={() => setDuplicateDetectionOpen(true)}
+                  >
+                    检测重复幻灯片
+                  </Button>
+                  <Button
+                    block
+                    icon={<CameraOutlined />}
+                    onClick={() => setIsCapturePanelOpen(true)}
+                  >
+                    捕获幻灯片
+                  </Button>
+                  <Popconfirm
+                    title="确定要删除此PPT文件吗？删除后无法恢复。"
+                    onConfirm={handleDeletePpt}
+                    okText="确定"
+                    cancelText="取消"
+                  >
+                    <Button block danger icon={<DeleteOutlined />}>
+                      删除PPT
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </Card>
 
-        {/* 右列 - 信息面板 (30%) */}
-        <Col span={7}>
-          {/* Tabbed info panel per D-09 */}
-          <Tabs
-            defaultActiveKey="info"
-            style={{ marginBottom: 16 }}
-            items={[
-              {
-                key: 'info',
-                label: '基本信息',
-                children: (
-                  <Descriptions column={1} size="small">
-                    <Descriptions.Item label="视频名称">
-                      {videoName}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="转录时间">
-                      {currentPpt ? dayjs(currentPpt.created_at).format('YYYY-MM-DD HH:mm') : '—'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="页数">
-                      {currentPpt?.page_count || 0} 页
-                    </Descriptions.Item>
-                    <Descriptions.Item label="文件大小">
-                      {formatFileSize(currentPpt?.file_size || 0)}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="类型">
-                      {currentPpt?.source_type === 'merge' ? '合并' : '转录'}
-                    </Descriptions.Item>
-                  </Descriptions>
-                ),
-              },
-              {
-                key: 'text',
-                label: '文字内容',
-                children: (
-                  <TextContentTab videoFileId={videoFileIdNum} />
-                ),
-              },
-            ]}
+      {/* Merge Selection Bar - Below Info Bar */}
+      {isMergeMode && (
+        <MergeSelectionBar
+          selectedSlides={selectedSlides}
+          onReorder={setSelectedSlides}
+          onRemove={handleRemoveSlide}
+          onConfirm={handleConfirmMerge}
+          onCancel={() => {
+            setIsMergeMode(false)
+            setSelectedSlides([])
+          }}
+          isMerging={isMerging}
+        />
+      )}
+
+      {/* Multiple PPT Results Gallery */}
+      {ppts.length > 1 && (
+        <Card title="多个转录结果" size="small">
+          <PPTGalleryStrip
+            ppts={ppts}
+            currentPptId={currentPptId}
+            onSelect={setCurrentPptId}
           />
-
-          {/* 操作按钮卡片 */}
-          <Card title="操作" size="small" style={{ marginBottom: 16 }}>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Button
-                block
-                icon={<DownloadOutlined />}
-                onClick={handleDownloadPpt}
-              >
-                下载PPT
-              </Button>
-              <Dropdown
-                menu={{
-                  items: [
-                    {
-                      key: 'local',
-                      icon: <LaptopOutlined />,
-                      label: '本地转录',
-                      onClick: () => handleRetranscribeWithMode('local'),
-                    },
-                    {
-                      key: 'cloud',
-                      icon: <CloudOutlined />,
-                      label: '云端转录（通义听悟）',
-                      onClick: () => handleRetranscribeWithMode('cloud'),
-                    },
-                  ],
-                }}
-                trigger={['click']}
-              >
-                <Button block icon={<RedoOutlined />}>
-                  重新转录
-                </Button>
-              </Dropdown>
-              <Button
-                block
-                type="primary"
-                icon={<MergeCellsOutlined />}
-                onClick={() => setIsMergeMode(!isMergeMode)}
-              >
-                {isMergeMode ? '取消合并' : '合并幻灯片'}
-              </Button>
-              <Button
-                block
-                icon={<VideoCameraOutlined />}
-                onClick={() => setIsVideoPanelVisible(!isVideoPanelVisible)}
-              >
-                {isVideoPanelVisible ? '隐藏视频预览' : '显示视频预览'}
-              </Button>
-              <Button
-                block
-                icon={<ScanOutlined />}
-                onClick={() => setDuplicateDetectionOpen(true)}
-              >
-                检测重复幻灯片
-              </Button>
-              <Button
-                block
-                icon={<CameraOutlined />}
-                onClick={() => setIsCapturePanelOpen(true)}
-              >
-                捕获幻灯片
-              </Button>
-              <Popconfirm
-                title="确定要删除此PPT文件吗？删除后无法恢复。"
-                onConfirm={handleDeletePpt}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Button block danger icon={<DeleteOutlined />}>
-                  删除PPT
-                </Button>
-              </Popconfirm>
-            </Space>
-          </Card>
-
-          {/* 多个转录结果 */}
-          {ppts.length > 1 && (
-            <Card title="多个转录结果" size="small">
-              <PPTGalleryStrip
-                ppts={ppts}
-                currentPptId={currentPptId}
-                onSelect={setCurrentPptId}
-              />
-            </Card>
-          )}
-        </Col>
-      </Row>
+        </Card>
+      )}
 
       {/* 重新转录模态框 */}
       <TranscriptionProgressModal
