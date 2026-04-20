@@ -71,7 +71,7 @@ Each task was committed atomically:
 2. **Task 2: Integrate DirectCaptureButton into results page** - `cb220f4` (feat)
 3. **Task 3: Update VideoPreviewPanel for external videoRef** - `1d2cbe4` (feat)
 
-**Plan metadata:** TBD (docs: complete plan)
+**Plan metadata:** `4f592ad` (docs: complete plan)
 
 ## Files Created/Modified
 
@@ -102,6 +102,18 @@ None - no external service configuration required.
 - Direct capture workflow ready for testing and validation
 - Video ref forwarding pattern established for future video-related features
 - Both quick capture (direct button) and advanced capture (modal with preview) available to users
+
+## Self-Check: PASSED
+
+- ✓ FOUND: .planning/phases/06-ppt-editor/06-06-03-SUMMARY.md
+- ✓ FOUND: 57bcbfb (Task 1: DirectCaptureButton component)
+- ✓ FOUND: cb220f4 (Task 2: Integrate DirectCaptureButton)
+- ✓ FOUND: 1d2cbe4 (Task 3: Update VideoPreviewPanel)
+- ✓ FOUND: 4f592ad (Summary commit)
+- ✓ FOUND: frontend/src/components/SlideCapturePanel.tsx (with DirectCaptureButton export)
+- ✓ All tasks completed with atomic commits
+- ✓ No deviations from plan
+- ✓ SUMMARY.md created and committed
 
 ---
 *Phase: 06-ppt-editor*
