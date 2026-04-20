@@ -19,6 +19,7 @@ import EditableProgressBar from './EditableProgressBar'
 // ==================== 常量 ====================
 const SKIP_SECONDS = 10
 const TIME_UPDATE_DEBOUNCE_MS = 1000  // Debounce timeupdate events to avoid excessive updates
+const SYNC_THRESHOLD_SECONDS = 5  // Maximum time difference for video-slide sync
 
 // ==================== 工具函数 ====================
 
@@ -103,8 +104,8 @@ export function VideoPreviewPanel({
         if (response.data?.success && Array.isArray(response.data?.slide_timestamps)) {
           const map = new Map<number, number>()
           response.data.slide_timestamps.forEach((ts: SlideTimestamp) => {
-            // WR-02: Add validation for slide_number and timestamp
-            if (ts.slide_number && typeof ts.timestamp === 'number') {
+            // WR-05: Add validation for positive slide_number and valid timestamp
+            if (ts.slide_number && ts.slide_number > 0 && typeof ts.timestamp === 'number' && ts.timestamp >= 0) {
               map.set(ts.slide_number, ts.timestamp)
             }
           })
@@ -184,6 +185,9 @@ export function VideoPreviewPanel({
 
       const currentTime = video.currentTime
 
+      // WR-06: Use constant for sync threshold and handle empty timestamp map
+      if (timestampMap.size === 0) return
+
       // Find closest slide based on current timestamp
       let closestSlide: number | undefined
       let minDiff = Infinity
@@ -196,7 +200,7 @@ export function VideoPreviewPanel({
         }
       }
 
-      if (closestSlide !== undefined && minDiff < 5) {  // Within 5 seconds
+      if (closestSlide !== undefined && minDiff < SYNC_THRESHOLD_SECONDS) {
         onSlideClick(closestSlide)
       }
     }
