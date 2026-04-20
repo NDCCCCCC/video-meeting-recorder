@@ -311,6 +311,21 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     return () => clearTimeout(timer)
   }, [visible])
 
+  // ==================== 键盘快捷键 ====================
+  useKeyboardShortcuts({
+    videoRef,
+    isPlaying,
+    playbackRate,
+    volume: actualVolume,
+    enabled: visible,
+    onPlayPause: handlePlayPause,
+    onSeek: handleSeekWithInfinity,
+    onVolumeChange: handleVolumeChange,
+    onPlaybackRateChange: setPlaybackRate,
+    onFullscreen: handleFullscreen,
+    onMuteToggle: handleMuteToggle,
+  })
+
   // ==================== 不支持格式的内容 ====================
   const unsupportedContent = (
     <div style={{ padding: '60px 20px', textAlign: 'center', backgroundColor: '#000', color: '#fff' }}>
@@ -363,6 +378,8 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
               src={videoUrl}
               style={STYLES.video}
               preload="metadata"
+              muted={muted}
+              volume={actualVolume}
               onLoadedMetadata={() => {
                 const video = videoRef.current
                 if (video) {
@@ -376,7 +393,15 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
               }}
               onTimeUpdate={() => {
                 const video = videoRef.current
-                if (video) setCurrentTime(video.currentTime)
+                if (video) {
+                  setCurrentTime(video.currentTime)
+                  // Sync playback rate from video element (in case external controls changed it)
+                  setPlaybackRate(video.playbackRate)
+                }
+              }}
+              onRateChange={() => {
+                const video = videoRef.current
+                if (video) setPlaybackRate(video.playbackRate)
               }}
             />
 
