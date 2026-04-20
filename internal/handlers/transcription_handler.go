@@ -15,6 +15,7 @@ import (
 type TranscriptionHandler struct {
 	transcriptionService *services.TranscriptionService
 	videoFileService     *services.VideoFileService
+	timestampMapper      *services.TimestampMapper
 	logger               *zap.Logger
 }
 
@@ -22,11 +23,13 @@ type TranscriptionHandler struct {
 func NewTranscriptionHandler(
 	transcriptionService *services.TranscriptionService,
 	videoFileService *services.VideoFileService,
+	timestampMapper *services.TimestampMapper,
 	logger *zap.Logger,
 ) *TranscriptionHandler {
 	return &TranscriptionHandler{
 		transcriptionService: transcriptionService,
 		videoFileService:     videoFileService,
+		timestampMapper:      timestampMapper,
 		logger:               logger,
 	}
 }
@@ -264,5 +267,47 @@ func (h *TranscriptionHandler) ListActiveTasks(c *gin.Context) {
 	response.GinSuccess(c, gin.H{
 		"tasks": filteredTasks,
 		"total": len(filteredTasks),
+	})
+}
+
+// GetTimestampMapHandler handles GET /api/v1/transcriptions/:videoFileId/timestamps
+// Returns slide-to-timestamp mappings for video preview synchronization
+func (h *TranscriptionHandler) GetTimestampMapHandler(c *gin.Context) {
+	idStr := c.Param("videoFileId")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的视频ID")
+		return
+	}
+
+	videoFileID := uint(id)
+
+	// Verify user owns the video file
+	userID := middleware.GetUserID(c)
+	file, err := h.videoFileService.GetFileByID(videoFileID)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "视频文件不存在")
+		return
+	}
+	if !middleware.GetIsAdmin(c) && file.CreatedBy != userID {
+		response.GinError(c, response.CodeForbidden, "无权访问此视频文件的时间戳映射")
+		return
+	}
+
+	// Get timestamp map from service
+	timestamps, err := h.timestampMapper.GetTimestampMap(videoFileID)
+	if err != nil {
+		// Return empty array instead of error for graceful degradation
+		response.GinSuccess(c, gin.H{
+			"success":         true,
+			"slide_timestamps": []interface{}{},
+		})
+		return
+	}
+
+	// Return timestamp map
+	response.GinSuccess(c, gin.H{
+		"success":          true,
+		"slide_timestamps": timestamps,
 	})
 }

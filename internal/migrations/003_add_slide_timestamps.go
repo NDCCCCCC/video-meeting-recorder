@@ -3,7 +3,6 @@ package migrations
 import (
 	"fmt"
 
-	"github.com/cpic/record_v2/internal/models"
 	"gorm.io/gorm"
 )
 

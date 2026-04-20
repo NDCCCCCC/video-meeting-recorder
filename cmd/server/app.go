@@ -566,6 +566,9 @@ func (a *MinimalApp) initHandlers() error {
 	// Start OSS cleanup scheduler
 	a.transcriptionService.StartOSSCleanupScheduler()
 
+	// Timestamp mapper for video preview synchronization
+	timestampMapper := services.NewTimestampMapper(a.db, a.logger)
+
 	// PPT管理服务
 	slideExtractor := services.NewSlideExtractor(a.logger)
 	a.slideCacheService = services.NewSlideCacheService(a.db, a.logger, a.config, slideExtractor)
@@ -597,7 +600,7 @@ func (a *MinimalApp) initHandlers() error {
 		System:        handlers.NewSystemHandler(a.db, a.logger, a.config),
 		APIKey:        apikeyHandler,
 		Split:         handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
-		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, a.logger),
+		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, timestampMapper, a.logger),
 		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.frameCaptureService, a.logger),
 	}
 
@@ -762,7 +765,8 @@ func (a *MinimalApp) registerRoutes() error {
 	// 转录任务管理
 	transcriptions := api.Group("/transcriptions")
 	{
-		transcriptions.GET("/active", a.handlers.Transcription.ListActiveTasks) // 获取活跃的转录任务列表
+		transcriptions.GET("/active", a.handlers.Transcription.ListActiveTasks)                       // 获取活跃的转录任务列表
+	transcriptions.GET("/:videoFileId/timestamps", a.handlers.Transcription.GetTimestampMapHandler) // 获取时间戳映射
 	}
 
 	// PPT管理
