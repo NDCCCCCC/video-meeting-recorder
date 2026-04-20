@@ -13,7 +13,7 @@ import {
 import { getTimestampMap } from '../api/transcription'
 import type { SlideTimestamp } from '../types/transcription'
 import { getToken } from '../api/apiClient'
-import { PlaybackSpeedControl, usePlaybackSpeed, SPEED_OPTIONS } from './PlaybackSpeedControl'
+import { PlaybackSpeedControl, usePlaybackSpeed } from './PlaybackSpeedControl'
 
 // ==================== 常量 ====================
 const SKIP_SECONDS = 10
@@ -71,7 +71,7 @@ export function VideoPreviewPanel({
   const [playbackRate, setPlaybackRate] = useState(1.0)
 
   // Initialize playback speed hook
-  const { playbackRate: currentPlaybackRate, changeSpeed } = usePlaybackSpeed(videoRef)
+  const { changeSpeed } = usePlaybackSpeed(videoRef as React.RefObject<HTMLVideoElement>)
 
   // ==================== 计算值 ====================
   const videoUrl = useMemo(() => {
@@ -402,7 +402,6 @@ export function VideoPreviewPanel({
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
                   <PlaybackSpeedControl
-                    videoRef={videoRef}
                     currentSpeed={playbackRate}
                     onSpeedChange={(speed) => {
                       changeSpeed(speed)

@@ -10,7 +10,7 @@ export const SPEED_OPTIONS = [
   { label: '1.25x', value: 1.25 },
   { label: '1.5x', value: 1.5 },
   { label: '2x', value: 2.0 },
-] as const
+]
 
 // ==================== Hook ====================
 
@@ -42,7 +42,6 @@ export function usePlaybackSpeed(videoRef: React.RefObject<HTMLVideoElement>) {
 // ==================== 组件接口 ====================
 
 interface PlaybackSpeedControlProps {
-  videoRef: React.RefObject<HTMLVideoElement>
   currentSpeed: number
   onSpeedChange: (speed: number) => void
   style?: React.CSSProperties
@@ -51,7 +50,6 @@ interface PlaybackSpeedControlProps {
 // ==================== 组件 ====================
 
 export function PlaybackSpeedControl({
-  videoRef,
   currentSpeed,
   onSpeedChange,
   style
