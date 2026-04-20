@@ -39,8 +39,8 @@
 - [ ] Phase 8: Video Snapshot & Player Enhancement (5 plans) — **ready to execute**
     - Goal: Implement snapshot video time range logic, naming conventions, and enhance video player precision and controls
     - [x] 08-00-PLAN.md — Wave 0: Test stubs for snapshot service and player enhancements
-    - [ ] 08-01-PLAN.md — Snapshot service: concurrent safety, enhanced naming, validation
-    - [ ] 08-02-PLAN.md — Keyboard shortcuts hook and utility constants
+    - [x] 08-01-PLAN.md — Snapshot service: concurrent safety, enhanced naming, validation
+    - [x] 08-02-PLAN.md — Keyboard shortcuts hook and utility constants
     - [ ] 08-03-PLAN.md — Frame-level navigation hook and component
     - [ ] 08-04-PLAN.md — VideoPlayerModal integration of all enhancements
 
