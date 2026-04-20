@@ -34,9 +34,27 @@ func NewFrameCaptureService(ffmpegPath, ffprobePath string, logger *zap.Logger) 
 // CaptureFrame captures a frame from video at specific timestamp and saves to file
 // Uses FFmpeg with optimal flags for quality and speed
 func (s *FrameCaptureService) CaptureFrame(ctx context.Context, videoPath string, timestamp float64, outputPath string) error {
-	// Validate video path exists
+	// Validate video path exists (WR-03: call validatePath)
+	if err := s.validatePath(videoPath); err != nil {
+		return fmt.Errorf("invalid video path: %w", err)
+	}
+
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
 		return fmt.Errorf("video file not found: %s", videoPath)
+	}
+
+	// Validate file extension (WR-01: add MIME type/extension validation)
+	ext := strings.ToLower(filepath.Ext(videoPath))
+	validExts := []string{".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv"}
+	isValidExt := false
+	for _, valid := range validExts {
+		if ext == valid {
+			isValidExt = true
+			break
+		}
+	}
+	if !isValidExt {
+		return fmt.Errorf("invalid video file extension: %s (supported: %v)", ext, validExts)
 	}
 
 	// Validate timestamp
@@ -132,7 +150,10 @@ func (s *FrameCaptureService) ValidateTimestamp(videoPath string, timestamp floa
 		return 0, fmt.Errorf("timestamp cannot be negative: %.3f", timestamp)
 	}
 
-	duration, err := s.GetVideoDuration(videoPath)
+	// WR-04: Add context timeout for GetVideoDuration call
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	duration, err := s.GetVideoDuration(ctx, videoPath)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get video duration: %w", err)
 	}
@@ -150,8 +171,13 @@ func (s *FrameCaptureService) ValidateTimestamp(videoPath string, timestamp floa
 }
 
 // GetVideoDuration uses ffprobe to extract video duration in seconds
-func (s *FrameCaptureService) GetVideoDuration(videoPath string) (float64, error) {
-	// Validate video path exists
+// WR-04: Added context parameter for timeout support
+func (s *FrameCaptureService) GetVideoDuration(ctx context.Context, videoPath string) (float64, error) {
+	// Validate video path exists (WR-03: call validatePath)
+	if err := s.validatePath(videoPath); err != nil {
+		return 0, fmt.Errorf("invalid video path: %w", err)
+	}
+
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
 		return 0, fmt.Errorf("video file not found: %s", videoPath)
 	}
@@ -168,7 +194,8 @@ func (s *FrameCaptureService) GetVideoDuration(videoPath string) (float64, error
 		videoPath,
 	}
 
-	cmd := exec.Command(s.ffprobePath, args...)
+	// WR-04: Use CommandContext to respect timeout
+	cmd := exec.CommandContext(ctx, s.ffprobePath, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
