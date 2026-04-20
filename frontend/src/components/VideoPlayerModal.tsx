@@ -386,12 +386,12 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
 
             <video
               key={`${file.id}-${visible}`}
-              ref={videoRef}
+              ref={videoRef as React.RefObject<HTMLVideoElement>}
               src={videoUrl}
               style={STYLES.video}
               preload="metadata"
               muted={muted}
-              volume={actualVolume}
+              {...({ volume: actualVolume } as any)}
               onLoadedMetadata={() => {
                 const video = videoRef.current
                 if (video) {

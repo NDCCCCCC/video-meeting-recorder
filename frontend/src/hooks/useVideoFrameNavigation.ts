@@ -24,7 +24,7 @@ const DEFAULT_FRAME_RATE = 30
  * @param videoRef - React ref to the HTMLVideoElement
  * @returns Object with navigation functions and browser support status
  */
-export function useVideoFrameNavigation(videoRef: React.RefObject<HTMLVideoElement>) {
+export function useVideoFrameNavigation(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const supportsFrameCallback = useCallback(() => {
     const video = videoRef.current
     if (!video) return false

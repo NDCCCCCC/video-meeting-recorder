@@ -349,7 +349,7 @@ export function VideoPreviewPanel({
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
+              objectFit: 'contain',
               display: 'block',
             }}
             preload="metadata"
