@@ -13,6 +13,7 @@ import {
 import { getTimestampMap } from '../api/transcription'
 import type { SlideTimestamp } from '../types/transcription'
 import { getToken } from '../api/apiClient'
+import { PlaybackSpeedControl, usePlaybackSpeed, SPEED_OPTIONS } from './PlaybackSpeedControl'
 
 // ==================== 常量 ====================
 const SKIP_SECONDS = 10
@@ -67,6 +68,10 @@ export function VideoPreviewPanel({
   const [error, setError] = useState<string>()
   const [timestampMap, setTimestampMap] = useState<Map<number, number>>(new Map())
   const [timestampError, setTimestampError] = useState<string>()
+  const [playbackRate, setPlaybackRate] = useState(1.0)
+
+  // Initialize playback speed hook
+  const { playbackRate: currentPlaybackRate, changeSpeed } = usePlaybackSpeed(videoRef)
 
   // ==================== 计算值 ====================
   const videoUrl = useMemo(() => {
@@ -147,6 +152,15 @@ export function VideoPreviewPanel({
     }
   }, [currentSlide, timestampMap, autoPlay])
 
+  // Reset playback speed when videoFileId changes (new video)
+  useEffect(() => {
+    const video = videoRef.current
+    if (video) {
+      video.playbackRate = 1.0
+      setPlaybackRate(1.0)
+    }
+  }, [videoFileId])
+
   // ==================== 视频 -> 幻灯片同步（反向同步）====================
   useEffect(() => {
     if (!onSlideClick) return
@@ -213,7 +227,8 @@ export function VideoPreviewPanel({
     const video = videoRef.current
     if (!video) return
     video.currentTime = value
-  }, [])
+    video.playbackRate = playbackRate  // Restore speed after seek
+  }, [playbackRate])
 
   // ==================== 全屏控制 ====================
   const handleFullscreen = useCallback(() => {
@@ -386,6 +401,15 @@ export function VideoPreviewPanel({
                   <span style={{ color: '#fff', marginLeft: '8px' }}>
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
+                  <PlaybackSpeedControl
+                    videoRef={videoRef}
+                    currentSpeed={playbackRate}
+                    onSpeedChange={(speed) => {
+                      changeSpeed(speed)
+                      setPlaybackRate(speed)
+                    }}
+                    style={{ marginLeft: 8 }}
+                  />
                 </Space>
 
                 <Button
