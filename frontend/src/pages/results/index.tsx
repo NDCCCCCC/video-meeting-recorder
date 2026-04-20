@@ -33,7 +33,7 @@ import MergeSelectionBar from '../../components/MergeSelectionBar'
 import TextContentTab from '../../components/TextContentTab'
 import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import SlideCapturePanel from '../../components/SlideCapturePanel'
-import VideoPreviewPanel from '../../components/VideoPreviewPanel'
+import { VideoPreviewPanel } from '../../components/VideoPreviewPanel'
 import {
   getPptsByVideo,
   getSlides,
