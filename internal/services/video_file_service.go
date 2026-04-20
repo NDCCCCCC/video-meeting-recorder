@@ -1334,3 +1334,94 @@ func (s *VideoFileService) extractTaskIDFromPath(path string) *uint {
 	}
 	return nil
 }
+
+// DeleteSplitSegmentsByParentID deletes all split segments for a parent video
+// Parameters:
+//   - parentID: parent video file ID
+//   - userID: user ID requesting the deletion (for ownership validation)
+// Returns:
+//   - count: number of segments deleted
+//   - error: error if deletion fails
+//
+// This method performs cascade deletion:
+// 1. Queries all VideoFile records where parent_id = parentID
+// 2. Filters by ownership (created_by = userID)
+// 3. Filters by source_type IN ('split', 'snapshot') - never deletes original recordings
+// 4. Deletes physical files and thumbnails
+// 5. Deletes database records atomically
+func (s *VideoFileService) DeleteSplitSegmentsByParentID(parentID uint, userID uint) (int, error) {
+	// 1. Query segments with ownership and source type validation
+	var segments []models.VideoFile
+	err := s.db.Where("parent_id = ? AND created_by = ? AND source_type IN ?", parentID, userID, []string{"split", "snapshot"}).Find(&segments).Error
+	if err != nil {
+		return 0, fmt.Errorf("failed to query segments: %w", err)
+	}
+
+	// Return early if no segments found
+	if len(segments) == 0 {
+		return 0, nil
+	}
+
+	s.logger.Info("开始删除分割段",
+		zap.Uint("parent_id", parentID),
+		zap.Uint("user_id", userID),
+		zap.Int("segment_count", len(segments)),
+	)
+
+	// 2. Delete in transaction
+	deletedCount := 0
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		for _, segment := range segments {
+			// Delete physical file
+			if segment.FilePath != "" {
+				if err := os.Remove(segment.FilePath); err != nil {
+					if !os.IsNotExist(err) {
+						s.logger.Warn("删除分割段物理文件失败",
+							zap.Uint("segment_id", segment.ID),
+							zap.String("path", segment.FilePath),
+							zap.Error(err),
+						)
+					}
+					// Continue with DB deletion even if physical file is missing
+				}
+			}
+
+			// Delete thumbnail if exists
+			if segment.ThumbnailPath != nil && *segment.ThumbnailPath != "" {
+				if err := os.Remove(*segment.ThumbnailPath); err != nil {
+					if !os.IsNotExist(err) {
+						s.logger.Warn("删除缩略图失败",
+							zap.Uint("segment_id", segment.ID),
+							zap.String("thumbnail_path", *segment.ThumbnailPath),
+							zap.Error(err),
+						)
+					}
+				}
+			}
+
+			// Delete database record
+			if err := tx.Delete(&segment).Error; err != nil {
+				return fmt.Errorf("failed to delete segment record %d: %w", segment.ID, err)
+			}
+
+			deletedCount++
+			s.logger.Debug("已删除分割段",
+				zap.Uint("segment_id", segment.ID),
+				zap.String("file_name", segment.FileName),
+			)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete segments: %w", err)
+	}
+
+	s.logger.Info("成功删除分割段",
+		zap.Uint("parent_id", parentID),
+		zap.Uint("user_id", userID),
+		zap.Int("deleted_count", deletedCount),
+	)
+
+	return deletedCount, nil
+}

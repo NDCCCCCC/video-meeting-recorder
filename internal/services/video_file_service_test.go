@@ -1117,3 +1117,453 @@ func TestVideoFileService_RenameVideoFile_DuplicateDetection(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "已存在")
 }
+
+// --- DeleteSplitSegmentsByParentID tests (Phase 05-02) ---
+
+func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
+	t.Run("Test1_DeleteSplitSegments", func(t *testing.T) {
+		service, db, tempDir := setupTestService(t)
+
+		userID := uint(1)
+
+		// Create parent video
+		parent := &models.VideoFile{
+			FileName:   "parent_video.mp4",
+			FilePath:   createTestVideoFile(t, tempDir, "parent_video.mp4", "fake parent"),
+			FileSize:   1024000,
+			Duration:   300,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeRecording,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(parent).Error)
+
+		// Create multiple split segments
+		seg1 := &models.VideoFile{
+			FileName:   "segment_001.mp4",
+			FilePath:   "/test/segments/segment_001.mp4",
+			FileSize:   512000,
+			Duration:   30,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		seg2 := &models.VideoFile{
+			FileName:   "segment_002.mp4",
+			FilePath:   "/test/segments/segment_002.mp4",
+			FileSize:   512000,
+			Duration:   30,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		seg3 := &models.VideoFile{
+			FileName:   "segment_003.mp4",
+			FilePath:   "/test/segments/segment_003.mp4",
+			FileSize:   512000,
+			Duration:   30,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(seg1).Error)
+		require.NoError(t, db.Create(seg2).Error)
+		require.NoError(t, db.Create(seg3).Error)
+
+		// Delete segments
+		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+
+		// Verify
+		assert.NoError(t, err)
+		assert.Equal(t, 3, count)
+
+		// Check segments are deleted from DB
+		var segments []models.VideoFile
+		err = db.Where("parent_id = ?", parent.ID).Find(&segments).Error
+		assert.NoError(t, err)
+		assert.Len(t, segments, 0)
+	})
+
+	t.Run("Test2_PhysicalFileDeletion", func(t *testing.T) {
+		service, db, tempDir := setupTestService(t)
+
+		userID := uint(1)
+
+		// Create parent
+		parent := &models.VideoFile{
+			FileName:   "parent_video.mp4",
+			FilePath:   createTestVideoFile(t, tempDir, "parent_video.mp4", "fake parent"),
+			FileSize:   1024000,
+			Duration:   300,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeRecording,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(parent).Error)
+
+		// Create temporary directory for segments
+		segmentsDir := filepath.Join(tempDir, "segments")
+		err := os.MkdirAll(segmentsDir, 0755)
+		require.NoError(t, err)
+
+		// Create physical segment files
+		seg1Path := filepath.Join(segmentsDir, "segment_001.mp4")
+		seg2Path := filepath.Join(segmentsDir, "segment_002.mp4")
+
+		err = os.WriteFile(seg1Path, []byte("fake video data 1"), 0644)
+		require.NoError(t, err)
+		err = os.WriteFile(seg2Path, []byte("fake video data 2"), 0644)
+		require.NoError(t, err)
+
+		// Create segment records with real file paths
+		seg1 := &models.VideoFile{
+			FileName:   "segment_001.mp4",
+			FilePath:   seg1Path,
+			FileSize:   20,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		seg2 := &models.VideoFile{
+			FileName:   "segment_002.mp4",
+			FilePath:   seg2Path,
+			FileSize:   20,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		err = db.Create(seg1).Error
+		require.NoError(t, err)
+		err = db.Create(seg2).Error
+		require.NoError(t, err)
+
+		// Delete segments
+		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, count)
+
+		// Verify physical files are deleted
+		_, err = os.Stat(seg1Path)
+		assert.True(t, os.IsNotExist(err))
+		_, err = os.Stat(seg2Path)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("Test3_ParentRecordingPreserved", func(t *testing.T) {
+		service, db, tempDir := setupTestService(t)
+
+		userID := uint(1)
+
+		// Create parent
+		parent := &models.VideoFile{
+			FileName:   "parent_video.mp4",
+			FilePath:   createTestVideoFile(t, tempDir, "parent_video.mp4", "fake parent"),
+			FileSize:   1024000,
+			Duration:   300,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeRecording,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(parent).Error)
+
+		// Create segments
+		seg1 := &models.VideoFile{
+			FileName:   "segment_001.mp4",
+			FilePath:   "/test/segments/segment_001.mp4",
+			FileSize:   512000,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		seg2 := &models.VideoFile{
+			FileName:   "snapshot_001.mp4",
+			FilePath:   "/test/segments/snapshot_001.mp4",
+			FileSize:   512000,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSnapshot,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(seg1).Error)
+		require.NoError(t, db.Create(seg2).Error)
+
+		// Delete segments
+		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		assert.NoError(t, err)
+		assert.Greater(t, count, 0)
+
+		// Verify parent still exists
+		var parentCheck models.VideoFile
+		err = db.First(&parentCheck, parent.ID).Error
+		assert.NoError(t, err)
+		assert.Equal(t, parent.ID, parentCheck.ID)
+		assert.Equal(t, models.SourceTypeRecording, parentCheck.SourceType)
+	})
+
+	t.Run("Test4_ThumbnailDeletion", func(t *testing.T) {
+		service, db, tempDir := setupTestService(t)
+
+		userID := uint(1)
+
+		// Create parent
+		parent := &models.VideoFile{
+			FileName:   "parent_video.mp4",
+			FilePath:   createTestVideoFile(t, tempDir, "parent_video.mp4", "fake parent"),
+			FileSize:   1024000,
+			Duration:   300,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeRecording,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(parent).Error)
+
+		// Create temporary directory
+		segmentsDir := filepath.Join(tempDir, "segments")
+		err := os.MkdirAll(segmentsDir, 0755)
+		require.NoError(t, err)
+
+		// Create physical files
+		segPath := filepath.Join(segmentsDir, "segment_001.mp4")
+		thumbPath := filepath.Join(segmentsDir, "segment_001.jpg")
+
+		err = os.WriteFile(segPath, []byte("fake video"), 0644)
+		require.NoError(t, err)
+		err = os.WriteFile(thumbPath, []byte("fake thumbnail"), 0644)
+		require.NoError(t, err)
+
+		// Create segment with thumbnail
+		seg := &models.VideoFile{
+			FileName:   "segment_001.mp4",
+			FilePath:   segPath,
+			FileSize:   12,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+			ThumbnailPath: &thumbPath,
+		}
+		err = db.Create(seg).Error
+		require.NoError(t, err)
+
+		// Delete segment
+		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, count)
+
+		// Verify thumbnail is deleted
+		_, err = os.Stat(thumbPath)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("Test5_ReturnsDeletedCount", func(t *testing.T) {
+		service, db, tempDir := setupTestService(t)
+
+		userID := uint(1)
+
+		// Create parent
+		parent := &models.VideoFile{
+			FileName:   "parent_video.mp4",
+			FilePath:   createTestVideoFile(t, tempDir, "parent_video.mp4", "fake parent"),
+			FileSize:   1024000,
+			Duration:   300,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeRecording,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(parent).Error)
+
+		// Create known number of segments
+		for i := 1; i <= 3; i++ {
+			seg := &models.VideoFile{
+				FileName:   fmt.Sprintf("segment_%03d.mp4", i),
+				FilePath:   fmt.Sprintf("/test/segments/segment_%03d.mp4", i),
+				FileSize:   512000,
+				Status:     models.FileStatusReady,
+				SourceType: models.SourceTypeSplit,
+				ParentID:   &parent.ID,
+				CreatedBy:  userID,
+			}
+			require.NoError(t, db.Create(seg).Error)
+		}
+
+		// Create one snapshot
+		snap := &models.VideoFile{
+			FileName:   "snapshot_001.mp4",
+			FilePath:   "/test/segments/snapshot_001.mp4",
+			FileSize:   512000,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSnapshot,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(snap).Error)
+
+		// Delete segments
+		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+
+		// Verify count matches
+		assert.NoError(t, err)
+		assert.Equal(t, 4, count)
+	})
+
+	t.Run("Test6_MissingPhysicalFiles", func(t *testing.T) {
+		service, db, tempDir := setupTestService(t)
+
+		userID := uint(1)
+
+		// Create parent
+		parent := &models.VideoFile{
+			FileName:   "parent_video.mp4",
+			FilePath:   createTestVideoFile(t, tempDir, "parent_video.mp4", "fake parent"),
+			FileSize:   1024000,
+			Duration:   300,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeRecording,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(parent).Error)
+
+		// Create segment records with non-existent file paths
+		seg1 := &models.VideoFile{
+			FileName:   "missing_segment_001.mp4",
+			FilePath:   "/nonexistent/path/segment_001.mp4",
+			FileSize:   0,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		seg2 := &models.VideoFile{
+			FileName:   "missing_segment_002.mp4",
+			FilePath:   "/nonexistent/path/segment_002.mp4",
+			FileSize:   0,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		err := db.Create(seg1).Error
+		require.NoError(t, err)
+		err = db.Create(seg2).Error
+		require.NoError(t, err)
+
+		// Delete segments (should not fail even though files don't exist)
+		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+
+		// Verify success
+		assert.NoError(t, err)
+		assert.Equal(t, 2, count)
+
+		// Verify DB records are deleted
+		var segments []models.VideoFile
+		err = db.Where("parent_id = ?", parent.ID).Find(&segments).Error
+		assert.NoError(t, err)
+		assert.Len(t, segments, 0)
+	})
+
+	t.Run("Test7_OwnershipCheck", func(t *testing.T) {
+		service, db, tempDir := setupTestService(t)
+
+		userID := uint(1)
+		otherUserID := uint(2)
+
+		// Create parent
+		parent := &models.VideoFile{
+			FileName:   "parent_video.mp4",
+			FilePath:   createTestVideoFile(t, tempDir, "parent_video.mp4", "fake parent"),
+			FileSize:   1024000,
+			Duration:   300,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeRecording,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(parent).Error)
+
+		// Create segments for different users
+		seg1 := &models.VideoFile{
+			FileName:   "segment_001.mp4",
+			FilePath:   "/test/segments/segment_001.mp4",
+			FileSize:   512000,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		seg2 := &models.VideoFile{
+			FileName:   "segment_002.mp4",
+			FilePath:   "/test/segments/segment_002.mp4",
+			FileSize:   512000,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  userID,
+		}
+		seg3 := &models.VideoFile{
+			FileName:   "segment_003.mp4",
+			FilePath:   "/test/segments/segment_003.mp4",
+			FileSize:   512000,
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeSplit,
+			ParentID:   &parent.ID,
+			CreatedBy:  otherUserID,
+		}
+		require.NoError(t, db.Create(seg1).Error)
+		require.NoError(t, db.Create(seg2).Error)
+		require.NoError(t, db.Create(seg3).Error)
+
+		// Delete segments for userID only
+		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+
+		// Verify only user's segments are deleted
+		assert.NoError(t, err)
+		assert.Equal(t, 2, count)
+
+		// Check other user's segment still exists
+		var segments []models.VideoFile
+		err = db.Where("parent_id = ? AND created_by = ?", parent.ID, otherUserID).Find(&segments).Error
+		assert.NoError(t, err)
+		assert.Len(t, segments, 1)
+	})
+
+	t.Run("Test8_NoSegmentsToDelete", func(t *testing.T) {
+		service, db, tempDir := setupTestService(t)
+
+		userID := uint(1)
+
+		// Create parent
+		parent := &models.VideoFile{
+			FileName:   "parent_video.mp4",
+			FilePath:   createTestVideoFile(t, tempDir, "parent_video.mp4", "fake parent"),
+			FileSize:   1024000,
+			Duration:   300,
+			Format:     "mp4",
+			Status:     models.FileStatusReady,
+			SourceType: models.SourceTypeRecording,
+			CreatedBy:  userID,
+		}
+		require.NoError(t, db.Create(parent).Error)
+
+		// Try to delete when no segments exist
+		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+
+		// Verify
+		assert.NoError(t, err)
+		assert.Equal(t, 0, count)
+	})
+}
