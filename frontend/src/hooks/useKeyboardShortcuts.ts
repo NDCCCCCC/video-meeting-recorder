@@ -4,7 +4,6 @@
  */
 
 import { useEffect, useCallback } from 'react'
-import { KEYBOARD_SHORTCUTS, matchesShortcut, type KeyboardShortcut } from '../utils/videoPlayerHotkeys'
 import { message } from 'antd'
 
 // ==================== Constants ====================
@@ -16,7 +15,7 @@ const PLAYBACK_SPEEDS = [0.5, 1, 1.25, 1.5, 2]
 // ==================== Hook Interface ====================
 
 interface UseKeyboardShortcutsProps {
-  videoRef: React.RefObject<HTMLVideoElement>
+  videoRef: React.RefObject<HTMLVideoElement | null>
   isPlaying: boolean
   playbackRate: number
   volume: number

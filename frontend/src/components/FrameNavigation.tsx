@@ -5,7 +5,7 @@ import { useVideoFrameNavigation } from '../hooks/useVideoFrameNavigation'
 // ==================== Types ====================
 
 interface FrameNavigationProps {
-  videoRef: React.RefObject<HTMLVideoElement>
+  videoRef: React.RefObject<HTMLVideoElement | null>
   disabled?: boolean
 }
 
