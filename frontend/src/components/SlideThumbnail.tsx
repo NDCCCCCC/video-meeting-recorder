@@ -3,7 +3,6 @@
 
 import { Image } from 'antd'
 import type { SlideImage } from '../types/ppt'
-import React from 'react'
 
 interface SlideThumbnailProps {
   slide: SlideImage

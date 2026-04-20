@@ -2,7 +2,6 @@
 
 import type { ApiResponse } from '../types/auth'
 import type {
-  TranscriptionTriggerRequest,
   TranscriptionTriggerResponse,
   TranscriptionStatusResponse,
   TranscriptionTriggerResponseExtended,

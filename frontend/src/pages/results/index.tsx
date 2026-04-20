@@ -10,7 +10,6 @@ import {
   Space,
   message,
   Popconfirm,
-  Modal,
   Tabs,
   Dropdown,
 } from 'antd'
@@ -37,7 +36,6 @@ import {
   getPptDownloadUrl,
 } from '../../api/ppt'
 import {
-  submitTranscription,
   submitTranscriptionWithMode,
 } from '../../api/transcription'
 import type {
@@ -53,12 +51,6 @@ import TranscriptionProgressModal from '../../components/TranscriptionProgressMo
 const formatFileSize = (bytes: number): string => {
   if (!bytes || bytes === 0) return '0 MB'
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
-}
-
-// 清理文件名中的危险字符
-const sanitizeFileName = (name: string): string => {
-  // 移除路径分隔符和特殊字符，防止路径注入
-  return name.replace(/[\/\\:*?"<>|]/g, '_').substring(0, 100)
 }
 
 export default function ResultDetailPage() {
@@ -212,7 +204,7 @@ export default function ResultDetailPage() {
 
   // 合并模式：切换选择
   const handleToggleSelect = useCallback(
-    (slide: SlideImage, index: number) => {
+    (slide: SlideImage, _index: number) => {
       const slideId = `${currentPptId}_${slide.slide_number}`
       const existing = selectedSlides.find((s) => s.id === slideId)
 

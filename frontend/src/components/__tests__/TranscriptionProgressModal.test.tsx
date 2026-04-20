@@ -2,7 +2,7 @@
  * Type-level and structural tests for TranscriptionProgressModal.
  * Validates props interface, mode support, and stage config at compile time.
  */
-import type { TranscriptionMode, CloudTranscriptionStage } from '../../../types/transcription'
+import type { TranscriptionMode, CloudTranscriptionStage } from '../../types/transcription'
 
 // Test: Props mode field accepts both values
 const localProp: TranscriptionMode = 'local'

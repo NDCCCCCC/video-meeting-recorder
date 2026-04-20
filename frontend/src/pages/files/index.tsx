@@ -29,8 +29,7 @@ import {
   VideoCameraOutlined,
   EyeOutlined,
   ScanOutlined,
-  ScissorsOutlined,
-  FileTextOutlined,
+  ScissorOutlined,
   FilePptOutlined,
   CloudOutlined,
   LaptopOutlined,
@@ -39,7 +38,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import * as videoFileApi from '../../api/video-file'
-import { submitTranscription, submitTranscriptionWithMode } from '../../api/transcription'
+import { submitTranscriptionWithMode } from '../../api/transcription'
 import { getPptsByVideo } from '../../api/ppt'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
@@ -366,7 +365,7 @@ export default function FileManagement() {
             <Button
               type="link"
               size="small"
-              icon={<ScissorsOutlined />}
+              icon={<ScissorOutlined />}
               onClick={() => navigate(`/split/${record.id}`)}
             />
           </Tooltip>

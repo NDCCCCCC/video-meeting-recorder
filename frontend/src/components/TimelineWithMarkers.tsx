@@ -94,8 +94,8 @@ export function TimelineWithMarkers({
 
   // ==================== 事件处理 ====================
 
-  const handleSliderChange: SliderSingleProps['onChange'] = useCallback((value) => {
-    onSeek(value as number)
+  const handleSliderChange: SliderSingleProps['onChange'] = useCallback((value: number) => {
+    onSeek(value)
   }, [onSeek])
 
   const handleSliderClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {

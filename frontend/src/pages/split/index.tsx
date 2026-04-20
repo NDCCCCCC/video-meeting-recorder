@@ -431,7 +431,7 @@ export default function SplitPage() {
           <Alert
             type="info"
             message="暂无分割标记"
-            description="点击视频时间线添加分割点，或输入时间精确定位。添加标记后点击"确认分割"开始处理。"
+            description={'点击视频时间线添加分割点，或输入时间精确定位。添加标记后点击"确认分割"开始处理。'}
             showIcon
           />
         )}
