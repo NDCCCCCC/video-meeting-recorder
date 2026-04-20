@@ -557,6 +557,11 @@ func (s *PPTEditorService) InsertCapturedFrame(pptFileID uint, frameBytes []byte
 		s.db.First(&pptFile, pptFileID)
 	}
 
+		// WR-06: Check for overflow before validation
+		if pptFile.PageCount == 2147483647 { // math.MaxInt32
+			return fmt.Errorf("cannot insert slide: maximum page count reached")
+		}
+
 	// Validate insert position
 	if insertPosition < 1 || insertPosition > pptFile.PageCount+1 {
 		return fmt.Errorf("invalid insert position: %d (valid range: 1-%d)", insertPosition, pptFile.PageCount+1)
