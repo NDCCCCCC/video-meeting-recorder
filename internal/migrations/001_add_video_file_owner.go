@@ -303,5 +303,6 @@ func GetRegisteredMigrations() []interface{} {
 		&AddSegmentFieldsMigration{},
 		&CreateTranscriptionTasksMigration{},
 		&AddPPTCacheFieldsMigration{},
+		&AddSlideTimestampsMigration{},
 	}
 }
