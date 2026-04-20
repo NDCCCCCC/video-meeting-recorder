@@ -30,7 +30,7 @@ import PPTGalleryStrip from '../../components/PPTGalleryStrip'
 import MergeSelectionBar from '../../components/MergeSelectionBar'
 import TextContentTab from '../../components/TextContentTab'
 import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
-import SlideCapturePanel from '../../components/SlideCapturePanel'
+import SlideCapturePanel, { DirectCaptureButton } from '../../components/SlideCapturePanel'
 import { VideoPreviewPanel } from '../../components/VideoPreviewPanel'
 import SlideThumbnail from '../../components/SlideThumbnail'
 import {
@@ -91,6 +91,9 @@ export default function ResultDetailPage() {
 
   // Ref to track cleanup function for polling
   const slidesPollCleanupRef = useRef<(() => void) | null>(null)
+
+  // Ref for thumbnail container (for auto-scroll to current slide)
+  const thumbnailContainerRef = useRef<HTMLDivElement>(null)
 
   // Re-transcribe modal state
   const [retranscribeModalOpen, setRetranscribeModalOpen] = useState(false)
@@ -419,6 +422,18 @@ export default function ResultDetailPage() {
     }
   }, [slides.length])
 
+  // 自动滚动到当前幻灯片缩略图
+  useEffect(() => {
+    if (thumbnailContainerRef.current && currentSlide >= 0) {
+      const container = thumbnailContainerRef.current
+      const thumbnailList = container.children[0] as HTMLElement
+      if (thumbnailList && thumbnailList.children[currentSlide]) {
+        const currentThumbnail = thumbnailList.children[currentSlide] as HTMLElement
+        currentThumbnail.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [currentSlide])
+
   if (loading) {
     return <div style={{ padding: 24, textAlign: 'center' }}>加载中...</div>
   }
@@ -469,12 +484,17 @@ export default function ResultDetailPage() {
       {/* Preview Area with Side-by-Side Layout */}
       <div className="ppt-preview-grid" style={previewAreaStyle}>
         {/* Left: Thumbnail Sidebar (160px) */}
-        <div style={{
-          overflowY: 'auto',
-          borderRight: '1px solid #f0f0f0',
-          padding: 8,
-          background: '#fafafa',
-        }}>
+        <div
+          ref={thumbnailContainerRef}
+          style={{
+            overflowY: 'auto',
+            borderRight: '1px solid #f0f0f0',
+            padding: 8,
+            background: '#fafafa',
+            maxHeight: 'calc(100vh - 200px)',
+            scrollBehavior: 'smooth',
+          }}
+        >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {slides.map((slide, idx) => (
               <SlideThumbnail
