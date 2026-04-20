@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-20T15:25:58.487Z"
+last_updated: "2026-04-20T15:27:35.286Z"
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 36
-  completed_plans: 34
-  percent: 94
+  completed_plans: 35
+  percent: 97
 ---
 
 # STATE.md - Project Memory
@@ -39,11 +39,11 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 ## Current Position
 
 Phase: 08 (video-snapshot-player-enhancement) — EXECUTING
-Plan: 01 of 5 (Snapshot Service Enhancements) — COMPLETED
+Plan: 03 of 5 (Frame-Level Navigation) — COMPLETED
 **Phase:** 08
-**Plan:** 00-01 complete, 02-04 pending
+**Plan:** 00-03 complete, 04 pending
 **Status:** Phase 8 in progress
-**Progress:** [███░░░░░░] 40% (2/5 plans complete)
+**Progress:** [█████░░░░] 60% (3/5 plans complete)
 
 ### Blockers
 
@@ -71,6 +71,7 @@ None identified.
 ---
 | Phase 05-file-rename P02 | 18 | 4 tasks | 5 files |
 | Phase 07 P04 | 3min | 3 tasks | 1 files |
+| Phase 08 P03 | 64 | 2 tasks | 2 files |
 
 ## Roadmap Evolution
 
@@ -191,6 +192,12 @@ None identified.
 ---
 
 ## Decisions Log
+
+### 2026-04-20 - Frame-Level Navigation Implementation
+
+**Decision:** Frame time calculated as 1/30 second for standard 30fps videos
+**Rationale:** HTML5 video API doesn't provide frame-level seeking; using 1/30s increments provides sufficient precision for slide capture workflows
+**Outcome:** Frame navigation hook and component created with browser compatibility detection
 
 ### 2026-04-17 - Roadmap Creation
 
