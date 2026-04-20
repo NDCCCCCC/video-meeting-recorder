@@ -23,6 +23,7 @@ import {
   LaptopOutlined,
   ScanOutlined,
   CameraOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import dayjs from 'dayjs'
@@ -32,6 +33,7 @@ import MergeSelectionBar from '../../components/MergeSelectionBar'
 import TextContentTab from '../../components/TextContentTab'
 import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import SlideCapturePanel from '../../components/SlideCapturePanel'
+import VideoPreviewPanel from '../../components/VideoPreviewPanel'
 import {
   getPptsByVideo,
   getSlides,
@@ -86,6 +88,9 @@ export default function ResultDetailPage() {
 
   // Slide capture panel state
   const [isCapturePanelOpen, setIsCapturePanelOpen] = useState(false)
+
+  // Video preview panel state
+  const [isVideoPanelVisible, setIsVideoPanelVisible] = useState(true)
 
   // 当前选中的 PPT
   const currentPpt = ppts.find((p) => p.id === currentPptId)
@@ -371,6 +376,16 @@ export default function ResultDetailPage() {
     setCurrentSlide(newSlideNumber - 1) // Convert to 0-based index
   }, [loadPpts, loadSlides, currentPptId])
 
+  // 处理视频->幻灯片同步回调（反向同步）
+  const handleVideoSlideChange = useCallback((slideNumber: number) => {
+    // VideoPreviewPanel uses 1-based slide numbers
+    // Convert to 0-based index for PPTPreview
+    const index = slideNumber - 1
+    if (index >= 0 && index < slides.length) {
+      setCurrentSlide(index)
+    }
+  }, [slides.length])
+
   if (loading) {
     return <div style={{ padding: 24, textAlign: 'center' }}>加载中...</div>
   }
@@ -433,6 +448,18 @@ export default function ResultDetailPage() {
               currentPptId={currentPptId}
             />
           </Card>
+
+          {/* 视频预览面板 */}
+          {isVideoPanelVisible && (
+            <VideoPreviewPanel
+              videoFileId={videoFileIdNum}
+              currentSlide={currentSlide + 1} // Convert to 1-based
+              onSlideClick={handleVideoSlideChange}
+              style={{ marginTop: 16 }}
+              autoPlay={false}
+              showControls={true}
+            />
+          )}
 
           {/* 合并选择栏 - 仅在合并模式显示 */}
           {isMergeMode && (
@@ -530,6 +557,13 @@ export default function ResultDetailPage() {
                 onClick={() => setIsMergeMode(!isMergeMode)}
               >
                 {isMergeMode ? '取消合并' : '合并幻灯片'}
+              </Button>
+              <Button
+                block
+                icon={<VideoCameraOutlined />}
+                onClick={() => setIsVideoPanelVisible(!isVideoPanelVisible)}
+              >
+                {isVideoPanelVisible ? '隐藏视频预览' : '显示视频预览'}
               </Button>
               <Button
                 block
