@@ -31,7 +31,7 @@
     - [x] 06-06-02-PLAN.md — Side-by-side 16:9 layout for PPT and video previews
     - [x] 06-06-03-PLAN.md — Direct slide capture without modal
     - [x] 06-06-04-PLAN.md — Optimized vertical scrolling thumbnails with lazy loading
-- [ ] Phase 7: Preview Page UI Improvements (4/4 plans) — **in progress**
+- [x] Phase 7: Preview Page UI Improvements (4/4 plans) — **completed 2026-04-20**
     - [x] 07-01-PLAN.md — Thumbnail sidebar fixed height & video aspect ratio correction
     - [x] 07-02-PLAN.md — Editable progress bar time input & PPT results dropdown
     - [x] 07-03-PLAN.md — Info display reorganization & operations bar horizontal layout
@@ -55,7 +55,7 @@
 | 4. Cloud Services | v1.0 | 5/5 | Complete | 2026-04-18 |
 | 5. File Rename & Smart Cleanup | v1.1 | 2/2 | **Complete** | 2026-04-20 |
 | 6. PPT Editor UI Improvements | v1.1 | 7/7 | **Complete** | 2026-04-20 |
-| 7. Preview Page UI Improvements | v1.1 | 3/4 | In Progress | - |
+| 7. Preview Page UI Improvements | v1.1 | 4/4 | **Complete** | 2026-04-20 |
 | 8. Video Snapshot & Player Enhancement | v1.1 | 5/5 | **Complete** | 2026-04-20 |
 
 ---
