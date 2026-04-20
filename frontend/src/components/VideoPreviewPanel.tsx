@@ -90,10 +90,13 @@ export function VideoPreviewPanel({
 
         if (!mounted) return
 
-        if (response.data?.success && response.data?.slide_timestamps) {
+        if (response.data?.success && Array.isArray(response.data?.slide_timestamps)) {
           const map = new Map<number, number>()
           response.data.slide_timestamps.forEach((ts: SlideTimestamp) => {
-            map.set(ts.slide_number, ts.timestamp)
+            // WR-02: Add validation for slide_number and timestamp
+            if (ts.slide_number && typeof ts.timestamp === 'number') {
+              map.set(ts.slide_number, ts.timestamp)
+            }
           })
           setTimestampMap(map)
 
@@ -269,7 +272,8 @@ export function VideoPreviewPanel({
                 icon={<SyncOutlined />}
                 size="small"
                 onClick={() => {
-                  if (currentSlide) {
+                  // WR-08: Use explicit undefined check instead of falsy check
+                  if (currentSlide !== undefined) {
                     const timestamp = timestampMap.get(currentSlide)
                     if (timestamp !== undefined && videoRef.current) {
                       videoRef.current.currentTime = timestamp
