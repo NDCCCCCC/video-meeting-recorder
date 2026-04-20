@@ -13,9 +13,12 @@ commit_docs:
   - hash: "bf24bf1"
     message: "fix(06-06-01): fix TypeScript compilation errors"
     files: [frontend/src/components/PlaybackSpeedControl.tsx, frontend/src/components/VideoPreviewPanel.tsx]
+  - hash: "e3ed01d"
+    message: "feat(06-06-01): add 3x and 5x playback speed options"
+    files: [frontend/src/components/PlaybackSpeedControl.tsx]
 depends_on: []
 provides:
-  - speed-control: "Video playback speed control with 0.5x-2x options"
+  - speed-control: "Video playback speed control with 0.5x-5x options (7 speeds)"
   - usePlaybackSpeed: "Hook for managing video playback rate state"
 affects:
   - video-preview: "VideoPreviewPanel now has speed control UI"
