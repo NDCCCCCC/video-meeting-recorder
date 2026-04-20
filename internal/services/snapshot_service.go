@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/cpic/record_v2/internal/config"
@@ -20,6 +21,7 @@ type SnapshotService struct {
 	config           *config.Config
 	ffmpegPath       string
 	videoFileService *VideoFileService
+	snapshotMutexes  sync.Map // map[uint]*sync.Mutex - one mutex per task
 }
 
 func NewSnapshotService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, videoFileService *VideoFileService) *SnapshotService {
@@ -36,10 +38,21 @@ func NewSnapshotService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, vid
 	}
 }
 
+// getMutex returns (or creates) a mutex for the specified task ID
+func (s *SnapshotService) getMutex(taskID uint) *sync.Mutex {
+	mutex, _ := s.snapshotMutexes.LoadOrStore(taskID, &sync.Mutex{})
+	return mutex.(*sync.Mutex)
+}
+
 // GenerateSnapshot generates an MP4 snapshot from an active recording task's MKV file.
 // Per D-08/D-09: copies the partial MKV to temp, converts to MP4, registers via callback.
 // Per D-15: Incremental — each snapshot starts from the end of the previous snapshot.
 func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models.VideoFile, error) {
+	// Acquire mutex for this task to prevent concurrent snapshots
+	mutex := s.getMutex(taskID)
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	// 1. Load recording task
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, taskID).Error; err != nil {
@@ -179,7 +192,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 		return nil, fmt.Errorf("注册快照文件失败: %w", err)
 	}
 
-	s.logger.Info("快照生成完成",
+	s.logger.Info("快照生成完成 (互斥锁已释放)",
 		zap.Uint("task_id", taskID),
 		zap.Uint("snapshot_file_id", snapshotFile.ID),
 		zap.Float64("offset", seekOffset),
