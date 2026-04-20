@@ -62,6 +62,16 @@ a:hover {
   grid-template-columns: 160px 1fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
+  align-items: start;
+}
+
+.ppt-preview-grid .thumbnail-sidebar {
+  height: calc((100vw - 32px - 160px - 32px) / 2 * 9 / 16);
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  border-right: 1px solid #f0f0f0;
+  padding: 8px;
+  background: #fafafa;
 }
 
 /* Responsive breakpoint: Stack vertically on screens < 1200px */
