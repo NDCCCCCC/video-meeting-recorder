@@ -13,6 +13,8 @@ import {
 } from '@ant-design/icons'
 import type { VideoFile } from '../types/video-file'
 import { getToken } from '../api/apiClient'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import { FrameNavigation } from './FrameNavigation'
 
 // ==================== 常量 ====================
 const PLAYBACK_RATES: readonly number[] = [0.5, 1, 1.25, 1.5, 2]
@@ -129,7 +131,9 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [volume, setVolume] = useState(1)
+  const [volume, setVolume] = useState(1) // Store pre-mute volume
+  const [actualVolume, setActualVolume] = useState(1) // Actual volume applied to video
+  const [muted, setMuted] = useState(false)
   const [playbackRate, setPlaybackRate] = useState(1)
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(true)
@@ -185,10 +189,51 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
   }, [playbackRate])
 
   const handleVolumeChange = useCallback((value: number) => {
-    setVolume(value)
     const video = videoRef.current
-    if (video) video.volume = value
-  }, [])
+    if (!video) return
+
+    setVolume(value)
+    setActualVolume(value)
+    video.volume = value
+
+    // Auto-unmute if volume increased from 0
+    if (value > 0 && muted) {
+      setMuted(false)
+    }
+  }, [muted])
+
+  const handleMuteToggle = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    if (muted) {
+      // Unmute: restore previous volume
+      const restoreVolume = volume > 0 ? volume : 0.5
+      setMuted(false)
+      setActualVolume(restoreVolume)
+      video.volume = restoreVolume
+      video.muted = false
+    } else {
+      // Mute: store current volume and set to 0
+      setMuted(true)
+      setVolume(video.volume)
+      setActualVolume(0)
+      video.muted = true
+    }
+  }, [muted, volume])
+
+  const handleSeekWithInfinity = useCallback((seconds: number) => {
+    const video = videoRef.current
+    if (!video || !duration) return
+
+    if (seconds === Infinity) {
+      video.currentTime = video.duration
+    } else if (seconds === -Infinity) {
+      video.currentTime = 0
+    } else {
+      video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
+    }
+  }, [duration])
 
   // ==================== 全屏控制 ====================
   const handleFullscreen = useCallback(() => {
