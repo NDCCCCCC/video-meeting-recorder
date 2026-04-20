@@ -64,7 +64,16 @@ export interface RollbackResponse {
 
 // 获取 PPT 幻灯片列表
 export async function getSlides(pptFileId: number): Promise<ApiResponse<SlidesResponse>> {
-  return apiRequest<SlidesResponse>(`/api/v1/ppts/${pptFileId}/slides`)
+  const response = await apiRequest<SlidesResponse>(`/api/v1/ppts/${pptFileId}/slides`)
+  // Debug logging
+  console.log('[DEBUG] getSlides pptFileId:', pptFileId)
+  console.log('[DEBUG] getSlides response:', response)
+  if (response.data) {
+    console.log('[DEBUG] slide_count:', response.data.slide_count)
+    console.log('[DEBUG] slides length:', response.data.slides?.length)
+    console.log('[DEBUG] status:', response.data.status)
+  }
+  return response
 }
 
 // 获取视频的所有 PPT 结果

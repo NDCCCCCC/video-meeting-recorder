@@ -104,7 +104,7 @@ export default function ResultDetailPage() {
       const response = await getPptsByVideo(videoFileIdNum)
       if (response.data && response.data.ppts) {
         const sortedPpts = response.data.ppts.sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          (a: PPTResult, b: PPTResult) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
         setPpts(sortedPpts)
         if (sortedPpts.length > 0) {
