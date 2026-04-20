@@ -927,3 +927,193 @@ func TestVideoFileService_AutoScan_SplitCallback(t *testing.T) {
 	// CreateSegmentFile is called for each segment, and all segments
 	// appear in the database with correct parent_id and source_type
 }
+
+// --- RenameVideoFile tests (Phase 05) ---
+
+func TestVideoFileService_RenameVideoFile_Success(t *testing.T) {
+	service, db, tempDir := setupTestService(t)
+
+	// Create test user and video file
+	userID := uint(1)
+	parentID := uint(42)
+	videoFile := &models.VideoFile{
+		FileName:   "test_video.mp4",
+		FilePath:   createTestVideoFile(t, tempDir, "test_video.mp4", "fake video content"),
+		FileSize:   1024,
+		Duration:   60,
+		Format:     "mp4",
+		Resolution: "1920x1080",
+		Bitrate:    5000,
+		Codec:      "h264",
+		SourceType: models.SourceTypeSplit,
+		ParentID:   &parentID,
+		CreatedBy:  userID,
+		Status:     models.FileStatusReady,
+	}
+	require.NoError(t, db.Create(videoFile).Error)
+
+	// Rename the file
+	err := service.RenameVideoFile(videoFile.ID, "new_video_name", userID)
+	assert.NoError(t, err)
+
+	// Verify database was updated
+	var updated models.VideoFile
+	err = db.First(&updated, videoFile.ID).Error
+	require.NoError(t, err)
+	assert.Equal(t, "new_video_name.mp4", updated.FileName)
+	assert.True(t, strings.HasSuffix(updated.FilePath, "new_video_name.mp4"))
+
+	// Verify physical file was renamed
+	_, err = os.Stat(updated.FilePath)
+	assert.NoError(t, err, "Renamed file should exist")
+
+	// Verify old file path no longer exists
+	_, err = os.Stat(videoFile.FilePath)
+	assert.True(t, os.IsNotExist(err), "Old file path should not exist")
+}
+
+func TestVideoFileService_RenameVideoFile_PreservesExtension(t *testing.T) {
+	service, db, tempDir := setupTestService(t)
+
+	userID := uint(1)
+	parentID := uint(42)
+	videoFile := &models.VideoFile{
+		FileName:   "test_video.mp4",
+		FilePath:   createTestVideoFile(t, tempDir, "test_video.mp4", "fake video content"),
+		FileSize:   1024,
+		Duration:   60,
+		Format:     "mp4",
+		SourceType: models.SourceTypeSplit,
+		ParentID:   &parentID,
+		CreatedBy:  userID,
+		Status:     models.FileStatusReady,
+	}
+	require.NoError(t, db.Create(videoFile).Error)
+
+	// Try to rename with custom extension (should be ignored)
+	err := service.RenameVideoFile(videoFile.ID, "new_name.mkv", userID)
+	assert.NoError(t, err)
+
+	var updated models.VideoFile
+	db.First(&updated, videoFile.ID)
+	assert.Equal(t, "new_name.mp4", updated.FileName, "Should preserve .mp4 extension")
+	assert.True(t, strings.HasSuffix(updated.FilePath, ".mp4"))
+}
+
+func TestVideoFileService_RenameVideoFile_OriginalRecordingImmutable(t *testing.T) {
+	service, db, tempDir := setupTestService(t)
+
+	userID := uint(1)
+	videoFile := &models.VideoFile{
+		FileName:   "test_video.mp4",
+		FilePath:   createTestVideoFile(t, tempDir, "test_video.mp4", "fake video content"),
+		FileSize:   1024,
+		Duration:   60,
+		Format:     "mp4",
+		SourceType: models.SourceTypeRecording,
+		ParentID:   nil, // Original recording
+		CreatedBy:  userID,
+		Status:     models.FileStatusReady,
+	}
+	require.NoError(t, db.Create(videoFile).Error)
+
+	// Try to rename original recording
+	err := service.RenameVideoFile(videoFile.ID, "new_name", userID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "不能重命名原始录制")
+}
+
+func TestVideoFileService_RenameVideoFile_OwnershipValidation(t *testing.T) {
+	service, db, tempDir := setupTestService(t)
+
+	userID := uint(1)
+	otherUserID := uint(2)
+	parentID := uint(42)
+	videoFile := &models.VideoFile{
+		FileName:   "test_video.mp4",
+		FilePath:   createTestVideoFile(t, tempDir, "test_video.mp4", "fake video content"),
+		FileSize:   1024,
+		Duration:   60,
+		Format:     "mp4",
+		SourceType: models.SourceTypeSplit,
+		ParentID:   &parentID,
+		CreatedBy:  userID,
+		Status:     models.FileStatusReady,
+	}
+	require.NoError(t, db.Create(videoFile).Error)
+
+	// Try to rename as different user
+	err := service.RenameVideoFile(videoFile.ID, "new_name", otherUserID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "无权重命名")
+}
+
+func TestVideoFileService_RenameVideoFile_RollbackOnFilesystemError(t *testing.T) {
+	service, db, tempDir := setupTestService(t)
+
+	userID := uint(1)
+	parentID := uint(42)
+	videoFile := &models.VideoFile{
+		FileName:   "test_video.mp4",
+		FilePath:   createTestVideoFile(t, tempDir, "test_video.mp4", "fake video content"),
+		FileSize:   1024,
+		Duration:   60,
+		Format:     "mp4",
+		SourceType: models.SourceTypeSplit,
+		ParentID:   &parentID,
+		CreatedBy:  userID,
+		Status:     models.FileStatusReady,
+	}
+	require.NoError(t, db.Create(videoFile).Error)
+
+	// Delete the physical file to simulate filesystem error
+	require.NoError(t, os.Remove(videoFile.FilePath))
+
+	// Try to rename (should fail due to missing source file)
+	err := service.RenameVideoFile(videoFile.ID, "new_name", userID)
+	assert.Error(t, err)
+
+	// Verify database was NOT updated (transaction rolled back)
+	var updated models.VideoFile
+	err = db.First(&updated, videoFile.ID).Error
+		require.NoError(t, err)
+	assert.Equal(t, videoFile.FileName, updated.FileName, "FileName should not change")
+	assert.Equal(t, videoFile.FilePath, updated.FilePath, "FilePath should not change")
+}
+
+func TestVideoFileService_RenameVideoFile_DuplicateDetection(t *testing.T) {
+	service, db, tempDir := setupTestService(t)
+
+	userID := uint(1)
+	parentID := uint(42)
+
+	// Create two split files from same parent
+	file1 := &models.VideoFile{
+		FileName:   "existing_video.mp4",
+		FilePath:   createTestVideoFile(t, tempDir, "existing_video.mp4", "fake video content 1"),
+		FileSize:   1024,
+		Format:     "mp4",
+		SourceType: models.SourceTypeSplit,
+		ParentID:   &parentID,
+		CreatedBy:  userID,
+		Status:     models.FileStatusReady,
+	}
+	require.NoError(t, db.Create(file1).Error)
+
+	file2 := &models.VideoFile{
+		FileName:   "test_video.mp4",
+		FilePath:   createTestVideoFile(t, tempDir, "test_video.mp4", "fake video content 2"),
+		FileSize:   1024,
+		Format:     "mp4",
+		SourceType: models.SourceTypeSplit,
+		ParentID:   &parentID,
+		CreatedBy:  userID,
+		Status:     models.FileStatusReady,
+	}
+	require.NoError(t, db.Create(file2).Error)
+
+	// Rename file2 to the same name as file1
+	err := service.RenameVideoFile(file2.ID, "existing_video", userID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "已存在")
+}

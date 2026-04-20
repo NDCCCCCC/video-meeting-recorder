@@ -1215,6 +1215,113 @@ func (s *VideoFileService) findVideoFiles(dir string) ([]fileInfoWithPath, error
 	return files, err
 }
 
+// RenameVideoFile renames a video file with atomic database and filesystem update
+// Parameters:
+//   - id: video file ID
+//   - newName: new filename without extension (extension will be preserved)
+//   - userID: user ID requesting the rename (for ownership validation)
+func (s *VideoFileService) RenameVideoFile(id uint, newName string, userID uint) error {
+	// Validation: load video file
+	var videoFile models.VideoFile
+	if err := s.db.First(&videoFile, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("视频文件不存在")
+		}
+		return fmt.Errorf("查询视频文件失败: %w", err)
+	}
+
+	// Validation: check ownership
+	if videoFile.CreatedBy != userID {
+		return fmt.Errorf("无权重命名此文件")
+	}
+
+	// Validation: check immutability (original recordings cannot be renamed)
+	if videoFile.SourceType == models.SourceTypeRecording && videoFile.ParentID == nil {
+		return fmt.Errorf("不能重命名原始录制文件")
+	}
+
+	// Validation: sanitize new name
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return fmt.Errorf("新文件名不能为空")
+	}
+	if len(newName) > 200 {
+		return fmt.Errorf("新文件名过长（最大200字符）")
+	}
+	// Reject path separators to prevent path traversal attacks
+	if strings.ContainsAny(newName, "/\\") {
+		return fmt.Errorf("文件名不能包含路径分隔符")
+	}
+
+	// Preserve file extension
+	newName = strings.TrimSuffix(newName, filepath.Ext(newName))
+	if newName == "" {
+		return fmt.Errorf("新文件名不能为空")
+	}
+	ext := filepath.Ext(videoFile.FilePath)
+	if ext == "" {
+		ext = ".mp4" // Default extension if none exists
+	}
+	newFileName := newName + ext
+
+	// Validation: check for duplicate filename in same directory
+	dir := filepath.Dir(videoFile.FilePath)
+	newFilePath := filepath.Join(dir, newFileName)
+
+	// Check if another file with the same path already exists
+	var existingFile models.VideoFile
+	err := s.db.Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
+	if err == nil {
+		return fmt.Errorf("目标文件名已存在")
+	} else if err != gorm.ErrRecordNotFound {
+		return fmt.Errorf("检查文件名重复失败: %w", err)
+	}
+
+	// Atomic rename: database transaction + filesystem rename
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Step 1: Rename physical file
+		if err := os.Rename(videoFile.FilePath, newFilePath); err != nil {
+			s.logger.Warn("重命名物理文件失败",
+				zap.Uint("file_id", id),
+				zap.String("old_path", videoFile.FilePath),
+				zap.String("new_path", newFilePath),
+				zap.Error(err),
+			)
+			return fmt.Errorf("重命名物理文件失败: %w", err)
+		}
+
+		// Step 2: Update database record
+		if err := tx.Model(&videoFile).Updates(map[string]interface{}{
+			"file_name": newFileName,
+			"file_path": newFilePath,
+		}).Error; err != nil {
+			// Rollback: try to revert physical file rename
+			s.logger.Error("更新数据库失败，尝试回滚文件重命名",
+				zap.Uint("file_id", id),
+				zap.Error(err),
+			)
+			if rollbackErr := os.Rename(newFilePath, videoFile.FilePath); rollbackErr != nil {
+				s.logger.Error("回滚文件重命名失败",
+					zap.String("from", newFilePath),
+					zap.String("to", videoFile.FilePath),
+					zap.Error(rollbackErr),
+				)
+			}
+			return fmt.Errorf("更新数据库记录失败: %w", err)
+		}
+
+		s.logger.Info("视频文件重命名成功",
+			zap.Uint("file_id", id),
+			zap.String("old_name", videoFile.FileName),
+			zap.String("new_name", newFileName),
+		)
+
+		return nil
+	})
+
+	return err
+}
+
 // extractTaskIDFromPath 从路径提取任务ID
 func (s *VideoFileService) extractTaskIDFromPath(path string) *uint {
 	dir := filepath.Dir(path)
