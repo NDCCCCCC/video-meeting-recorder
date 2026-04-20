@@ -21,7 +21,8 @@ interface PPTPreviewProps {
   onToggleSelect: (slide: SlideImage, index: number) => void
   isLoading: boolean
   currentPptId?: number
-  containerStyle?: React.CSSProperties  // NEW: Allow custom container style
+  containerStyle?: React.CSSProperties  // Allow custom container style
+  hideThumbnailSidebar?: boolean  // Hide built-in thumbnail sidebar for side-by-side layout
 }
 
 export default function PPTPreview({
@@ -33,7 +34,8 @@ export default function PPTPreview({
   onToggleSelect,
   isLoading,
   currentPptId = 0,
-  containerStyle,  // NEW
+  containerStyle,
+  hideThumbnailSidebar = false,
 }: PPTPreviewProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -100,7 +102,7 @@ export default function PPTPreview({
           borderRight: '1px solid #f0f0f0',
           padding: 8,
           background: '#fafafa',
-          display: isFullscreen ? 'none' : 'block',
+          display: isFullscreen || hideThumbnailSidebar ? 'none' : 'block',
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
