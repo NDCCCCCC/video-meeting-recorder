@@ -515,6 +515,7 @@ export default function ResultDetailPage() {
             isLoading={isLoadingSlides}
             currentPptId={currentPptId}
             containerStyle={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+            hideThumbnailSidebar={true}
           />
         </div>
 
