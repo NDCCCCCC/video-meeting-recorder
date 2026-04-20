@@ -190,7 +190,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 	defer os.Remove(tempMKV) // Clean up temp MKV after conversion
 
 	// 6. Convert temp MKV to MP4 with incremental offset (D-15)
-	outputMP4 = filepath.Join(tempDir, filename)
+	outputMP4 := filepath.Join(tempDir, filename)
 
 	// Re-validate task status before starting FFmpeg to catch race conditions
 	var currentTask models.VideoRecordingTask
