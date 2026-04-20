@@ -117,3 +117,8 @@ export async function renameVideoFile(
     body: JSON.stringify({ new_name: newName }),
   })
 }
+
+// 获取视频的所有分割段
+export async function getVideoSegments(parentId: number): Promise<ApiResponse<VideoFile[]>> {
+  return apiRequest<VideoFile[]>(`/api/v1/videos/${parentId}/segments`)
+}
