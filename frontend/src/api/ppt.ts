@@ -202,3 +202,25 @@ export function getCapturedPreviewUrl(pptFileId: number, timestamp: number): str
   const token = getToken() || ''
   return `/api/v1/ppts/${pptFileId}/captured-preview?ts=${timestamp}&token=${token}`
 }
+
+// 重排序幻灯片请求
+export interface ReorderSlidesRequest {
+  slide_order: number[] // 新的幻灯片顺序 [slide_number, ...]
+}
+
+export interface ReorderSlidesResponse {
+  success: boolean
+  message: string
+  new_order: number[]
+}
+
+// 重排序幻灯片
+export async function reorderSlides(
+  pptFileId: number,
+  slideOrder: number[]
+): Promise<ApiResponse<ReorderSlidesResponse>> {
+  return apiRequest<ReorderSlidesResponse>(`/api/v1/ppts/${pptFileId}/reorder`, {
+    method: 'POST',
+    body: JSON.stringify({ slide_order: slideOrder }),
+  })
+}
