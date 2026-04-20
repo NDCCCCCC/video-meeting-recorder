@@ -10,6 +10,15 @@ interface VideoRefState {
   isPlaying: boolean
 }
 
+interface DirectCaptureButtonProps {
+  pptFileId: number
+  videoFileId: number
+  currentSlide: number
+  onCaptureComplete: (newSlideNumber: number) => void
+  videoRef: React.RefObject<HTMLVideoElement>
+  disabled?: boolean
+}
+
 const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
   pptFileId,
   videoFileId,
@@ -304,6 +313,74 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
         </div>
       </Space>
     </Modal>
+  )
+}
+
+// Direct capture button - captures current video frame and inserts as next slide
+export const DirectCaptureButton: React.FC<DirectCaptureButtonProps> = ({
+  pptFileId,
+  videoFileId,
+  currentSlide,
+  onCaptureComplete,
+  videoRef,
+  disabled = false,
+}) => {
+  const [isCapturing, setIsCapturing] = useState(false)
+
+  const handleDirectCapture = async () => {
+    // Validate video is loaded
+    const video = videoRef.current
+    if (!video || video.duration === 0) {
+      message.error('视频未加载，无法捕获')
+      return
+    }
+
+    setIsCapturing(true)
+
+    try {
+      // Step 1: Capture current frame from video
+      const captureResponse = await captureFrame(pptFileId, video.currentTime)
+
+      if (!captureResponse.data?.success || !captureResponse.data?.frame_data) {
+        message.error('捕获失败，请重试')
+        return
+      }
+
+      // Step 2: Insert as next slide (currentSlide + 1)
+      const insertPosition = currentSlide + 1
+      const insertResponse = await insertSlide(
+        pptFileId,
+        captureResponse.data.frame_data,
+        insertPosition,
+        video.currentTime
+      )
+
+      if (insertResponse.data?.success) {
+        const newSlideNumber = insertResponse.data.inserted_slide_number
+        message.success(`幻灯片已插入到位置 ${newSlideNumber}`)
+        onCaptureComplete(newSlideNumber)
+      } else {
+        message.error('插入幻灯片失败')
+      }
+    } catch (error) {
+      console.error('Direct capture failed:', error)
+      message.error('捕获失败: ' + (error as Error).message)
+    } finally {
+      setIsCapturing(false)
+    }
+  }
+
+  return (
+    <Button
+      type="primary"
+      icon={<CameraOutlined />}
+      onClick={handleDirectCapture}
+      loading={isCapturing}
+      disabled={disabled || isCapturing}
+      block
+    >
+      {isCapturing ? '捕获中...' : '捕获幻灯片'}
+    </Button>
   )
 }
 
