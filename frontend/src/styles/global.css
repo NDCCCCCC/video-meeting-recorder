@@ -62,7 +62,7 @@ a:hover {
   grid-template-columns: 160px 1fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .ppt-preview-grid .thumbnail-sidebar {
