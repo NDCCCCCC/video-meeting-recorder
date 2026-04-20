@@ -22,6 +22,7 @@ import {
   CloudOutlined,
   LaptopOutlined,
   ScanOutlined,
+  CameraOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import dayjs from 'dayjs'
@@ -30,6 +31,7 @@ import PPTGalleryStrip from '../../components/PPTGalleryStrip'
 import MergeSelectionBar from '../../components/MergeSelectionBar'
 import TextContentTab from '../../components/TextContentTab'
 import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
+import SlideCapturePanel from '../../components/SlideCapturePanel'
 import {
   getPptsByVideo,
   getSlides,
@@ -81,6 +83,9 @@ export default function ResultDetailPage() {
 
   // Duplicate detection panel state
   const [duplicateDetectionOpen, setDuplicateDetectionOpen] = useState(false)
+
+  // Slide capture panel state
+  const [isCapturePanelOpen, setIsCapturePanelOpen] = useState(false)
 
   // 当前选中的 PPT
   const currentPpt = ppts.find((p) => p.id === currentPptId)
@@ -353,6 +358,19 @@ export default function ResultDetailPage() {
     }
   }, [loadPpts, loadSlides, currentPptId])
 
+  // 处理幻灯片插入后的回调
+  const handleSlideInserted = useCallback(async (newSlideNumber: number) => {
+    message.success(`幻灯片已插入到位置 ${newSlideNumber}`)
+    // 刷新 PPT 列表以获取更新的页数
+    await loadPpts()
+    // 重新加载当前 PPT 的幻灯片
+    if (currentPptId > 0) {
+      await loadSlides(currentPptId)
+    }
+    // 更新当前幻灯片到新插入的幻灯片
+    setCurrentSlide(newSlideNumber - 1) // Convert to 0-based index
+  }, [loadPpts, loadSlides, currentPptId])
+
   if (loading) {
     return <div style={{ padding: 24, textAlign: 'center' }}>加载中...</div>
   }
@@ -520,6 +538,13 @@ export default function ResultDetailPage() {
               >
                 检测重复幻灯片
               </Button>
+              <Button
+                block
+                icon={<CameraOutlined />}
+                onClick={() => setIsCapturePanelOpen(true)}
+              >
+                捕获幻灯片
+              </Button>
               <Popconfirm
                 title="确定要删除此PPT文件吗？删除后无法恢复。"
                 onConfirm={handleDeletePpt}
@@ -563,6 +588,17 @@ export default function ResultDetailPage() {
         visible={duplicateDetectionOpen}
         onClose={() => setDuplicateDetectionOpen(false)}
         onSlidesDeleted={handleSlidesDeleted}
+      />
+
+      {/* 捕获幻灯片面板 */}
+      <SlideCapturePanel
+        pptFileId={currentPptId}
+        videoFileId={videoFileIdNum}
+        currentSlide={currentSlide + 1} // Convert to 1-based
+        totalSlides={slides.length}
+        onSlideInserted={handleSlideInserted}
+        onCancel={() => setIsCapturePanelOpen(false)}
+        open={isCapturePanelOpen}
       />
     </div>
   )
