@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -82,7 +83,7 @@ func (s *SlideCacheService) GetOrExtractSlides(pptFileID uint) ([]SlideImageData
 		zap.String("pptx_path", pptFile.FilePath))
 
 	// Extract slides using SlideExtractor
-	slideCount, err := s.slideExtractor.ExtractSlides(nil, pptFile.FilePath, cacheDir)
+	slideCount, err := s.slideExtractor.ExtractSlides(context.Background(), pptFile.FilePath, cacheDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract slides: %w", err)
 	}
