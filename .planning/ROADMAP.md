@@ -21,8 +21,8 @@
 <summary>🔄 v1.1 文件管理与编辑增强 (Phases 5-6) — IN PROGRESS</summary>
 
 - [ ] Phase 5: File Rename & Smart Cleanup (2/2 plans)
-    - [ ] 05-01-PLAN.md — File rename API and UI for split videos and PPTs
-    - [ ] 05-02-PLAN.md — Smart cleanup logic for re-splitting videos
+    - [x] 05-01-PLAN.md — File rename API and UI for split videos and PPTs
+    - [x] 05-02-PLAN.md — Smart cleanup logic for re-splitting videos
 - [ ] Phase 6: PPT Editor (3/3 plans)
     - [ ] 06-01-PLAN.md — Duplicate slide detection and deletion
     - [ ] 06-02-PLAN.md — Video preview integration with timestamp sync
