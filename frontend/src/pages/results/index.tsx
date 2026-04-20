@@ -192,25 +192,45 @@ export default function ResultDetailPage() {
       slidesPollCleanupRef.current = null
     }
 
-    if (currentPptId > 0) {
-      setCurrentSlide(0)
+    if (currentPptId <= 0) return
 
-      // 异步加载幻灯片（可能返回清理函数）
-      loadSlides(currentPptId).then((cleanup) => {
-        if (cleanup) {
-          slidesPollCleanupRef.current = cleanup
+    setCurrentSlide(0)
+    let cancelled = false
+    let intervalId: NodeJS.Timeout | null = null
+
+    const poll = async () => {
+      if (cancelled) return
+      try {
+        const response = await getSlides(currentPptId)
+        if (cancelled) return
+
+        if (response.data?.status === 'ready') {
+          if (intervalId) clearInterval(intervalId)
+          if (!cancelled) {
+            setSlides(response.data.slides)
+            setIsLoadingSlides(false)
+          }
         }
-      })
-    }
-
-    // 清理函数
-    return () => {
-      if (slidesPollCleanupRef.current) {
-        slidesPollCleanupRef.current()
-        slidesPollCleanupRef.current = null
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Polling error:', error)
+        }
       }
     }
-  }, [currentPptId, loadSlides])
+
+    // Initial check
+    poll().then(() => {
+      // If still extracting, start polling
+      if (!cancelled && isLoadingSlides) {
+        intervalId = setInterval(poll, 2000)
+      }
+    })
+
+    return () => {
+      cancelled = true
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [currentPptId])
 
   // 切换幻灯片
   const handleSlideChange = useCallback((index: number) => {
