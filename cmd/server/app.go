@@ -570,7 +570,7 @@ func (a *MinimalApp) initHandlers() error {
 	timestampMapper := services.NewTimestampMapper(a.db, a.logger)
 
 	// PPT管理服务
-	slideExtractor := services.NewSlideExtractor(a.logger)
+	slideExtractor := services.NewSlideExtractor(a.logger, a.config.Python.PreferUV)
 	a.slideCacheService = services.NewSlideCacheService(a.db, a.logger, a.config, slideExtractor)
 	a.pptMergeService = services.NewPPTMergeService(a.db, a.logger, a.config, a.slideCacheService)
 	pptFileService := services.NewPPTFileService(a.db, a.logger, a.config)
@@ -773,7 +773,7 @@ func (a *MinimalApp) registerRoutes() error {
 	ppts := api.Group("/ppts")
 	{
 		ppts.GET("/:id/slides", a.handlers.PPT.GetSlides)                                  // 获取幻灯片图片列表
-		ppts.GET("/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage)      // 服务幻灯片图片
+// 		ppts.GET("/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage)      // 服务幻灯片图片
 		ppts.POST("/merge", a.handlers.PPT.MergeSlides)                                    // 合并幻灯片
 		ppts.GET("/:id/download", a.handlers.PPT.DownloadPPT)                              // 下载PPT文件
 		ppts.DELETE("/:id", a.handlers.PPT.DeletePPT)                                      // 删除PPT
@@ -781,10 +781,16 @@ func (a *MinimalApp) registerRoutes() error {
 		ppts.GET("/:id/duplicates", a.handlers.PPT.DetectDuplicatesHandler)                // 检测重复幻灯片
 		ppts.DELETE("/:id/slides", a.handlers.PPT.DeleteSlidesHandler)                     // 删除指定幻灯片
 		ppts.POST("/:id/rollback", a.handlers.PPT.RollbackHandler)                         // 回滚到备份版本
+t		ppts.POST("/:id/reorder", a.handlers.PPT.ReorderSlidesHandler)				// 重排序幻灯片
+			ppts.POST("/:id/capture", a.handlers.PPT.CaptureFrameHandler)				// 捕获视频帧
+			ppts.POST("/:id/slides", a.handlers.PPT.InsertSlideHandler)				// 插入幻灯片
 	}
 
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
 	a.router.GET("/api/v1/recordings/:id/preview/stream/:file", a.handlers.VideoTask.ServeHLSStream)
+
+	// PPT幻灯片图片访问（无需认证，handler内部验证权限，用于<img>标签显示）
+	a.router.GET("/api/v1/ppts/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage)
 
 	// 审计日志管理
 	auditLog := api.Group("/audit")
