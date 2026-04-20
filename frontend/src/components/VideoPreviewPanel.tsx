@@ -14,6 +14,7 @@ import { getTimestampMap } from '../api/transcription'
 import type { SlideTimestamp } from '../types/transcription'
 import { getToken } from '../api/apiClient'
 import { PlaybackSpeedControl, usePlaybackSpeed } from './PlaybackSpeedControl'
+import EditableProgressBar from './EditableProgressBar'
 
 // ==================== 常量 ====================
 const SKIP_SECONDS = 10
@@ -369,17 +370,11 @@ export function VideoPreviewPanel({
                 gap: '8px',
               }}
             >
-              {/* 进度条 */}
-              <input
-                type="range"
-                min={0}
-                max={duration}
-                value={currentTime}
-                onChange={(e) => handleSeek(Number(e.target.value))}
-                style={{
-                  width: '100%',
-                  cursor: 'pointer',
-                }}
+              {/* Editable progress bar with time input */}
+              <EditableProgressBar
+                currentTime={currentTime}
+                duration={duration}
+                onSeek={handleSeek}
               />
 
               {/* 控制按钮行 */}
@@ -403,9 +398,6 @@ export function VideoPreviewPanel({
                     onClick={() => handleSkip(SKIP_SECONDS)}
                     style={{ color: '#fff' }}
                   />
-                  <span style={{ color: '#fff', marginLeft: '8px' }}>
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </span>
                   <PlaybackSpeedControl
                     currentSpeed={playbackRate}
                     onSpeedChange={(speed) => {
