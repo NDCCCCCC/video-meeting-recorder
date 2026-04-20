@@ -1,6 +1,6 @@
 ---
 phase: 06-ppt-editor
-plan: 02
+plan: 05
 subsystem: [ui, api, video-processing]
 tags: [video-preview, timestamp-synchronization, react, html5-video, bidirectional-sync]
 
@@ -44,7 +44,7 @@ duration: 3min
 completed: 2026-04-20
 ---
 
-# Phase 06-02 Summary: Video Preview with Timestamp Synchronization
+# Phase 06-05 Summary: Video Preview with Timestamp Synchronization
 
 **Integrated video playback with PPT viewer using bidirectional timestamp synchronization, enabling users to click slides to jump to corresponding video timestamps and vice versa.**
 
@@ -408,7 +408,7 @@ None - all tasks executed smoothly without issues.
 
 ## Conclusion
 
-Plan 06-02 successfully implemented video preview with timestamp synchronization:
+Plan 06-05 successfully implemented video preview with timestamp synchronization:
 - ✅ Frontend API client for timestamp mapping
 - ✅ VideoPreviewPanel component with bidirectional sync
 - ✅ Results page integration with toggle button
