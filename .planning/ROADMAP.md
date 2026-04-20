@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 视频切割与会议转录PPT** — Phases 1-4 (shipped 2026-04-18)
-- 🔄 **v1.1 文件管理与编辑增强** — Phases 5-7 (in progress)
+- 🔄 **v1.1 文件管理与编辑增强** — Phases 5-8 (in progress)
 
 ## Phases
 
@@ -18,7 +18,7 @@
 </details>
 
 <details>
-<summary>🔄 v1.1 文件管理与编辑增强 (Phases 5-7) — IN PROGRESS</summary>
+<summary>🔄 v1.1 文件管理与编辑增强 (Phases 5-8) — IN PROGRESS</summary>
 
 - [x] Phase 5: File Rename & Smart Cleanup (2/2 plans) — **completed 2026-04-20**
     - [x] 05-01-PLAN.md — File rename API and UI for split videos and PPTs
@@ -36,6 +36,13 @@
     - [x] 07-02-PLAN.md — Editable progress bar time input & PPT results dropdown
     - [x] 07-03-PLAN.md — Info display reorganization & operations bar horizontal layout
     - [x] 07-04-PLAN.md — Gap: Fix thumbnail height alignment & video black box
+- [ ] Phase 8: Video Snapshot & Player Enhancement (5 plans) — **ready to execute**
+    - Goal: Implement snapshot video time range logic, naming conventions, and enhance video player precision and controls
+    - [x] 08-00-PLAN.md — Wave 0: Test stubs for snapshot service and player enhancements
+    - [ ] 08-01-PLAN.md — Snapshot service: concurrent safety, enhanced naming, validation
+    - [ ] 08-02-PLAN.md — Keyboard shortcuts hook and utility constants
+    - [ ] 08-03-PLAN.md — Frame-level navigation hook and component
+    - [ ] 08-04-PLAN.md — VideoPlayerModal integration of all enhancements
 
 </details>
 
@@ -50,7 +57,8 @@
 | 5. File Rename & Smart Cleanup | v1.1 | 2/2 | **Complete** | 2026-04-20 |
 | 6. PPT Editor UI Improvements | v1.1 | 6/7 | In Progress | - |
 | 7. Preview Page UI Improvements | v1.1 | 3/4 | In Progress | - |
+| 8. Video Snapshot & Player Enhancement | v1.1 | 0/5 | Not Started | - |
 
 ---
 *Roadmap created: 2026-04-17*
-*Last updated: 2026-04-20 - Phase 07 plans created*
+*Last updated: 2026-04-20 - Phase 08 plans created*
