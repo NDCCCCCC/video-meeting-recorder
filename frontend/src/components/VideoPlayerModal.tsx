@@ -224,7 +224,7 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
 
   const handleSeekWithInfinity = useCallback((seconds: number) => {
     const video = videoRef.current
-    if (!video || !duration) return
+    if (!video || !duration || !Number.isFinite(video.duration)) return
 
     if (seconds === Infinity) {
       video.currentTime = video.duration
