@@ -63,6 +63,7 @@ type MinimalApp struct {
 	pptMergeService      *services.PPTMergeService
 	pptEditorService     *services.PPTEditorService
 	frameCaptureService  *services.FrameCaptureService
+	depsManager          *services.PythonDepsManager
 }
 
 // Handlers 处理器集合
@@ -431,14 +432,14 @@ func (a *MinimalApp) seedPermissions() error {
 func (a *MinimalApp) checkPythonDependencies() error {
 	a.logger.Info("检查Python依赖...")
 
-	// 创建Python依赖管理器
-	depsManager := services.NewPythonDepsManager(a.logger, a.config.Python.PreferUV)
+	// 创建Python依赖管理器并存储到 app
+	a.depsManager = services.NewPythonDepsManager(a.logger, a.config.Python.PreferUV)
 
 	// 检查依赖
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	info, err := depsManager.CheckDependencies(ctx)
+	info, err := a.depsManager.CheckDependencies(ctx)
 	if err != nil {
 		return fmt.Errorf("Python依赖检查失败: %w", err)
 	}
@@ -572,7 +573,7 @@ func (a *MinimalApp) initHandlers() error {
 	// PPT管理服务
 	slideExtractor := services.NewSlideExtractor(a.logger, a.config.Python.PreferUV)
 	a.slideCacheService = services.NewSlideCacheService(a.db, a.logger, a.config, slideExtractor)
-	a.pptMergeService = services.NewPPTMergeService(a.db, a.logger, a.config, a.slideCacheService)
+	a.pptMergeService = services.NewPPTMergeService(a.db, a.logger, a.config, a.slideCacheService, a.depsManager)
 	pptFileService := services.NewPPTFileService(a.db, a.logger, a.config)
 
 	// Create PPT editor service (reuse existing similarityDetector and pptxGenerator from transcription service)
