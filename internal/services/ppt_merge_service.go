@@ -149,10 +149,17 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	args := []string{s.mergeScript, outputPath, string(slideSpecJSON)}
 	cmd := exec.CommandContext(ctx, cmdName, args...)
 
-	output, err := cmd.Output()
+	// Log the command for debugging (truncated slideSpec to avoid huge logs)
+	s.logger.Info("Executing Python merge script",
+		zap.String("cmd", cmdName),
+		zap.String("script", s.mergeScript),
+		zap.Int("slide_spec_count", len(slideSpecs)))
+
+	// Use CombinedOutput to capture both stdout and stderr
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		s.logger.Error("Python merge script failed",
-			zap.String("output", string(output)),
+			zap.String("stdout/stderr", string(output)),
 			zap.Error(err))
 		return nil, fmt.Errorf("failed to merge slides: %w (output: %s)", err, string(output))
 	}
