@@ -276,18 +276,6 @@ func (s *UserService) AssignRoles(userID uint, req *AssignRolesRequest) error {
 		return errors.New("部分角色不存在")
 	}
 
-	// D-13: 仅管理员可分配 shared_viewer 角色
-	var currentUser models.User
-	if req.CurrentUserID > 0 {
-		if err := s.db.Preload("Roles").First(&currentUser, req.CurrentUserID).Error; err == nil {
-			for _, role := range roles {
-				if role.Name == models.RoleSharedViewer && !currentUser.HasRole(models.RoleAdmin) {
-					return errors.New("仅管理员可分配'共享查看者'角色")
-				}
-			}
-		}
-	}
-
 	// 使用 Clear + Append 方式（参考 RoleService.AssignPermissions）
 	if err := s.db.Model(&user).Association("Roles").Clear(); err != nil {
 		return err
