@@ -25,10 +25,8 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import * as userApi from '../../../api/user'
 import type { UserInfo, UserListParams, CreateUserRequest, UpdateUserRequest } from '../../../types/user'
-import { useAuthStore } from '../../../stores/authStore'
 
 export default function UserManagement() {
-  const { user: currentUser } = useAuthStore()
   const [users, setUsers] = useState<UserInfo[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
