@@ -7,6 +7,7 @@ import {
   CopyOutlined,
   FullscreenOutlined,
   FullscreenExitOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons'
 import type { SlideImage, SelectedSlide } from '../types/ppt'
 import { useState, useEffect, useCallback } from 'react'
@@ -23,6 +24,7 @@ interface PPTPreviewProps {
   currentPptId?: number
   containerStyle?: React.CSSProperties  // Allow custom container style
   hideThumbnailSidebar?: boolean  // Hide built-in thumbnail sidebar for side-by-side layout
+  onDeleteCurrentSlide?: () => void  // Callback for deleting current slide
 }
 
 export default function PPTPreview({
@@ -36,6 +38,7 @@ export default function PPTPreview({
   currentPptId = 0,
   containerStyle,
   hideThumbnailSidebar = false,
+  onDeleteCurrentSlide,
 }: PPTPreviewProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -224,6 +227,16 @@ export default function PPTPreview({
             >
               全屏演示
             </Button>
+            {onDeleteCurrentSlide && (
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                aria-label="删除当前幻灯片"
+                onClick={onDeleteCurrentSlide}
+              >
+                删除此页
+              </Button>
+            )}
           </div>
         )}
       </div>

@@ -38,6 +38,7 @@ import {
   deletePpt,
   getPptDownloadUrl,
   reorderSlides,
+  deleteSlides,
 } from '../../api/ppt'
 import {
   submitTranscriptionWithMode,
@@ -411,6 +412,32 @@ export default function ResultDetailPage() {
     }
   }, [loadPpts, loadSlides, currentPptId])
 
+  // 删除当前幻灯片
+  const handleDeleteCurrentSlide = useCallback(async () => {
+    if (!currentPptId || !slides[currentSlide]) return
+
+    const slideNumber = slides[currentSlide].slide_number
+
+    try {
+      await deleteSlides(currentPptId, [slideNumber])
+      message.success(`幻灯片 ${slideNumber} 已删除`)
+
+      // 刷新幻灯片列表
+      await handleSlidesDeleted()
+
+      // 调整当前幻灯片索引
+      if (slides.length > 1) {
+        // 如果删除的是最后一张，显示前一张
+        if (currentSlide >= slides.length - 1) {
+          setCurrentSlide(Math.max(0, slides.length - 2))
+        }
+        // 否则保持当前索引（会自动显示下一张）
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '删除幻灯片失败')
+    }
+  }, [currentPptId, slides, currentSlide, handleSlidesDeleted])
+
   // 处理幻灯片插入后的回调
   const handleSlideInserted = useCallback(async (newSlideNumber: number) => {
     message.success(`幻灯片已插入到位置 ${newSlideNumber}`)
@@ -643,6 +670,7 @@ export default function ResultDetailPage() {
             currentPptId={currentPptId}
             containerStyle={{ display: 'flex', flexDirection: 'column', height: '100%' }}
             hideThumbnailSidebar={true}
+            onDeleteCurrentSlide={handleDeleteCurrentSlide}
           />
         </div>
 
