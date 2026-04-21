@@ -264,7 +264,7 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 	}
 
 	var user models.User
-	if err := s.db.Preload("Role.Permissions").First(&user, claims.UserID).Error; err != nil {
+	if err := s.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
 		return nil, errors.New("user not found")
 	}
 

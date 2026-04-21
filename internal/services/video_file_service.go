@@ -69,6 +69,7 @@ type ListFilesRequest struct {
 	IsAdmin        bool         `form:"-"`
 	ApplyDataScope bool         `form:"-"`
 	User           *models.User `form:"-"` // User object with Roles preloaded for visibility control (D-11, D-12)
+	RoleIDs        []uint       `form:"-"` // Role IDs from token claims for shared_viewer check (D-02)
 }
 
 // ListFilesResponse 文件列表响应
@@ -172,18 +173,29 @@ func (s *VideoFileService) applyFilters(query *gorm.DB, req *ListFilesRequest) {
 	// DATA VISIBILITY: Shared viewers see all data (D-02, D-11, D-12)
 	// Visibility check (data scope) happens before permission checks (operation authorization)
 	// shared_viewer affects data scope, not operation permissions (D-01, D-03)
-	if req.ApplyDataScope && req.User != nil {
-		// Check if user has shared_viewer role - if yes, skip created_by filter
-		if !req.User.HasRole(models.RoleSharedViewer) {
-			// Non-shared-viewers only see their own data (D-10)
-			if req.UserID > 0 {
-				query = query.Where("created_by = ?", req.UserID)
+	if req.ApplyDataScope {
+		// Check if user has shared_viewer role
+		hasSharedViewer := false
+		if req.User != nil {
+			// Check from User object (preferred)
+			hasSharedViewer = req.User.HasRole(models.RoleSharedViewer)
+		} else if len(req.RoleIDs) > 0 {
+			// Check from token claims RoleIDs (fallback)
+			// shared_viewer role ID is 5
+			for _, roleID := range req.RoleIDs {
+				if roleID == 5 { // RoleSharedViewer ID
+					hasSharedViewer = true
+					break
+				}
 			}
 		}
-		// shared_viewers skip created_by filter to see all data (D-02)
-	} else if req.ApplyDataScope && !req.IsAdmin && req.UserID > 0 {
-		// Fallback for requests without User object loaded (legacy support)
-		query = query.Where("created_by = ?", req.UserID)
+
+		// Apply created_by filter only for non-admin, non-shared-viewer users
+		if !req.IsAdmin && !hasSharedViewer && req.UserID > 0 {
+			// Non-shared-viewers only see their own data (D-10)
+			query = query.Where("created_by = ?", req.UserID)
+		}
+		// shared_viewers and admins skip created_by filter to see all data (D-02)
 	}
 
 	// 日期范围筛选

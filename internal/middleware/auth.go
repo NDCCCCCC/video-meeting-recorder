@@ -33,6 +33,14 @@ func GetRoleID(c *gin.Context) uint {
 	return 0
 }
 
+// GetRoleIDs 从context获取角色ID列表
+func GetRoleIDs(c *gin.Context) []uint {
+	if roleIDs, exists := c.Get("role_ids"); exists {
+		return roleIDs.([]uint)
+	}
+	return nil
+}
+
 // GetIsAdmin 从context获取是否管理员
 func GetIsAdmin(c *gin.Context) bool {
 	if isAdmin, exists := c.Get("is_admin"); exists {

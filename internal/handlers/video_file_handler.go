@@ -51,6 +51,7 @@ func (h *VideoFileHandler) ListFiles(c *gin.Context) {
 	req.UserID = middleware.GetUserID(c)
 	req.IsAdmin = middleware.GetIsAdmin(c)
 	req.ApplyDataScope = true
+	req.RoleIDs = middleware.GetRoleIDs(c)
 
 	result, err := h.fileService.ListFiles(&req)
 	if err != nil {
