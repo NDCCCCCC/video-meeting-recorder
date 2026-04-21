@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -173,12 +174,18 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 // MergeSlides handles POST /api/v1/ppts/merge (per D-13 to D-18)
 func (h *PPThandler) MergeSlides(c *gin.Context) {
 	// Read body for logging before binding (since binding consumes it)
-	bodyBytes, _ := c.GetRawData()
+	bodyBytes, err := c.GetRawData()
+	if err != nil {
+		h.logger.Warn("Failed to read request body", zap.Error(err))
+		response.GinError(c, response.CodeInvalidRequest, "读取请求失败")
+		return
+	}
 	bodyStr := string(bodyBytes)
 
+	// Unmarshal JSON manually since we already consumed the body
 	var req models.MergeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Merge request binding failed",
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		h.logger.Warn("Merge request JSON parse failed",
 			zap.Error(err),
 			zap.String("request_body", bodyStr))
 		response.GinError(c, response.CodeInvalidRequest, "无效的请求参数: "+err.Error())
@@ -205,7 +212,7 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 
 	// Validate each slide item
 	for _, slide := range req.Slides {
-		if slide.SlideNumber <= 0 {
+		if slide.SlideNumber < 0 {
 			response.GinError(c, response.CodeInvalidRequest,
 				fmt.Sprintf("无效的幻灯片编号: %d", slide.SlideNumber))
 			return
