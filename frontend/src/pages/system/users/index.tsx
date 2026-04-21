@@ -341,6 +341,7 @@ export default function UserManagement() {
               { label: '操作员', value: 2 },
               { label: '查看者', value: 3 },
               { label: 'API客户端', value: 4 },
+              { label: '共享查看者', value: 5 },
             ]}
           />
           <Select
