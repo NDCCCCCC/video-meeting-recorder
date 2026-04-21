@@ -25,8 +25,10 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import * as userApi from '../../../api/user'
 import type { UserInfo, UserListParams, CreateUserRequest, UpdateUserRequest } from '../../../types/user'
+import { useAuthStore } from '../../../stores/authStore'
 
 export default function UserManagement() {
+  const { user: currentUser } = useAuthStore()
   const [users, setUsers] = useState<UserInfo[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -119,6 +121,14 @@ export default function UserManagement() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+
+      // Admin check for shared_viewer assignment (D-13)
+      if (values.role_ids?.includes(5)) {
+        if (!currentUser?.is_admin) {
+          message.error('仅管理员可分配"共享查看者"角色')
+          return
+        }
+      }
 
       if (editingUser) {
         // 更新用户
