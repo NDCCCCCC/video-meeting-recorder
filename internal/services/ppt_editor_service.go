@@ -817,9 +817,10 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 	}
 
 	// Check if order actually changed
+	// Note: newOrder is 0-based from frontend [0,1,2,...]
 	orderChanged := false
 	for i, slideNum := range newOrder {
-		if slideNum != i+1 {
+		if slideNum != i {
 			orderChanged = true
 			break
 		}
@@ -870,13 +871,13 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 	defer os.RemoveAll(tempDir)
 
 	// Copy slides to new positions in temp directory
+	// Note: newOrder is 0-based from frontend, and files are also 0-based (slide_000.jpg, slide_001.jpg, ...)
+	// We create new files named slide_000.jpg, slide_001.jpg, etc. based on the new order
 	for newPosition, oldSlideNum := range newOrder {
-		newSlideNum := newPosition + 1
-
 		srcFullsize := filepath.Join(fullsizeDir, fmt.Sprintf("slide_%03d.jpg", oldSlideNum))
 		srcThumbnail := filepath.Join(thumbnailDir, fmt.Sprintf("slide_%03d.jpg", oldSlideNum))
-		dstFullsize := filepath.Join(tempDir, fmt.Sprintf("slide_%03d.jpg", newSlideNum))
-		dstThumbnail := filepath.Join(tempDir, fmt.Sprintf("thumb_%03d.jpg", newSlideNum))
+		dstFullsize := filepath.Join(tempDir, fmt.Sprintf("slide_%03d.jpg", newPosition))
+		dstThumbnail := filepath.Join(tempDir, fmt.Sprintf("thumb_%03d.jpg", newPosition))
 
 		if err := copyFile(srcFullsize, dstFullsize); err != nil {
 			return nil, fmt.Errorf("failed to copy slide %d: %w", oldSlideNum, err)
@@ -887,13 +888,12 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 	}
 
 	// Move reordered slides from temp to final directories
+	// Files are 0-based: slide_000.jpg, slide_001.jpg, etc.
 	for newPosition := range newOrder {
-		newSlideNum := newPosition + 1
-
-		srcFullsize := filepath.Join(tempDir, fmt.Sprintf("slide_%03d.jpg", newSlideNum))
-		srcThumbnail := filepath.Join(tempDir, fmt.Sprintf("thumb_%03d.jpg", newSlideNum))
-		dstFullsize := filepath.Join(fullsizeDir, fmt.Sprintf("slide_%03d.jpg", newSlideNum))
-		dstThumbnail := filepath.Join(thumbnailDir, fmt.Sprintf("slide_%03d.jpg", newSlideNum))
+		srcFullsize := filepath.Join(tempDir, fmt.Sprintf("slide_%03d.jpg", newPosition))
+		srcThumbnail := filepath.Join(tempDir, fmt.Sprintf("thumb_%03d.jpg", newPosition))
+		dstFullsize := filepath.Join(fullsizeDir, fmt.Sprintf("slide_%03d.jpg", newPosition))
+		dstThumbnail := filepath.Join(thumbnailDir, fmt.Sprintf("slide_%03d.jpg", newPosition))
 
 		if err := os.Rename(srcFullsize, dstFullsize); err != nil {
 			return nil, fmt.Errorf("failed to move fullsize slide: %w", err)
