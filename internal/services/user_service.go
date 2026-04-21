@@ -1,24 +1,28 @@
 package services
 
 import (
+	"context"
 	"errors"
 
 	"github.com/cpic/record_v2/internal/models"
+	"github.com/cpic/record_v2/internal/services/audit"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 // UserService 用户服务
 type UserService struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db           *gorm.DB
+	logger       *zap.Logger
+	auditService *audit.AuditLogService
 }
 
 // NewUserService 创建用户服务
-func NewUserService(db *gorm.DB, logger *zap.Logger) *UserService {
+func NewUserService(db *gorm.DB, logger *zap.Logger, auditService *audit.AuditLogService) *UserService {
 	return &UserService{
-		db:     db,
-		logger: logger,
+		db:           db,
+		logger:       logger,
+		auditService: auditService,
 	}
 }
 
@@ -289,6 +293,45 @@ func (s *UserService) AssignRoles(userID uint, req *AssignRolesRequest) error {
 
 	if err := s.db.Model(&user).Association("Roles").Append(roles); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// UpdateRoles 更新用户角色（带审计日志）
+func (s *UserService) UpdateRoles(userID uint, roleIDs []uint, currentUserID uint) error {
+	var user models.User
+	if err := s.db.Preload("Roles").First(&user, userID).Error; err != nil {
+		return errors.New("用户不存在")
+	}
+
+	// 记录旧角色（用于审计）
+	oldRoles := make([]uint, len(user.Roles))
+	for i, role := range user.Roles {
+		oldRoles[i] = role.ID
+	}
+
+	// 调用 AssignRoles
+	req := &AssignRolesRequest{
+		RoleIDs:       roleIDs,
+		CurrentUserID: currentUserID,
+	}
+
+	if err := s.AssignRoles(userID, req); err != nil {
+		return err
+	}
+
+	// D-15: 记录审计日志
+	if s.auditService != nil {
+		s.auditService.LogOperation(context.Background(), &audit.LogOperationRequest{
+			UserID:     currentUserID,
+			Module:     "user",
+			Action:     "update_roles",
+			ResourceID: &userID,
+			OldData:    oldRoles,
+			NewData:    roleIDs,
+			Status:     "success",
+		})
 	}
 
 	return nil
