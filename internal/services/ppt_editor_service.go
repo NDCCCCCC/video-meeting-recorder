@@ -830,10 +830,16 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 		return newOrder, nil
 	}
 
-	// Get slide image directory
-	slideDir := filepath.Join(filepath.Dir(pptFile.FilePath), "slides")
+	// Get slide image directory - use slide cache directory structure
+	// The correct path is: {recordingsPath}/ppts/{pptFileID}/slides/
+	slideDir := filepath.Join(s.config.Storage.RecordingsPath, "ppts", fmt.Sprintf("%d", pptFileID), "slides")
 	fullsizeDir := filepath.Join(slideDir, "fullsize")
 	thumbnailDir := filepath.Join(slideDir, "thumbnails")
+
+	// Verify the slide cache directory exists
+	if _, err := os.Stat(fullsizeDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("slide cache directory does not exist: %s", fullsizeDir)
+	}
 
 	// Backup current slides before reordering
 	backupDir := filepath.Join(slideDir, fmt.Sprintf("backup_before_reorder_%s", time.Now().Format("20060102_150405")))

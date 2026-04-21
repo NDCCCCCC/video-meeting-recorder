@@ -21,7 +21,6 @@ import {
   LaptopOutlined,
   ScanOutlined,
   CameraOutlined,
-  VideoCameraOutlined,
   DragOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -108,9 +107,6 @@ export default function ResultDetailPage() {
 
   // Slide capture panel state
   const [isCapturePanelOpen, setIsCapturePanelOpen] = useState(false)
-
-  // Video preview panel state
-  const [isVideoPanelVisible, setIsVideoPanelVisible] = useState(true)
 
   // Drag reorder mode state
   const [isDragMode, setIsDragMode] = useState(false)
@@ -420,6 +416,8 @@ export default function ResultDetailPage() {
     if (!currentPptId || !slides[currentSlide]) return
 
     const slideNumber = slides[currentSlide].slide_number
+    const oldSlideCount = slides.length
+    const wasLastSlide = currentSlide === oldSlideCount - 1
 
     try {
       await deleteSlides(currentPptId, [slideNumber])
@@ -428,13 +426,17 @@ export default function ResultDetailPage() {
       // 刷新幻灯片列表
       await handleSlidesDeleted()
 
-      // 调整当前幻灯片索引
-      if (slides.length > 1) {
-        // 如果删除的是最后一张，显示前一张
-        if (currentSlide >= slides.length - 1) {
-          setCurrentSlide(Math.max(0, slides.length - 2))
+      // 调整当前幻灯片索引 - 等待刷新后根据新数量调整
+      // 如果删除前是最后一张，删除后新数量是 oldSlideCount - 1
+      // 应该显示新的最后一张，即 oldSlideCount - 2 (0-based)
+      if (oldSlideCount > 1) {
+        if (wasLastSlide) {
+          // 删除的是最后一张，显示新的最后一张
+          setCurrentSlide(Math.max(0, oldSlideCount - 2))
+        } else {
+          // 删除的不是最后一张，保持当前索引（会自动显示原来的下一张）
+          setCurrentSlide(currentSlide)
         }
-        // 否则保持当前索引（会自动显示下一张）
       }
     } catch (error) {
       message.error(error instanceof Error ? error.message : '删除幻灯片失败')
@@ -678,19 +680,17 @@ export default function ResultDetailPage() {
         </div>
 
         {/* Right: Video Preview (16:9) */}
-        {isVideoPanelVisible && (
-          <div style={previewBoxStyle}>
-            <VideoPreviewPanel
-              videoRef={videoRef}
-              videoFileId={videoFileIdNum}
-              currentSlide={currentSlide + 1}
-              onSlideClick={handleVideoSlideChange}
-              style={{ height: '100%', border: 'none', boxShadow: 'none' }}
-              autoPlay={false}
-              showControls={true}
-            />
-          </div>
-        )}
+        <div style={previewBoxStyle}>
+          <VideoPreviewPanel
+            videoRef={videoRef}
+            videoFileId={videoFileIdNum}
+            currentSlide={currentSlide + 1}
+            onSlideClick={handleVideoSlideChange}
+            style={{ height: '100%', border: 'none', boxShadow: 'none' }}
+            autoPlay={false}
+            showControls={true}
+          />
+        </div>
       </div>
 
       {/* Info & Operations Bar - Inline layout without tabs */}
@@ -760,12 +760,6 @@ export default function ResultDetailPage() {
               </Button>
             )}
             <Button
-              icon={<VideoCameraOutlined />}
-              onClick={() => setIsVideoPanelVisible(!isVideoPanelVisible)}
-            >
-              {isVideoPanelVisible ? '隐藏视频预览' : '显示视频预览'}
-            </Button>
-            <Button
               icon={<DragOutlined />}
               onClick={() => setIsDragMode(!isDragMode)}
               type={isDragMode ? 'primary' : 'default'}
@@ -785,7 +779,7 @@ export default function ResultDetailPage() {
               currentSlide={currentSlide}
               onCaptureComplete={handleDirectCapture}
               videoRef={videoRef}
-              disabled={!isVideoPanelVisible || slides.length === 0}
+              disabled={slides.length === 0}
             />
 
             {/* Advanced capture with preview modal */}

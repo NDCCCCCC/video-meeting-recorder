@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Modal, Button, Space, InputNumber, Image, message, Progress, Select } from 'antd'
+import { Modal, Button, Space, InputNumber, Image, message, Slider, Select } from 'antd'
 import { CameraOutlined, PlayCircleOutlined, PauseCircleOutlined, CheckOutlined } from '@ant-design/icons'
 import type { SlideCapturePanelProps } from '../types/ppt'
 import { captureFrame, insertSlide } from '../api/ppt'
@@ -95,6 +95,17 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
       setVideoState({
         ...videoState,
         isPlaying: !videoState.isPlaying,
+      })
+    }
+  }
+
+  // Handle seek
+  const handleSeek = (value: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = value
+      setVideoState({
+        ...videoState,
+        currentTime: value,
       })
     }
   }
@@ -215,20 +226,6 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
             />
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 10,
-                left: 10,
-                color: '#fff',
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                padding: '4px 8px',
-                borderRadius: 4,
-                fontFamily: 'monospace',
-              }}
-            >
-              {formatTime(videoState.currentTime)} / {formatTime(videoState.duration)}
-            </div>
           </div>
 
           {/* Video Controls */}
@@ -249,14 +246,22 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
             </Button>
           </Space>
 
-          {/* Progress Bar */}
+          {/* Progress Bar - Draggable slider */}
           {videoState.duration > 0 && (
-            <Progress
-              percent={(videoState.currentTime / videoState.duration) * 100}
-              showInfo={false}
-              strokeColor="#1890ff"
-              style={{ marginTop: 8 }}
-            />
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: 'monospace', minWidth: 100 }}>
+                {formatTime(videoState.currentTime)} / {formatTime(videoState.duration)}
+              </span>
+              <Slider
+                min={0}
+                max={videoState.duration}
+                step={0.1}
+                value={videoState.currentTime}
+                onChange={handleSeek}
+                tooltip={{ formatter: (value) => formatTime(value || 0) }}
+                style={{ flex: 1 }}
+              />
+            </div>
           )}
         </div>
 
