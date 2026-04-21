@@ -39,6 +39,7 @@ import {
   getPptDownloadUrl,
   reorderSlides,
   deleteSlides,
+  mergeSlides,
 } from '../../api/ppt'
 import {
   submitTranscriptionWithMode,
@@ -47,6 +48,7 @@ import type {
   PPTResult,
   SlideImage,
   SelectedSlide,
+  MergeSlideItem,
 } from '../../types/ppt'
 import type { TranscriptionMode } from '../../types/transcription'
 import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
@@ -84,6 +86,7 @@ export default function ResultDetailPage() {
   const [isLoadingSlides, setIsLoadingSlides] = useState(false)
   const [isMergeMode, setIsMergeMode] = useState(false)
   const [selectedSlides, setSelectedSlides] = useState<SelectedSlide[]>([])
+  const [isMerging, setIsMerging] = useState(false)
   const [videoName, setVideoName] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -307,41 +310,41 @@ export default function ResultDetailPage() {
   //   []
   // )
 
-  // 合并模式：确认合并（功能已移除，保留以备后用）
-  // const handleConfirmMerge = useCallback(async () => {
-  //   if (selectedSlides.length === 0) {
-  //     message.warning('请先选择要合并的幻灯片')
-  //     return
-  //   }
+  // 合并模式：确认合并
+  const handleConfirmMerge = useCallback(async () => {
+    if (selectedSlides.length === 0) {
+      message.warning('请先选择要合并的幻灯片')
+      return
+    }
 
-  //   setIsMerging(true)
-  //   try {
-  //     const mergeItems: MergeSlideItem[] = selectedSlides.map((s) => ({
-  //       ppt_file_id: s.ppt_file_id,
-  //       slide_number: s.slide_number,
-  //     }))
+    setIsMerging(true)
+    try {
+      const mergeItems: MergeSlideItem[] = selectedSlides.map((s) => ({
+        ppt_file_id: s.ppt_file_id,
+        slide_number: s.slide_number,
+      }))
 
-  //     const response = await mergeSlides({
-  //       slides: mergeItems,
-  //       video_file_id: videoFileIdNum,
-  //     })
+      const response = await mergeSlides({
+        slides: mergeItems,
+        video_file_id: videoFileIdNum,
+      })
 
-  //     if (response.data) {
-  //       message.success(`合并完成！已生成 ${response.data.page_count} 页 PPT。`)
-  //       // 刷新 PPT 列表
-  //       await loadPpts()
-  //       // 退出合并模式
-  //       setIsMergeMode(false)
-  //       setSelectedSlides([])
-  //       // 切换到新生成的 PPT
-  //       setCurrentPptId(response.data.ppt_file_id)
-  //     }
-  //   } catch (error) {
-  //     message.error(error instanceof Error ? error.message : '合并失败')
-  //   } finally {
-  //     setIsMerging(false)
-  //   }
-  // }, [selectedSlides, videoFileIdNum, loadPpts])
+      if (response.data) {
+        message.success(`合并完成！已生成 ${response.data.page_count} 页 PPT。`)
+        // 刷新 PPT 列表
+        await loadPpts()
+        // 退出合并模式
+        setIsMergeMode(false)
+        setSelectedSlides([])
+        // 切换到新生成的 PPT
+        setCurrentPptId(response.data.ppt_file_id)
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '合并失败')
+    } finally {
+      setIsMerging(false)
+    }
+  }, [selectedSlides, videoFileIdNum, loadPpts])
 
   // 下载 PPT
   const handleDownloadPpt = useCallback(() => {
@@ -746,6 +749,16 @@ export default function ResultDetailPage() {
             >
               {isMergeMode ? '取消合并' : '合并幻灯片'}
             </Button>
+            {isMergeMode && selectedSlides.length > 0 && (
+              <Button
+                type="primary"
+                danger
+                loading={isMerging}
+                onClick={handleConfirmMerge}
+              >
+                完成合并 ({selectedSlides.length}页)
+              </Button>
+            )}
             <Button
               icon={<VideoCameraOutlined />}
               onClick={() => setIsVideoPanelVisible(!isVideoPanelVisible)}
