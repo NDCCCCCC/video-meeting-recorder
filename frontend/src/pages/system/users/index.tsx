@@ -11,7 +11,8 @@ import {
   Form,
   message,
   Popconfirm,
-  Switch
+  Switch,
+  Tag
 } from 'antd'
 import {
   PlusOutlined,
@@ -24,8 +25,10 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import * as userApi from '../../../api/user'
 import type { UserInfo, UserListParams, CreateUserRequest, UpdateUserRequest } from '../../../types/user'
+import { useAuthStore } from '../../../stores/authStore'
 
 export default function UserManagement() {
+  const { user: currentUser } = useAuthStore()
   const [users, setUsers] = useState<UserInfo[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -94,11 +97,15 @@ export default function UserManagement() {
         username: user.username,
         email: user.email,
         full_name: user.full_name,
-        role_id: user.role_id,
+        role_ids: user.roles?.map(r => r.id) || [],
         is_active: user.is_active,
       })
     } else {
       form.resetFields()
+      form.setFieldsValue({
+        is_active: true,
+        role_ids: [],
+      })
     }
     setModalVisible(true)
   }
@@ -115,12 +122,20 @@ export default function UserManagement() {
     try {
       const values = await form.validateFields()
 
+      // Admin check for shared_viewer assignment (D-13)
+      if (values.role_ids?.includes(5)) {
+        if (!currentUser?.is_admin) {
+          message.error('仅管理员可分配"共享查看者"角色')
+          return
+        }
+      }
+
       if (editingUser) {
         // 更新用户
         const req: UpdateUserRequest = {
           email: values.email,
           full_name: values.full_name,
-          role_id: values.role_id,
+          role_ids: values.role_ids,
           is_active: values.is_active,
         }
         await userApi.updateUser(editingUser.id, req)
@@ -132,7 +147,7 @@ export default function UserManagement() {
           password: values.password,
           email: values.email,
           full_name: values.full_name,
-          role_id: values.role_id,
+          role_ids: values.role_ids || [],
           is_active: values.is_active ?? true,
         }
         await userApi.createUser(req)
@@ -219,9 +234,21 @@ export default function UserManagement() {
     },
     {
       title: '角色',
-      dataIndex: 'role',
-      width: 120,
-      render: (role) => role?.name || '-',
+      dataIndex: 'roles',
+      width: 200,
+      render: (roles) => (
+        <>
+          {roles?.map((role) => (
+            <Tag
+              key={role.id}
+              color={role.name === 'shared_viewer' ? 'purple' : 'blue'}
+              style={{ marginBottom: 4 }}
+            >
+              {role.description || role.name}
+            </Tag>
+          ))}
+        </>
+      ),
     },
     {
       title: '状态',
@@ -314,6 +341,7 @@ export default function UserManagement() {
               { label: '操作员', value: 2 },
               { label: '查看者', value: 3 },
               { label: 'API客户端', value: 4 },
+              { label: '共享查看者', value: 5 },
             ]}
           />
           <Select
@@ -399,16 +427,29 @@ export default function UserManagement() {
           </Form.Item>
 
           <Form.Item
-            name="role_id"
+            name="role_ids"
             label="角色"
-            rules={[{ required: true, message: '请选择角色' }]}
+            rules={[{ required: true, message: '请选择至少一个角色' }]}
           >
-            <Select placeholder="请选择角色">
-              <Select.Option value={1}>管理员</Select.Option>
-              <Select.Option value={2}>操作员</Select.Option>
-              <Select.Option value={3}>查看者</Select.Option>
-              <Select.Option value={4}>API客户端</Select.Option>
-            </Select>
+            <Select
+              mode="multiple"
+              placeholder="请选择角色（可多选）"
+              options={[
+                { label: '管理员', value: 1 },
+                { label: '操作员', value: 2 },
+                { label: '查看者', value: 3 },
+                { label: 'API客户端', value: 4 },
+                { label: '共享查看者', value: 5 },
+              ]}
+              tagRender={(props) => {
+                const { label, value, ...restProps } = props
+                // Special badge for shared_viewer
+                if (value === 5) {
+                  return <Tag {...restProps} color="purple">{label}</Tag>
+                }
+                return <Tag {...restProps}>{label}</Tag>
+              }}
+            />
           </Form.Item>
 
           <Form.Item
