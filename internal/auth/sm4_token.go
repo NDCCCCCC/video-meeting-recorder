@@ -34,7 +34,7 @@ type SM4TokenService struct {
 type Claims struct {
 	UserID      uint     `json:"uid"`
 	Username    string   `json:"sub"`
-	RoleID      uint     `json:"rid"`
+	RoleIDs     []uint   `json:"rids"`
 	Permissions []string `json:"perms"`
 	IsAdmin     bool     `json:"adm"`
 	TokenType   string   `json:"tt"` // "access" | "refresh"
@@ -111,18 +111,30 @@ func (s *SM4TokenService) generateToken(user *models.User, tokenType string, dur
 	now := time.Now()
 
 	var permissions []string
-	isAdmin := false
-	if user.Role != nil {
-		isAdmin = user.Role.Name == models.RoleAdmin
-		for _, perm := range user.Role.Permissions {
-			permissions = append(permissions, perm.Resource+":"+perm.Action)
+	isAdmin := user.HasRole(models.RoleAdmin)
+
+	// Collect permissions from all roles (OR logic)
+	permMap := make(map[string]bool)
+	for _, role := range user.Roles {
+		for _, perm := range role.Permissions {
+			permStr := perm.Resource + ":" + perm.Action
+			permMap[permStr] = true
 		}
+	}
+	for permStr := range permMap {
+		permissions = append(permissions, permStr)
+	}
+
+	// Extract role IDs for token
+	var roleIDs []uint
+	for _, role := range user.Roles {
+		roleIDs = append(roleIDs, role.ID)
 	}
 
 	claims := &Claims{
 		UserID:      user.ID,
 		Username:    user.Username,
-		RoleID:      user.RoleID,
+		RoleIDs:     roleIDs,
 		Permissions: permissions,
 		IsAdmin:     isAdmin,
 		TokenType:   tokenType,
