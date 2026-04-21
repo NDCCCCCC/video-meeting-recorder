@@ -236,9 +236,9 @@ export default function UserManagement() {
       title: '角色',
       dataIndex: 'roles',
       width: 200,
-      render: (roles) => (
+      render: (roles: Array<{ id: number; name: string; description: string }>) => (
         <>
-          {roles?.map((role) => (
+          {roles?.map((role: { id: number; name: string; description: string }) => (
             <Tag
               key={role.id}
               color={role.name === 'shared_viewer' ? 'purple' : 'blue'}
