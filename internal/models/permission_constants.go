@@ -18,6 +18,12 @@ const (
 	ResourceFileDelete = "files:delete"
 	ResourceFileScan   = "files:scan"
 
+	// PPT 文件
+	ResourcePPTView     = "ppts:view"
+	ResourcePPTDelete   = "ppts:delete"
+	ResourcePPTEdit     = "ppts:edit"
+	ResourcePPTDownload = "ppts:download"
+
 	// 审计日志
 	ResourceAuditView = "audit:view"
 
@@ -63,6 +69,10 @@ var AllPermissions = []string{
 	ResourceFileView,
 	ResourceFileDelete,
 	ResourceFileScan,
+	ResourcePPTView,
+	ResourcePPTDelete,
+	ResourcePPTEdit,
+	ResourcePPTDownload,
 	ResourceAuditView,
 	ResourceUserView,
 	ResourceUserCreate,
