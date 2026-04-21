@@ -122,14 +122,6 @@ export default function UserManagement() {
     try {
       const values = await form.validateFields()
 
-      // Admin check for shared_viewer assignment (D-13)
-      if (values.role_ids?.includes(5)) {
-        if (!currentUser?.is_admin) {
-          message.error('仅管理员可分配"共享查看者"角色')
-          return
-        }
-      }
-
       if (editingUser) {
         // 更新用户
         const req: UpdateUserRequest = {
