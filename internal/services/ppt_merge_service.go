@@ -22,6 +22,7 @@ type PPTMergeService struct {
 	config            *config.Config
 	mergeScript       string
 	slideCacheService *SlideCacheService
+	depsManager       *PythonDepsManager
 }
 
 // pythonMergeResult represents the JSON output from the Python merge script
@@ -33,14 +34,14 @@ type pythonMergeResult struct {
 }
 
 // NewPPTMergeService creates a new PPTMergeService instance
-func NewPPTMergeService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, slideCacheService *SlideCacheService) *PPTMergeService {
-	projectRoot := getProjectRoot()
+func NewPPTMergeService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, slideCacheService *SlideCacheService, depsManager *PythonDepsManager) *PPTMergeService {
 	return &PPTMergeService{
 		db:                db,
 		logger:            logger,
 		config:            cfg,
-		mergeScript:       filepath.Join(projectRoot, "scripts", "merge_slides.py"),
+		mergeScript:       "scripts/merge_slides.py", // 相对路径，确保从项目根目录启动
 		slideCacheService: slideCacheService,
+		depsManager:       depsManager,
 	}
 }
 
@@ -141,18 +142,25 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	cmdName := "python3"
-	if _, err := exec.LookPath("python3"); err != nil {
-		cmdName = "python"
+	// Get Python command using depsManager (same as slide_extractor and pptx_generator)
+	pythonCmd, pythonCmdArgs, err := s.depsManager.GetPythonCommand(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find Python interpreter: %w", err)
 	}
 
-	args := []string{s.mergeScript, outputPath, string(slideSpecJSON)}
-	cmd := exec.CommandContext(ctx, cmdName, args...)
+	// Prepare command arguments: python3 merge_slides.py <outputPath> <slideSpecJSON>
+	// Prepend pythonCmdArgs (e.g., ["run", "python"] for uv)
+	args := append(pythonCmdArgs, s.mergeScript, outputPath, string(slideSpecJSON))
+	cmd := exec.CommandContext(ctx, pythonCmd, args...)
+
+	// Set working directory to project root so relative paths work correctly
+	cmd.Dir = s.depsManager.projectRoot
 
 	// Log the command for debugging (truncated slideSpec to avoid huge logs)
 	s.logger.Info("Executing Python merge script",
-		zap.String("cmd", cmdName),
+		zap.String("cmd", pythonCmd),
 		zap.String("script", s.mergeScript),
+		zap.String("working_dir", s.depsManager.projectRoot),
 		zap.Int("slide_spec_count", len(slideSpecs)))
 
 	// Use CombinedOutput to capture both stdout and stderr
