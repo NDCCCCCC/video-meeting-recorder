@@ -23,8 +23,7 @@ export interface UserInfo {
   username: string
   email: string
   full_name: string
-  role_id: number
-  role?: Role
+  roles: Array<Role>
   is_active: boolean
   last_login_at: string | null
 }
@@ -42,7 +41,7 @@ export interface CreateUserRequest {
   password: string
   email?: string
   full_name?: string
-  role_id: number
+  role_ids: number[]
   is_active: boolean
 }
 
@@ -50,7 +49,7 @@ export interface CreateUserRequest {
 export interface UpdateUserRequest {
   email?: string
   full_name?: string
-  role_id?: number
+  role_ids?: number[]
   is_active?: boolean
 }
 
