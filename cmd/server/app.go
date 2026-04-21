@@ -291,6 +291,7 @@ func (a *MinimalApp) seedDatabase() error {
 		{Name: models.RoleOperator, Description: "操作员"},
 		{Name: models.RoleViewer, Description: "查看者"},
 		{Name: models.RoleAPIClient, Description: "API客户端"},
+		{Name: models.RoleSharedViewer, Description: "共享查看者"}, // D-04
 	}
 
 	for _, role := range roles {
@@ -315,7 +316,6 @@ func (a *MinimalApp) seedDatabase() error {
 			Username: "admin",
 			Email:    "admin@example.com",
 			FullName: "系统管理员",
-			RoleID:   adminRole.ID,
 			IsActive: true,
 		}
 		if err := admin.SetPassword("admin123"); err != nil {
@@ -324,6 +324,12 @@ func (a *MinimalApp) seedDatabase() error {
 		if err := a.db.Create(admin).Error; err != nil {
 			return fmt.Errorf("failed to create admin user: %w", err)
 		}
+
+		// 使用 Association API 分配角色（多对多关系）
+		if err := a.db.Model(admin).Association("Roles").Append(&adminRole); err != nil {
+			return fmt.Errorf("failed to assign admin role: %w", err)
+		}
+
 		a.logger.Info("Created default admin user",
 			zap.String("username", "admin"),
 			zap.String("note", "请及时修改默认密码"),
