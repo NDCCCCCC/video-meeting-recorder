@@ -134,7 +134,10 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.UpdateUser(id, &req)
+	// 获取当前用户ID用于审计日志
+	currentUserID := middleware.GetUserID(c)
+
+	user, err := h.userService.UpdateUser(id, &req, currentUserID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -259,7 +262,7 @@ func (h *UserHandler) UpdateCurrentProfile(c *gin.Context) {
 		FullName: req.FullName,
 	}
 
-	user, err := h.userService.UpdateUser(userID, updateReq)
+	user, err := h.userService.UpdateUser(userID, updateReq, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
