@@ -59,7 +59,7 @@ type UserDTO struct {
 	Username    string   `json:"username"`
 	Email       string   `json:"email"`
 	FullName    string   `json:"full_name"`
-	RoleID      uint     `json:"role_id"`
+	RoleIDs     []uint   `json:"role_ids"`
 	RoleName    string   `json:"role_name,omitempty"`
 	IsAdmin     bool     `json:"is_admin"`
 	Permissions []string `json:"permissions"`
@@ -83,7 +83,7 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	// 1. 查找用户（预加载角色和权限）
 	var user models.User
-	err := s.db.Preload("Role.Permissions").Where("username = ?", req.Username).First(&user).Error
+	err := s.db.Preload("Roles.Permissions").Where("username = ?", req.Username).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("用户名或密码错误")
@@ -189,7 +189,7 @@ func (s *Service) ValidatePassword(password string) *ValidationResult {
 // GetUserByID 根据ID获取用户
 func (s *Service) GetUserByID(userID uint) (*UserDTO, error) {
 	var user models.User
-	if err := s.db.Preload("Role.Permissions").First(&user, userID).Error; err != nil {
+	if err := s.db.Preload("Roles.Permissions").First(&user, userID).Error; err != nil {
 		return nil, err
 	}
 	return s.toUserDTO(&user), nil
@@ -197,20 +197,36 @@ func (s *Service) GetUserByID(userID uint) (*UserDTO, error) {
 
 // toUserDTO 转换为UserDTO
 func (s *Service) toUserDTO(user *models.User) *UserDTO {
-	dto := &UserDTO{
-		ID:       user.ID,
-		Username: user.Username,
-		Email:    user.Email,
-		FullName: user.FullName,
-		RoleID:   user.RoleID,
-		IsActive: user.IsActive,
+	// Extract role IDs
+	var roleIDs []uint
+	for _, role := range user.Roles {
+		roleIDs = append(roleIDs, role.ID)
 	}
-	if user.Role != nil {
-		dto.RoleName = user.Role.Name
-		dto.IsAdmin = user.Role.Name == models.RoleAdmin
-		// 构造权限列表: resource:action
-		for _, perm := range user.Role.Permissions {
-			permStr := perm.Resource + ":" + perm.Action
+
+	dto := &UserDTO{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		FullName:  user.FullName,
+		RoleIDs:   roleIDs,
+		IsActive:  user.IsActive,
+	}
+
+	// Check if user has any roles
+	if len(user.Roles) > 0 {
+		// Use first role for RoleName (backward compatibility)
+		dto.RoleName = user.Roles[0].Name
+		dto.IsAdmin = user.HasRole(models.RoleAdmin)
+
+		// Collect permissions from all roles (OR logic per D-07)
+		permMap := make(map[string]bool)
+		for _, role := range user.Roles {
+			for _, perm := range role.Permissions {
+				permStr := perm.Resource + ":" + perm.Action
+				permMap[permStr] = true
+			}
+		}
+		for permStr := range permMap {
 			dto.Permissions = append(dto.Permissions, permStr)
 		}
 	}
