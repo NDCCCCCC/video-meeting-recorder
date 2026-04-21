@@ -98,9 +98,16 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 		slideNumbers := sourcePptMap[pptFileID]
 		uniqueSlides := uniqueInts(slideNumbers)
 
+		// Convert 0-based slide numbers to 1-based for Python script
+		// Python script expects 1-based indices (slide_001.jpg = slide 1)
+		pythonSlideNumbers := make([]int, len(uniqueSlides))
+		for i, num := range uniqueSlides {
+			pythonSlideNumbers[i] = num + 1
+		}
+
 		slideSpecs = append(slideSpecs, map[string]interface{}{
 			"pptx_path":     pptFile.FilePath,
-			"slide_numbers": uniqueSlides,
+			"slide_numbers": pythonSlideNumbers,
 		})
 		sourcePptIDs = append(sourcePptIDs, pptFileID)
 	}
