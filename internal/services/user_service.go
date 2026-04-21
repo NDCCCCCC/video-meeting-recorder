@@ -1,24 +1,28 @@
 package services
 
 import (
+	"context"
 	"errors"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 // UserService 用户服务
 type UserService struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db           *gorm.DB
+	logger       *zap.Logger
+	auditService *audit.AuditLogService
 }
 
 // NewUserService 创建用户服务
-func NewUserService(db *gorm.DB, logger *zap.Logger) *UserService {
+func NewUserService(db *gorm.DB, logger *zap.Logger, auditService *audit.AuditLogService) *UserService {
 	return &UserService{
-		db:     db,
-		logger: logger,
+		db:           db,
+		logger:       logger,
+		auditService: auditService,
 	}
 }
 
@@ -27,7 +31,6 @@ type ListUsersRequest struct {
 	Page     int    `form:"page"`
 	PageSize int    `form:"page_size" binding:"max=100"`
 	Keyword  string `form:"keyword"`
-	RoleID   uint   `form:"role_id"`
 	IsActive *bool  `form:"is_active"`
 }
 
@@ -43,7 +46,7 @@ type CreateUserRequest struct {
 	Password string `json:"password" binding:"required,min=8"`
 	Email    string `json:"email" binding:"omitempty,email"`
 	FullName string `json:"full_name" binding:"omitempty,max=100"`
-	RoleID   uint   `json:"role_id" binding:"required"`
+	RoleIDs  []uint `json:"role_ids" binding:"required,min=1"`
 	IsActive bool   `json:"is_active"`
 }
 
@@ -51,8 +54,14 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Email    string `json:"email" binding:"omitempty,email"`
 	FullName string `json:"full_name" binding:"omitempty,max=100"`
-	RoleID   uint   `json:"role_id"`
+	RoleIDs  []uint `json:"role_ids"`
 	IsActive *bool  `json:"is_active"`
+}
+
+// AssignRolesRequest 分配角色请求
+type AssignRolesRequest struct {
+	RoleIDs       []uint `json:"role_ids" binding:"required,min=1"`
+	CurrentUserID uint   `json:"-"` // 当前执行操作的用户ID
 }
 
 // ListUsers 获取用户列表
@@ -68,11 +77,6 @@ func (s *UserService) ListUsers(req *ListUsersRequest) (*ListUsersResponse, erro
 			"%"+req.Keyword+"%", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
 	}
 
-	// 角色筛选
-	if req.RoleID > 0 {
-		query = query.Where("role_id = ?", req.RoleID)
-	}
-
 	// 状态筛选
 	if req.IsActive != nil {
 		query = query.Where("is_active = ?", *req.IsActive)
@@ -85,7 +89,7 @@ func (s *UserService) ListUsers(req *ListUsersRequest) (*ListUsersResponse, erro
 
 	// 分页查询
 	offset := (req.Page - 1) * req.PageSize
-	if err := query.Preload("Role").
+	if err := query.Preload("Roles").
 		Offset(offset).
 		Limit(req.PageSize).
 		Order("created_at DESC").
@@ -102,7 +106,7 @@ func (s *UserService) ListUsers(req *ListUsersRequest) (*ListUsersResponse, erro
 // GetUserByID 根据ID获取用户
 func (s *UserService) GetUserByID(id uint) (*models.User, error) {
 	var user models.User
-	if err := s.db.Preload("Role").First(&user, id).Error; err != nil {
+	if err := s.db.Preload("Roles").First(&user, id).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -123,18 +127,20 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 		}
 	}
 
-	// 检查角色是否存在
-	var role models.Role
-	if err := s.db.First(&role, req.RoleID).Error; err != nil {
-		return nil, errors.New("角色不存在")
+	// 验证角色ID是否存在
+	var roles []models.Role
+	if err := s.db.Find(&roles, req.RoleIDs).Error; err != nil {
+		return nil, err
+	}
+	if len(roles) != len(req.RoleIDs) {
+		return nil, errors.New("部分角色不存在")
 	}
 
-	// 创建用户
+	// 创建用户（不设置角色）
 	user := &models.User{
 		Username: req.Username,
 		Email:    req.Email,
 		FullName: req.FullName,
-		RoleID:   req.RoleID,
 		IsActive: req.IsActive,
 	}
 
@@ -146,14 +152,22 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 		return nil, err
 	}
 
+	// 使用 AssignRoles 分配角色
+	if err := s.AssignRoles(user.ID, &AssignRolesRequest{
+		RoleIDs:       req.RoleIDs,
+		CurrentUserID: 0, // 系统创建
+	}); err != nil {
+		return nil, err
+	}
+
 	// 重新加载用户信息
-	s.db.Preload("Role").First(user, user.ID)
+	s.db.Preload("Roles").First(user, user.ID)
 
 	return user, nil
 }
 
 // UpdateUser 更新用户
-func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest) (*models.User, error) {
+func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID uint) (*models.User, error) {
 	var user models.User
 	if err := s.db.First(&user, id).Error; err != nil {
 		return nil, errors.New("用户不存在")
@@ -169,12 +183,10 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest) (*models.User,
 	}
 
 	// 更新角色
-	if req.RoleID > 0 {
-		var role models.Role
-		if err := s.db.First(&role, req.RoleID).Error; err != nil {
-			return nil, errors.New("角色不存在")
+	if len(req.RoleIDs) > 0 {
+		if err := s.UpdateRoles(id, req.RoleIDs, currentUserID); err != nil {
+			return nil, err
 		}
-		user.RoleID = req.RoleID
 	}
 
 	// 更新其他字段
@@ -191,7 +203,7 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest) (*models.User,
 	}
 
 	// 重新加载用户信息
-	s.db.Preload("Role").First(&user, user.ID)
+	s.db.Preload("Roles").First(&user, user.ID)
 
 	return &user, nil
 }
@@ -246,4 +258,83 @@ func (s *UserService) ToggleUserStatus(id uint) (*models.User, error) {
 	}
 
 	return &user, nil
+}
+
+// AssignRoles 分配多个角色给用户
+func (s *UserService) AssignRoles(userID uint, req *AssignRolesRequest) error {
+	var user models.User
+	if err := s.db.First(&user, userID).Error; err != nil {
+		return errors.New("用户不存在")
+	}
+
+	// 验证角色ID是否存在
+	var roles []models.Role
+	if err := s.db.Find(&roles, req.RoleIDs).Error; err != nil {
+		return err
+	}
+	if len(roles) != len(req.RoleIDs) {
+		return errors.New("部分角色不存在")
+	}
+
+	// D-13: 仅管理员可分配 shared_viewer 角色
+	var currentUser models.User
+	if req.CurrentUserID > 0 {
+		if err := s.db.Preload("Roles").First(&currentUser, req.CurrentUserID).Error; err == nil {
+			for _, role := range roles {
+				if role.Name == models.RoleSharedViewer && !currentUser.HasRole(models.RoleAdmin) {
+					return errors.New("仅管理员可分配'共享查看者'角色")
+				}
+			}
+		}
+	}
+
+	// 使用 Clear + Append 方式（参考 RoleService.AssignPermissions）
+	if err := s.db.Model(&user).Association("Roles").Clear(); err != nil {
+		return err
+	}
+
+	if err := s.db.Model(&user).Association("Roles").Append(roles); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UpdateRoles 更新用户角色（带审计日志）
+func (s *UserService) UpdateRoles(userID uint, roleIDs []uint, currentUserID uint) error {
+	var user models.User
+	if err := s.db.Preload("Roles").First(&user, userID).Error; err != nil {
+		return errors.New("用户不存在")
+	}
+
+	// 记录旧角色（用于审计）
+	oldRoles := make([]uint, len(user.Roles))
+	for i, role := range user.Roles {
+		oldRoles[i] = role.ID
+	}
+
+	// 调用 AssignRoles
+	req := &AssignRolesRequest{
+		RoleIDs:       roleIDs,
+		CurrentUserID: currentUserID,
+	}
+
+	if err := s.AssignRoles(userID, req); err != nil {
+		return err
+	}
+
+	// D-15: 记录审计日志
+	if s.auditService != nil {
+		s.auditService.LogOperation(context.Background(), &audit.LogOperationRequest{
+			UserID:     currentUserID,
+			Module:     "user",
+			Action:     "update_roles",
+			ResourceID: &userID,
+			OldData:    oldRoles,
+			NewData:    roleIDs,
+			Status:     "success",
+		})
+	}
+
+	return nil
 }
