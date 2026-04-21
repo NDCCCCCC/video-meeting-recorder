@@ -341,12 +341,17 @@ export function VideoPreviewPanel({
             backgroundColor: '#000',
             borderRadius: '8px',
             overflow: 'hidden',
+            width: '100%',
+            aspectRatio: '16 / 9',
           }}
         >
           <video
             ref={videoRef}
             src={videoUrl}
             style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
               width: '100%',
               height: '100%',
               objectFit: 'contain',
@@ -372,6 +377,7 @@ export function VideoPreviewPanel({
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
+                boxSizing: 'border-box',
               }}
             >
               {/* Editable progress bar with time input */}

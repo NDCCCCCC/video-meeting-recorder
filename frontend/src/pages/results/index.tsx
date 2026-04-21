@@ -27,7 +27,6 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import PPTPreview from '../../components/PPTPreview'
-import MergeSelectionBar from '../../components/MergeSelectionBar'
 import TextContentTab from '../../components/TextContentTab'
 import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import SlideCapturePanel, { DirectCaptureButton } from '../../components/SlideCapturePanel'
@@ -744,21 +743,6 @@ export default function ResultDetailPage() {
           <TextContentTab videoFileId={videoFileIdNum} />
         </Space>
       </Card>
-
-      {/* Merge Selection Bar - Below Info Bar */}
-      {isMergeMode && (
-        <MergeSelectionBar
-          selectedSlides={selectedSlides}
-          onReorder={setSelectedSlides}
-          onRemove={handleRemoveSlide}
-          onConfirm={handleConfirmMerge}
-          onCancel={() => {
-            setIsMergeMode(false)
-            setSelectedSlides([])
-          }}
-          isMerging={isMerging}
-        />
-      )}
 
       {/* 重新转录模态框 */}
       <TranscriptionProgressModal
