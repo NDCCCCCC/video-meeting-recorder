@@ -73,6 +73,7 @@ func (h *VideoRecordingTaskHandler) ListTasks(c *gin.Context) {
 	req.UserID = middleware.GetUserID(c)
 	req.IsAdmin = middleware.GetIsAdmin(c)
 	req.ApplyDataScope = true
+	req.RoleIDs = middleware.GetRoleIDs(c)
 
 	result, err := h.taskService.ListTasks(&req)
 	if err != nil {
