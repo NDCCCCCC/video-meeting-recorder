@@ -191,13 +191,25 @@ func (g *PPTXGenerator) validatePath(path string) error {
 
 // getProjectRoot returns the project root directory by searching for go.mod
 func getProjectRoot() string {
-	// Start from current directory and search for go.mod
-	dir, err := os.Getwd()
+	// Start from executable directory instead of current working directory
+	// This ensures scripts are found when running from any location
+	execPath, err := os.Executable()
 	if err != nil {
-		return "."
+		// Fallback to current directory if executable path can't be determined
+		dir, err := os.Getwd()
+		if err != nil {
+			return "."
+		}
+		return findGoMod(dir)
 	}
 
-	// Search up for go.mod
+	// Get the directory containing the executable
+	execDir := filepath.Dir(execPath)
+	return findGoMod(execDir)
+}
+
+// findGoMod searches upward from dir for go.mod
+func findGoMod(dir string) string {
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return dir
