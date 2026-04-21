@@ -35,7 +35,6 @@ import SlideThumbnail from '../../components/SlideThumbnail'
 import {
   getPptsByVideo,
   getSlides,
-  mergeSlides,
   deletePpt,
   getPptDownloadUrl,
   reorderSlides,
@@ -47,7 +46,6 @@ import type {
   PPTResult,
   SlideImage,
   SelectedSlide,
-  MergeSlideItem,
 } from '../../types/ppt'
 import type { TranscriptionMode } from '../../types/transcription'
 import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
@@ -85,7 +83,6 @@ export default function ResultDetailPage() {
   const [isLoadingSlides, setIsLoadingSlides] = useState(false)
   const [isMergeMode, setIsMergeMode] = useState(false)
   const [selectedSlides, setSelectedSlides] = useState<SelectedSlide[]>([])
-  const [isMerging, setIsMerging] = useState(false)
   const [videoName, setVideoName] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -301,49 +298,49 @@ export default function ResultDetailPage() {
     [currentPptId, selectedSlides, currentPpt]
   )
 
-  // 合并模式：移除幻灯片
-  const handleRemoveSlide = useCallback(
-    (slideId: string) => {
-      setSelectedSlides((prev) => prev.filter((s) => s.id !== slideId))
-    },
-    []
-  )
+  // 合并模式：移除幻灯片（功能已移除，保留以备后用）
+  // const handleRemoveSlide = useCallback(
+  //   (slideId: string) => {
+  //     setSelectedSlides((prev) => prev.filter((s) => s.id !== slideId))
+  //   },
+  //   []
+  // )
 
-  // 合并模式：确认合并
-  const handleConfirmMerge = useCallback(async () => {
-    if (selectedSlides.length === 0) {
-      message.warning('请先选择要合并的幻灯片')
-      return
-    }
+  // 合并模式：确认合并（功能已移除，保留以备后用）
+  // const handleConfirmMerge = useCallback(async () => {
+  //   if (selectedSlides.length === 0) {
+  //     message.warning('请先选择要合并的幻灯片')
+  //     return
+  //   }
 
-    setIsMerging(true)
-    try {
-      const mergeItems: MergeSlideItem[] = selectedSlides.map((s) => ({
-        ppt_file_id: s.ppt_file_id,
-        slide_number: s.slide_number,
-      }))
+  //   setIsMerging(true)
+  //   try {
+  //     const mergeItems: MergeSlideItem[] = selectedSlides.map((s) => ({
+  //       ppt_file_id: s.ppt_file_id,
+  //       slide_number: s.slide_number,
+  //     }))
 
-      const response = await mergeSlides({
-        slides: mergeItems,
-        video_file_id: videoFileIdNum,
-      })
+  //     const response = await mergeSlides({
+  //       slides: mergeItems,
+  //       video_file_id: videoFileIdNum,
+  //     })
 
-      if (response.data) {
-        message.success(`合并完成！已生成 ${response.data.page_count} 页 PPT。`)
-        // 刷新 PPT 列表
-        await loadPpts()
-        // 退出合并模式
-        setIsMergeMode(false)
-        setSelectedSlides([])
-        // 切换到新生成的 PPT
-        setCurrentPptId(response.data.ppt_file_id)
-      }
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '合并失败')
-    } finally {
-      setIsMerging(false)
-    }
-  }, [selectedSlides, videoFileIdNum, loadPpts])
+  //     if (response.data) {
+  //       message.success(`合并完成！已生成 ${response.data.page_count} 页 PPT。`)
+  //       // 刷新 PPT 列表
+  //       await loadPpts()
+  //       // 退出合并模式
+  //       setIsMergeMode(false)
+  //       setSelectedSlides([])
+  //       // 切换到新生成的 PPT
+  //       setCurrentPptId(response.data.ppt_file_id)
+  //     }
+  //   } catch (error) {
+  //     message.error(error instanceof Error ? error.message : '合并失败')
+  //   } finally {
+  //     setIsMerging(false)
+  //   }
+  // }, [selectedSlides, videoFileIdNum, loadPpts])
 
   // 下载 PPT
   const handleDownloadPpt = useCallback(() => {
@@ -548,14 +545,46 @@ export default function ResultDetailPage() {
           justifyContent: 'space-between',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Button
-            icon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/files')}
-          >
-            返回
-          </Button>
-          <h2 style={{ margin: 0 }}>PPT结果 - {videoName}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Button
+              icon={<ArrowLeftOutlined />}
+              onClick={() => navigate('/files')}
+            >
+              返回
+            </Button>
+            <h2 style={{ margin: 0 }}>PPT结果 - {videoName}</h2>
+          </div>
+
+          {/* PPT选择下拉框 - 当有多个PPT时显示 */}
+          {ppts.length > 1 && (
+            <Dropdown
+              menu={{
+                items: ppts.map((ppt) => ({
+                  key: ppt.id,
+                  label: (
+                    <span>
+                      {ppt.source_type === 'merge' ? '🔀 ' : '📝 '}
+                      {new Date(ppt.created_at).toLocaleString('zh-CN', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                      ({ppt.page_count}页)
+                    </span>
+                  ),
+                  onClick: () => setCurrentPptId(ppt.id),
+                })),
+              }}
+              trigger={['click']}
+            >
+              <Button type={currentPpt?.source_type === 'merge' ? 'primary' : 'default'}>
+                {currentPpt?.source_type === 'merge' ? '🔀 ' : '📝 '}
+                切换PPT
+              </Button>
+            </Dropdown>
+          )}
         </div>
       </div>
 
