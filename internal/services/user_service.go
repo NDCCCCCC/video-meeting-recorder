@@ -55,6 +55,12 @@ type UpdateUserRequest struct {
 	IsActive *bool  `json:"is_active"`
 }
 
+// AssignRolesRequest 分配角色请求
+type AssignRolesRequest struct {
+	RoleIDs       []uint `json:"role_ids" binding:"required,min=1"`
+	CurrentUserID uint   `json:"-"` // 当前执行操作的用户ID
+}
+
 // ListUsers 获取用户列表
 func (s *UserService) ListUsers(req *ListUsersRequest) (*ListUsersResponse, error) {
 	var users []models.User
@@ -246,4 +252,44 @@ func (s *UserService) ToggleUserStatus(id uint) (*models.User, error) {
 	}
 
 	return &user, nil
+}
+
+// AssignRoles 分配多个角色给用户
+func (s *UserService) AssignRoles(userID uint, req *AssignRolesRequest) error {
+	var user models.User
+	if err := s.db.First(&user, userID).Error; err != nil {
+		return errors.New("用户不存在")
+	}
+
+	// 验证角色ID是否存在
+	var roles []models.Role
+	if err := s.db.Find(&roles, req.RoleIDs).Error; err != nil {
+		return err
+	}
+	if len(roles) != len(req.RoleIDs) {
+		return errors.New("部分角色不存在")
+	}
+
+	// D-13: 仅管理员可分配 shared_viewer 角色
+	var currentUser models.User
+	if req.CurrentUserID > 0 {
+		if err := s.db.Preload("Roles").First(&currentUser, req.CurrentUserID).Error; err == nil {
+			for _, role := range roles {
+				if role.Name == models.RoleSharedViewer && !currentUser.HasRole(models.RoleAdmin) {
+					return errors.New("仅管理员可分配'共享查看者'角色")
+				}
+			}
+		}
+	}
+
+	// 使用 Clear + Append 方式（参考 RoleService.AssignPermissions）
+	if err := s.db.Model(&user).Association("Roles").Clear(); err != nil {
+		return err
+	}
+
+	if err := s.db.Model(&user).Association("Roles").Append(roles); err != nil {
+		return err
+	}
+
+	return nil
 }
