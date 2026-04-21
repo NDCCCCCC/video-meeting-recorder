@@ -14,8 +14,7 @@ type User struct {
 	PasswordHash string     `gorm:"type:varchar(255);not null" json:"-"`
 	Email        string     `gorm:"type:varchar(100)" json:"email"`
 	FullName     string     `gorm:"type:varchar(100)" json:"full_name"`
-	RoleID       uint       `gorm:"not null" json:"role_id"`
-	Role         *Role      `gorm:"foreignKey:RoleID" json:"role,omitempty"`
+	Roles        []Role     `gorm:"many2many:users_roles;" json:"roles,omitempty"`
 	IsActive     bool       `gorm:"default:true" json:"is_active"`
 	LastLoginAt  *time.Time `json:"last_login_at"`
 	APIKeys      []APIKey   `gorm:"foreignKey:UserID" json:"api_keys,omitempty"`
@@ -44,28 +43,41 @@ func (u *User) CheckPassword(password string) bool {
 
 // HasPermission 检查用户权限
 func (u *User) HasPermission(resource, action string) bool {
-	if u.Role == nil {
+	if len(u.Roles) == 0 {
 		return false
 	}
 
-	// 管理员拥有所有权限
-	if u.Role.Name == RoleAdmin {
-		return true
-	}
-
-	// 检查角色权限
-	for _, perm := range u.Role.Permissions {
-		if perm.Resource == resource && (perm.Action == action || perm.Action == "*") {
+	// 检查所有角色 (OR logic per D-07)
+	for _, role := range u.Roles {
+		// 管理员拥有所有权限
+		if role.Name == RoleAdmin {
 			return true
 		}
-		// 检查通配符权限 (e.g., "conferences:*")
-		if perm.Resource == resource || perm.Resource == "*" {
-			if perm.Action == action || perm.Action == "*" {
+
+		// 检查该角色的权限
+		for _, perm := range role.Permissions {
+			if perm.Resource == resource && (perm.Action == action || perm.Action == "*") {
 				return true
+			}
+			// 检查通配符权限 (e.g., "conferences:*")
+			if perm.Resource == resource || perm.Resource == "*" {
+				if perm.Action == action || perm.Action == "*" {
+					return true
+				}
 			}
 		}
 	}
 
+	return false
+}
+
+// HasRole 检查用户是否拥有特定角色
+func (u *User) HasRole(roleName string) bool {
+	for _, role := range u.Roles {
+		if role.Name == roleName {
+			return true
+		}
+	}
 	return false
 }
 
