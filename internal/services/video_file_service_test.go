@@ -1567,3 +1567,84 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		assert.Equal(t, 0, count)
 	})
 }
+
+// Wave 0 Test Stubs for Shared Viewer Visibility Control (Phase 09-03)
+// These tests verify the shared_viewer role behavior for data visibility (D-01, D-02, D-03, D-10, D-11, D-12)
+
+// TestListFiles_WithSharedViewerRole_ReturnsAllFiles verifies that users with shared_viewer role
+// can see all files created by any user (D-02)
+func TestListFiles_WithSharedViewerRole_ReturnsAllFiles(t *testing.T) {
+	t.Skip("Wave 0: Test stub for shared_viewer visibility - to be implemented in Wave 1")
+
+	// Setup: Create multiple users with different roles
+	//   - user1: regular user (viewer role only)
+	//   - user2: regular user (operator role only)
+	//   - sharedViewerUser: user with shared_viewer role
+	// Create files created by user1 and user2
+
+	// Action: Call ListFiles() with sharedViewerUser context
+
+	// Assert: Verify returned files include both user1's and user2's files
+	//         Verify total count matches sum of all files in system
+}
+
+// TestListFiles_WithoutSharedViewerRole_ReturnsOwnFilesOnly verifies that users without
+// shared_viewer role can only see their own files (D-10, D-11)
+func TestListFiles_WithoutSharedViewerRole_ReturnsOwnFilesOnly(t *testing.T) {
+	t.Skip("Wave 0: Test stub for data ownership filtering - to be implemented in Wave 1")
+
+	// Setup: Create multiple users (user1, user2) without shared_viewer role
+	//   Create files: file1 (created by user1), file2 (created by user2), file3 (created by user1)
+
+	// Action: Call ListFiles() with user1 context (no shared_viewer role)
+
+	// Assert: Verify returned files only include file1 and file3 (user1's files)
+	//         Verify file2 (user2's file) is NOT in results
+	//         Verify total count equals 2 (only user1's files)
+}
+
+// TestListFiles_SharedViewerHasNoOperationPermissions verifies that shared_viewer role
+// does NOT grant operation permissions like delete or edit (D-01, D-03)
+func TestListFiles_SharedViewerHasNoOperationPermissions(t *testing.T) {
+	t.Skip("Wave 0: Test stub for permission separation - to be implemented in Wave 1")
+
+	// Setup: Create user with shared_viewer role (but no admin/operator roles)
+	//   Create a file owned by another user
+
+	// Action: Attempt to delete the file using service.DeleteFile()
+
+	// Assert: Verify deletion fails with permission error
+	//         Verify file still exists in database after deletion attempt
+	//         (This confirms visibility != permissions - shared_viewer can SEE but not MODIFY)
+}
+
+// TestListFiles_VisibilityCheckedBeforePermissions verifies that data visibility filtering
+// happens before permission checks in the request flow (D-12)
+func TestListFiles_VisibilityCheckedBeforePermissions(t *testing.T) {
+	t.Skip("Wave 0: Test stub for visibility vs permission ordering - to be implemented in Wave 1")
+
+	// Setup: Create shared_viewer user with limited operation permissions
+	//   Create files owned by multiple users
+
+	// Action: Call ListFiles() with shared_viewer user context
+
+	// Assert: Verify query includes all users' files (visibility check passed)
+	//         Verify permission middleware still blocks unauthorized operations
+	//         (This confirms visibility is applied at service layer, permissions at middleware)
+}
+
+// TestListFiles_MultipleSharedViewersSeeSameData verifies that multiple users with
+// shared_viewer role all see the same all-user data set
+func TestListFiles_MultipleSharedViewersSeeSameData(t *testing.T) {
+	t.Skip("Wave 0: Test stub for multiple shared_viewers - to be implemented in Wave 1")
+
+	// Setup: Create two shared_viewer users (sharedViewer1, sharedViewer2)
+	//   Create files owned by multiple regular users
+
+	// Action: Call ListFiles() with sharedViewer1 context
+	//         Call ListFiles() with sharedViewer2 context
+
+	// Assert: Verify both users receive identical file lists
+	//         Verify both lists include all files in system
+	//         Verify total counts match
+}
