@@ -913,8 +913,9 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 		return nil, fmt.Errorf("failed to update backup path: %w", err)
 	}
 
-	// Clear cache to force re-extraction with new order
-	s.slideCache.InvalidateCache(pptFileID)
+	// NOTE: Don't invalidate cache after reordering!
+	// The reordered JPEG images in the cache directory are now the source of truth.
+	// Invalidating would cause re-extraction from the PPTX file which still has the original order.
 
 	s.logger.Info("Successfully reordered slides",
 		zap.Uint("ppt_file_id", pptFileID),
