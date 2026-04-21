@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -144,6 +145,11 @@ func (s *SlideCacheService) readCachedSlides(thumbnailDir string, pptFileID uint
 			FullsizeURL:  fmt.Sprintf("%s/fullsize/%s", baseURL, filename),
 		})
 	}
+
+	// Sort slides by slide number to ensure consistent ordering
+	sort.Slice(slides, func(i, j int) bool {
+		return slides[i].SlideNumber < slides[j].SlideNumber
+	})
 
 	return slides, nil
 }

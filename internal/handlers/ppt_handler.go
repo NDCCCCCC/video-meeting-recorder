@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -244,7 +245,19 @@ func (h *PPThandler) DownloadPPT(c *gin.Context) {
 		return
 	}
 
-	// Serve file
+	// Determine download filename - use video name if available
+	downloadFilename := pptFile.FileName
+	if pptFile.SourceVideoFileID != nil {
+		videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+		if err == nil && videoFile != nil {
+			// Use video filename without extension + .pptx
+			videoName := strings.TrimSuffix(videoFile.FileName, filepath.Ext(videoFile.FileName))
+			downloadFilename = videoName + ".pptx"
+		}
+	}
+
+	// Set Content-Disposition header with custom filename
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", downloadFilename))
 	c.File(pptFile.FilePath)
 }
 
