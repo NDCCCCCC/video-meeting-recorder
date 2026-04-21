@@ -172,11 +172,30 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 
 // MergeSlides handles POST /api/v1/ppts/merge (per D-13 to D-18)
 func (h *PPThandler) MergeSlides(c *gin.Context) {
+	// Read body for logging before binding (since binding consumes it)
+	bodyBytes, _ := c.GetRawData()
+	bodyStr := string(bodyBytes)
+
 	var req models.MergeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.GinError(c, response.CodeInvalidRequest, "无效的请求参数")
+		h.logger.Warn("Merge request binding failed",
+			zap.Error(err),
+			zap.String("request_body", bodyStr))
+		response.GinError(c, response.CodeInvalidRequest, "无效的请求参数: "+err.Error())
 		return
 	}
+
+	// Additional validation with better error messages
+	if req.VideoFileID == 0 {
+		h.logger.Warn("Merge request failed: video_file_id is 0 or missing",
+			zap.String("request_body", bodyStr))
+		response.GinError(c, response.CodeInvalidRequest, "视频文件ID不能为空")
+		return
+	}
+
+	h.logger.Info("Merge request received",
+		zap.Uint("video_file_id", req.VideoFileID),
+		zap.Int("slide_count", len(req.Slides)))
 
 	// Validate slides not empty
 	if len(req.Slides) == 0 {
@@ -864,12 +883,23 @@ func (h *PPThandler) ReorderSlidesHandler(c *gin.Context) {
 		return
 	}
 
-	// Clear slide cache to force re-extraction
-	h.slideCacheService.InvalidateCache(uint(id))
+	// NOTE: Don't invalidate cache after reordering!
+	// The reordered JPEG images in the cache directory are now the source of truth.
+	// Invalidating would cause re-extraction from the PPTX file which still has the original order.
 
 	response.GinSuccess(c, gin.H{
 		"success":   true,
 		"message":   "幻灯片顺序已更新",
 		"new_order": newOrder,
 	})
+}
+
+// GetRequestBody reads and returns the request body for logging
+// Note: This consumes the body, so it should only be used for error logging
+func GetRequestBody(c *gin.Context) string {
+	body, err := c.GetRawData()
+	if err != nil {
+		return fmt.Sprintf("[error reading body: %v]", err)
+	}
+	return string(body)
 }
