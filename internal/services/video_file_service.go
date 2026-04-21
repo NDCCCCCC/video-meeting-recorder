@@ -56,18 +56,19 @@ func (s *VideoFileService) SetHLSPath(hlsPath string) {
 
 // ListFilesRequest 文件列表请求
 type ListFilesRequest struct {
-	Page           int    `form:"page"`
-	PageSize       int    `form:"page_size" binding:"max=100"`
-	Keyword        string `form:"keyword"`
-	TaskID         *uint  `form:"task_id"`
-	Status         string `form:"status"`
-	Format         string `form:"format"`
-	SourceType     string `form:"source_type"`
-	StartDate      string `form:"start_date"`
-	EndDate        string `form:"end_date"`
-	UserID         uint   `form:"-"`
-	IsAdmin        bool   `form:"-"`
-	ApplyDataScope bool   `form:"-"`
+	Page           int          `form:"page"`
+	PageSize       int          `form:"page_size" binding:"max=100"`
+	Keyword        string       `form:"keyword"`
+	TaskID         *uint        `form:"task_id"`
+	Status         string       `form:"status"`
+	Format         string       `form:"format"`
+	SourceType     string       `form:"source_type"`
+	StartDate      string       `form:"start_date"`
+	EndDate        string       `form:"end_date"`
+	UserID         uint         `form:"-"`
+	IsAdmin        bool         `form:"-"`
+	ApplyDataScope bool         `form:"-"`
+	User           *models.User `form:"-"` // User object with Roles preloaded for visibility control (D-11, D-12)
 }
 
 // ListFilesResponse 文件列表响应
@@ -168,8 +169,20 @@ func (s *VideoFileService) applyFilters(query *gorm.DB, req *ListFilesRequest) {
 		query = query.Where("source_type = ?", req.SourceType)
 	}
 
-	// 数据范围过滤
-	if req.ApplyDataScope && !req.IsAdmin && req.UserID > 0 {
+	// DATA VISIBILITY: Shared viewers see all data (D-02, D-11, D-12)
+	// Visibility check (data scope) happens before permission checks (operation authorization)
+	// shared_viewer affects data scope, not operation permissions (D-01, D-03)
+	if req.ApplyDataScope && req.User != nil {
+		// Check if user has shared_viewer role - if yes, skip created_by filter
+		if !req.User.HasRole(models.RoleSharedViewer) {
+			// Non-shared-viewers only see their own data (D-10)
+			if req.UserID > 0 {
+				query = query.Where("created_by = ?", req.UserID)
+			}
+		}
+		// shared_viewers skip created_by filter to see all data (D-02)
+	} else if req.ApplyDataScope && !req.IsAdmin && req.UserID > 0 {
+		// Fallback for requests without User object loaded (legacy support)
 		query = query.Where("created_by = ?", req.UserID)
 	}
 
