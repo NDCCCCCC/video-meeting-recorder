@@ -7,16 +7,16 @@ type Role struct {
 	Base
 	Name        string       `gorm:"type:varchar(50);uniqueIndex;not null" json:"name"`
 	Description string       `gorm:"type:text" json:"description"`
-	Users       []User       `gorm:"foreignKey:RoleID" json:"users,omitempty"`
 	Permissions []Permission `gorm:"many2many:role_permissions;" json:"permissions,omitempty"`
 }
 
 // 预定义角色
 const (
-	RoleAdmin     = "admin"      // 系统管理员
-	RoleOperator  = "operator"   // 操作员
-	RoleViewer    = "viewer"     // 查看者
-	RoleAPIClient = "api_client" // API客户端
+	RoleAdmin        = "admin"         // 系统管理员
+	RoleOperator     = "operator"      // 操作员
+	RoleViewer       = "viewer"        // 查看者
+	RoleAPIClient    = "api_client"    // API客户端
+	RoleSharedViewer = "shared_viewer" // 共享查看者 (D-04)
 )
 
 // BeforeCreate GORM hook - 在创建前调用
