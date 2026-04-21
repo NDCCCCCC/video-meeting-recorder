@@ -135,7 +135,7 @@ func extractTokenFromHeader(c *gin.Context) string {
 func setUserContext(c *gin.Context, claims *auth.Claims, tokenString string) {
 	c.Set("user_id", claims.UserID)
 	c.Set("username", claims.Username)
-	c.Set("role_id", claims.RoleID)
+	c.Set("role_ids", claims.RoleIDs)
 	c.Set("is_admin", claims.IsAdmin)
 	c.Set("permissions", claims.Permissions)
 	c.Set("token", tokenString)

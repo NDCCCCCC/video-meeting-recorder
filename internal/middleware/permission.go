@@ -21,7 +21,7 @@ func RequirePermission(db *gorm.DB, resource, action string) gin.HandlerFunc {
 
 		// 加载用户和权限
 		var user models.User
-		if err := db.Preload("Role").Preload("Role.Permissions").First(&user, userID).Error; err != nil {
+		if err := db.Preload("Roles.Permissions").First(&user, userID).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": response.CodeInternalError, "message": "加载用户信息失败"})
 			c.Abort()
 			return
@@ -49,16 +49,16 @@ func RequireRole(db *gorm.DB, roles ...string) gin.HandlerFunc {
 		}
 
 		var user models.User
-		if err := db.Preload("Role").First(&user, userID).Error; err != nil {
+		if err := db.Preload("Roles").First(&user, userID).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": response.CodeInternalError, "message": "加载用户信息失败"})
 			c.Abort()
 			return
 		}
 
-		// 检查角色
+		// Check if user has any of the required roles (OR logic)
 		hasRole := false
-		for _, role := range roles {
-			if user.Role.Name == role {
+		for _, requiredRole := range roles {
+			if user.HasRole(requiredRole) {
 				hasRole = true
 				break
 			}
@@ -95,15 +95,16 @@ func RequireOwnershipOrRole(db *gorm.DB, ownerIDField string, roles ...string) g
 
 		// 检查角色
 		var user models.User
-		if err := db.Preload("Role").First(&user, userID).Error; err != nil {
+		if err := db.Preload("Roles").First(&user, userID).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": response.CodeInternalError, "message": "加载用户信息失败"})
 			c.Abort()
 			return
 		}
 
+		// Check if user has any of the required roles (OR logic)
 		hasRole := false
-		for _, role := range roles {
-			if user.Role.Name == role {
+		for _, requiredRole := range roles {
+			if user.HasRole(requiredRole) {
 				hasRole = true
 				break
 			}
