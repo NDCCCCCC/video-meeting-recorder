@@ -224,9 +224,21 @@ export default function UserManagement() {
     },
     {
       title: '角色',
-      dataIndex: 'role',
-      width: 120,
-      render: (role) => role?.name || '-',
+      dataIndex: 'roles',
+      width: 200,
+      render: (roles) => (
+        <>
+          {roles?.map((role) => (
+            <Tag
+              key={role.id}
+              color={role.name === 'shared_viewer' ? 'purple' : 'blue'}
+              style={{ marginBottom: 4 }}
+            >
+              {role.description || role.name}
+            </Tag>
+          ))}
+        </>
+      ),
     },
     {
       title: '状态',
