@@ -358,8 +358,12 @@ func (a *MinimalApp) seedPermissions() error {
 		models.ResourceTaskStop:   "停止录制任务",
 		models.ResourceFileView:   "查看视频文件",
 		models.ResourceFileDelete: "删除视频文件",
-		models.ResourceFileScan:   "扫描视频文件",
-		models.ResourceUserView:   "查看用户",
+		models.ResourceFileScan:      "扫描视频文件",
+		models.ResourcePPTView:      "查看PPT文件",
+		models.ResourcePPTDelete:    "删除PPT文件",
+		models.ResourcePPTEdit:      "编辑PPT文件",
+		models.ResourcePPTDownload:  "下载PPT文件",
+		models.ResourceUserView:     "查看用户",
 		models.ResourceUserCreate: "创建用户",
 		models.ResourceUserEdit:   "编辑用户",
 		models.ResourceUserDelete: "删除用户",
@@ -503,7 +507,6 @@ func corsMiddleware() gin.HandlerFunc {
 func (a *MinimalApp) initHandlers() error {
 	a.tokenService = auth.NewSM4TokenService(a.config, a.db, a.logger)
 	authService := auth.NewService(a.config, a.db, a.logger)
-	userService := services.NewUserService(a.db, a.logger)
 	roleService := services.NewRoleService(a.db, a.logger)
 	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger, a.config)
 	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
@@ -525,8 +528,9 @@ func (a *MinimalApp) initHandlers() error {
 	fileService := storage.NewFileService(a.db, a.logger, a.config)
 	fileHandler := handlers.NewFileHandler(fileService, a.logger)
 
-	// 审计日志服务
+	// 审计日志服务（必须在 userService 之前创建）
 	auditService := audit.NewAuditLogService(a.db, a.logger)
+	userService := services.NewUserService(a.db, a.logger, auditService)
 	auditHandler := handlers.NewAuditHandler(auditService)
 	auditHandler.SetLogger(a.logger)
 

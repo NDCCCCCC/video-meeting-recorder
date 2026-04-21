@@ -111,7 +111,7 @@ func handleAPIKeyAuth(c *gin.Context, db *gorm.DB) bool {
 
 	var key models.APIKey
 	clientIP := c.ClientIP()
-	err := db.Preload("User").Preload("User.Role").Where("key = ?", apiKey).First(&key).Error
+	err := db.Preload("User.Roles.Permissions").Where("key = ?", apiKey).First(&key).Error
 	if err != nil {
 		// API Key 格式不对或不存在，继续尝试其他认证方式
 		return false
@@ -141,7 +141,12 @@ func handleAPIKeyAuth(c *gin.Context, db *gorm.DB) bool {
 	// 将用户信息存入context
 	c.Set("user_id", key.UserID)
 	c.Set("username", key.User.Username)
-	c.Set("role_id", key.User.RoleID)
+	// Extract role IDs
+	var roleIDs []uint
+	for _, role := range key.User.Roles {
+		roleIDs = append(roleIDs, role.ID)
+	}
+	c.Set("role_ids", roleIDs)
 	c.Set("api_key_id", key.ID)
 	c.Set("auth_type", "apikey")
 
@@ -150,14 +155,21 @@ func handleAPIKeyAuth(c *gin.Context, db *gorm.DB) bool {
 	c.Set("inherit_perms", key.InheritPerms)
 
 	// 如果继承权限，设置用户权限信息
-	if key.InheritPerms && key.User.Role != nil {
+	if key.InheritPerms && len(key.User.Roles) > 0 {
 		var permissions []string
-		for _, perm := range key.User.Role.Permissions {
-			permStr := perm.Resource + ":" + perm.Action
-			permissions = append(permissions, permStr)
+		isAdmin := false
+		// Collect permissions from all roles
+		for _, role := range key.User.Roles {
+			if role.Name == models.RoleAdmin {
+				isAdmin = true
+			}
+			for _, perm := range role.Permissions {
+				permStr := perm.Resource + ":" + perm.Action
+				permissions = append(permissions, permStr)
+			}
 		}
 		c.Set("permissions", permissions)
-		c.Set("is_admin", key.User.Role.Name == models.RoleAdmin)
+		c.Set("is_admin", isAdmin)
 	}
 
 	// 记录请求开始时间
