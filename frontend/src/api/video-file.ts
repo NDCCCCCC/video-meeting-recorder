@@ -39,17 +39,22 @@ export async function getVideoFile(id: number): Promise<ApiResponse<VideoFile>> 
 // 下载文件（触发浏览器原生下载，显示进度）
 export function downloadVideoFile(id: number, fileName?: string): void {
   const token = getToken()
-  const url = token
-    ? `${API_BASE_URL}/api/v1/files/${id}/download?token=${token}`
-    : `${API_BASE_URL}/api/v1/files/${id}/download`
+  const url = `${API_BASE_URL}/api/v1/files/${id}/download`
 
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName || `video_${id}.mp4`
-  link.style.display = 'none'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
+  fetch(url, {
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    }
+  })
+  .then(response => response.blob())
+  .then(blob => {
+    const blobUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = fileName || `video_${id}.mp4`
+    link.click()
+    URL.revokeObjectURL(blobUrl)
+  })
 }
 
 // 删除文件
