@@ -1,48 +1,46 @@
 {
   "version": "1.0",
-  "timestamp": "2026-04-21T01:58:48Z",
-  "phase": null,
-  "phase_name": null,
-  "phase_dir": null,
-  "plan": null,
-  "task": null,
-  "total_tasks": 2,
-  "status": "complete",
-  "completed_tasks": [
+  "timestamp": "2026-04-23T05:30:48Z",
+  "phase": "09",
+  "phase_name": "multi-role-permissions",
+  "phase_dir": ".planning/phases/09-multi-role-permissions",
+  "status": "paused",
+  "quick_tasks_completed": [
     {
-      "id": 1,
-      "name": "Fix drag-and-drop reorder persistence bug",
+      "id": "260423-f7v",
+      "name": "文件管理页面添加视频上传功能",
       "status": "done",
-      "commit": "pending",
-      "description": "Removed InvalidateCache() calls in ppt_handler.go:871 and ppt_editor_service.go:917. Cache images are now the source of truth for slide order."
-    },
-    {
-      "id": 2,
-      "name": "Fix merge 400 error bug",
-      "status": "done",
-      "commit": "pending",
-      "description": "Added better error logging and validation for video_file_id in ppt_handler.go merge handler."
+      "commit": "4c2b1d8"
     }
   ],
-  "remaining_tasks": [],
+  "phase_work": {
+    "context": "修复 shared_viewer 角色权限问题",
+    "completed_files": [
+      "internal/handlers/ppt_handler.go",
+      "internal/services/video_file_service.go",
+      "internal/services/video_recording_task_service.go",
+      "internal/models/permission_constants.go",
+      "cmd/server/app.go",
+      "internal/handlers/transcription_handler.go",
+      "frontend/src/api/apiClient.ts",
+      "frontend/src/pages/files/index.tsx",
+      "internal/middleware/auth.go"
+    ],
+    "remaining_work": "See .continue-here.md for full audit",
+    "wip_commit": "6b0cb9e"
+  },
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [
     {
-      "decision": "Do not invalidate slide cache after reordering",
-      "rationale": "After reordering JPEG images in the cache directory, the cache IS the source of truth. Invalidating causes re-extraction from the PPTX file which still has the original order.",
-      "phase": null
+      "decision": "shared_viewer 角色控制数据可见性，操作权限由其他角色负责",
+      "rationale": "设计意图：shared_viewer 能看到所有数据，operator 能对所有可见数据执行操作"
     },
     {
-      "decision": "Read request body before JSON binding for better error logging",
-      "rationale": "ShouldBindJSON consumes the body, so logging needs to happen before binding to capture the actual request payload.",
-      "phase": null
+      "decision": "权限检查顺序：isAdmin OR hasSharedViewer OR isOwner",
+      "rationale": "先检查数据访问权限，操作权限由 RBAC 控制"
     }
   ],
-  "uncommitted_files": [
-    "internal/handlers/ppt_handler.go",
-    "internal/services/ppt_editor_service.go"
-  ],
-  "next_action": "Commit the bug fixes and test the functionality in production environment",
-  "context_notes": "Fixed two bugs in PPT preview page: 1) Drag-and-drop reordering not persisting - removed cache invalidation, 2) Merge 400 error - added better error logging. Both fixes have been tested via browser automation and the UI is working correctly. The backend server has been recompiled with the fixes."
+  "next_action": "继续修复 shared_viewer 权限问题，参考 SHARED_VIEWER_PERMISSIONS_AUDIT.md",
+  "context_notes": "本会话完成了快速任务 260423-f7v，并进行了 Token 审计。Shared Viewer 权限修复部分完成，需继续。"
 }
