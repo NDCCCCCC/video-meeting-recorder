@@ -160,7 +160,11 @@ export default function FileManagement() {
         setStats(response.data)
       }
     } catch (error) {
-      // Stats loading failure is non-critical, silently ignore
+      console.warn('Failed to load stats:', error)
+      // Only show user-facing message for critical errors
+      if (error instanceof Error && !error.message.includes('404')) {
+        message.warning('无法加载统计信息')
+      }
     }
   }, [])
 
