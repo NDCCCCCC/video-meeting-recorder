@@ -444,7 +444,11 @@ export default function FileManagement() {
           icon: <CloudOutlined />,
           label: '查看转录进度',
           onClick: () => {
-            const taskInfo = activeTranscriptions.get(record.id)!
+            const taskInfo = activeTranscriptions.get(record.id)
+            if (!taskInfo) {
+              message.error('转录任务信息未找到')
+              return
+            }
             setTranscriptionVideoFile(record)
             setCloudTranscriptionMode(taskInfo.mode as TranscriptionMode)
             setSelectedSamplingRate(taskInfo.samplingRate)
