@@ -49,6 +49,14 @@ None identified.
 
 ---
 
+## Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260423-f7v | 文件管理页面添加视频上传功能 | 2026-04-23 | d4f78f7 | [260423-f7v-add-video-upload-feature](./quick/260423-f7v-add-video-upload-feature/) |
+
+---
+
 ## Performance Metrics
 
 ### Requirements Coverage
