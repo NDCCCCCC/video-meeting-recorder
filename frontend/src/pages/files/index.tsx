@@ -35,6 +35,7 @@ import {
   CloudOutlined,
   LaptopOutlined,
   EditOutlined,
+  UploadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -46,6 +47,7 @@ import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
 import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
 const TranscriptionProgressModal = lazy(() => import('../../components/TranscriptionProgressModal'))
+import VideoUploadModal from '../../components/VideoUploadModal'
 import type {
   VideoFile,
   VideoFileListParams,
@@ -122,6 +124,9 @@ export default function FileManagement() {
   const [renamingFile, setRenamingFile] = useState<VideoFile | null>(null)
   const [newFileName, setNewFileName] = useState('')
   const [renameLoading, setRenameLoading] = useState(false)
+
+  // Upload modal state
+  const [uploadModalVisible, setUploadModalVisible] = useState(false)
 
   const [params, setParams] = useState<VideoFileListParams>({
     page: 1,
@@ -418,6 +423,107 @@ export default function FileManagement() {
 
   // 渲染操作按钮 - 作为 Table column 的 render prop 不需要 useCallback
   function renderActions(record: VideoFile) {
+    // 构建"更多"操作菜单
+    const moreMenuItems: any[] = []
+
+    // 下载
+    moreMenuItems.push({
+      key: 'download',
+      icon: <DownloadOutlined />,
+      label: '下载文件',
+      disabled: record.status !== 'ready',
+      onClick: () => handleDownload(record.id, record.file_name),
+    })
+
+    // 转录相关（仅 mp4 格式）
+    if (record.format === 'mp4') {
+      if (activeTranscriptions.has(record.id)) {
+        // 有活跃转录任务
+        moreMenuItems.push({
+          key: 'view-transcription',
+          icon: <CloudOutlined />,
+          label: '查看转录进度',
+          onClick: () => {
+            const taskInfo = activeTranscriptions.get(record.id)!
+            setTranscriptionVideoFile(record)
+            setCloudTranscriptionMode(taskInfo.mode as TranscriptionMode)
+            setSelectedSamplingRate(taskInfo.samplingRate)
+            setTranscriptionModalOpen(true)
+          },
+        })
+      } else if (record.status === 'ready') {
+        // 可以开始转录
+        moreMenuItems.push({
+          key: 'transcribe-submenu',
+          icon: <CloudOutlined />,
+          label: '开始转录',
+          children: [
+            {
+              key: 'local',
+              icon: <LaptopOutlined />,
+              label: '本地转录',
+              onClick: () => handleTranscribeClick(record),
+            },
+            {
+              key: 'cloud',
+              icon: <CloudOutlined />,
+              label: '云端转录（通义听悟）',
+              onClick: () => handleCloudTranscribe(record),
+            },
+          ],
+        })
+      }
+    }
+
+    // 预览PPT
+    if (videosWithPpt.has(record.id)) {
+      moreMenuItems.push({
+        key: 'preview-ppt',
+        icon: <FilePptOutlined />,
+        label: '预览PPT',
+        onClick: () => navigate(`/results/${record.id}`),
+      })
+    }
+
+    // 分隔线
+    moreMenuItems.push({ type: 'divider' })
+
+    // 视频分割（仅 mp4 格式）
+    if (record.format === 'mp4') {
+      moreMenuItems.push({
+        key: 'split',
+        icon: <ScissorOutlined />,
+        label: '视频分割',
+        onClick: () => navigate(`/split/${record.id}`),
+      })
+    }
+
+    // 重命名（非原始录制文件）
+    if (record.source_type !== 'recording' || record.parent_id) {
+      moreMenuItems.push({
+        key: 'rename',
+        icon: <EditOutlined />,
+        label: '重命名',
+        disabled: record.status !== 'ready',
+        onClick: () => handleRename(record),
+      })
+    }
+
+    // 删除
+    moreMenuItems.push({
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: '删除',
+      danger: true,
+      disabled: record.status === 'processing',
+      onClick: () => {
+        Modal.confirm({
+          title: '确定要删除这个文件吗？',
+          onOk: () => handleDelete(record.id),
+        })
+      },
+    })
+
     return (
       <Space size="small">
         <RenderVideoPreview {...record} />
@@ -429,116 +535,14 @@ export default function FileManagement() {
         >
           详情
         </Button>
-        {record.format === 'mp4' && (
-          <PermissionGuard permission={PERMISSIONS.FILE_SPLIT}>
-            <Tooltip title="视频分割">
-              <Button
-                type="link"
-                size="small"
-                icon={<ScissorOutlined />}
-                onClick={() => navigate(`/split/${record.id}`)}
-              />
-            </Tooltip>
-          </PermissionGuard>
-        )}
-        {record.format === 'mp4' && record.status === 'ready' && (
-          <PermissionGuard permission={PERMISSIONS.FILE_TRANSCRIBE}>
-            <Dropdown
-              menu={{
-                items: [
-                  {
-                    key: 'local',
-                    icon: <LaptopOutlined />,
-                    label: '本地转录',
-                    onClick: () => handleTranscribeClick(record),
-                  },
-                  {
-                    key: 'cloud',
-                    icon: <CloudOutlined />,
-                    label: '云端转录（通义听悟）',
-                    onClick: () => handleCloudTranscribe(record),
-                  },
-                ],
-              }}
-              trigger={['click']}
-            >
-              <Button type="primary" size="small" icon={<CloudOutlined />}>
-                转录
-              </Button>
-            </Dropdown>
-          </PermissionGuard>
-        )}
-        {activeTranscriptions.has(record.id) && (
-          <PermissionGuard permission={PERMISSIONS.FILE_TRANSCRIBE}>
-            <Button
-              type="link"
-              size="small"
-              icon={<CloudOutlined />}
-              onClick={() => {
-                const taskInfo = activeTranscriptions.get(record.id)!
-                setTranscriptionVideoFile(record)
-                setCloudTranscriptionMode(taskInfo.mode as TranscriptionMode)
-                setSelectedSamplingRate(taskInfo.samplingRate)
-                setTranscriptionModalOpen(true)
-              }}
-            >
-              查看转录
-            </Button>
-          </PermissionGuard>
-        )}
-        {videosWithPpt.has(record.id) && (
-          <PermissionGuard permission={PERMISSIONS.FILE_PPT_VIEW}>
-            <Tooltip title="预览PPT">
-              <Button
-                type="primary"
-                size="small"
-                icon={<FilePptOutlined />}
-                onClick={() => navigate(`/results/${record.id}`)}
-              >
-                预览PPT
-              </Button>
-            </Tooltip>
-          </PermissionGuard>
-        )}
-        <Button
-          type="link"
-          size="small"
-          icon={<DownloadOutlined />}
-          onClick={() => handleDownload(record.id, record.file_name)}
-          disabled={record.status !== 'ready'}
+        <Dropdown
+          menu={{ items: moreMenuItems }}
+          trigger={['click']}
         >
-          下载
-        </Button>
-        <PermissionGuard permission={PERMISSIONS.FILE_EDIT}>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleRename(record)}
-            disabled={record.status !== 'ready'}
-            // Only show rename for split/snapshot files (not original recordings)
-            style={{ display: record.source_type === 'recording' && !record.parent_id ? 'none' : 'inline-block' }}
-          >
-            重命名
+          <Button size="small">
+            更多
           </Button>
-        </PermissionGuard>
-        <PermissionGuard permission={PERMISSIONS.FILE_DELETE}>
-          <Popconfirm
-            title="确定要删除这个文件吗？"
-            onConfirm={() => handleDelete(record.id)}
-            disabled={record.status === 'processing'}
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              disabled={record.status === 'processing'}
-            >
-              删除
-            </Button>
-          </Popconfirm>
-        </PermissionGuard>
+        </Dropdown>
       </Space>
     )
   }
@@ -725,6 +729,13 @@ export default function FileManagement() {
               扫描导入
             </Button>
           </PermissionGuard>
+          <Button
+            type="primary"
+            icon={<UploadOutlined />}
+            onClick={() => setUploadModalVisible(true)}
+          >
+            上传视频
+          </Button>
         </Space>
       </div>
 
@@ -898,6 +909,16 @@ export default function FileManagement() {
           )}
         </Space>
       </Modal>
+
+      {/* 上传视频模态框 */}
+      <VideoUploadModal
+        visible={uploadModalVisible}
+        onCancel={() => setUploadModalVisible(false)}
+        onUploadSuccess={() => {
+          loadFiles()
+          loadStats()
+        }}
+      />
     </div>
   )
 }

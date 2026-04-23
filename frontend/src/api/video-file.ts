@@ -122,3 +122,66 @@ export async function renameVideoFile(
 export async function getVideoSegments(parentId: number): Promise<ApiResponse<VideoFile[]>> {
   return apiRequest<VideoFile[]>(`/api/v1/videos/${parentId}/segments`)
 }
+
+// 文件上传结果
+export interface FileUploadResult {
+  file_id: number
+  file_name: string
+  file_path: string
+  file_size: number
+  mime_type: string
+  access_url: string
+}
+
+// 上传视频文件（带进度回调）
+export function uploadVideoFile(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<ApiResponse<FileUploadResult>> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('folder', 'videos')
+
+    const xhr = new XMLHttpRequest()
+
+    // Track upload progress
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable && onProgress) {
+        const percent = (event.loaded / event.total) * 100
+        onProgress(percent)
+      }
+    })
+
+    // Handle completion
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText)
+          resolve(response)
+        } catch (error) {
+          reject(new Error('解析响应失败'))
+        }
+      } else {
+        reject(new Error(`上传失败: ${xhr.status} ${xhr.statusText}`))
+      }
+    })
+
+    // Handle errors
+    xhr.addEventListener('error', () => {
+      reject(new Error('网络错误，上传失败'))
+    })
+
+    xhr.addEventListener('abort', () => {
+      reject(new Error('上传已取消'))
+    })
+
+    // Open and send request
+    const token = getToken()
+    xhr.open('POST', `${API_BASE_URL}/api/v1/storage/upload`)
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    }
+    xhr.send(formData)
+  })
+}
