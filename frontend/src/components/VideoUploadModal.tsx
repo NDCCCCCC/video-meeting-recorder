@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { Modal, Upload, Progress, message } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
 import type { UploadProps } from 'antd'
@@ -48,6 +48,15 @@ export default function VideoUploadModal({
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [fileList, setFileList] = useState<any[]>([])
+  const xhrRef = useRef<XMLHttpRequest | null>(null)
+
+  const handleCancel = useCallback(() => {
+    if (xhrRef.current) {
+      xhrRef.current.abort()
+      xhrRef.current = null
+    }
+    onCancel()
+  }, [onCancel])
 
   const handleUpload = useCallback(
     async (file: File) => {
@@ -75,6 +84,8 @@ export default function VideoUploadModal({
       try {
         const result = await uploadVideoFile(file, (percent) => {
           setProgress(percent)
+        }, (xhr) => {
+          xhrRef.current = xhr
         })
 
         if (result.data) {
@@ -93,6 +104,7 @@ export default function VideoUploadModal({
         setFileList([])
       } finally {
         setUploading(false)
+        xhrRef.current = null
       }
 
       return false // Prevent auto upload
@@ -121,7 +133,7 @@ export default function VideoUploadModal({
     <Modal
       title="上传视频"
       open={visible}
-      onCancel={onCancel}
+      onCancel={handleCancel}
       okButtonProps={{ style: { display: 'none' } }}
       cancelButtonProps={{ disabled: uploading }}
       cancelText="关闭"

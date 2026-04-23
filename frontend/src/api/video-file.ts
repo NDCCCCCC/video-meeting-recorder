@@ -141,7 +141,8 @@ export interface FileUploadResult {
 // 上传视频文件（带进度回调）
 export function uploadVideoFile(
   file: File,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  onXhrCreated?: (xhr: XMLHttpRequest) => void
 ): Promise<ApiResponse<FileUploadResult>> {
   return new Promise((resolve, reject) => {
     const formData = new FormData()
@@ -201,6 +202,10 @@ export function uploadVideoFile(
     xhr.open('POST', `${API_BASE_URL}/api/v1/storage/upload`)
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    }
+    // Expose xhr to caller for cancellation support
+    if (onXhrCreated) {
+      onXhrCreated(xhr)
     }
     xhr.send(formData)
   })
