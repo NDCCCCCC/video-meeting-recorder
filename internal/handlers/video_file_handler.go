@@ -262,8 +262,21 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 		return
 	}
 
-	// Get user ID from context
+	// Get user context
 	userID := middleware.GetUserID(c)
+
+	// Load file to check ownership
+	file, err := h.fileService.GetFileByID(id)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "文件不存在")
+		return
+	}
+
+	// Check data access permission
+	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
+		response.GinError(c, response.CodeForbidden, "无权重命名此文件")
+		return
+	}
 
 	// Call service to rename
 	if err := h.fileService.RenameVideoFile(id, newName, userID); err != nil {
@@ -287,7 +300,7 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 	}
 
 	// Get updated file info
-	file, err := h.fileService.GetFileByID(id)
+	file, err = h.fileService.GetFileByID(id)
 	if err != nil {
 		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err))
 		response.GinSuccess(c, gin.H{

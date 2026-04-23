@@ -82,7 +82,7 @@ func (h *TranscriptionHandler) SubmitTranscription(c *gin.Context) {
 		response.GinError(c, response.CodeInternalError, "视频文件不存在")
 		return
 	}
-	if !middleware.GetIsAdmin(c) && file.CreatedBy != userID {
+	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
 		response.GinError(c, response.CodeInvalidRequest, "无权操作此视频文件")
 		return
 	}
@@ -116,7 +116,7 @@ func (h *TranscriptionHandler) GetTranscriptionStatus(c *gin.Context) {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
 	}
-	if !middleware.GetIsAdmin(c) && file.CreatedBy != userID {
+	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
 		response.GinError(c, response.CodeForbidden, "无权访问此视频文件的转录状态")
 		return
 	}
@@ -155,7 +155,7 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
 	}
-	if !middleware.GetIsAdmin(c) && file.CreatedBy != userID {
+	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
 		response.GinError(c, response.CodeForbidden, "无权访问此视频文件的转录内容")
 		return
 	}
@@ -204,7 +204,6 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 // Returns all active transcription tasks (pending or processing)
 func (h *TranscriptionHandler) ListActiveTasks(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	isAdmin := middleware.GetIsAdmin(c)
 
 	tasks, err := h.transcriptionService.GetActiveTasks()
 	if err != nil {
@@ -245,8 +244,8 @@ func (h *TranscriptionHandler) ListActiveTasks(c *gin.Context) {
 			continue // Skip if video file not found
 		}
 
-		// Only show tasks owned by user (or all if admin)
-		if !isAdmin && videoFile.CreatedBy != userID {
+		// Only show tasks owned by user (or all if admin/shared_viewer)
+		if !middleware.CanAccessAllData(c) && videoFile.CreatedBy != userID {
 			continue
 		}
 
@@ -289,7 +288,7 @@ func (h *TranscriptionHandler) GetTimestampMapHandler(c *gin.Context) {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
 	}
-	if !middleware.GetIsAdmin(c) && file.CreatedBy != userID {
+	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
 		response.GinError(c, response.CodeForbidden, "无权访问此视频文件的时间戳映射")
 		return
 	}

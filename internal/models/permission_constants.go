@@ -14,11 +14,15 @@ const (
 	ResourceTaskStop   = "tasks:stop"
 
 	// 视频文件
-	ResourceFileView   = "files:view"
-	ResourceFileDelete = "files:delete"
-	ResourceFileScan   = "files:scan"
+	ResourceFileView      = "files:view"
+	ResourceFileEdit      = "files:edit"
+	ResourceFileDelete    = "files:delete"
+	ResourceFileScan      = "files:scan"
+	ResourceFileSplit     = "files:split"
+	ResourceFileTranscribe = "files:transcribe"
+	ResourceFilePPTView   = "files:ppt_view" // 匹配前端 FILE_PPT_VIEW
 
-	// PPT 文件
+	// PPT 文件（保留旧的权限字符串以兼容，但新增前端使用的权限）
 	ResourcePPTView     = "ppts:view"
 	ResourcePPTDelete   = "ppts:delete"
 	ResourcePPTEdit     = "ppts:edit"
@@ -67,8 +71,12 @@ var AllPermissions = []string{
 	ResourceTaskStart,
 	ResourceTaskStop,
 	ResourceFileView,
+	ResourceFileEdit,
 	ResourceFileDelete,
 	ResourceFileScan,
+	ResourceFileSplit,
+	ResourceFileTranscribe,
+	ResourceFilePPTView,
 	ResourcePPTView,
 	ResourcePPTDelete,
 	ResourcePPTEdit,

@@ -67,7 +67,7 @@ func (h *SplitHandler) SubmitSplit(c *gin.Context) {
 		response.GinError(c, response.CodeInternalError, "视频文件不存在")
 		return
 	}
-	if !middleware.GetIsAdmin(c) && file.CreatedBy != userID {
+	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
 		response.GinError(c, response.CodeInvalidRequest, "无权操作此视频文件")
 		return
 	}

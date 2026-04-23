@@ -435,6 +435,44 @@ func (a *MinimalApp) seedPermissions() error {
 	}
 
 	a.logger.Info("权限数据创建完成", zap.Int("total", len(allPermissions)))
+
+	// 为 shared_viewer 角色分配只读权限 (仅数据可见性)
+	// shared_viewer 只控制是否能看到所有数据，操作权限由其他角色决定
+	var sharedViewerRole models.Role
+	if err := a.db.Where("name = ?", models.RoleSharedViewer).First(&sharedViewerRole).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			a.logger.Warn("shared_viewer role not found, skipping permission assignment")
+		} else {
+			return fmt.Errorf("failed to find shared_viewer role: %w", err)
+		}
+	} else {
+		// 只分配查看权限，不分配操作权限
+		viewOnlyPermissions := []string{
+			models.ResourceDashboardView,
+			models.ResourceTaskView,
+			models.ResourceFileView,
+			models.ResourceAuditView,
+		}
+
+		// 获取这些权限对象
+		var permissions []models.Permission
+		if err := a.db.Where("resource || ':' || action IN ?", viewOnlyPermissions).Find(&permissions).Error; err != nil {
+			return fmt.Errorf("failed to find view-only permissions: %w", err)
+		}
+
+		// 检查是否需要关联权限
+		var existingSharedViewer models.Role
+		if err := a.db.Preload("Permissions").Where("name = ?", models.RoleSharedViewer).First(&existingSharedViewer).Error; err == nil {
+			// 如果权限数量不匹配，则重新分配
+			if len(existingSharedViewer.Permissions) != len(permissions) {
+				if err := a.db.Model(&existingSharedViewer).Association("Permissions").Replace(&permissions); err != nil {
+					return fmt.Errorf("failed to assign permissions to shared_viewer role: %w", err)
+				}
+				a.logger.Info("Assigned view-only permissions to shared_viewer role (data visibility only)", zap.Int("count", len(permissions)))
+			}
+		}
+	}
+
 	return nil
 }
 
