@@ -13,6 +13,21 @@ interface VideoUploadModalProps {
   onUploadSuccess: (file: VideoFile) => void
 }
 
+// Add proper validation interface
+interface VideoFileValidation {
+  id?: number
+  file_name?: string
+  file_path?: string
+  file_size?: number
+  mime_type?: string
+  format?: string
+}
+
+const validateVideoFile = (data: unknown): data is VideoFile => {
+  const file = data as VideoFileValidation
+  return !!(file?.id && file?.file_name && file?.file_path)
+}
+
 // Video file formats allowed for upload
 const ACCEPTED_VIDEO_FORMATS = ['.mp4', '.mkv', '.avi', '.mov']
 // MIME types for validation
@@ -66,10 +81,15 @@ export default function VideoUploadModal({
         })
 
         if (result.data) {
+          if (!validateVideoFile(result.data)) {
+            message.error('服务器返回的数据格式无效')
+            setFileList([])
+            return
+          }
           message.success(`${file.name} 上传成功`)
           setFileList([])
           setProgress(0)
-          onUploadSuccess(result.data as VideoFile)
+          onUploadSuccess(result.data)
         }
       } catch (error) {
         message.error(error instanceof Error ? error.message : '上传失败')
