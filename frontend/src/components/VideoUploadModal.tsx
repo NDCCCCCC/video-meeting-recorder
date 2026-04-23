@@ -57,7 +57,7 @@ export default function VideoUploadModal({
         return false
       }
 
-      // Validate file type by extension
+      // Validate file type by extension (more reliable than MIME type)
       const hasValidExtension = ACCEPTED_VIDEO_FORMATS.some((ext) =>
         file.name.toLowerCase().endsWith(ext)
       )
@@ -66,11 +66,8 @@ export default function VideoUploadModal({
         return false
       }
 
-      // Validate file type by MIME type
-      if (!VIDEO_MIME_TYPES.includes(file.type)) {
-        message.error('文件类型验证失败，请上传有效的视频文件')
-        return false
-      }
+      // Security: Rely on server-side MIME type validation
+      // Client-side MIME type can be spoofed and is unreliable
 
       setUploading(true)
       setProgress(0)
