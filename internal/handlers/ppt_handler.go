@@ -55,6 +55,7 @@ func NewPPThandler(
 // verifyPPTOwnership verifies that the current user owns the PPT file
 // via its associated SourceVideoFileID. Returns an error if ownership
 // cannot be verified or if the user doesn't have access.
+// shared_viewer role (ID: 5) can access all PPT files.
 func (h *PPThandler) verifyPPTOwnership(c *gin.Context, pptFile *models.PPTFile) error {
 	if pptFile.SourceVideoFileID == nil {
 		return fmt.Errorf("PPT文件没有关联视频")
@@ -69,7 +70,21 @@ func (h *PPThandler) verifyPPTOwnership(c *gin.Context, pptFile *models.PPTFile)
 	}
 
 	userID := middleware.GetUserID(c)
-	if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
+	isAdmin := middleware.GetIsAdmin(c)
+	roleIDs := middleware.GetRoleIDs(c)
+
+	// Check if user has shared_viewer role (ID: 5)
+	hasSharedViewer := false
+	for _, roleID := range roleIDs {
+		if roleID == 5 { // RoleSharedViewer ID
+			hasSharedViewer = true
+			break
+		}
+	}
+
+	// Admins and shared_viewers can access all PPT files
+	// Regular users can only access their own files
+	if !isAdmin && !hasSharedViewer && videoFile.CreatedBy != userID {
 		return fmt.Errorf("无权访问此PPT文件")
 	}
 
@@ -145,13 +160,27 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 
 	// Verify user owns the video file
 	userID := middleware.GetUserID(c)
+	isAdmin := middleware.GetIsAdmin(c)
+	roleIDs := middleware.GetRoleIDs(c)
+
 	videoFile, err := h.videoFileService.GetFileByID(uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
 	}
 
-	if !middleware.GetIsAdmin(c) && videoFile.CreatedBy != userID {
+	// Check if user has shared_viewer role (ID: 5)
+	hasSharedViewer := false
+	for _, roleID := range roleIDs {
+		if roleID == 5 { // RoleSharedViewer ID
+			hasSharedViewer = true
+			break
+		}
+	}
+
+	// Admins and shared_viewers can access all PPTs
+	// Regular users can only access their own video files' PPTs
+	if !isAdmin && !hasSharedViewer && videoFile.CreatedBy != userID {
 		response.GinError(c, response.CodeForbidden, "无权访问此视频文件的PPT")
 		return
 	}
@@ -228,11 +257,25 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 		req.OutputName = "合并PPT.pptx"
 	}
 
-	// Get user ID from context
+	// Get user context
 	userID := middleware.GetUserID(c)
 
+	// Load video file to check ownership
+	videoFile, err := h.videoFileService.GetFileByID(req.VideoFileID)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "视频文件不存在")
+		return
+	}
+
+	// Check data access permission
+	if !middleware.CanAccessAllData(c) && videoFile.CreatedBy != userID {
+		response.GinError(c, response.CodeForbidden, "无权访问此视频文件")
+		return
+	}
+
 	// Call merge service
-	pptFile, err := h.mergeService.MergeSlides(c.Request.Context(), &req, userID)
+	var pptFile *models.PPTFile
+	pptFile, err = h.mergeService.MergeSlides(c.Request.Context(), &req, userID)
 	if err != nil {
 		h.logger.Error("Failed to merge slides",
 			zap.Uint("video_file_id", req.VideoFileID),
@@ -356,8 +399,25 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 		return
 	}
 
-	// Get user ID from context
+	// Get user context
 	userID := middleware.GetUserID(c)
+
+	// Load PPT file to check ownership (via SourceVideoFile)
+	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
+		return
+	}
+
+	// Check data access permission via SourceVideoFile
+	if pptFile.SourceVideoFile == nil {
+		response.GinError(c, response.CodeInternalError, "PPT文件没有关联视频")
+		return
+	}
+	if !middleware.CanAccessAllData(c) && pptFile.SourceVideoFile.CreatedBy != userID {
+		response.GinError(c, response.CodeForbidden, "无权重命名此文件")
+		return
+	}
 
 	// Call service to rename
 	if err := h.pptFileService.RenamePPTFile(uint(id), newName, userID); err != nil {
@@ -379,7 +439,7 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 	}
 
 	// Get updated PPT file info
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err = h.pptFileService.GetPPTFileByID(uint(id))
 	if err != nil {
 		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err))
 		response.GinSuccess(c, gin.H{

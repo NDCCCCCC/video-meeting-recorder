@@ -49,6 +49,24 @@ func GetIsAdmin(c *gin.Context) bool {
 	return false
 }
 
+// GetHasSharedViewer 从context检查用户是否有 shared_viewer 角色
+// RoleSharedViewer ID: 5
+func GetHasSharedViewer(c *gin.Context) bool {
+	roleIDs := GetRoleIDs(c)
+	for _, roleID := range roleIDs {
+		if roleID == 5 { // RoleSharedViewer ID
+			return true
+		}
+	}
+	return false
+}
+
+// CanAccessAllData 检查用户是否可以访问所有数据
+// 管理员和 shared_viewers 可以看到所有用户创建的数据
+func CanAccessAllData(c *gin.Context) bool {
+	return GetIsAdmin(c) || GetHasSharedViewer(c)
+}
+
 // SM4Auth SM4-GCM Token认证中间件
 // 支持 Authorization 头和 token 查询参数（用于视频播放等场景）
 func SM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {

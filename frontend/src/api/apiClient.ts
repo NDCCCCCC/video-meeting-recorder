@@ -74,6 +74,10 @@ const saveToken = (accessToken: string, refreshToken: string): void => {
     parsed.state.isAuthenticated = true
     localStorage.setItem('auth-storage', JSON.stringify(parsed))
   }
+
+  // 立即更新缓存变量，避免下次读取时使用旧值
+  cachedToken = accessToken
+  cachedRefreshToken = refreshToken
 }
 
 // 清除 Token

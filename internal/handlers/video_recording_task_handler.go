@@ -471,9 +471,20 @@ func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
 	_, m3u8Err := os.Stat(task.HLSPreviewPath)
 	m3u8Exists := m3u8Err == nil
 
-	// 验证权限：只有任务创建者可以访问
+	// 验证权限：任务创建者、管理员或 shared_viewer 可以访问
 	userID := middleware.GetUserID(c)
-	if task.CreatedBy != userID {
+	isAdmin := middleware.GetIsAdmin(c)
+	roleIDs := middleware.GetRoleIDs(c)
+
+	hasSharedViewer := false
+	for _, roleID := range roleIDs {
+		if roleID == 5 { // RoleSharedViewer ID
+			hasSharedViewer = true
+			break
+		}
+	}
+
+	if !isAdmin && !hasSharedViewer && task.CreatedBy != userID {
 		response.GinError(c, response.CodeForbidden, "无权限访问此预览")
 		return
 	}
@@ -567,8 +578,21 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 		return
 	}
 
-	// 验证用户权限：token 中的用户 ID 必须是任务创建者
-	if claims.UserID != task.CreatedBy {
+	// 验证用户权限：管理员、shared_viewer 或任务创建者可以访问
+	// 从当前上下文获取用户角色信息（而非仅依赖 token）
+	isAdmin := middleware.GetIsAdmin(c)
+	roleIDs := middleware.GetRoleIDs(c)
+
+	hasSharedViewer := false
+	for _, roleID := range roleIDs {
+		if roleID == 5 { // RoleSharedViewer ID
+			hasSharedViewer = true
+			break
+		}
+	}
+
+	// token 用户身份验证 + 数据访问权限检查
+	if !isAdmin && !hasSharedViewer && claims.UserID != task.CreatedBy {
 		h.logger.Warn("HLS流访问权限拒绝：用户不匹配",
 			zap.Uint("task_id", id),
 			zap.Uint("token_user_id", claims.UserID),
