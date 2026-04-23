@@ -163,12 +163,27 @@ export function uploadVideoFile(
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText)
+          // Validate response structure
+          if (!response || !response.data || !response.data.file_id) {
+            reject(new Error('服务器返回的响应格式无效'))
+            return
+          }
           resolve(response)
         } catch (error) {
           reject(new Error('解析响应失败'))
         }
       } else {
-        reject(new Error(`上传失败: ${xhr.status} ${xhr.statusText}`))
+        // Try to parse error message from server
+        let errorMsg = `上传失败: ${xhr.status} ${xhr.statusText}`
+        try {
+          const errorResponse = JSON.parse(xhr.responseText)
+          if (errorResponse.message) {
+            errorMsg = errorResponse.message
+          }
+        } catch {
+          // Use default error message
+        }
+        reject(new Error(errorMsg))
       }
     })
 
