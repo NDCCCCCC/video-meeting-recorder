@@ -319,8 +319,11 @@ export default function FileManagement() {
   // 重命名文件
   const handleRename = useCallback((file: VideoFile) => {
     setRenamingFile(file)
-    // Strip extension from filename for editing
-    const nameWithoutExt = file.file_name.replace(/\.[^/.]+$/, '')
+    // Find the last dot and split from there
+    const lastDotIndex = file.file_name.lastIndexOf('.')
+    const nameWithoutExt = lastDotIndex > 0
+      ? file.file_name.substring(0, lastDotIndex)
+      : file.file_name
     setNewFileName(nameWithoutExt)
     setRenameModalVisible(true)
   }, [])
@@ -332,7 +335,10 @@ export default function FileManagement() {
     }
 
     // Check if name hasn't changed
-    const nameWithoutExt = renamingFile.file_name.replace(/\.[^/.]+$/, '')
+    const lastDotIndex = renamingFile.file_name.lastIndexOf('.')
+    const nameWithoutExt = lastDotIndex > 0
+      ? renamingFile.file_name.substring(0, lastDotIndex)
+      : renamingFile.file_name
     if (newFileName.trim() === nameWithoutExt) {
       message.info('文件名未改变')
       setRenameModalVisible(false)
