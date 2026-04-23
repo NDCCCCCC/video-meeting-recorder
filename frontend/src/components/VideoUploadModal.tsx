@@ -136,8 +136,10 @@ export default function VideoUploadModal({
       onCancel={handleCancel}
       okButtonProps={{ style: { display: 'none' } }}
       cancelButtonProps={{ disabled: uploading }}
-      cancelText="关闭"
+      cancelText={uploading ? "上传中..." : "关闭"}
       width={600}
+      closable={!uploading}
+      maskClosable={!uploading}
     >
       <div style={{ padding: '20px 0' }}>
         <Dragger {...uploadProps}>
