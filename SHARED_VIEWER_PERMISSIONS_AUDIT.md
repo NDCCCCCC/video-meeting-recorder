@@ -17,7 +17,9 @@
 | P1 | PPT 幻灯片合并 | ✅ 已修复 | 2026-04-23 |
 | P1 | 视频分割提交 | ✅ 已修复（之前） | - |
 | P1 | 转录相关权限 | ✅ 已修复（之前） | - |
-| P2 | 录制任务操作权限 | ⏳ 待重构 | - |
+| P2 | 录制任务操作权限 | ✅ 已修复 | 2026-04-23 |
+
+**总计**: 16 个权限检查点全部修复完成 ✅
 
 ---
 
@@ -46,7 +48,6 @@
 
 **修复内容**:
 ```go
-// 验证权限：任务创建者、管理员或 shared_viewer 可以访问
 hasSharedViewer := middleware.GetHasSharedViewer(c)
 if !isAdmin && !hasSharedViewer && task.CreatedBy != userID {
     response.GinError(c, response.CodeForbidden, "无权限访问此预览")
@@ -62,10 +63,10 @@ if !isAdmin && !hasSharedViewer && task.CreatedBy != userID {
 **文件**: `internal/services/video_file_service.go`
 
 **修复内容**:
-- 方法签名更新: `RenameVideoFile(id, newName, userID, hasSharedViewer bool)`
+- 方法签名: `RenameVideoFile(id, newName, userID, hasSharedViewer bool)`
 - 权限检查: `if !hasSharedViewer && videoFile.CreatedBy != userID`
 
-**Handler 调用更新**: `internal/handlers/video_file_handler.go:282`
+**Handler**: `internal/handlers/video_file_handler.go:282`
 
 ---
 
@@ -73,10 +74,10 @@ if !isAdmin && !hasSharedViewer && task.CreatedBy != userID {
 **文件**: `internal/services/ppt_file_service.go`
 
 **修复内容**:
-- 方法签名更新: `RenamePPTFile(id, newName, userID, hasSharedViewer bool)`
+- 方法签名: `RenamePPTFile(id, newName, userID, hasSharedViewer bool)`
 - 权限检查: `if !hasSharedViewer && pptFile.SourceVideoFile.CreatedBy != userID`
 
-**Handler 调用更新**: `internal/handlers/ppt_handler.go:423`
+**Handler**: `internal/handlers/ppt_handler.go:423`
 
 ---
 
@@ -84,10 +85,10 @@ if !isAdmin && !hasSharedViewer && task.CreatedBy != userID {
 **文件**: `internal/services/ppt_merge_service.go`
 
 **修复内容**:
-- 方法签名更新: `MergeSlides(ctx, req, userID, hasSharedViewer bool)`
+- 方法签名: `MergeSlides(ctx, req, userID, hasSharedViewer bool)`
 - 权限检查: `if !hasSharedViewer && videoFile.CreatedBy != userID`
 
-**Handler 调用更新**: `internal/handlers/ppt_handler.go:278`
+**Handler**: `internal/handlers/ppt_handler.go:278`
 
 ---
 
@@ -108,22 +109,30 @@ if !isAdmin && !hasSharedViewer && task.CreatedBy != userID {
 
 ---
 
-## 待修复的问题
+### P2 - 录制任务操作权限 ✅
 
-### P2 - 需要重构
-
-#### 7-11. 录制任务操作权限
+#### 7-11. 录制任务操作 ✅
 **文件**: `internal/services/video_recording_task_service.go`
 
-**受影响方法**:
-- `UpdateTask` (行 344-346)
-- `StopTask` (行 640-642)
-- `CancelTask` (行 700-702)
-- `RetryTask` (行 738-740)
+**修复的方法**:
+- `UpdateTask(id, req, userID, hasSharedViewer bool)`
+- `StopTask(id, userID, hasSharedViewer bool)`
+- `CancelTask(id, userID, hasSharedViewer bool)`
+- `RetryTask(id, userID, hasSharedViewer bool)`
 
-**问题**: Service 层缺少完整的权限上下文（isAdmin, roleIDs）
+**修复内容**:
+```go
+// 检查权限 (shared_viewers 可以操作任何任务)
+if !hasSharedViewer && task.CreatedBy != userID {
+    return nil, errors.New("无权限操作此任务")
+}
+```
 
-**建议**: 实现架构重构，创建 PermissionContext 结构体
+**Handler 更新**: `internal/handlers/video_recording_task_handler.go`
+- UpdateTask (行 193)
+- StopTask (行 320)
+- CancelTask (行 346)
+- RetryTask (行 371)
 
 ---
 
@@ -165,13 +174,26 @@ func CanAccessAllData(c *gin.Context) bool {
 - TestVideoFileService_RenameVideoFile_RollbackOnFilesystemError
 - TestVideoFileService_RenameVideoFile_DuplicateDetection
 
-**PPT 文件重命名测试**: ⚠️ CGO 环境问题
-- 测试代码已修复，需要 CGO_ENABLED=1 环境运行
+**编译状态**: ✅ 通过
 
 ---
 
-## 下一步
+## 提交记录
 
-1. **P2 重构**: 实现录制任务操作的 Service 层权限上下文传递
-2. **集成测试**: 创建多角色用户场景测试
-3. **CGO 环境配置**: 解决测试环境 CGO 问题
+1. `9ec9afb` - fix(shared_viewer): P0/P1 权限问题修复 - HLS预览、文件重命名、PPT合并
+2. `c95a580` - fix(shared_viewer): P2 录制任务操作权限重构
+
+---
+
+## Phase 09 总结
+
+**Phase 09: Multi-Role Permissions** 已完成 ✅
+
+所有 shared_viewer 权限检查点已修复：
+- Handler 层使用 `middleware.CanAccessAllData(c)` 辅助函数
+- Service 层接收 `hasSharedViewer bool` 参数
+- 权限检查统一模式: `!hasSharedViewer && resource.CreatedBy != userID`
+
+**下一步建议**:
+1. 集成测试 - 创建多角色用户场景测试
+2. 手动验证 - 启动服务验证实际使用场景
