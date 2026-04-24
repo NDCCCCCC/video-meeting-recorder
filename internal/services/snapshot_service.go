@@ -68,7 +68,7 @@ func (s *SnapshotService) generateSnapshotFilename(task models.VideoRecordingTas
 // GenerateSnapshot generates an MP4 snapshot from an active recording task's MKV file.
 // Per D-08/D-09: copies the partial MKV to temp, converts to MP4, registers via callback.
 // Per D-15: Incremental — each snapshot starts from the end of the previous snapshot.
-func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models.VideoFile, error) {
+func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasSharedViewer bool) (*models.VideoFile, error) {
 	// Acquire mutex for this task to prevent concurrent snapshots
 	mutex := s.getMutex(taskID)
 	mutex.Lock()
@@ -78,6 +78,11 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint) (*models
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, taskID).Error; err != nil {
 		return nil, fmt.Errorf("录制任务不存在: %w", err)
+	}
+
+	// 1.5. Verify permission (shared_viewers can snapshot any task)
+	if !hasSharedViewer && task.CreatedBy != createdBy {
+		return nil, fmt.Errorf("无权限访问此录制任务")
 	}
 
 	// 2. Verify task is recording

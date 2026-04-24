@@ -94,8 +94,9 @@ func (h *SplitHandler) GenerateSnapshot(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
+	hasSharedViewer := middleware.GetHasSharedViewer(c)
 
-	snapshotFile, err := h.snapshotService.GenerateSnapshot(uint(id), userID)
+	snapshotFile, err := h.snapshotService.GenerateSnapshot(uint(id), userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "生成快照失败: "+err.Error())
 		return

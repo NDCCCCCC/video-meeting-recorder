@@ -9,7 +9,8 @@
       "Bash(go test:*)",
       "Bash(set CGO_ENABLED=1)",
       "Bash(go clean:*)",
-      "Bash(./services.test -test.run \"TestPPTFileService_RenamePPTFile\" -test.v)"
+      "Bash(./services.test -test.run \"TestPPTFileService_RenamePPTFile\" -test.v)",
+      "Bash(rm:*)"
     ]
   }
 }
