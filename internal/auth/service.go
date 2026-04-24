@@ -18,6 +18,7 @@ type Service struct {
 	passwordValidator *PasswordValidator
 	cfg               *config.Config
 	logger            *zap.Logger
+	rateLimiter       *RateLimiter
 }
 
 // LoginRequest 登录请求
@@ -72,6 +73,7 @@ type UserDTO struct {
 func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 	tokenService := NewSM4TokenService(cfg, db, logger)
 	passwordValidator := NewPasswordValidator(8, true, true, true, false)
+	rateLimiter := NewRateLimiterFromConfig(cfg)
 
 	return &Service{
 		db:                db,
@@ -79,6 +81,7 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 		passwordValidator: passwordValidator,
 		cfg:               cfg,
 		logger:            logger,
+		rateLimiter:       rateLimiter,
 	}
 }
 
@@ -94,7 +97,15 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 		return nil, err
 	}
 
-	// 2. 验证 SM4 密钥配置（如果使用加密密码）
+	// 2. 检查解密失败速率限制
+	if s.rateLimiter.ShouldBlock(req.Username) {
+		s.logger.Warn("Decrypt failure rate limit exceeded",
+			zap.String("ip", ipAddress),
+		)
+		return nil, errors.New("登录尝试过于频繁，请稍后再试")
+	}
+
+	// 3. 验证 SM4 密钥配置（如果使用加密密码）
 	if utils.IsEncryptedPassword(req.Password) {
 		if s.cfg.Auth.SM4Secret != "" {
 			if err := utils.ValidateSM4Secret(s.cfg.Auth.SM4Secret); err != nil {
@@ -104,11 +115,14 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 		}
 	}
 
-	// 3. 尝试解密密码（如果已加密）
+	// 4. 尝试解密密码（如果已加密）
 	passwordToCheck := req.Password
 	if utils.IsEncryptedPassword(req.Password) {
 		decrypted, err := utils.DecryptPasswordECB(req.Password, s.cfg.Auth.SM4Secret)
 		if err != nil {
+			// 记录解密失败
+			s.rateLimiter.RecordFailure(req.Username)
+
 			// 移除用户名，仅记录解密失败事件
 			s.logger.Warn("Failed to decrypt password",
 				// zap.String("username", req.Username),  // 移除敏感信息
@@ -122,10 +136,15 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 		)
 	}
 
-	// 3. 检查密码（使用解密后的密码）
+	// 5. 检查密码（使用解密后的密码）
 	if !user.CheckPassword(passwordToCheck) {
+		// 记录密码验证失败
+		s.rateLimiter.RecordFailure(req.Username)
 		return nil, errors.New("用户名或密码错误")
 	}
+
+	// 登录成功，清除失败记录
+	s.rateLimiter.Clear(req.Username)
 
 	// 4. 检查用户状态
 	if !user.IsActive {

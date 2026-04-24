@@ -32,6 +32,12 @@ type ServerConfig struct {
 	Environment  string `mapstructure:"environment" json:"environment" yaml:"environment"`
 	ReadTimeout  int    `mapstructure:"read_timeout" json:"read_timeout" yaml:"read_timeout"`
 	WriteTimeout int    `mapstructure:"write_timeout" json:"write_timeout" yaml:"write_timeout"`
+	// TLS 配置
+	TLSEnabled       bool   `mapstructure:"tls_enabled" json:"tls_enabled" yaml:"tls_enabled"`
+	TLSCertFile      string `mapstructure:"tls_cert_file" json:"tls_cert_file" yaml:"tls_cert_file"`
+	TLSKeyFile       string `mapstructure:"tls_key_file" json:"tls_key_file" yaml:"tls_key_file"`
+	HTTPSPort        int    `mapstructure:"https_port" json:"https_port" yaml:"https_port"`
+	RedirectHTTPToHTTPS bool `mapstructure:"redirect_http_to_https" json:"redirect_http_to_https" yaml:"redirect_http_to_https"`
 }
 
 // DatabaseConfig 数据库配置
@@ -51,12 +57,14 @@ type DatabaseConfig struct {
 
 // AuthConfig 认证配置
 type AuthConfig struct {
-	SM4Secret            string        `mapstructure:"sm4_secret" json:"sm4_secret" yaml:"sm4_secret"`
-	AccessTokenDuration  time.Duration `mapstructure:"access_token_duration" json:"access_token_duration" yaml:"access_token_duration"`
-	RefreshTokenDuration time.Duration `mapstructure:"refresh_token_duration" json:"refresh_token_duration" yaml:"refresh_token_duration"`
-	MaxSessionDuration   time.Duration `mapstructure:"max_session_duration" json:"max_session_duration" yaml:"max_session_duration"`
-	HLSTokenSecret       string        `mapstructure:"hls_token_secret" json:"hls_token_secret" yaml:"hls_token_secret"`
-	HLSTokenDuration     time.Duration `mapstructure:"hls_token_duration" json:"hls_token_duration" yaml:"hls_token_duration"`
+	SM4Secret              string        `mapstructure:"sm4_secret" json:"sm4_secret" yaml:"sm4_secret"`
+	AccessTokenDuration    time.Duration `mapstructure:"access_token_duration" json:"access_token_duration" yaml:"access_token_duration"`
+	RefreshTokenDuration   time.Duration `mapstructure:"refresh_token_duration" json:"refresh_token_duration" yaml:"refresh_token_duration"`
+	MaxSessionDuration     time.Duration `mapstructure:"max_session_duration" json:"max_session_duration" yaml:"max_session_duration"`
+	HLSTokenSecret          string        `mapstructure:"hls_token_secret" json:"hls_token_secret" yaml:"hls_token_secret"`
+	HLSTokenDuration        time.Duration `mapstructure:"hls_token_duration" json:"hls_token_duration" yaml:"hls_token_duration"`
+	MaxDecryptFailures      int           `mapstructure:"max_decrypt_failures" json:"max_decrypt_failures" yaml:"max_decrypt_failures"`        // 最大解密失败次数
+	DecryptFailureWindow    int           `mapstructure:"decrypt_failure_window" json:"decrypt_failure_window" yaml:"decrypt_failure_window"`      // 时间窗口（秒）
 }
 
 // LoggingConfig 日志配置
@@ -286,6 +294,14 @@ func setDefaults(cfg *Config) {
 	if cfg.Server.WriteTimeout == 0 {
 		cfg.Server.WriteTimeout = 30
 	}
+	// TLS 默认值
+	if cfg.Server.HTTPSPort == 0 {
+		cfg.Server.HTTPSPort = 8443
+	}
+	if !cfg.Server.TLSEnabled && cfg.Server.TLSCertFile != "" {
+		// 如果指定了证书文件，自动启用 TLS
+		cfg.Server.TLSEnabled = true
+	}
 
 	if cfg.Database.Driver == "" {
 		cfg.Database.Driver = "sqlite"
@@ -330,6 +346,13 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Auth.HLSTokenDuration == 0 {
 		cfg.Auth.HLSTokenDuration = 5 * time.Minute
+	}
+	// 解密失败速率限制默认值
+	if cfg.Auth.MaxDecryptFailures == 0 {
+		cfg.Auth.MaxDecryptFailures = 5 // 最大失败次数
+	}
+	if cfg.Auth.DecryptFailureWindow == 0 {
+		cfg.Auth.DecryptFailureWindow = 300 // 5分钟时间窗口
 	}
 
 	if cfg.Logging.Level == "" {
