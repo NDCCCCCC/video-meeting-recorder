@@ -82,6 +82,7 @@ type Handlers struct {
 	Split         *handlers.SplitHandler
 	Transcription *handlers.TranscriptionHandler
 	PPT           *handlers.PPThandler
+	Dashboard     *handlers.DashboardHandler
 }
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
@@ -635,6 +636,9 @@ func (a *MinimalApp) initHandlers() error {
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
 	a.huaweiConnector = video_recording.NewHuaweiConferenceConnector(a.db, a.huaweiManager, a.logger)
 
+	// 仪表板服务
+	dashboardService := services.NewDashboardService(a.db, a.logger)
+
 	// 创建handlers
 	a.handlers = &Handlers{
 		Auth:          handlers.NewAuthHandler(authService, a.logger),
@@ -651,6 +655,7 @@ func (a *MinimalApp) initHandlers() error {
 		Split:         handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
 		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, timestampMapper, a.logger),
 		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.frameCaptureService, a.logger),
+		Dashboard:     handlers.NewDashboardHandler(dashboardService, a.logger),
 	}
 
 	return nil
@@ -859,6 +864,13 @@ func (a *MinimalApp) registerRoutes() error {
 		notifications.PUT("/read-all", a.handlers.Notification.MarkAllAsRead)      // 全部标记为已读
 		notifications.GET("/settings", a.handlers.Notification.GetUserSetting)     // 获取通知配置
 		notifications.PUT("/settings", a.handlers.Notification.UpdateUserSetting)  // 更新通知配置
+	}
+
+	// 仪表板（需要 admin 权限）
+	dashboard := api.Group("/dashboard")
+	dashboard.Use(middleware.RequirePermission("dashboard:view"))
+	{
+		dashboard.GET("/stats", a.handlers.Dashboard.GetStats) // 获取仪表板统计数据
 	}
 
 	// 系统管理（需要 admin 权限）
