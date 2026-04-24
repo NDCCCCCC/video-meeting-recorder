@@ -9,6 +9,7 @@ import {
   User
 } from '../types/auth'
 import { apiRequest, clearToken as apiClearToken } from './apiClient'
+import { encryptPassword, getEncryptionKey } from '../utils/sm4'
 
 // API 基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
@@ -21,11 +22,25 @@ const saveToken = (accessToken: string, refreshToken: string): void => {
 
 // 登录（不需要认证）
 export async function login(req: LoginRequest): Promise<ApiResponse<LoginResponse>> {
+  // 获取加密密钥
+  const encryptionKey = getEncryptionKey()
+
+  // 加密密码
+  const encryptedPassword = encryptionKey
+    ? encryptPassword(req.password, encryptionKey)
+    : req.password  // 如果没有密钥则使用明文（向后兼容）
+
+  // 构建请求体（使用加密后的密码）
+  const loginRequest = {
+    username: req.username,
+    password: encryptedPassword,
+  }
+
   const url = `${API_BASE_URL}/api/v1/auth/login`
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    body: JSON.stringify(loginRequest),
   })
 
   const data: ApiResponse<LoginResponse> = await response.json()
