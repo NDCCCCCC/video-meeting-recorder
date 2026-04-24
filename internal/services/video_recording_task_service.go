@@ -334,14 +334,14 @@ func (s *VideoRecordingTaskService) CreateTaskAuto(req *CreateTaskAutoRequest, c
 }
 
 // UpdateTask 更新任务
-func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, userID uint) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
 		return nil, errors.New("任务不存在")
 	}
 
-	// 检查权限
-	if task.CreatedBy != userID {
+	// 检查权限 (shared_viewers 可以修改任何任务)
+	if !hasSharedViewer && task.CreatedBy != userID {
 		return nil, errors.New("无权限修改此任务")
 	}
 
@@ -630,14 +630,14 @@ func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.Vid
 }
 
 // StopTask 手动停止任务
-func (s *VideoRecordingTaskService) StopTask(id uint, userID uint) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
 		return nil, errors.New("任务不存在")
 	}
 
 	// 检查权限
-	if task.CreatedBy != userID {
+	if !hasSharedViewer && task.CreatedBy != userID {
 		return nil, errors.New("无权限操作此任务")
 	}
 
@@ -690,14 +690,14 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint) (*models.Vide
 }
 
 // CancelTask 取消任务
-func (s *VideoRecordingTaskService) CancelTask(id uint, userID uint) error {
+func (s *VideoRecordingTaskService) CancelTask(id uint, userID uint, hasSharedViewer bool) error {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
 		return errors.New("任务不存在")
 	}
 
 	// 检查权限
-	if task.CreatedBy != userID {
+	if !hasSharedViewer && task.CreatedBy != userID {
 		return errors.New("无权限操作此任务")
 	}
 
@@ -728,14 +728,14 @@ func (s *VideoRecordingTaskService) CancelTask(id uint, userID uint) error {
 }
 
 // RetryTask 重试失败任务
-func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
 		return nil, errors.New("任务不存在")
 	}
 
 	// 检查权限
-	if task.CreatedBy != userID {
+	if !hasSharedViewer && task.CreatedBy != userID {
 		return nil, errors.New("无权限操作此任务")
 	}
 
