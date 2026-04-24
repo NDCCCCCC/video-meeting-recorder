@@ -30,13 +30,6 @@ const validateVideoFile = (data: unknown): data is VideoFile => {
 
 // Video file formats allowed for upload
 const ACCEPTED_VIDEO_FORMATS = ['.mp4', '.mkv', '.avi', '.mov']
-// MIME types for validation
-const VIDEO_MIME_TYPES = [
-  'video/mp4',
-  'video/x-matroska',
-  'video/x-msvideo',
-  'video/quicktime',
-]
 // Maximum file size: 5GB (matches backend defaultMaxFileSize)
 const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024
 
