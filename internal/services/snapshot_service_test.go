@@ -46,7 +46,7 @@ func TestGenerateSnapshot_Concurrent(t *testing.T) {
 	//   wg.Add(1)
 	//   go func() {
 	//     defer wg.Done()
-	//     _, err := service.GenerateSnapshot(taskID, userID)
+	//     _, err := service.GenerateSnapshot(taskID, userID, false)
 	//     errors <- err
 	//   }()
 	// }
