@@ -6,6 +6,7 @@ import (
 
 	"github.com/cpic/record_v2/internal/config"
 	"github.com/cpic/record_v2/internal/models"
+	"github.com/cpic/record_v2/internal/utils"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -15,6 +16,7 @@ type Service struct {
 	db                *gorm.DB
 	tokenService      *SM4TokenService
 	passwordValidator *PasswordValidator
+	cfg               *config.Config
 	logger            *zap.Logger
 }
 
@@ -75,6 +77,7 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 		db:                db,
 		tokenService:      tokenService,
 		passwordValidator: passwordValidator,
+		cfg:               cfg,
 		logger:            logger,
 	}
 }
@@ -91,33 +94,50 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 		return nil, err
 	}
 
-	// 2. 检查密码
-	if !user.CheckPassword(req.Password) {
+	// 2. 尝试解密密码（如果已加密）
+	passwordToCheck := req.Password
+	if utils.IsEncryptedPassword(req.Password) {
+		decrypted, err := utils.DecryptPasswordECB(req.Password, s.cfg.Auth.SM4Secret)
+		if err != nil {
+			s.logger.Warn("Failed to decrypt password",
+				zap.String("username", req.Username),
+				zap.Error(err),
+			)
+			return nil, errors.New("密码格式错误")
+		}
+		passwordToCheck = decrypted
+		s.logger.Debug("Password decrypted for login",
+			zap.String("username", req.Username),
+		)
+	}
+
+	// 3. 检查密码（使用解密后的密码）
+	if !user.CheckPassword(passwordToCheck) {
 		return nil, errors.New("用户名或密码错误")
 	}
 
-	// 3. 检查用户状态
+	// 4. 检查用户状态
 	if !user.IsActive {
 		return nil, errors.New("用户已被禁用")
 	}
 
-	// 4. 生成Token
+	// 5. 生成Token
 	tokenPair, err := s.tokenService.GenerateTokenPair(&user)
 	if err != nil {
 		return nil, err
 	}
 
-	// 5. 更新最后登录时间
+	// 6. 更新最后登录时间
 	now := time.Now()
 	user.LastLoginAt = &now
 	s.db.Save(&user)
 
-	// 6. 创建session记录（可选，用于token撤销）
+	// 7. 创建session记录（可选，用于token撤销）
 	if err := s.tokenService.CreateSession(user.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt); err != nil {
 		s.logger.Warn("Failed to create session", zap.Error(err))
 	}
 
-	// 7. 返回响应
+	// 8. 返回响应
 	return &LoginResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
