@@ -22,6 +22,15 @@ const saveToken = (accessToken: string, refreshToken: string): void => {
 
 // 登录（不需要认证）
 export async function login(req: LoginRequest): Promise<ApiResponse<LoginResponse>> {
+  // 输入验证
+  if (!req.username || req.username.trim() === '') {
+    throw new Error('用户名不能为空')
+  }
+
+  if (!req.password || req.password.trim() === '') {
+    throw new Error('密码不能为空')
+  }
+
   // 获取加密密钥
   const encryptionKey = getEncryptionKey()
 
