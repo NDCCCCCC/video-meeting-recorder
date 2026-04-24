@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Input, AutoComplete, Checkbox, Button, Space, DatePicker } from 'antd'
+import { Card, AutoComplete, Checkbox, Button, Space, DatePicker } from 'antd'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { AuditLogListParams } from '../../../types/audit'
@@ -65,10 +65,12 @@ export function FilterBar({ onFilter, onReset, loading }: FilterBarProps) {
           onChange={setUsername}
           placeholder="搜索用户名或ID"
           style={{ width: 200 }}
-          options={[]} // Could be populated with API call
-          filterOption={(inputValue, option) =>
-            option?.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
-          }
+          options={[]}
+          filterOption={(inputValue, option) => {
+            if (!option) return false
+            const value = (option as { value: string }).value
+            return value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+          }}
         />
         <Checkbox.Group
           options={actionOptions}

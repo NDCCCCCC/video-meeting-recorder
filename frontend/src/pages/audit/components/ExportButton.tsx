@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Dropdown, message } from 'antd'
+import { Dropdown, message } from 'antd'
 import { DownloadOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
 import type { AuditLogExportParams } from '../../../types/audit'

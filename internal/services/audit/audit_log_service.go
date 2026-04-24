@@ -62,9 +62,9 @@ type QueryRequest struct {
 	UserID   uint   `form:"user_id"`
 	Username string `form:"username"`
 
-	// 时间范围
-	StartTime time.Time `form:"start_time"`
-	EndTime   time.Time `form:"end_time"`
+	// 时间范围（可选）
+	StartTime *time.Time `form:"start_time"`
+	EndTime   *time.Time `form:"end_time"`
 
 	// 搜索
 	Keyword string `form:"keyword"`
@@ -268,11 +268,11 @@ func (s *AuditLogService) Query(ctx context.Context, req *QueryRequest, userID u
 		escapedUsername = strings.ReplaceAll(escapedUsername, "_", "\\_")
 		query = query.Where("username LIKE ?", "%"+escapedUsername+"%")
 	}
-	if !req.StartTime.IsZero() {
-		query = query.Where("created_at >= ?", req.StartTime)
+	if req.StartTime != nil {
+		query = query.Where("created_at >= ?", *req.StartTime)
 	}
-	if !req.EndTime.IsZero() {
-		query = query.Where("created_at <= ?", req.EndTime)
+	if req.EndTime != nil {
+		query = query.Where("created_at <= ?", *req.EndTime)
 	}
 	if req.Keyword != "" {
 		// 转义关键词中的 LIKE 特殊字符

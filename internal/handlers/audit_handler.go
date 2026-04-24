@@ -83,12 +83,12 @@ func (h *AuditHandler) Query(c *gin.Context) {
 	// 解析时间
 	if startTime := c.Query("start_time"); startTime != "" {
 		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
-			req.StartTime = t
+			req.StartTime = &t
 		}
 	}
 	if endTime := c.Query("end_time"); endTime != "" {
 		if t, err := time.Parse(time.RFC3339, endTime); err == nil {
-			req.EndTime = t
+			req.EndTime = &t
 		}
 	}
 
@@ -179,12 +179,12 @@ func (h *AuditHandler) Export(c *gin.Context) {
 	// 解析时间
 	if startTime := c.Query("start_time"); startTime != "" {
 		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
-			req.StartTime = t
+			req.StartTime = &t
 		}
 	}
 	if endTime := c.Query("end_time"); endTime != "" {
 		if t, err := time.Parse(time.RFC3339, endTime); err == nil {
-			req.EndTime = t
+			req.EndTime = &t
 		}
 	}
 

@@ -2,7 +2,6 @@
 
 import { Card, Row, Col, Skeleton } from 'antd'
 import { Line, Column, Pie } from '@ant-design/charts'
-import type { StatisticalResult } from '@ant-design/charts'
 
 interface ChartsSectionProps {
   taskTrendData: Array<{ date: string; count: number }>
@@ -13,24 +12,24 @@ interface ChartsSectionProps {
 
 export function ChartsSection({ taskTrendData, taskStatusData, fileTypeData, loading }: ChartsSectionProps) {
   // Line chart config (D-07: trends)
-  const lineConfig: StatisticalResult.Line = {
+  const lineConfig = {
     data: taskTrendData,
-    xField: 'date',
-    yField: 'count',
+    xField: 'date' as const,
+    yField: 'count' as const,
     smooth: true,
     animation: true,
     point: { size: 3 },
     tooltip: {
-      formatter: (datum) => ({ name: '任务数', value: datum.count }),
+      formatter: (datum: { date: string; count: number }) => ({ name: '任务数', value: datum.count }),
     },
   }
 
   // Column chart config (D-08: comparisons)
-  const columnConfig: StatisticalResult.Column = {
+  const columnConfig = {
     data: taskStatusData,
-    xField: 'status',
-    yField: 'count',
-    label: { position: 'top' },
+    xField: 'status' as const,
+    yField: 'count' as const,
+    label: { position: 'top' as const },
     meta: {
       status: { alias: '状态' },
       count: { alias: '数量' },
@@ -38,17 +37,17 @@ export function ChartsSection({ taskTrendData, taskStatusData, fileTypeData, loa
   }
 
   // Pie chart config (D-09: distributions)
-  const pieConfig: StatisticalResult.Pie = {
+  const pieConfig = {
     data: fileTypeData,
-    angleField: 'count',
-    colorField: 'type',
+    angleField: 'count' as const,
+    colorField: 'type' as const,
     radius: 0.8,
     innerRadius: 0.6,
     label: {
-      type: 'inner',
+      type: 'inner' as const,
       offset: '-50%',
       content: '{value}',
-      style: { fontSize: 14, textAlign: 'center' },
+      style: { fontSize: 14, textAlign: 'center' as const },
     },
     statistic: {
       title: { offsetY: -8, content: '文件总数' },
