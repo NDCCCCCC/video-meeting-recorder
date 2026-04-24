@@ -130,7 +130,7 @@ func TestFrameCaptureService_GetVideoDuration(t *testing.T) {
 	service := NewFrameCaptureService("ffmpeg", ffprobePath, logger)
 
 	// Test with non-existent file
-	_, err := service.GetVideoDuration("nonexistent.mp4")
+	_, err := service.GetVideoDuration(context.Background(), "nonexistent.mp4")
 	if err == nil {
 		t.Error("Expected error for non-existent video file")
 	}

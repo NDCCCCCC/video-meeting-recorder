@@ -1245,7 +1245,7 @@ func (s *VideoFileService) findVideoFiles(dir string) ([]fileInfoWithPath, error
 //   - id: video file ID
 //   - newName: new filename without extension (extension will be preserved)
 //   - userID: user ID requesting the rename (for ownership validation)
-func (s *VideoFileService) RenameVideoFile(id uint, newName string, userID uint) error {
+func (s *VideoFileService) RenameVideoFile(id uint, newName string, userID uint, hasSharedViewer bool) error {
 	// Validation: load video file
 	var videoFile models.VideoFile
 	if err := s.db.First(&videoFile, id).Error; err != nil {
@@ -1255,8 +1255,8 @@ func (s *VideoFileService) RenameVideoFile(id uint, newName string, userID uint)
 		return fmt.Errorf("查询视频文件失败: %w", err)
 	}
 
-	// Validation: check ownership
-	if videoFile.CreatedBy != userID {
+	// Validation: check ownership (admin or shared_viewer can rename any file)
+	if !hasSharedViewer && videoFile.CreatedBy != userID {
 		return fmt.Errorf("无权重命名此文件")
 	}
 

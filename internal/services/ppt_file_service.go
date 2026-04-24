@@ -115,7 +115,7 @@ func (s *PPTFileService) UpdatePPTFile(id uint, updates map[string]interface{}) 
 //   - id: PPT file ID
 //   - newName: new filename without extension (extension will be preserved)
 //   - userID: user ID requesting the rename (for ownership validation)
-func (s *PPTFileService) RenamePPTFile(id uint, newName string, userID uint) error {
+func (s *PPTFileService) RenamePPTFile(id uint, newName string, userID uint, hasSharedViewer bool) error {
 	// Validation: load PPT file with SourceVideoFile preloaded
 	var pptFile models.PPTFile
 	if err := s.db.Preload("SourceVideoFile").First(&pptFile, id).Error; err != nil {
@@ -125,11 +125,11 @@ func (s *PPTFileService) RenamePPTFile(id uint, newName string, userID uint) err
 		return fmt.Errorf("查询PPT文件失败: %w", err)
 	}
 
-	// Validation: check ownership via SourceVideoFile
+	// Validation: check ownership via SourceVideoFile (shared_viewers can access all PPTs)
 	if pptFile.SourceVideoFile == nil {
 		return fmt.Errorf("PPT文件没有关联视频文件")
 	}
-	if pptFile.SourceVideoFile.CreatedBy != userID {
+	if !hasSharedViewer && pptFile.SourceVideoFile.CreatedBy != userID {
 		return fmt.Errorf("无权重命名此文件")
 	}
 

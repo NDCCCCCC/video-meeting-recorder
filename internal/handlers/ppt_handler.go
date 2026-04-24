@@ -275,7 +275,8 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 
 	// Call merge service
 	var pptFile *models.PPTFile
-	pptFile, err = h.mergeService.MergeSlides(c.Request.Context(), &req, userID)
+	hasSharedViewer := middleware.GetHasSharedViewer(c)
+	pptFile, err = h.mergeService.MergeSlides(c.Request.Context(), &req, userID, hasSharedViewer)
 	if err != nil {
 		h.logger.Error("Failed to merge slides",
 			zap.Uint("video_file_id", req.VideoFileID),
@@ -420,7 +421,8 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 	}
 
 	// Call service to rename
-	if err := h.pptFileService.RenamePPTFile(uint(id), newName, userID); err != nil {
+	hasSharedViewer := middleware.GetHasSharedViewer(c)
+	if err := h.pptFileService.RenamePPTFile(uint(id), newName, userID, hasSharedViewer); err != nil {
 		h.logger.Warn("重命名PPT文件失败",
 			zap.String("ppt_id", idStr),
 			zap.String("new_name", newName),
