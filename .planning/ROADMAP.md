@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 视频切割与会议转录PPT** — Phases 1-4 (shipped 2026-04-18)
-- 🔄 **v1.1 文件管理与编辑增强** — Phases 5-8 (in progress)
+- 🔄 **v1.1 文件管理与编辑增强** — Phases 5-10 (in progress)
 
 ## Phases
 
@@ -18,7 +18,7 @@
 </details>
 
 <details>
-<summary>🔄 v1.1 文件管理与编辑增强 (Phases 5-8) — IN PROGRESS</summary>
+<summary>🔄 v1.1 文件管理与编辑增强 (Phases 5-10) — IN PROGRESS</summary>
 
 - [x] Phase 5: File Rename & Smart Cleanup (2/2 plans) — **completed 2026-04-20**
     - [x] 05-01-PLAN.md — File rename API and UI for split videos and PPTs
@@ -42,6 +42,14 @@
     - [x] 08-02-PLAN.md — Keyboard shortcuts hook and utility constants
     - [x] 08-03-PLAN.md — Frame-level navigation hook and component
     - [x] 08-04-PLAN.md — VideoPlayerModal integration of all enhancements
+- [ ] Phase 9: Multi-Role Permissions & Shared Viewer (0/0 plans) — **not started**
+    - [ ] TBD (run /gsd-plan-phase 9 to break down)
+- [ ] Phase 10: Admin Dashboard, Audit Logs, and UI Enhancements (5/5 plans) — **ready to execute**
+    - [x] 10-01-PLAN.md — Backend dashboard statistics API (aggregations, service, handler, routes)
+    - [x] 10-02-PLAN.md — Audit log export functionality and frontend API client
+    - [x] 10-03-PLAN.md — Admin dashboard frontend (StatCards, ChartsSection, QuickActions, useDashboardStats)
+    - [x] 10-04-PLAN.md — Audit logs viewer frontend (AuditTable, FilterBar, DiffModal, ExportButton, useAuditLogs)
+    - [x] 10-05-PLAN.md — Design tokens system and reusable hooks (useLoadingState, useErrorHandler, API error interceptor)
 
 </details>
 
@@ -57,7 +65,33 @@
 | 6. PPT Editor UI Improvements | v1.1 | 7/7 | **Complete** | 2026-04-20 |
 | 7. Preview Page UI Improvements | v1.1 | 4/4 | **Complete** | 2026-04-20 |
 | 8. Video Snapshot & Player Enhancement | v1.1 | 5/5 | **Complete** | 2026-04-20 |
+| 9. Multi-Role Permissions & Shared Viewer | v1.1 | 0/0 | **Not Started** | — |
+| 10. Admin Dashboard, Audit Logs, and UI Enhancements | v1.1 | 0/5 | **Planning Complete** | — |
+
+### Phase 10: Admin Dashboard, Audit Logs, and UI Enhancements
+
+**Goal:** Deliver admin dashboard with statistics visualization, comprehensive audit log viewer with diff capabilities and export, and foundational UI design tokens and reusable hooks for consistent user experience.
+
+**Requirements:**
+- D-01 to D-12: Admin dashboard layout, statistics, charts, quick actions, admin-only access
+- D-13 to D-26: Audit logs table, filters, diff modal, CSV/JSON export
+- D-27 to D-39: Design tokens, loading states, error handling, API error interceptor
+
+**Depends on:** Phase 9
+**Plans:** 5 plans in 3 waves
+
+Plans:
+- [x] 10-01-PLAN.md — Backend dashboard statistics API (aggregations, service, handler, routes) — Wave 1
+- [x] 10-02-PLAN.md — Audit log export functionality and frontend API client — Wave 1
+- [x] 10-03-PLAN.md — Admin dashboard frontend (StatCards, ChartsSection, QuickActions, useDashboardStats) — Wave 2
+- [x] 10-04-PLAN.md — Audit logs viewer frontend (AuditTable, FilterBar, DiffModal, ExportButton, useAuditLogs) — Wave 2
+- [x] 10-05-PLAN.md — Design tokens system and reusable hooks (useLoadingState, useErrorHandler, API error interceptor) — Wave 3
+
+**Wave Structure:**
+- Wave 1 (parallel): 10-01 (backend dashboard API), 10-02 (audit export + API client)
+- Wave 2 (parallel): 10-03 (dashboard frontend, depends on 10-01), 10-04 (audit frontend, depends on 10-02)
+- Wave 3 (sequential): 10-05 (design tokens + hooks, depends on 10-03, 10-04)
 
 ---
 *Roadmap created: 2026-04-17*
-*Last updated: 2026-04-20 - Phase 08 completed*
+*Last updated: 2026-04-24 - Phase 10 planning complete (5 plans)*
