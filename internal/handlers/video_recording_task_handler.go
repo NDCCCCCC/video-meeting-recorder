@@ -190,7 +190,8 @@ func (h *VideoRecordingTaskHandler) UpdateTask(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	task, err := h.taskService.UpdateTask(id, &req, userID)
+	hasSharedViewer := middleware.GetHasSharedViewer(c)
+	task, err := h.taskService.UpdateTask(id, &req, userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -317,7 +318,8 @@ func (h *VideoRecordingTaskHandler) StopTask(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	task, err := h.taskService.StopTask(id, userID)
+	hasSharedViewer := middleware.GetHasSharedViewer(c)
+	task, err := h.taskService.StopTask(id, userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -343,7 +345,8 @@ func (h *VideoRecordingTaskHandler) CancelTask(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	if err := h.taskService.CancelTask(id, userID); err != nil {
+	hasSharedViewer := middleware.GetHasSharedViewer(c)
+	if err := h.taskService.CancelTask(id, userID, hasSharedViewer); err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
 	}
@@ -368,7 +371,8 @@ func (h *VideoRecordingTaskHandler) RetryTask(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	task, err := h.taskService.RetryTask(id, userID)
+	hasSharedViewer := middleware.GetHasSharedViewer(c)
+	task, err := h.taskService.RetryTask(id, userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
