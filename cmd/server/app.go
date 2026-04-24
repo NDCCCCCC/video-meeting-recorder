@@ -1028,7 +1028,12 @@ func (a *MinimalApp) Start() error {
 		}
 	}
 
-	// 启动HTTP服务器
+	// 启动HTTP/HTTPS服务器
+	if a.config.Server.TLSEnabled {
+		return a.startHTTPSServer()
+	}
+
+	// HTTP 模式
 	addr := fmt.Sprintf("%s:%d", a.config.Server.Host, a.config.Server.Port)
 
 	// 检查端口是否可用
@@ -1140,6 +1145,77 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 
 	a.logger.Info("应用已停止")
 	return nil
+}
+
+// startHTTPSServer 启动 HTTPS 服务器
+func (a *MinimalApp) startHTTPSServer() error {
+	// HTTPS 地址
+	httpsAddr := fmt.Sprintf("%s:%d", a.config.Server.Host, a.config.Server.HTTPSPort)
+
+	// 检查 HTTPS 端口是否可用
+	if err := a.checkPort(httpsAddr); err != nil {
+		return fmt.Errorf("HTTPS端口被占用: %w", err)
+	}
+
+	// 创建 HTTPS 服务器
+	a.httpServer = &http.Server{
+		Addr:         httpsAddr,
+		Handler:      a.router,
+		ReadTimeout:  time.Duration(a.config.Server.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(a.config.Server.WriteTimeout) * time.Second,
+	}
+
+	// 启动 HTTPS 服务器
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		a.logger.Info("正在启动HTTPS服务器", zap.String("address", httpsAddr))
+		if err := a.httpServer.ListenAndServeTLS(a.config.Server.TLSCertFile, a.config.Server.TLSKeyFile); err != nil && err != http.ErrServerClosed {
+			a.logger.Error("HTTPS服务器错误", zap.Error(err))
+		}
+	}()
+
+	// 如果启用了 HTTP 到 HTTPS 的重定向，同时启动 HTTP 服务器
+	if a.config.Server.RedirectHTTPToHTTPS {
+		httpAddr := fmt.Sprintf("%s:%d", a.config.Server.Host, a.config.Server.Port)
+		redirectServer := &http.Server{
+			Addr:         httpAddr,
+			Handler:      a.createRedirectHandler(),
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		}
+
+		a.wg.Add(1)
+		go func() {
+			defer a.wg.Done()
+			a.logger.Info("正在启动HTTP重定向服务器", zap.String("address", httpAddr), zap.String("redirect_to", httpsAddr))
+			if err := redirectServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				a.logger.Warn("HTTP重定向服务器错误", zap.Error(err))
+			}
+		}()
+	}
+
+	a.logger.Info("HTTPS应用启动成功",
+		zap.String("https_address", httpsAddr),
+	)
+
+	return nil
+}
+
+// createRedirectHandler 创建 HTTP 到 HTTPS 的重定向处理器
+func (a *MinimalApp) createRedirectHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 构造 HTTPS URL
+		host := r.Host
+		if idx := strings.Index(host, ":"); idx != -1 {
+			// 移除端口部分
+			host = host[:idx]
+		}
+		target := fmt.Sprintf("https://%s:%d%s", host, a.config.Server.HTTPSPort, r.RequestURI)
+
+		// 永久重定向到 HTTPS
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
 }
 
 // checkPort 检查端口是否可用
