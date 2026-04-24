@@ -67,3 +67,11 @@ export function isEncryptedPassword(password: string): boolean {
 
   return true
 }
+
+/**
+ * 获取加密密钥（从环境变量）
+ * @returns SM4 加密密钥，如果未配置则返回空字符串
+ */
+export function getEncryptionKey(): string {
+  return import.meta.env.VITE_SM4_SECRET || ''
+}
