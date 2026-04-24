@@ -13,6 +13,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css}\""
   },
   "dependencies": {
+    "@ant-design/charts": "^2.6.7",
+    "@ant-design/pro-layout": "^7.22.7",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -20,6 +22,7 @@
     "antd": "^6.0.0",
     "axios": "^1.7.0",
     "dayjs": "^1.11.13",
+    "diff": "^9.0.0",
     "framer-motion": "^12.0.0",
     "hls.js": "^1.6.15",
     "react": "^19.2.0",
