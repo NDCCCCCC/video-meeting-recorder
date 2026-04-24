@@ -109,15 +109,16 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 	if utils.IsEncryptedPassword(req.Password) {
 		decrypted, err := utils.DecryptPasswordECB(req.Password, s.cfg.Auth.SM4Secret)
 		if err != nil {
+			// 移除用户名，仅记录解密失败事件
 			s.logger.Warn("Failed to decrypt password",
-				zap.String("username", req.Username),
-				// zap.Error(err),  // 移除详细错误，防止日志泄露
+				// zap.String("username", req.Username),  // 移除敏感信息
 			)
-			return nil, errors.New("密码格式错误")
+			return nil, errors.New("用户名或密码错误")
 		}
 		passwordToCheck = decrypted
+		// 移除用户名，仅记录解密成功事件
 		s.logger.Debug("Password decrypted for login",
-			zap.String("username", req.Username),
+			// zap.String("username", req.Username),  // 移除敏感信息
 		)
 	}
 
