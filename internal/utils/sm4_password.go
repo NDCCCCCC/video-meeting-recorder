@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"strings"
 
@@ -22,12 +22,6 @@ func ValidateSM4Secret(secret string) error {
 		return errors.New("SM4 密钥长度不足，至少需要 16 字符")
 	}
 
-	// 验证是否为有效的 Base64 字符串
-	_, err := base64.StdEncoding.DecodeString(secret)
-	if err != nil {
-		return errors.New("SM4 密钥必须是有效的 Base64 编码")
-	}
-
 	return nil
 }
 
@@ -45,11 +39,32 @@ func ValidatePasswordInput(password string) error {
 	return nil
 }
 
-// DeriveSM4Key 从密钥字符串派生16字节SM4密钥
-// 与 auth.deriveSM4Key 相同的实现，用于密码解密
+// DeriveSM4Key 从密钥字符串获取SM4密钥
+// 将十六进制字符串转换为字节（与前端 sm-crypto 兼容）
 func DeriveSM4Key(secret string) []byte {
-	hash := sha256.Sum256([]byte(secret))
-	return hash[:16]
+	// 将十六进制字符串解码为字节
+	// 32个十六进制字符 = 16字节
+	keyBytes, err := hex.DecodeString(secret)
+	if err != nil {
+		// 如果不是有效的十六进制，回退到原始方式
+		keyBytes = []byte(secret)
+		if len(keyBytes) > 16 {
+			return keyBytes[:16]
+		}
+		if len(keyBytes) < 16 {
+			padded := make([]byte, 16)
+			copy(padded, keyBytes)
+			return padded
+		}
+		return keyBytes
+	}
+	// 确保密钥至少16字节
+	if len(keyBytes) < 16 {
+		padded := make([]byte, 16)
+		copy(padded, keyBytes)
+		return padded
+	}
+	return keyBytes[:16]
 }
 
 // DecryptPasswordECB 使用 SM4-ECB 模式解密密码
