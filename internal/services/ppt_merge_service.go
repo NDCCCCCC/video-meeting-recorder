@@ -46,7 +46,7 @@ func NewPPTMergeService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, sli
 }
 
 // MergeSlides merges selected slides from multiple PPT files into a new PPTX
-func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequest, userID uint) (*models.PPTFile, error) {
+func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequest, userID uint, hasSharedViewer bool) (*models.PPTFile, error) {
 	// 1. Validate: Check slide count <= 200 (per D-17 merge limit)
 	if len(req.Slides) > 200 {
 		return nil, fmt.Errorf("超过200页幻灯片限制")
@@ -58,8 +58,8 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 		return nil, fmt.Errorf("video file not found")
 	}
 
-	// Check ownership (admin or owner)
-	if videoFile.CreatedBy != userID {
+	// Check ownership (admin or shared_viewer can access any video)
+	if !hasSharedViewer && videoFile.CreatedBy != userID {
 		// Note: isAdmin check should be done at handler level
 		// This service layer check is a fallback
 		return nil, fmt.Errorf("user does not own this video file")

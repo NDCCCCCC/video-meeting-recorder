@@ -54,7 +54,7 @@ func TestPPTFileService_RenamePPTFile_Success(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.RenamePPTFile(pptFile.ID, "new_name", userID)
+	err := service.RenamePPTFile(pptFile.ID, "new_name", userID, false)
 	assert.NoError(t, err)
 
 	var updated models.PPTFile
@@ -87,7 +87,7 @@ func TestPPTFileService_RenamePPTFile_PreservesExtension(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.RenamePPTFile(pptFile.ID, "new.ppt", userID)
+	err := service.RenamePPTFile(pptFile.ID, "new.ppt", userID, false)
 	assert.NoError(t, err)
 
 	var updated models.PPTFile
@@ -121,7 +121,7 @@ func TestPPTFileService_RenamePPTFile_OwnershipValidation(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.RenamePPTFile(pptFile.ID, "new", otherUserID)
+	err := service.RenamePPTFile(pptFile.ID, "new", otherUserID, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "无权重命名")
 }
@@ -153,7 +153,7 @@ func TestPPTFileService_RenamePPTFile_RollbackOnFilesystemError(t *testing.T) {
 
 	require.NoError(t, os.Remove(pptPath))
 
-	err := service.RenamePPTFile(pptFile.ID, "new", userID)
+	err := service.RenamePPTFile(pptFile.ID, "new", userID, false)
 	assert.Error(t, err)
 
 	var updated models.PPTFile
@@ -199,7 +199,7 @@ func TestPPTFileService_RenamePPTFile_DuplicateDetection(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile2).Error)
 
-	err := service.RenamePPTFile(pptFile2.ID, "existing", userID)
+	err := service.RenamePPTFile(pptFile2.ID, "existing", userID, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "已存在")
 }
@@ -233,7 +233,7 @@ func TestPPTFileService_RenamePPTFile_UpdatesSlideCachePath(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.RenamePPTFile(pptFile.ID, "new_ppt", userID)
+	err := service.RenamePPTFile(pptFile.ID, "new_ppt", userID, false)
 	assert.NoError(t, err)
 
 	var updated models.PPTFile

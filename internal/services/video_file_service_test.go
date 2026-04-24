@@ -953,7 +953,7 @@ func TestVideoFileService_RenameVideoFile_Success(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	// Rename the file
-	err := service.RenameVideoFile(videoFile.ID, "new_video_name", userID)
+	err := service.RenameVideoFile(videoFile.ID, "new_video_name", userID, false)
 	assert.NoError(t, err)
 
 	// Verify database was updated
@@ -991,7 +991,7 @@ func TestVideoFileService_RenameVideoFile_PreservesExtension(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	// Try to rename with custom extension (should be ignored)
-	err := service.RenameVideoFile(videoFile.ID, "new_name.mkv", userID)
+	err := service.RenameVideoFile(videoFile.ID, "new_name.mkv", userID, false)
 	assert.NoError(t, err)
 
 	var updated models.VideoFile
@@ -1018,7 +1018,7 @@ func TestVideoFileService_RenameVideoFile_OriginalRecordingImmutable(t *testing.
 	require.NoError(t, db.Create(videoFile).Error)
 
 	// Try to rename original recording
-	err := service.RenameVideoFile(videoFile.ID, "new_name", userID)
+	err := service.RenameVideoFile(videoFile.ID, "new_name", userID, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "不能重命名原始录制")
 }
@@ -1043,7 +1043,7 @@ func TestVideoFileService_RenameVideoFile_OwnershipValidation(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	// Try to rename as different user
-	err := service.RenameVideoFile(videoFile.ID, "new_name", otherUserID)
+	err := service.RenameVideoFile(videoFile.ID, "new_name", otherUserID, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "无权重命名")
 }
@@ -1070,7 +1070,7 @@ func TestVideoFileService_RenameVideoFile_RollbackOnFilesystemError(t *testing.T
 	require.NoError(t, os.Remove(videoFile.FilePath))
 
 	// Try to rename (should fail due to missing source file)
-	err := service.RenameVideoFile(videoFile.ID, "new_name", userID)
+	err := service.RenameVideoFile(videoFile.ID, "new_name", userID, false)
 	assert.Error(t, err)
 
 	// Verify database was NOT updated (transaction rolled back)
@@ -1113,7 +1113,7 @@ func TestVideoFileService_RenameVideoFile_DuplicateDetection(t *testing.T) {
 	require.NoError(t, db.Create(file2).Error)
 
 	// Rename file2 to the same name as file1
-	err := service.RenameVideoFile(file2.ID, "existing_video", userID)
+	err := service.RenameVideoFile(file2.ID, "existing_video", userID, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "已存在")
 }

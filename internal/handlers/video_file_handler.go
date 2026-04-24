@@ -279,7 +279,8 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 	}
 
 	// Call service to rename
-	if err := h.fileService.RenameVideoFile(id, newName, userID); err != nil {
+	hasSharedViewer := middleware.GetHasSharedViewer(c)
+	if err := h.fileService.RenameVideoFile(id, newName, userID, hasSharedViewer); err != nil {
 		h.logger.Warn("重命名视频文件失败",
 			zap.Uint("file_id", id),
 			zap.String("new_name", newName),
