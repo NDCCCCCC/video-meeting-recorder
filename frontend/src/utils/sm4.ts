@@ -2,6 +2,7 @@
 import { sm4 } from 'sm-crypto'
 
 const SM4_KEY_SIZE = 16 // SM4 密钥 16 字节
+export const ENCRYPTION_PREFIX = 'SM4:' // 加密前缀标记，用于可靠检测加密密码
 
 /**
  * 从字符串派生 SM4 密钥（与后端 deriveSM4Key 兼容）
@@ -25,47 +26,44 @@ export async function deriveSM4Key(secret: string): Promise<string> {
  * SM4-ECB 加密密码
  * @param password 明文密码
  * @param key Base64 编码的 SM4 密钥
- * @returns Base64 编码的密文
+ * @returns Base64 编码的密文（带前缀标记）
  */
 export function encryptPassword(password: string, key: string): string {
   try {
     // sm-crypto 的 sm4.encrypt 使用 ECB 模式
     const encrypted = sm4.encrypt(password, key)
-    return encrypted
+    // 添加前缀标记，确保解密检测不会被绕过
+    return `${ENCRYPTION_PREFIX}${encrypted}`
   } catch (error) {
-    throw new Error(`SM4 加密失败: ${error}`)
+    throw new Error(`Failed to encrypt password: ${error}`)
   }
 }
 
 /**
  * SM4-ECB 解密密码（用于测试验证）
- * @param encrypted Base64 编码的密文
+ * @param encrypted Base64 编码的密文（带前缀标记）
  * @param key Base64 编码的 SM4 密钥
  * @returns 明文密码
  */
 export function decryptPassword(encrypted: string, key: string): string {
   try {
-    const decrypted = sm4.decrypt(encrypted, key)
+    // 移除前缀标记
+    const ciphertext = encrypted.replace(ENCRYPTION_PREFIX, '')
+
+    // sm-crypto 的 sm4.decrypt 使用 ECB 模式
+    const decrypted = sm4.decrypt(ciphertext, key)
     return decrypted
   } catch (error) {
-    throw new Error(`SM4 解密失败: ${error}`)
+    throw new Error(`Failed to decrypt password: ${error}`)
   }
 }
 
 /**
- * 检测字符串是否为 SM4 加密格式
- * SM4-ECB 加密后的 Base64 长度必须是 4 的倍数
- * 且密码长度通常 > 32 字符
+ * 检测字符串是否为 SM4 加密格式（使用前缀标记）
  */
 export function isEncryptedPassword(password: string): boolean {
-  // Base64 字符集检查
-  const base64Regex = /^[A-Za-z0-9+/=]+$/
-  if (!base64Regex.test(password)) return false
-
-  // 长度检查（SM4-ECB 加密后长度为 4 的倍数）
-  if (password.length < 32 || password.length % 4 !== 0) return false
-
-  return true
+  // 使用前缀标记进行可靠检测
+  return password.startsWith(ENCRYPTION_PREFIX)
 }
 
 /**
