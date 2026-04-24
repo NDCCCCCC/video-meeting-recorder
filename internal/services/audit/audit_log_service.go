@@ -62,9 +62,9 @@ type QueryRequest struct {
 	UserID   uint   `form:"user_id"`
 	Username string `form:"username"`
 
-	// 时间范围（可选）
-	StartTime *time.Time `form:"start_time"`
-	EndTime   *time.Time `form:"end_time"`
+	// 时间范围（可选，手动解析）
+	StartTime *time.Time
+	EndTime   *time.Time
 
 	// 搜索
 	Keyword string `form:"keyword"`

@@ -35,7 +35,8 @@
       "Bash(sed -i '86s/.*/\\\\t\\\\t\\\\treq.StartTime = \\\\&t/' internal/handlers/audit_handler.go)",
       "Bash(sed -i '91s/.*/\\\\t\\\\t\\\\treq.EndTime = \\\\&t/' internal/handlers/audit_handler.go)",
       "Bash(sed -i '182s/.*/\\\\t\\\\t\\\\treq.StartTime = \\\\&t/' internal/handlers/audit_handler.go)",
-      "Bash(sed -i '187s/.*/\\\\t\\\\t\\\\treq.EndTime = \\\\&t/' internal/handlers/audit_handler.go)"
+      "Bash(sed -i '187s/.*/\\\\t\\\\t\\\\treq.EndTime = \\\\&t/' internal/handlers/audit_handler.go)",
+      "Bash(tasklist)"
     ]
   }
 }
