@@ -95,16 +95,20 @@ func (s *DashboardService) getTaskStats(ctx context.Context) (*TaskStats, error)
 		return nil, err
 	}
 
-	// 进行中的任务数
+	// 进行中的任务数（connecting, recording, converting）
 	if err := s.db.Model(&models.VideoRecordingTask{}).
-		Where("status = ?", models.VideoStatusInProgress).
+		Where("status IN ?", []models.VideoRecordingTaskStatus{
+			models.VideoStatusConnecting,
+			models.VideoStatusRecording,
+			models.VideoStatusConverting,
+		}).
 		Count(&stats.InProgress).Error; err != nil {
 		return nil, err
 	}
 
-	// 成功的任务数
+	// 成功的任务数（completed）
 	if err := s.db.Model(&models.VideoRecordingTask{}).
-		Where("status = ?", models.VideoStatusSuccess).
+		Where("status = ?", models.VideoStatusCompleted).
 		Count(&stats.Success).Error; err != nil {
 		return nil, err
 	}
@@ -123,7 +127,7 @@ func (s *DashboardService) getTaskStats(ctx context.Context) (*TaskStats, error)
 	var result Result
 	if err := s.db.Model(&models.VideoRecordingTask{}).
 		Select("AVG(julianday(end_time) - julianday(start_time)) * 86400 as avg_time").
-		Where("status = ? AND end_time IS NOT NULL AND start_time IS NOT NULL", models.VideoStatusSuccess).
+		Where("status = ? AND end_time IS NOT NULL AND start_time IS NOT NULL", models.VideoStatusCompleted).
 		Scan(&result).Error; err != nil {
 		// 如果查询失败，设置为0
 		stats.AvgTime = 0
