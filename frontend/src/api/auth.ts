@@ -8,17 +8,11 @@ import {
   ValidationResult,
   User
 } from '../types/auth'
-import { apiRequest, clearToken as apiClearToken } from './apiClient'
+import { apiRequest, clearToken as apiClearToken, saveToken } from './apiClient'
 import { encryptPassword, getEncryptionKey } from '../utils/sm4'
 
 // API 基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-
-// 保存 Token 到 localStorage（用于登录时）
-const saveToken = (accessToken: string, refreshToken: string): void => {
-  localStorage.setItem('access_token', accessToken)
-  localStorage.setItem('refresh_token', refreshToken)
-}
 
 // 登录（不需要认证）
 export async function login(req: LoginRequest): Promise<ApiResponse<LoginResponse>> {
@@ -59,7 +53,14 @@ export async function login(req: LoginRequest): Promise<ApiResponse<LoginRespons
   }
 
   if (data.data) {
+    console.log('[DEBUG] auth.ts login - received tokens:', {
+      access: data.data.access_token ? `${data.data.access_token.substring(0, 20)}...` : null,
+      refresh: data.data.refresh_token ? `${data.data.refresh_token.substring(0, 20)}...` : null
+    })
     saveToken(data.data.access_token, data.data.refresh_token)
+    // 注意：不再手动更新 auth-storage，避免与 zustand persist 竞态
+    // zustand persist 会在 authStore.login() 的 set() 调用时自动处理持久化
+    console.log('[DEBUG] auth.ts login - tokens saved, localStorage access_token:', localStorage.getItem('access_token')?.substring(0, 20) + '...')
   }
 
   return data
