@@ -94,14 +94,24 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 		return nil, err
 	}
 
-	// 2. 尝试解密密码（如果已加密）
+	// 2. 验证 SM4 密钥配置（如果使用加密密码）
+	if utils.IsEncryptedPassword(req.Password) {
+		if s.cfg.Auth.SM4Secret != "" {
+			if err := utils.ValidateSM4Secret(s.cfg.Auth.SM4Secret); err != nil {
+				s.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
+				return nil, errors.New("系统配置错误")
+			}
+		}
+	}
+
+	// 3. 尝试解密密码（如果已加密）
 	passwordToCheck := req.Password
 	if utils.IsEncryptedPassword(req.Password) {
 		decrypted, err := utils.DecryptPasswordECB(req.Password, s.cfg.Auth.SM4Secret)
 		if err != nil {
 			s.logger.Warn("Failed to decrypt password",
 				zap.String("username", req.Username),
-				zap.Error(err),
+				// zap.Error(err),  // 移除详细错误，防止日志泄露
 			)
 			return nil, errors.New("密码格式错误")
 		}
