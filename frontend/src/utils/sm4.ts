@@ -25,18 +25,30 @@ export async function deriveSM4Key(secret: string): Promise<string> {
 /**
  * SM4-ECB 加密密码
  * @param password 明文密码
- * @param key Base64 编码的 SM4 密钥
+ * @param key SM4 密钥（32字符十六进制字符串）
  * @returns Base64 编码的密文（带前缀标记）
  */
 export function encryptPassword(password: string, key: string): string {
   try {
-    // sm-crypto 的 sm4.encrypt 使用 ECB 模式
-    const encrypted = sm4.encrypt(password, key)
+    // sm-crypto 的 sm4.encrypt 返回十六进制字符串
+    const hexEncrypted = sm4.encrypt(password, key)
+
+    // 将十六进制转换为 Base64（与后端兼容）
+    const encrypted = hexToBase64(hexEncrypted)
+
     // 添加前缀标记，确保解密检测不会被绕过
     return `${ENCRYPTION_PREFIX}${encrypted}`
   } catch (error) {
     throw new Error(`Failed to encrypt password: ${error}`)
   }
+}
+
+/**
+ * 十六进制字符串转 Base64
+ */
+function hexToBase64(hexString: string): string {
+  const hexBytes = new Uint8Array(hexString.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
+  return btoa(String.fromCharCode(...hexBytes))
 }
 
 /**
