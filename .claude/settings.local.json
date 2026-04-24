@@ -10,7 +10,32 @@
       "Bash(set CGO_ENABLED=1)",
       "Bash(go clean:*)",
       "Bash(./services.test -test.run \"TestPPTFileService_RenamePPTFile\" -test.v)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Skill(gsd-audit-uat)",
+      "Skill(gsd-add-phase)",
+      "Skill(gsd-plan-phase)",
+      "Skill(gsd-execute-phase)",
+      "Skill(gsd-code-review)",
+      "Skill(gsd-debug)",
+      "Bash(openssl rand:*)",
+      "Bash(grep -o \"getEncryptionKey\" D:/CODE/ClaudeCode/record_V2/frontend/dist/assets/*.js)",
+      "Bash(node -e ':*)",
+      "Bash(node /tmp/test_sm4.js)",
+      "Bash(node test_sm4.js)",
+      "Bash(rm test_sm4.js)",
+      "Bash(node test_sm4.cjs)",
+      "Bash(rm test_sm4.cjs)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(curl -s -H \"Authorization: Bearer $\\(cat .test-token || echo 'test'\\)\" \"https://10.62.0.123:5443/api/v1/audit/logs?page=1&page_size=20\")",
+      "Bash(sed -i '271s/.*/\\\\tif req.StartTime != nil {/' internal/services/audit/audit_log_service.go)",
+      "Bash(sed -i '272s/.*/\\\\t\\\\tquery = query.Where\\(\"created_at >= ?\", *req.StartTime\\)/' internal/services/audit/audit_log_service.go)",
+      "Bash(sed -i '274s/.*/\\\\tif req.EndTime != nil {/' internal/services/audit/audit_log_service.go)",
+      "Bash(sed -i '275s/.*/\\\\t\\\\tquery = query.Where\\(\"created_at <= ?\", *req.EndTime\\)/' internal/services/audit/audit_log_service.go)",
+      "Bash(sed -i '86s/.*/\\\\t\\\\t\\\\treq.StartTime = \\\\&t/' internal/handlers/audit_handler.go)",
+      "Bash(sed -i '91s/.*/\\\\t\\\\t\\\\treq.EndTime = \\\\&t/' internal/handlers/audit_handler.go)",
+      "Bash(sed -i '182s/.*/\\\\t\\\\t\\\\treq.StartTime = \\\\&t/' internal/handlers/audit_handler.go)",
+      "Bash(sed -i '187s/.*/\\\\t\\\\t\\\\treq.EndTime = \\\\&t/' internal/handlers/audit_handler.go)"
     ]
   }
 }

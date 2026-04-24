@@ -16,7 +16,7 @@ export default function AuditLogsPage() {
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
   const [diffModalOpen, setDiffModalOpen] = useState(false)
 
-  const { logs, total, loading, error, fetchLogs } = useAuditLogs(params)
+  const { logs, total, loading, fetchLogs } = useAuditLogs(params)
 
   const handleFilter = (newParams: AuditLogListParams) => {
     setParams(newParams)

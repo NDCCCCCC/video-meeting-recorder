@@ -868,7 +868,7 @@ func (a *MinimalApp) registerRoutes() error {
 
 	// 仪表板（需要 admin 权限）
 	dashboard := api.Group("/dashboard")
-	dashboard.Use(middleware.RequirePermission("dashboard:view"))
+	dashboard.Use(middleware.RequirePermission(a.db, "dashboard", "view"))
 	{
 		dashboard.GET("/stats", a.handlers.Dashboard.GetStats) // 获取仪表板统计数据
 	}

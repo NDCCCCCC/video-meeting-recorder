@@ -1,10 +1,10 @@
 // 审计日志 API 客户端
 
 import type {
-	AuditLog,
 	AuditLogListParams,
 	AuditLogListApiResponse,
 	AuditLogExportParams,
+	AuditLogApiResponse,
 } from '../types/audit'
 import type { ApiResponse } from '../types/auth'
 import { apiRequest } from './apiClient'

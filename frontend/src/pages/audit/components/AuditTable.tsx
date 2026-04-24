@@ -1,4 +1,4 @@
-import { Table, Tag, Button, Space } from 'antd'
+import { Table, Tag, Button } from 'antd'
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
 import dayjs from 'dayjs'
 import type { AuditLog } from '../../../types/audit'
