@@ -1,9 +1,14 @@
 package handlers
 
 import (
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/cpic/record_v2/internal/models"
 	"github.com/cpic/record_v2/internal/services/audit"
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -142,4 +147,125 @@ func (h *AuditHandler) Statistics(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, stats)
+}
+
+// Export 导出审计日志
+// @Summary 导出审计日志
+// @Tags 审计日志
+// @Produce json
+// @Param format query string false "导出格式" Enums(csv, json)
+// @Param module query string false "模块"
+// @Param action query string false "操作"
+// @Param status query string false "状态"
+// @Param start_time query string false "开始时间"
+// @Param end_time query string false "结束时间"
+// @Success 200 {file} file
+// @Router /api/v1/audit/logs/export [get]
+func (h *AuditHandler) Export(c *gin.Context) {
+	format := c.DefaultQuery("format", "csv")
+
+	// 格式白名单验证
+	if format != "csv" && format != "json" {
+		response.GinError(c, response.CodeInvalidRequest, "不支持的导出格式")
+		return
+	}
+
+	var req audit.QueryRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误")
+		return
+	}
+
+	// 解析时间
+	if startTime := c.Query("start_time"); startTime != "" {
+		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
+			req.StartTime = t
+		}
+	}
+	if endTime := c.Query("end_time"); endTime != "" {
+		if t, err := time.Parse(time.RFC3339, endTime); err == nil {
+			req.EndTime = t
+		}
+	}
+
+	// 导出限制：最多10000条 (T-10-04 mitigation)
+	req.Page = 1
+	req.PageSize = 10000
+
+	result, err := h.auditService.Query(c.Request.Context(), &req, h.getUserID(c), h.getDataScope(c))
+	if err != nil {
+		h.logger.Warn("导出审计日志失败", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "导出失败")
+		return
+	}
+
+	if format == "csv" {
+		h.exportCSV(c, result.Items)
+	} else {
+		h.exportJSON(c, result.Items)
+	}
+}
+
+// exportCSV 导出CSV格式
+func (h *AuditHandler) exportCSV(c *gin.Context, logs []*models.AuditLog) {
+	timestamp := time.Now().Format("2006-01-02-15-04-05")
+	filename := fmt.Sprintf("audit_logs_%s.csv", timestamp)
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+
+	// 创建CSV写入器
+	writer := csv.NewWriter(c.Writer)
+	defer writer.Flush()
+
+	// 写入表头
+	headers := []string{"ID", "时间", "用户", "操作", "模块", "资源", "状态", "错误信息"}
+	if err := writer.Write(headers); err != nil {
+		h.logger.Error("写入CSV表头失败", zap.Error(err))
+		return
+	}
+
+	// 写入数据行
+	for _, log := range logs {
+		record := []string{
+			strconv.FormatUint(uint64(log.ID), 10),
+			log.CreatedAt.Format("2006-01-02 15:04:05"),
+			log.Username,
+			log.Action,
+			log.Module,
+			log.Resource,
+			log.Status,
+			log.ErrorMsg,
+		}
+
+		// T-10-02 mitigation: 防止CSV注入，转义特殊字符
+		for i := range record {
+			if strings.HasPrefix(record[i], "=") || strings.HasPrefix(record[i], "+") ||
+				strings.HasPrefix(record[i], "-") || strings.HasPrefix(record[i], "@") {
+				record[i] = "'" + record[i]
+			}
+		}
+
+		if err := writer.Write(record); err != nil {
+			h.logger.Error("写入CSV记录失败", zap.Error(err), zap.Uint("id", log.ID))
+			return
+		}
+	}
+}
+
+// exportJSON 导出JSON格式
+func (h *AuditHandler) exportJSON(c *gin.Context, logs []*models.AuditLog) {
+	timestamp := time.Now().Format("2006-01-02-15-04-05")
+	filename := fmt.Sprintf("audit_logs_%s.json", timestamp)
+
+	c.Header("Content-Type", "application/json; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+
+	encoder := json.NewEncoder(c.Writer)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(logs); err != nil {
+		h.logger.Error("写入JSON失败", zap.Error(err))
+		return
+	}
 }
