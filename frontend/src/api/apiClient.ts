@@ -2,6 +2,7 @@
 // 处理所有 API 请求的认证、401 错误和 token 刷新
 
 import type { ApiResponse } from '../types/auth'
+import { message } from 'antd'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
@@ -232,6 +233,37 @@ export async function apiRequest<T>(
 
     return data
   } catch (error) {
+    // Handle HTTP errors with centralized error handling per D-39
+    if (error && typeof error === 'object' && 'response' in error) {
+      const err = error as { response?: { status?: number; data?: { message?: string } } }
+
+      if (err.response) {
+        const { status, data } = err.response
+
+        // Map error codes to user-friendly messages per D-38
+        const errorMessages: Record<number, string> = {
+          400: '请求参数错误',
+          401: '登录已过期，请重新登录',
+          403: '权限不足，无法访问此资源',
+          404: '请求的资源不存在',
+          500: '服务器错误，请稍后重试',
+          502: '网关错误，请稍后重试',
+          503: '服务不可用，请稍后重试',
+        }
+
+        const errorMessage = data?.message || errorMessages[status || 500] || '请求失败，请稍后重试'
+        message.error(errorMessage, 5) // 5 seconds duration per D-38
+
+        // Redirect to login on 401
+        if (status === 401) {
+          handleUnauthorized()
+        }
+      }
+    } else if (error instanceof Error && error.message === 'Network error') {
+      // Network error (no response received)
+      message.error('网络连接失败，请检查网络设置', 5)
+    }
+
     if (error instanceof Error) {
       throw error
     }
