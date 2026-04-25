@@ -16,6 +16,11 @@ export default defineConfig({
         target: 'https://127.0.0.1:5443',
         changeOrigin: true,
         secure: false,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('Connection', 'close')
+          })
+        },
       },
       '/ws': {
         target: 'wss://127.0.0.1:5443',
