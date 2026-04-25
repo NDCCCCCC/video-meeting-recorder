@@ -13,12 +13,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'https://127.0.0.1:5433',
         changeOrigin: true,
+        secure: false, // 忽略自签名证书错误
       },
       '/ws': {
-        target: 'ws://localhost:8080',
+        target: 'wss://127.0.0.1:5433',
         ws: true,
+        secure: false,
       },
     },
   },
