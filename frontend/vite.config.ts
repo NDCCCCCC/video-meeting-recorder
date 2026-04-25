@@ -2,9 +2,9 @@ import { defineConfig, Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import https from 'https'
-import http from 'http'
 
-// 自定义 HTTPS 代理插件 - 绕过 http-proxy 的 TLS 问题
+// 自定义 HTTPS 代理插件（仅开发环境使用）
+// 生产构建不经过此插件，直接使用 .env.production 中的 VITE_API_URL
 function httpsProxyPlugin(): Plugin {
   const agent = new https.Agent({ rejectUnauthorized: false })
 
