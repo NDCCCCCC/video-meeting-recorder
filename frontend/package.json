@@ -4,7 +4,7 @@
   "type": "module",
   "description": "视频会议录制管理系统 V2.0 前端",
   "scripts": {
-    "dev": "vite --mode development",
+    "dev": "set NODE_TLS_REJECT_UNAUTHORIZED=0 && vite --mode development",
     "build": "tsc -b && vite build --mode production",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
