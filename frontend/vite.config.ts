@@ -16,19 +16,6 @@ export default defineConfig({
         target: 'https://127.0.0.1:5443',
         changeOrigin: true,
         secure: false,
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            console.log('[Proxy] Request:', req.method, req.url)
-          })
-          proxy.on('proxyRes', (proxyRes, req, res) => {
-            console.log('[Proxy] Response:', proxyRes.statusCode, req.url)
-          })
-          proxy.on('error', (err, req, res) => {
-            console.log('[Proxy] Error:', err.message)
-            res.writeHead(500, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: err.message }))
-          })
-        },
       },
       '/ws': {
         target: 'wss://127.0.0.1:5443',
