@@ -13,7 +13,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://localhost:5443',
+        target: 'https://127.0.0.1:5443',
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -25,13 +25,13 @@ export default defineConfig({
           })
           proxy.on('error', (err, req, res) => {
             console.log('[Proxy] Error:', err.message)
-            res.writeHead(500, { 'Content-Type': 'text/plain' })
+            res.writeHead(500, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ error: err.message }))
           })
         },
       },
       '/ws': {
-        target: 'wss://localhost:5443',
+        target: 'wss://127.0.0.1:5443',
         ws: true,
         secure: false,
       },
