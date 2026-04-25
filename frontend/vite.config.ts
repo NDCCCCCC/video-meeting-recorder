@@ -1,6 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { https } from 'https'
+
+// 创建完全跳过证书验证的 agent
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+})
 
 export default defineConfig({
   plugins: [react()],
@@ -16,10 +22,13 @@ export default defineConfig({
         target: 'https://127.0.0.1:5443',
         changeOrigin: true,
         secure: false,
+        agent: httpsAgent,
         configure: (proxy, _options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {
-            // 添加日志用于调试
-            console.log('[Proxy] Request:', req.method, req.url, '->', proxyReq.getHeader('host'))
+            console.log('[Proxy] Request:', req.method, req.url, '->' + proxyReq.path)
+          })
+          proxy.on('error', (err, req, res) => {
+            console.log('[Proxy] Error:', err.message)
           })
         },
       },
@@ -27,6 +36,7 @@ export default defineConfig({
         target: 'wss://127.0.0.1:5443',
         ws: true,
         secure: false,
+        agent: httpsAgent,
       },
     },
   },
