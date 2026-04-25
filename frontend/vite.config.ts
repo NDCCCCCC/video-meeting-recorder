@@ -13,12 +13,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://127.0.0.1:5443',
+        target: 'https://10.62.0.123:5443',
         changeOrigin: true,
         secure: false, // 忽略自签名证书错误
       },
       '/ws': {
-        target: 'wss://127.0.0.1:5443',
+        target: 'wss://10.62.0.123:5443',
         ws: true,
         secure: false,
       },
