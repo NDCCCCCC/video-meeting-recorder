@@ -13,17 +13,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://127.0.0.1:5443',
+        target: 'https://localhost:5443',
         changeOrigin: true,
         secure: false,
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.setHeader('Connection', 'close')
-          })
-        },
       },
       '/ws': {
-        target: 'wss://127.0.0.1:5443',
+        target: 'wss://localhost:5443',
         ws: true,
         secure: false,
       },
