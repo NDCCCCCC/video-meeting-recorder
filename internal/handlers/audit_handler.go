@@ -76,6 +76,7 @@ func (h *AuditHandler) getDataScope(c *gin.Context) string {
 func (h *AuditHandler) Query(c *gin.Context) {
 	var req audit.QueryRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
+		h.logger.Warn("审计日志查询参数绑定失败", zap.Error(err), zap.String("query", c.Request.URL.RawQuery))
 		response.GinError(c, response.CodeInvalidRequest, "请求参数错误")
 		return
 	}
