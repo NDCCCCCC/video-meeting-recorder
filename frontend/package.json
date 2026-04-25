@@ -4,7 +4,7 @@
   "type": "module",
   "description": "视频会议录制管理系统 V2.0 前端",
   "scripts": {
-    "dev": "set NODE_TLS_REJECT_UNAUTHORIZED=0 && vite --mode development",
+    "dev": "vite --mode development",
     "build": "tsc -b && vite build --mode production",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -44,7 +44,6 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.0",
-    "http-proxy-middleware": "^3.0.5",
     "postcss": "^8.4.0",
     "prettier": "^3.0.0",
     "tailwindcss": "^4.0.0",
