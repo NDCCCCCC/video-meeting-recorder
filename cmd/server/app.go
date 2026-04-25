@@ -335,6 +335,12 @@ func (a *MinimalApp) seedDatabase() error {
 			zap.String("username", "admin"),
 			zap.String("note", "请及时修改默认密码"),
 		)
+	} else if err == nil {
+		// 用户已存在，确保角色关联正确
+		if err := a.db.Model(&existingUser).Association("Roles").Append(&adminRole); err != nil {
+			return fmt.Errorf("failed to ensure admin role: %w", err)
+		}
+		a.logger.Info("Ensured admin user has admin role", zap.Uint("userId", existingUser.ID))
 	}
 
 	// 创建默认权限
