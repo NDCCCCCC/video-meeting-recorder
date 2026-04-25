@@ -75,7 +75,7 @@ type QueryRequest struct {
 
 	// 排序
 	OrderBy string `form:"order_by"`
-	Order   string `form:"order" binding:"oneof=asc desc"`
+	Order   string `form:"order" binding:"omitempty,oneof=asc desc"`
 }
 
 // QueryResponse 查询响应
