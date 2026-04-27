@@ -305,5 +305,7 @@ func GetRegisteredMigrations() []interface{} {
 		&AddPPTCacheFieldsMigration{},
 		&AddSlideTimestampsMigration{},
 		&MultiRoleMigration{},
+		&AddIPRestrictionsMigration{},
+		&DropLegacyRoleIDMigration{},
 	}
 }
