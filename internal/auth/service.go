@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -19,6 +21,7 @@ type Service struct {
 	cfg               *config.Config
 	logger            *zap.Logger
 	rateLimiter       *RateLimiter
+	auditLogger       *audit.AuditLogService
 }
 
 // LoginRequest 登录请求
@@ -83,6 +86,11 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 		logger:            logger,
 		rateLimiter:       rateLimiter,
 	}
+}
+
+// SetAuditService 设置审计服务
+func (s *Service) SetAuditService(auditService *audit.AuditLogService) {
+	s.auditLogger = auditService
 }
 
 // Login 用户登录
@@ -215,10 +223,34 @@ func (s *Service) CheckIPRestriction(user *models.User, clientIP string) error {
 				zap.Error(err),
 			)
 		}
+		// Log validation failure to audit trail per D-14
+		if s.auditLogger != nil {
+			s.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
+				UserID:    user.ID,
+				Username:  user.Username,
+				Action:    models.ActionIPRestrictionFailed,
+				Module:    models.ModuleUser,
+				IPAddress: clientIP,
+				Status:    models.StatusFailure,
+				ErrorMsg:  "IP地址验证失败: " + err.Error(),
+			})
+		}
 		return errors.New("IP地址验证失败")
 	}
 
 	if !allowed {
+		// Log IP restriction failure to audit trail per D-14
+		if s.auditLogger != nil {
+			s.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
+				UserID:    user.ID,
+				Username:  user.Username,
+				Action:    models.ActionIPRestrictionFailed,
+				Module:    models.ModuleUser,
+				IPAddress: clientIP,
+				Status:    models.StatusFailure,
+				ErrorMsg:  "您的IP地址不在允许列表中",
+			})
+		}
 		return errors.New("您的IP地址不在允许列表中")
 	}
 
