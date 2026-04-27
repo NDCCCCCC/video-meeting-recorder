@@ -24,6 +24,7 @@ export interface UserInfo {
   email: string
   full_name: string
   roles: Array<Role>
+  allowed_ips?: string[]
   is_active: boolean
   last_login_at: string | null
 }
@@ -42,6 +43,7 @@ export interface CreateUserRequest {
   email?: string
   full_name?: string
   role_ids: number[]
+  allowed_ips?: string[]
   is_active: boolean
 }
 
@@ -50,6 +52,7 @@ export interface UpdateUserRequest {
   email?: string
   full_name?: string
   role_ids?: number[]
+  allowed_ips?: string[]
   is_active?: boolean
 }
 
