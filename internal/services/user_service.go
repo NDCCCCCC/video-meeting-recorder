@@ -46,7 +46,7 @@ type CreateUserRequest struct {
 	Password string `json:"password" binding:"required,min=8"`
 	Email    string `json:"email" binding:"omitempty,email"`
 	FullName string `json:"full_name" binding:"omitempty,max=100"`
-	RoleIDs  []uint `json:"role_ids" binding:"required,min=1"`
+	RoleIDs  []uint `json:"role_ids"`
 	IsActive bool   `json:"is_active"`
 }
 
@@ -127,16 +127,7 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 		}
 	}
 
-	// 验证角色ID是否存在
-	var roles []models.Role
-	if err := s.db.Find(&roles, req.RoleIDs).Error; err != nil {
-		return nil, err
-	}
-	if len(roles) != len(req.RoleIDs) {
-		return nil, errors.New("部分角色不存在")
-	}
-
-	// 创建用户（不设置角色）
+	// 创建用户
 	user := &models.User{
 		Username: req.Username,
 		Email:    req.Email,
@@ -152,12 +143,24 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 		return nil, err
 	}
 
-	// 使用 AssignRoles 分配角色
-	if err := s.AssignRoles(user.ID, &AssignRolesRequest{
-		RoleIDs:       req.RoleIDs,
-		CurrentUserID: 0, // 系统创建
-	}); err != nil {
-		return nil, err
+	// 分配角色（如果有）
+	if len(req.RoleIDs) > 0 {
+		// 验证角色ID是否存在
+		var roles []models.Role
+		if err := s.db.Find(&roles, req.RoleIDs).Error; err != nil {
+			return nil, err
+		}
+		if len(roles) != len(req.RoleIDs) {
+			return nil, errors.New("部分角色不存在")
+		}
+
+		// 使用 AssignRoles 分配角色
+		if err := s.AssignRoles(user.ID, &AssignRolesRequest{
+			RoleIDs:       req.RoleIDs,
+			CurrentUserID: 0, // 系统创建
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	// 重新加载用户信息

@@ -49,7 +49,23 @@
       "mcp__chrome-devtools__type_text",
       "mcp__chrome-devtools__list_network_requests",
       "Bash(curl -k https://127.0.0.1:5433/ --max-time 3)",
-      "Bash(curl -k https://127.0.0.1:5443/ --max-time 3)"
+      "Bash(curl -k https://127.0.0.1:5443/ --max-time 3)",
+      "mcp__chrome-devtools__wait_for",
+      "mcp__chrome-devtools__get_network_request",
+      "Bash(curl -k -s -w \"\\\\n%{http_code}\" https://127.0.0.1:5433/health)",
+      "Bash(mkdir -p .planning/debug/resolved)",
+      "Bash(mv .planning/debug/ssl-cert-authority-invalid.md .planning/debug/resolved/)",
+      "Bash(openssl x509:*)",
+      "Bash(curl -k -s -w \"\\\\n%{http_code}\" https://127.0.0.1:5443/api/v1/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"test\",\"password\":\"test\"}')",
+      "mcp__chrome-devtools__select_page",
+      "Bash(tail -30 logs/*.log)",
+      "Bash(curl:*)",
+      "Bash(tail -50 logs/*.log)",
+      "Bash(find logs:*)",
+      "Bash(npm list:*)",
+      "Bash(npm install:*)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
     ]
   }
 }
