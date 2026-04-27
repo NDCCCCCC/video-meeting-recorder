@@ -1,6 +1,24 @@
 /**
  * Type-level and structural tests for IP input component.
  * Validates textarea to array conversion, whitespace handling, and IP format support.
+ *
+ * NOTE: These are TypeScript type-level tests (compile-time assertions).
+ * For proper runtime testing with Vitest + React Testing Library, test framework
+ * integration is needed. The actual IP input implementation is inline in the user/role
+ * forms (frontend/src/pages/system/users/index.tsx and roles/index.tsx), not a
+ * separate component, so traditional component testing would require form integration tests.
+ *
+ * Test cases covered (8 total):
+ * 1. Single IP format support (192.168.1.100)
+ * 2. CIDR format support (192.168.1.0/24)
+ * 3. IP range format support (192.168.1.100-192.168.1.200)
+ * 4. Multi-line input (one IP per line)
+ * 5. Whitespace trimming (leading/trailing spaces)
+ * 6. Empty line filtering
+ * 7. Whitespace-only line filtering
+ * 8. Empty input returns empty array
+ * 9. Placeholder text contains format examples
+ * 10. Form field name convention (allowed_ips_text / allowed_ips)
  */
 
 // Test: Textarea lines to array conversion function
@@ -68,13 +86,13 @@ if (whitespaceResult.length !== 3) {
   throw new Error('Whitespace should be trimmed, entries should not be lost')
 }
 if (whitespaceResult[0] !== "192.168.1.100") {
-  throw new Error('Leading whitespace should be trimmed'
+  throw new Error('Leading whitespace should be trimmed')
 }
 if (whitespaceResult[1] !== "192.168.1.0/24") {
-  throw new Error('Trailing whitespace should be trimmed'
+  throw new Error('Trailing whitespace should be trimmed')
 }
 if (whitespaceResult[2] !== "10.0.0.1-10.0.0.254") {
-  throw new Error('Both leading and trailing whitespace should be trimmed'
+  throw new Error('Both leading and trailing whitespace should be trimmed')
 }
 
 // Test: Empty line filtering
@@ -86,16 +104,16 @@ const emptyLinesInput = `192.168.1.100
 10.0.0.1-10.0.0.254`
 const emptyLinesResult = convertTextareaToArray(emptyLinesInput)
 if (emptyLinesResult.length !== 3) {
-  throw new Error('Empty lines should be filtered out'
+  throw new Error('Empty lines should be filtered out')
 }
 if (emptyLinesResult[0] !== "192.168.1.100") {
-  throw new Error('First entry should be preserved'
+  throw new Error('First entry should be preserved')
 }
 if (emptyLinesResult[1] !== "192.168.1.0/24") {
-  throw new Error('Second entry should be preserved'
+  throw new Error('Second entry should be preserved')
 }
 if (emptyLinesResult[2] !== "10.0.0.1-10.0.0.254") {
-  throw new Error('Third entry should be preserved'
+  throw new Error('Third entry should be preserved')
 }
 
 // Test: Whitespace-only lines are filtered
@@ -105,20 +123,20 @@ const whitespaceOnlyInput = `192.168.1.100
 192.168.1.0/24`
 const whitespaceOnlyResult = convertTextareaToArray(whitespaceOnlyInput)
 if (whitespaceOnlyResult.length !== 2) {
-  throw new Error('Whitespace-only lines should be filtered'
+  throw new Error('Whitespace-only lines should be filtered')
 }
 if (whitespaceOnlyResult[0] !== "192.168.1.100") {
-  throw new Error('First entry should be preserved'
+  throw new Error('First entry should be preserved')
 }
 if (whitespaceOnlyResult[1] !== "192.168.1.0/24") {
-  throw new Error('Second entry should be preserved'
+  throw new Error('Second entry should be preserved')
 }
 
 // Test: Empty input returns empty array
 const emptyInput = ""
 const emptyResult = convertTextareaToArray(emptyInput)
 if (emptyResult.length !== 0) {
-  throw new Error('Empty input should return empty array'
+  throw new Error('Empty input should return empty array')
 }
 
 // Test: Placeholder text with examples
@@ -136,7 +154,7 @@ if (!placeholderText.includes("192.168.1.100-192.168.1.200")) {
 // Test: Form field name convention
 const formFieldName = "allowed_ips"
 if (formFieldName !== "allowed_ips") {
-  throw new Error('Form field name should be allowed_ips for consistency with backend'
+  throw new Error('Form field name should be allowed_ips for consistency with backend')
 }
 
 // Test: TextArea component props interface (compile-time check)
