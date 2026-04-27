@@ -9,8 +9,6 @@ import (
 // TestValidateIP_ValidIP tests valid IPv4 addresses
 // Validates that standard IPv4 addresses pass validation per D-06
 func TestValidateIP_ValidIP(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.ValidateIP()")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -50,8 +48,6 @@ func TestValidateIP_ValidIP(t *testing.T) {
 // TestValidateIP_InvalidIP tests invalid IP formats
 // Validates that malformed IP addresses are rejected
 func TestValidateIP_InvalidIP(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.ValidateIP()")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -101,8 +97,6 @@ func TestValidateIP_InvalidIP(t *testing.T) {
 // TestValidateIP_IPv6Rejected tests IPv6 rejection per D-09
 // Validates that IPv6 addresses are explicitly rejected as per decision D-09
 func TestValidateIP_IPv6Rejected(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.ValidateIP() with IPv6 rejection")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -147,8 +141,6 @@ func TestValidateIP_IPv6Rejected(t *testing.T) {
 // TestValidateCIDR_ValidCIDR tests valid CIDR ranges per D-07
 // Validates that CIDR notation is accepted for IP ranges
 func TestValidateCIDR_ValidCIDR(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.ValidateCIDR()")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -193,8 +185,6 @@ func TestValidateCIDR_ValidCIDR(t *testing.T) {
 // TestValidateCIDR_InvalidCIDR tests invalid CIDR formats
 // Validates that malformed CIDR notation is rejected
 func TestValidateCIDR_InvalidCIDR(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.ValidateCIDR()")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -239,8 +229,6 @@ func TestValidateCIDR_InvalidCIDR(t *testing.T) {
 // TestValidateIPRange_ValidRange tests valid IP ranges per D-08
 // Validates that start-end IP range notation is accepted
 func TestValidateIPRange_ValidRange(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.ValidateIPRange()")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -280,8 +268,6 @@ func TestValidateIPRange_ValidRange(t *testing.T) {
 // TestValidateIPRange_InvalidRange tests invalid IP range formats
 // Validates that malformed IP range notation is rejected
 func TestValidateIPRange_InvalidRange(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.ValidateIPRange()")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -336,8 +322,6 @@ func TestValidateIPRange_InvalidRange(t *testing.T) {
 // TestIsIPAllowed_SingleIP tests single IP matching
 // Validates that exact IP match returns true
 func TestIsIPAllowed_SingleIP(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.IsIPAllowed()")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -386,8 +370,6 @@ func TestIsIPAllowed_SingleIP(t *testing.T) {
 // TestIsIPAllowed_CIDRRange tests CIDR range matching
 // Validates that IPs within CIDR ranges are allowed
 func TestIsIPAllowed_CIDRRange(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.IsIPAllowed() with CIDR matching")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -450,8 +432,6 @@ func TestIsIPAllowed_CIDRRange(t *testing.T) {
 // TestIsIPAllowed_IPRange tests IP range matching per D-08
 // Validates that IPs within start-end ranges are allowed
 func TestIsIPAllowed_IPRange(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.IsIPAllowed() with IP range matching")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -514,8 +494,6 @@ func TestIsIPAllowed_IPRange(t *testing.T) {
 // TestIsIPAllowed_NoMatch tests IP not in allowed list
 // Validates that IPs not matching any rule return false
 func TestIsIPAllowed_NoMatch(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.IsIPAllowed()")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
@@ -557,8 +535,6 @@ func TestIsIPAllowed_NoMatch(t *testing.T) {
 // TestIsIPAllowed_EmptyList tests empty allowed list behavior
 // Validates that empty allowed list permits all IPs (no restriction)
 func TestIsIPAllowed_EmptyList(t *testing.T) {
-	t.Skip("TODO: implement IPValidator.IsIPAllowed() with empty list logic")
-
 	validator := &IPValidator{}
 
 	tests := []struct {
