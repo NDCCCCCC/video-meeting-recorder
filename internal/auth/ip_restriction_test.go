@@ -73,7 +73,6 @@ func createTestUserWithRoles(t *testing.T, db *gorm.DB, username string, userIPs
 // TestCheckIPRestriction_UserOnly tests user-level IP restrictions only
 // Validates that when only user has IP restrictions, role IPs are not considered
 func TestCheckIPRestriction_UserOnly(t *testing.T) {
-	t.Skip("TODO: implement AuthService.CheckIPRestriction()")
 
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -124,7 +123,6 @@ func TestCheckIPRestriction_UserOnly(t *testing.T) {
 // TestCheckIPRestriction_RoleOnly tests role-level IP restrictions only
 // Validates that when only role has IP restrictions, user IPs are not considered
 func TestCheckIPRestriction_RoleOnly(t *testing.T) {
-	t.Skip("TODO: implement AuthService.CheckIPRestriction()")
 
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -175,7 +173,6 @@ func TestCheckIPRestriction_RoleOnly(t *testing.T) {
 // TestCheckIPRestriction_UserAndRole_OR tests OR logic merging user + role IPs per D-02
 // Validates that user and role IP restrictions are merged using OR logic
 func TestCheckIPRestriction_UserAndRole_OR(t *testing.T) {
-	t.Skip("TODO: implement AuthService.CheckIPRestriction() with OR logic")
 
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -231,7 +228,6 @@ func TestCheckIPRestriction_UserAndRole_OR(t *testing.T) {
 // TestCheckIPRestriction_NoRestrictions tests empty IP lists (allow all per D-03)
 // Validates that when neither user nor roles have IP restrictions, all IPs are allowed
 func TestCheckIPRestriction_NoRestrictions(t *testing.T) {
-	t.Skip("TODO: implement AuthService.CheckIPRestriction() with no restriction logic")
 
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -283,7 +279,6 @@ func TestCheckIPRestriction_NoRestrictions(t *testing.T) {
 // TestCheckIPRestriction_IPNotInList tests IP not allowed
 // Validates that IPs not matching any restriction rule are rejected
 func TestCheckIPRestriction_IPNotInList(t *testing.T) {
-	t.Skip("TODO: implement AuthService.CheckIPRestriction()")
 
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -333,7 +328,6 @@ func TestCheckIPRestriction_IPNotInList(t *testing.T) {
 // TestCheckIPRestriction_MultiRoleMerge tests multiple roles' IPs merged correctly
 // Validates that IP restrictions from multiple roles are all merged (OR logic)
 func TestCheckIPRestriction_MultiRoleMerge(t *testing.T) {
-	t.Skip("TODO: implement AuthService.CheckIPRestriction() with multi-role merge")
 
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -400,7 +394,6 @@ func TestCheckIPRestriction_MultiRoleMerge(t *testing.T) {
 // TestCheckIPRestriction_InvalidClientIP tests invalid client IP handling
 // Validates that malformed client IPs return appropriate errors
 func TestCheckIPRestriction_InvalidClientIP(t *testing.T) {
-	t.Skip("TODO: implement AuthService.CheckIPRestriction() with invalid IP handling")
 
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -450,7 +443,6 @@ func TestCheckIPRestriction_InvalidClientIP(t *testing.T) {
 // TestCheckIPRestriction_AuditLogOnFailure tests audit logging on IP check failure
 // Validates that IP restriction failures are logged to audit log per D-14
 func TestCheckIPRestriction_AuditLogOnFailure(t *testing.T) {
-	t.Skip("TODO: implement AuthService.CheckIPRestriction() with audit logging")
 
 	db := setupTestDB(t)
 	service := &Service{db: db}
