@@ -1,6 +1,9 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"encoding/json"
+	"gorm.io/gorm"
+)
 
 // Role 角色模型
 type Role struct {
@@ -8,6 +11,7 @@ type Role struct {
 	Name        string       `gorm:"type:varchar(50);uniqueIndex;not null" json:"name"`
 	Description string       `gorm:"type:text" json:"description"`
 	Permissions []Permission `gorm:"many2many:role_permissions;" json:"permissions,omitempty"`
+	AllowedIPs  string       `gorm:"type:text" json:"allowed_ips"` // IP限制列表 (JSON数组)
 }
 
 // 预定义角色
@@ -22,6 +26,26 @@ const (
 // BeforeCreate GORM hook - 在创建前调用
 func (r *Role) BeforeCreate(tx *gorm.DB) error {
 	// 确保角色名称唯一
+	return nil
+}
+
+// GetAllowedIPs 获取IP限制列表
+func (r *Role) GetAllowedIPs() []string {
+	if r.AllowedIPs == "" {
+		return []string{}
+	}
+	var ips []string
+	_ = json.Unmarshal([]byte(r.AllowedIPs), &ips)
+	return ips
+}
+
+// SetAllowedIPs 设置IP限制列表
+func (r *Role) SetAllowedIPs(ips []string) error {
+	data, err := json.Marshal(ips)
+	if err != nil {
+		return err
+	}
+	r.AllowedIPs = string(data)
 	return nil
 }
 

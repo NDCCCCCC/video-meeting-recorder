@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -15,6 +16,7 @@ type User struct {
 	Email        string     `gorm:"type:varchar(100)" json:"email"`
 	FullName     string     `gorm:"type:varchar(100)" json:"full_name"`
 	Roles        []Role     `gorm:"many2many:users_roles;" json:"roles,omitempty"`
+	AllowedIPs   string     `gorm:"type:text" json:"allowed_ips"` // IP限制列表 (JSON数组)
 	IsActive     bool       `gorm:"default:true" json:"is_active"`
 	LastLoginAt  *time.Time `json:"last_login_at"`
 	APIKeys      []APIKey   `gorm:"foreignKey:UserID" json:"api_keys,omitempty"`
@@ -79,6 +81,26 @@ func (u *User) HasRole(roleName string) bool {
 		}
 	}
 	return false
+}
+
+// GetAllowedIPs 获取IP限制列表
+func (u *User) GetAllowedIPs() []string {
+	if u.AllowedIPs == "" {
+		return []string{}
+	}
+	var ips []string
+	_ = json.Unmarshal([]byte(u.AllowedIPs), &ips)
+	return ips
+}
+
+// SetAllowedIPs 设置IP限制列表
+func (u *User) SetAllowedIPs(ips []string) error {
+	data, err := json.Marshal(ips)
+	if err != nil {
+		return err
+	}
+	u.AllowedIPs = string(data)
+	return nil
 }
 
 // TableName 指定表名
