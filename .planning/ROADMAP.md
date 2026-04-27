@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 视频切割与会议转录PPT** — Phases 1-4 (shipped 2026-04-18)
-- 🔄 **v1.1 文件管理与编辑增强** — Phases 5-10 (in progress)
+- 🔄 **v1.1 文件管理与编辑增强** — Phases 5-11 (in progress)
 
 ## Phases
 
@@ -18,7 +18,7 @@
 </details>
 
 <details>
-<summary>🔄 v1.1 文件管理与编辑增强 (Phases 5-10) — IN PROGRESS</summary>
+<summary>🔄 v1.1 文件管理与编辑增强 (Phases 5-11) — IN PROGRESS</summary>
 
 - [x] Phase 5: File Rename & Smart Cleanup (2/2 plans) — **completed 2026-04-20**
     - [x] 05-01-PLAN.md — File rename API and UI for split videos and PPTs
@@ -44,12 +44,19 @@
     - [x] 08-04-PLAN.md — VideoPlayerModal integration of all enhancements
 - [ ] Phase 9: Multi-Role Permissions & Shared Viewer (0/0 plans) — **not started**
     - [ ] TBD (run /gsd-plan-phase 9 to break down)
-- [ ] Phase 10: Admin Dashboard, Audit Logs, and UI Enhancements (5/5 plans) — **ready to execute**
+- [x] Phase 10: Admin Dashboard, Audit Logs, and UI Enhancements (5/5 plans) — **completed 2026-04-24**
     - [x] 10-01-PLAN.md — Backend dashboard statistics API (aggregations, service, handler, routes)
     - [x] 10-02-PLAN.md — Audit log export functionality and frontend API client
     - [x] 10-03-PLAN.md — Admin dashboard frontend (StatCards, ChartsSection, QuickActions, useDashboardStats)
     - [x] 10-04-PLAN.md — Audit logs viewer frontend (AuditTable, FilterBar, DiffModal, ExportButton, useAuditLogs)
     - [x] 10-05-PLAN.md — Design tokens system and reusable hooks (useLoadingState, useErrorHandler, API error interceptor)
+- [ ] Phase 11: IP地址登录限制 (6/6 plans) — **ready to execute**
+    - [ ] 11-00-PLAN.md — Wave 0: Test infrastructure for IP validation and restriction
+    - [ ] 11-01-PLAN.md — Backend IP validation, model fields, and login enforcement (TDD)
+    - [ ] 11-02-PLAN.md — Audit logging integration for IP restriction failures
+    - [ ] 11-03-PLAN.md — Frontend TypeScript types and API client support
+    - [ ] 11-04-PLAN.md — Frontend UI components for IP management (with checkpoints)
+    - [ ] 11-05-PLAN.md — Comprehensive testing and documentation (with checkpoints)
 
 </details>
 
@@ -66,7 +73,8 @@
 | 7. Preview Page UI Improvements | v1.1 | 4/4 | **Complete** | 2026-04-20 |
 | 8. Video Snapshot & Player Enhancement | v1.1 | 5/5 | **Complete** | 2026-04-20 |
 | 9. Multi-Role Permissions & Shared Viewer | v1.1 | 0/0 | **Not Started** | — |
-| 10. Admin Dashboard, Audit Logs, and UI Enhancements | v1.1 | 5/5 | Complete    | 2026-04-24 |
+| 10. Admin Dashboard, Audit Logs, and UI Enhancements | v1.1 | 5/5 | **Complete** | 2026-04-24 |
+| 11. IP地址登录限制 | v1.1 | 0/6 | **Ready to Execute** | — |
 
 ### Phase 10: Admin Dashboard, Audit Logs, and UI Enhancements
 
@@ -92,6 +100,38 @@ Plans:
 - Wave 2 (parallel): 10-03 (dashboard frontend, depends on 10-01), 10-04 (audit frontend, depends on 10-02)
 - Wave 3 (sequential): 10-05 (design tokens + hooks, depends on 10-03, 10-04)
 
+### Phase 11: IP地址登录限制 - 为用户和角色添加IP地址组，限制只有组内地址才能登录系统
+
+**Goal:** Implement IP address-based access control for users and roles with OR logic merging, supporting IPv4 single addresses, CIDR ranges, and IP ranges, integrated with login flow and audit logging.
+
+**Requirements:**
+- D-01 to D-17: User and role IP restrictions, OR logic merging, IPv4-only support, login-time enforcement, audit logging
+
+**Depends on:** Phase 10
+**Plans:** 6/6 plans ready
+
+Plans:
+- [ ] 11-00-PLAN.md — Wave 0: Test infrastructure for IP validation and restriction — Wave 0
+- [ ] 11-01-PLAN.md — Backend IP validation, model fields, and login enforcement (TDD) — Wave 1
+- [ ] 11-02-PLAN.md — Audit logging integration for IP restriction failures — Wave 2
+- [ ] 11-03-PLAN.md — Frontend TypeScript types and API client support — Wave 2
+- [ ] 11-04-PLAN.md — Frontend UI components for IP management (with checkpoints) — Wave 2
+- [ ] 11-05-PLAN.md — Comprehensive testing and documentation (with checkpoints) — Wave 3
+
+**Wave Structure:**
+- Wave 0 (sequential): 11-00 (test stubs for all IP functionality)
+- Wave 1 (sequential): 11-01 (backend IP validation, models, CheckIPRestriction, migration - TDD)
+- Wave 2 (parallel): 11-02 (audit logging), 11-03 (frontend types/API), 11-04 (frontend UI with checkpoints)
+- Wave 3 (sequential): 11-05 (E2E testing, docs, verification)
+
+**Key Decisions:**
+- D-01 to D-03: User + role IP restrictions with OR logic merging
+- D-04 to D-05: JSON field storage (no separate IP address table)
+- D-06 to D-09: IPv4 only (single IP, CIDR, IP range formats)
+- D-10 to D-12: ClientIP() extraction, direct deployment
+- D-13 to D-15: User-friendly error messages, audit logging, no admin exemption
+- D-16 to D-17: IP check after password validation, before token generation
+
 ---
 *Roadmap created: 2026-04-17*
-*Last updated: 2026-04-24 - Phase 10 planning complete (5 plans)*
+*Last updated: 2026-04-27 - Phase 11 planning complete (6 plans)*
