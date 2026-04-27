@@ -99,6 +99,7 @@ export default function RoleManagement() {
       form.setFieldsValue({
         name: role.name,
         description: role.description,
+        allowed_ips: role.allowed_ips || [],
       })
     } else {
       form.resetFields()
@@ -122,6 +123,7 @@ export default function RoleManagement() {
         // 更新角色
         const req: UpdateRoleRequest = {
           description: values.description,
+          allowed_ips: values.allowed_ips,
         }
         await roleApi.updateRole(editingRole.id, req)
         message.success('更新成功')
@@ -130,6 +132,7 @@ export default function RoleManagement() {
         const req: CreateRoleRequest = {
           name: values.name,
           description: values.description,
+          allowed_ips: values.allowed_ips || [],
         }
         await roleApi.createRole(req)
         message.success('创建成功')
@@ -364,6 +367,24 @@ export default function RoleManagement() {
             rules={[{ max: 200, message: '描述最多200个字符' }]}
           >
             <Input.TextArea placeholder="请输入角色描述" rows={4} />
+          </Form.Item>
+
+          <Form.Item
+            name="allowed_ips"
+            label="IP地址限制"
+            extra="每行一个IP地址，支持格式：192.168.1.100 或 192.168.1.0/24 或 192.168.1.100-192.168.1.200"
+          >
+            <Input.TextArea
+              placeholder="例如：&#10;192.168.1.100&#10;192.168.1.0/24&#10;192.168.1.100-192.168.1.200"
+              rows={4}
+              onChange={(e) => {
+                // Convert textarea lines to array
+                const lines = e.target.value.split('\n')
+                  .map(line => line.trim())
+                  .filter(line => line.length > 0)
+                form.setFieldsValue({ allowed_ips: lines })
+              }}
+            />
           </Form.Item>
 
           {editingRole && (

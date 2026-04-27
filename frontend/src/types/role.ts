@@ -20,6 +20,7 @@ export interface RoleInfo {
   updated_at: string
   name: string
   description: string
+  allowed_ips?: string[]
   permissions?: Permission[]
 }
 
@@ -37,11 +38,13 @@ export interface Permission {
 export interface CreateRoleRequest {
   name: string
   description?: string
+  allowed_ips?: string[]
 }
 
 // 更新角色请求
 export interface UpdateRoleRequest {
   description?: string
+  allowed_ips?: string[]
 }
 
 // 分配权限请求
