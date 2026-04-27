@@ -151,29 +151,78 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 		return nil, errors.New("用户已被禁用")
 	}
 
-	// 5. 生成Token
+	// 5. 检查IP限制 (D-16, D-17)
+	if err := s.CheckIPRestriction(&user, ipAddress); err != nil {
+		return nil, err
+	}
+
+	// 6. 生成Token
 	tokenPair, err := s.tokenService.GenerateTokenPair(&user)
 	if err != nil {
 		return nil, err
 	}
 
-	// 6. 更新最后登录时间
+	// 7. 更新最后登录时间
 	now := time.Now()
 	user.LastLoginAt = &now
 	s.db.Save(&user)
 
-	// 7. 创建session记录（可选，用于token撤销）
+	// 8. 创建session记录（可选，用于token撤销）
 	if err := s.tokenService.CreateSession(user.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt); err != nil {
 		s.logger.Warn("Failed to create session", zap.Error(err))
 	}
 
-	// 8. 返回响应
+	// 9. 返回响应
 	return &LoginResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
 		ExpiresIn:    int64(s.tokenService.expireHours * 3600),
 		User:         s.toUserDTO(&user),
 	}, nil
+}
+
+// CheckIPRestriction 检查用户IP限制
+func (s *Service) CheckIPRestriction(user *models.User, clientIP string) error {
+	validator := &IPValidator{}
+
+	// Collect all allowed IPs from user and all roles
+	allowedIPs := make([]string, 0)
+
+	// Add user's IP restrictions
+	if len(user.GetAllowedIPs()) > 0 {
+		allowedIPs = append(allowedIPs, user.GetAllowedIPs()...)
+	}
+
+	// Add IP restrictions from all roles (OR logic per D-02)
+	for _, role := range user.Roles {
+		if len(role.GetAllowedIPs()) > 0 {
+			allowedIPs = append(allowedIPs, role.GetAllowedIPs()...)
+		}
+	}
+
+	// If no restrictions, allow all IPs
+	if len(allowedIPs) == 0 {
+		return nil
+	}
+
+	// Check if client IP is allowed
+	allowed, err := validator.IsIPAllowed(clientIP, allowedIPs)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("IP validation failed",
+				zap.String("client_ip", clientIP),
+				zap.Uint("user_id", user.ID),
+				zap.Error(err),
+			)
+		}
+		return errors.New("IP地址验证失败")
+	}
+
+	if !allowed {
+		return errors.New("您的IP地址不在允许列表中")
+	}
+
+	return nil
 }
 
 // RefreshToken 刷新Token

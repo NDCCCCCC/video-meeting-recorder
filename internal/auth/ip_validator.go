@@ -65,6 +65,11 @@ func (v *IPValidator) IsIPAllowed(clientIP string, allowedList []string) (bool, 
 		return false, errors.New("invalid client IP")
 	}
 
+	// Reject IPv6 addresses per D-09
+	if clientAddr.To4() == nil {
+		return false, errors.New("IPv6 is not supported")
+	}
+
 	for _, allowed := range allowedList {
 		// Single IP
 		if strings.Contains(allowed, "/") == false && strings.Contains(allowed, "-") == false {
