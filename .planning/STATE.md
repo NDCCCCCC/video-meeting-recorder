@@ -38,15 +38,26 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 
 ## Current Position
 
-Phase: 11 - IP地址登录限制 (EXECUTING)
-Plan: 5 of 6 (11-05 API Key IP Restriction Integration)
+Phase: 11 - IP地址登录限制 (PAUSED - awaiting manual testing)
+Plan: 11-05 (Checkpoint - 4/6 tasks complete)
 **Phase:** 11 - IP地址登录限制
-**Status:** Executing Phase 11, Plan 04 complete
-**Progress:** [██████░░░░] 73%
+**Status:** Phase 11 at manual testing checkpoint
+**Progress:** [███████░░░] 83%
+
+### Pause Reason
+
+Plan 11-05 (End-to-end testing) requires manual verification:
+- 8 test cases covering user/role IP restrictions
+- 5 security verification tests (IP spoofing, IPv6 rejection)
+- Test documentation created at `.planning/phases/11-ip-ip/11-TESTING.md`
+
+### To Resume
+
+Run `/gsd-execute-phase 11-ip-ip` to continue testing verification
 
 ### Blockers
 
-None identified.
+None - awaiting manual testing completion.
 
 ---
 
