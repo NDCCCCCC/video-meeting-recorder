@@ -96,7 +96,7 @@ export default function UserManagement() {
         email: user.email,
         full_name: user.full_name,
         role_ids: user.roles?.map(r => r.id) || [],
-        allowed_ips: user.allowed_ips || [],
+        allowed_ips_text: (user.allowed_ips || []).join('\n'),
         is_active: user.is_active,
       })
     } else {
@@ -104,7 +104,7 @@ export default function UserManagement() {
       form.setFieldsValue({
         is_active: true,
         role_ids: [],
-        allowed_ips: [],
+        allowed_ips_text: '',
       })
     }
     setModalVisible(true)
@@ -122,13 +122,21 @@ export default function UserManagement() {
     try {
       const values = await form.validateFields()
 
+      // Convert allowed_ips_text (textarea lines) to allowed_ips (array)
+      const allowed_ips = values.allowed_ips_text
+        ? String(values.allowed_ips_text)
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+        : []
+
       if (editingUser) {
         // 更新用户
         const req: UpdateUserRequest = {
           email: values.email,
           full_name: values.full_name,
-          role_ids: values.role_ids,
-          allowed_ips: values.allowed_ips,
+          role_ids: values.role_ids || [],
+          allowed_ips: allowed_ips,
           is_active: values.is_active,
         }
         await userApi.updateUser(editingUser.id, req)
@@ -141,7 +149,7 @@ export default function UserManagement() {
           email: values.email,
           full_name: values.full_name,
           role_ids: values.role_ids || [],
-          allowed_ips: values.allowed_ips || [],
+          allowed_ips: allowed_ips,
           is_active: values.is_active ?? true,
         }
         await userApi.createUser(req)
@@ -447,20 +455,13 @@ export default function UserManagement() {
           </Form.Item>
 
           <Form.Item
-            name="allowed_ips"
+            name="allowed_ips_text"
             label="IP地址限制"
             extra="每行一个IP地址，支持格式：192.168.1.100 或 192.168.1.0/24 或 192.168.1.100-192.168.1.200"
           >
             <Input.TextArea
               placeholder="例如：&#10;192.168.1.100&#10;192.168.1.0/24&#10;192.168.1.100-192.168.1.200"
               rows={4}
-              onChange={(e) => {
-                // Convert textarea lines to array
-                const lines = e.target.value.split('\n')
-                  .map(line => line.trim())
-                  .filter(line => line.length > 0)
-                form.setFieldsValue({ allowed_ips: lines })
-              }}
             />
           </Form.Item>
 
