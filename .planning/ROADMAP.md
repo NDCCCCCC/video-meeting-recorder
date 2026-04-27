@@ -50,12 +50,12 @@
     - [x] 10-03-PLAN.md — Admin dashboard frontend (StatCards, ChartsSection, QuickActions, useDashboardStats)
     - [x] 10-04-PLAN.md — Audit logs viewer frontend (AuditTable, FilterBar, DiffModal, ExportButton, useAuditLogs)
     - [x] 10-05-PLAN.md — Design tokens system and reusable hooks (useLoadingState, useErrorHandler, API error interceptor)
-- [ ] Phase 11: IP地址登录限制 (6/6 plans) — **ready to execute**
-    - [ ] 11-00-PLAN.md — Wave 0: Test infrastructure for IP validation and restriction
-    - [ ] 11-01-PLAN.md — Backend IP validation, model fields, and login enforcement (TDD)
-    - [ ] 11-02-PLAN.md — Audit logging integration for IP restriction failures
-    - [ ] 11-03-PLAN.md — Frontend TypeScript types and API client support
-    - [ ] 11-04-PLAN.md — Frontend UI components for IP management (with checkpoints)
+- [ ] Phase 11: IP地址登录限制 (6/6 plans) — **in progress (4/6 complete)**
+    - [x] 11-00-PLAN.md — Wave 0: Test infrastructure for IP validation and restriction
+    - [x] 11-01-PLAN.md — Backend IP validation, model fields, and login enforcement (TDD)
+    - [x] 11-02-PLAN.md — Audit logging integration for IP restriction failures
+    - [x] 11-03-PLAN.md — Frontend TypeScript types and API client support
+    - [x] 11-04-PLAN.md — Frontend UI components for IP management (with checkpoints)
     - [ ] 11-05-PLAN.md — Comprehensive testing and documentation (with checkpoints)
 
 </details>
@@ -74,7 +74,7 @@
 | 8. Video Snapshot & Player Enhancement | v1.1 | 5/5 | **Complete** | 2026-04-20 |
 | 9. Multi-Role Permissions & Shared Viewer | v1.1 | 0/0 | **Not Started** | — |
 | 10. Admin Dashboard, Audit Logs, and UI Enhancements | v1.1 | 5/5 | **Complete** | 2026-04-24 |
-| 11. IP地址登录限制 | v1.1 | 0/6 | **Ready to Execute** | — |
+| 11. IP地址登录限制 | v1.1 | 4/6 | **In Progress** | 2026-04-27 |
 
 ### Phase 10: Admin Dashboard, Audit Logs, and UI Enhancements
 
