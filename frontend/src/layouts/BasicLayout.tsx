@@ -14,6 +14,7 @@ import {
   CloudServerOutlined,
   TeamOutlined,
   SafetyOutlined,
+  SafetyCertificateOutlined,
   AuditOutlined,
   KeyOutlined,
 } from '@ant-design/icons'
@@ -51,6 +52,12 @@ function BasicLayout() {
     navigate(key)
   }, [navigate])
 
+  // 用户下拉菜单点击处理
+  const handleUserMenuClick = useCallback(({ key }: { key: string }) => {
+    if (key === 'logout') return // handled by item onClick
+    navigate(key)
+  }, [navigate])
+
   // 使用 useMemo 缓存菜单项计算
   const menuItems: MenuProps['items'] = useMemo(() => {
     const hasSystemAccess =
@@ -58,6 +65,7 @@ function BasicLayout() {
       canAccessPath('/system/roles', user) ||
       canAccessPath('/system/apikeys', user) ||
       canAccessPath('/system/huawei-configs', user) ||
+      canAccessPath('/system/auth-config', user) ||
       canAccessPath('/system/settings', user)
 
     const items: MenuProps['items'] = [
@@ -74,6 +82,7 @@ function BasicLayout() {
           canAccessPath('/system/roles', user) ? { key: '/system/roles', icon: <SafetyOutlined />, label: '角色管理' } : null,
           canAccessPath('/system/apikeys', user) ? { key: '/system/apikeys', icon: <KeyOutlined />, label: 'API密钥' } : null,
           canAccessPath('/system/huawei-configs', user) ? { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' } : null,
+          canAccessPath('/system/auth-config', user) ? { key: '/system/auth-config', icon: <SafetyCertificateOutlined />, label: '认证管理' } : null,
           canAccessPath('/system/settings', user) ? { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' } : null,
         ].filter((item): item is NonNullable<typeof item> => item !== null),
       } : null,
@@ -84,9 +93,7 @@ function BasicLayout() {
 
   // 用户菜单项 - 使用 useMemo 避免每次渲染重新创建
   const userMenuItems: MenuProps['items'] = useMemo(() => ([
-    { key: 'profile', icon: <UserOutlined />, label: '个人信息' },
-    { type: 'divider' as const },
-    { key: 'settings', icon: <SettingOutlined />, label: '系统设置' },
+    { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' },
     { type: 'divider' as const },
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
   ]), [handleLogout])
@@ -95,6 +102,12 @@ function BasicLayout() {
   const displayName = useMemo(() => {
     return user?.full_name || user?.username || '用户'
   }, [user?.full_name, user?.username])
+
+  // 默认展开的菜单项 - 当访问系统相关页面时自动展开系统管理菜单
+  const defaultOpenKeys = useMemo(() => {
+    if (location.pathname.startsWith('/system')) return ['system']
+    return []
+  }, [location.pathname])
 
   return (
     <Layout className="basic-layout">
@@ -106,13 +119,14 @@ function BasicLayout() {
           mode="inline"
           items={menuItems}
           selectedKeys={[location.pathname]}
+          defaultOpenKeys={defaultOpenKeys}
           onClick={handleMenuClick}
         />
       </Sider>
       <Layout>
         <Header className="layout-header">
           <div className="header-right">
-            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
               <Avatar icon={<UserOutlined />} style={{ cursor: 'pointer' }} />
             </Dropdown>
             <span className="user-name">{displayName}</span>
