@@ -55,11 +55,12 @@ func TestUser_ADFieldsNullable(t *testing.T) {
 	// TODO: Verify local users work correctly without AD information
 
 	// Create a local user (AD fields will be NULL after migration)
+	passwordHash := "hashedpassword"
 	user := User{
 		Username:     "localuser",
 		Email:        "local@example.com",
 		FullName:     "Local User",
-		PasswordHash: "hashedpassword",
+		PasswordHash: &passwordHash,
 		IsActive:     true,
 		// AD fields will be added by migration and default to NULL
 	}
@@ -154,11 +155,12 @@ func TestUser_ExistingLocalUserSupport(t *testing.T) {
 	// TODO: Verify local user can still authenticate
 	// TODO: Verify local user's AD fields are NULL
 
+	passwordHash := "hashedpassword"
 	user := User{
 		Username:     "existinguser",
 		Email:        "existing@example.com",
 		FullName:     "Existing User",
-		PasswordHash: "hashedpassword",
+		PasswordHash: &passwordHash,
 		IsActive:     true,
 	}
 

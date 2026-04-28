@@ -272,11 +272,20 @@ func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) erro
 		return err
 	}
 
-	// 异步删除物理文件
+	// 异步删除物理文件（传递上下文并记录错误）
 	go func() {
 		driver, ok := s.drivers[models.StorageType(file.StorageType)]
-		if ok {
-			driver.Delete(context.Background(), file.FilePath)
+		if !ok {
+			s.logger.Warn("Storage driver not found for async file deletion",
+				zap.String("storage_type", file.StorageType),
+				zap.String("file_path", file.FilePath))
+			return
+		}
+		if err := driver.Delete(ctx, file.FilePath); err != nil {
+			s.logger.Warn("Async file deletion failed",
+				zap.Uint("file_id", fileID),
+				zap.String("file_path", file.FilePath),
+				zap.Error(err))
 		}
 	}()
 

@@ -11,6 +11,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +19,7 @@ import (
 const requestStartTimeKey = "api_key_request_start_time"
 
 // logAPIKeyUsage 记录 API Key 使用日志
-func logAPIKeyUsage(c *gin.Context, db *gorm.DB, apiKeyID, userID uint, statusCode int, duration time.Duration) {
+func logAPIKeyUsage(c *gin.Context, db *gorm.DB, logger *zap.Logger, apiKeyID, userID uint, statusCode int, duration time.Duration) {
 	// 在 goroutine 启动前提取所有数据，避免在请求完成后访问被回收的 Context
 	method := c.Request.Method
 	path := c.Request.URL.Path
@@ -38,7 +39,16 @@ func logAPIKeyUsage(c *gin.Context, db *gorm.DB, apiKeyID, userID uint, statusCo
 			Duration:   durationMs,
 			Success:    statusCode < 400,
 		}
-		db.Create(log)
+		if err := db.Create(log).Error; err != nil {
+			// Log to system logger since DB write failed
+			if logger != nil {
+				logger.Warn("Failed to log API key usage",
+					zap.Uint("api_key_id", apiKeyID),
+					zap.Uint("user_id", userID),
+					zap.String("path", path),
+					zap.Error(err))
+			}
+		}
 	}()
 }
 
@@ -80,13 +90,13 @@ func getContextTime(c *gin.Context, key string) time.Time {
 }
 
 // MultiAuth 支持多种认证方式（SM4 Token或API Key）
-func MultiAuth(db *gorm.DB, tokenService *auth.SM4TokenService) gin.HandlerFunc {
+func MultiAuth(db *gorm.DB, tokenService *auth.SM4TokenService, logger *zap.Logger) gin.HandlerFunc {
 	// 预创建 SM4 认证 handler，避免每次请求都分配新闭包
 	sm4Handler := SM4Auth(tokenService)
 
 	return func(c *gin.Context) {
 		// 先尝试API Key认证
-		if handleAPIKeyAuth(c, db) {
+		if handleAPIKeyAuth(c, db, logger) {
 			return
 		}
 
@@ -103,7 +113,7 @@ func MultiAuth(db *gorm.DB, tokenService *auth.SM4TokenService) gin.HandlerFunc 
 }
 
 // handleAPIKeyAuth 处理 API Key 认证，返回 true 表示已处理（成功或失败），false 表示跳过
-func handleAPIKeyAuth(c *gin.Context, db *gorm.DB) bool {
+func handleAPIKeyAuth(c *gin.Context, db *gorm.DB, logger *zap.Logger) bool {
 	apiKey := c.GetHeader("X-API-Key")
 	if apiKey == "" {
 		return false
@@ -182,7 +192,7 @@ func handleAPIKeyAuth(c *gin.Context, db *gorm.DB) bool {
 	c.Next()
 
 	// 请求完成后记录使用日志
-	logAPIKeyUsage(c, db, key.ID, key.UserID, writer.status, time.Since(getContextTime(c, requestStartTimeKey)))
+	logAPIKeyUsage(c, db, nil, key.ID, key.UserID, writer.status, time.Since(getContextTime(c, requestStartTimeKey)))
 	return true
 }
 
