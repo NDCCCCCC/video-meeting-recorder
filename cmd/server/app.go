@@ -219,8 +219,9 @@ func (a *MinimalApp) migrateDatabase() error {
 	a.logger.Info("正在执行数据库迁移...")
 
 	// 先执行 AutoMigrate 创建基础表结构
+	// User 模型包含 RoleID 字段（使用 gorm:"-" 忽略），保留数据库中的 legacy role_id 列
 	err := a.db.AutoMigrate(
-		&models.User{},
+		&models.User{}, // 重新加入 - RoleID 字段被 gorm:"-" 忽略
 		&models.Role{},
 		&models.Permission{},
 		&models.APIKey{},
