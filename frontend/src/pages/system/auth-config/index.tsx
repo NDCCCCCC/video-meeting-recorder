@@ -41,8 +41,10 @@ const AuthConfigPage: React.FC = () => {
     setLoading(true);
     try {
       const response = await getAuthConfig();
-      setConfig(response.data);
-      form.setFieldsValue(response.data);
+      if (response.data) {
+        setConfig(response.data);
+        form.setFieldsValue(response.data);
+      }
     } catch (error) {
       message.error('获取配置失败');
     } finally {
@@ -57,12 +59,14 @@ const AuthConfigPage: React.FC = () => {
       const values = await form.validateFields(['ad']);
       const response = await testADConnection(values.ad);
 
-      setValidationResult(response.data);
+      if (response.data) {
+        setValidationResult(response.data);
 
-      if (response.data.valid) {
-        message.success('AD连接测试成功');
-      } else {
-        message.error('AD连接测试失败: ' + response.data.errors?.join(', '));
+        if (response.data.valid) {
+          message.success('AD连接测试成功');
+        } else {
+          message.error('AD连接测试失败: ' + response.data.errors?.join(', '));
+        }
       }
     } catch (error: any) {
       message.error('连接测试失败: ' + (error.response?.data?.message || error.message));
