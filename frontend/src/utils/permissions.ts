@@ -44,6 +44,10 @@ export const PERMISSIONS = {
   CONFIG_VIEW: 'configs:view',
   CONFIG_EDIT: 'configs:edit',
 
+  // 认证管理
+  AUTH_CONFIG_VIEW: 'auth:config:view',
+  AUTH_CONFIG_EDIT: 'auth:config:edit',
+
   // 系统设置
   SYSTEM_SETTINGS: 'system:settings',
 } as const
@@ -59,6 +63,7 @@ export const MENU_PERMISSIONS: Record<string, string> = {
   '/system/roles': PERMISSIONS.ROLE_VIEW,
   '/system/apikeys': PERMISSIONS.APIKEY_VIEW,
   '/system/huawei-configs': PERMISSIONS.CONFIG_VIEW,
+  '/system/auth-config': PERMISSIONS.AUTH_CONFIG_VIEW,
   '/system/settings': PERMISSIONS.SYSTEM_SETTINGS,
 }
 
@@ -68,6 +73,7 @@ export const SUBMENU_PERMISSIONS: Record<string, string> = {
   '/system/roles': PERMISSIONS.ROLE_VIEW,
   '/system/apikeys': PERMISSIONS.APIKEY_VIEW,
   '/system/huawei-configs': PERMISSIONS.CONFIG_VIEW,
+  '/system/auth-config': PERMISSIONS.AUTH_CONFIG_VIEW,
   '/system/settings': PERMISSIONS.SYSTEM_SETTINGS,
 }
 
