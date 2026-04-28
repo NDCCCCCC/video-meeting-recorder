@@ -100,9 +100,9 @@ export const clearToken = (): void => {
   authStorageString = null
 }
 
-// 刷新 Token
+// 刷新 Token (async-defer-await: 将 await 移到实际使用的分支)
 async function refreshAccessToken(refreshToken: string): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+  const response = fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -110,11 +110,13 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
     body: JSON.stringify({ refreshToken }),
   })
 
-  if (!response.ok) {
+  // 先检查响应状态，再等待 JSON 解析
+  const res = await response
+  if (!res.ok) {
     throw new Error('Failed to refresh token')
   }
 
-  const data: ApiResponse<{ access_token: string; refresh_token: string }> = await response.json()
+  const data: ApiResponse<{ access_token: string; refresh_token: string }> = await res.json()
   if (data.data) {
     saveToken(data.data.access_token, data.data.refresh_token)
     return data.data.access_token

@@ -1,0 +1,61 @@
+/* 渲染性能优化 (rendering-content-visibility) */
+
+/* PPT 缩略图列表优化 - 使用 content-visibility 跳过不可见内容的渲染 */
+.slide-thumbnail-list {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
+/* 任务表格行优化 - 使用 content-visibility 提升长列表性能 */
+.ant-table-tbody > tr {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
+
+/* 审计表格行优化 */
+.audit-table-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
+
+/* 文件列表表格行优化 */
+.file-table-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
+
+/* 用户列表表格行优化 */
+.user-table-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
+
+/* 华为配置列表表格行优化 */
+.huawei-config-table-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
+
+/* 标签列表优化 - 使用 content-visibility 优化标签渲染 */
+.tag-list-container {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
+}
+
+/* PPT 幻灯片列表优化 */
+.ppt-slides-list {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 400px;
+}
+
+/* 视频文件列表优化 */
+.video-file-list {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 100px;
+}
+
+/* 时间线标记列表优化 */
+.timeline-markers-list {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
+}
