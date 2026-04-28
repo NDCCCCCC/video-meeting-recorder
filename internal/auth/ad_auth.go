@@ -85,27 +85,32 @@ func (a *ADAuthenticator) Login(req *LoginRequest, ipAddress, userAgent string) 
 		return nil, errors.New("域控账号已禁用")
 	}
 
-	// Step 4.5: Decrypt SM4 password if needed (follow same pattern as local_auth.go)
-	passwordForBind := req.Password
-	if utils.IsEncryptedPassword(req.Password) {
-		if a.sm4Secret != "" {
-			if err := utils.ValidateSM4Secret(a.sm4Secret); err != nil {
-				a.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
-				return nil, errors.New("系统配置错误")
-			}
-			decrypted, err := utils.DecryptPasswordECB(req.Password, a.sm4Secret)
-			if err != nil {
-				a.logger.Warn("Failed to decrypt password", zap.String("username", req.Username))
-				return nil, errors.New("域控密码错误")
-			}
-			passwordForBind = decrypted
-			a.logger.Debug("Password decrypted for AD login", zap.String("username", req.Username))
-		} else {
-			// SM4 password received but no secret configured - treat as error
-			a.logger.Warn("SM4 encrypted password received but SM4_SECRET not configured")
-			return nil, errors.New("域控密码错误")
-		}
+	// Step 4.5: AD authentication requires SM4-encrypted password only (no plaintext support)
+	if !utils.IsEncryptedPassword(req.Password) {
+		a.logger.Warn("Plaintext password rejected for AD authentication", zap.String("username", req.Username))
+		return nil, errors.New("域控密码错误")
 	}
+
+	// SM4 secret must be configured for AD authentication
+	if a.sm4Secret == "" {
+		a.logger.Error("SM4_SECRET not configured for AD authentication")
+		return nil, errors.New("系统配置错误")
+	}
+
+	// Validate SM4 secret configuration
+	if err := utils.ValidateSM4Secret(a.sm4Secret); err != nil {
+		a.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
+		return nil, errors.New("系统配置错误")
+	}
+
+	// Decrypt SM4 password
+	passwordForBind, err := utils.DecryptPasswordECB(req.Password, a.sm4Secret)
+	if err != nil {
+		a.logger.Warn("Failed to decrypt SM4 password", zap.String("username", req.Username))
+		return nil, errors.New("域控密码错误")
+	}
+
+	a.logger.Debug("SM4 password decrypted for AD login", zap.String("username", req.Username))
 
 	// Step 5: Bind as user to authenticate (verify password)
 	err = conn.Bind(userDN, passwordForBind)
