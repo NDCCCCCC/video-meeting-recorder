@@ -360,3 +360,63 @@ func (a *ADAuthenticator) toUserDTO(user *models.User) *UserDTO {
 	}
 	return dto
 }
+
+// LookupUser looks up a user in Active Directory by username
+// Returns ADUserLookupResult with user information if found
+func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, error) {
+	// Connect to AD server
+	conn, err := a.connectAD()
+	if err != nil {
+		a.logger.Error("AD connection failed during lookup", zap.Error(err))
+		return nil, fmt.Errorf("无法连接到域控服务器")
+	}
+	defer conn.Close()
+
+	// Bind as admin to search for user
+	err = conn.Bind(a.adConfig.BindDN, a.adConfig.Password)
+	if err != nil {
+		a.logger.Error("AD admin bind failed during lookup", zap.Error(err))
+		return nil, fmt.Errorf("域控管理员认证失败")
+	}
+
+	// Search for user DN (prevent LDAP injection - use EscapeFilter)
+	searchRequest := ldap.NewSearchRequest(
+		a.adConfig.BaseDN,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		1, 0, false,
+		fmt.Sprintf("(&(objectClass=user)(sAMAccountName=%s))", ldap.EscapeFilter(username)),
+		[]string{"dn", "sAMAccountName", "mail", "displayName", "userAccountControl", "objectGUID", "department", "userPrincipalName"},
+		nil,
+	)
+
+	sr, err := conn.Search(searchRequest)
+	if err != nil {
+		a.logger.Error("AD user search failed during lookup", zap.Error(err))
+		return nil, fmt.Errorf("搜索用户失败")
+	}
+
+	// Check if user was found
+	if len(sr.Entries) == 0 {
+		return &ADUserLookupResult{
+			Found:    false,
+			Username: username,
+			Message:  "未在域控中找到该用户",
+		}, nil
+	}
+
+	// Parse the LDAP entry
+	adUser := a.parseLDAPEntry(sr.Entries[0])
+
+	// Return the lookup result
+	return &ADUserLookupResult{
+		Found:      true,
+		Username:   adUser.Username,
+		Email:      adUser.Email,
+		FullName:   adUser.DisplayName,
+		Department: adUser.Department,
+		UPN:        adUser.UserPrincipalName,
+		DN:         adUser.DN,
+		Disabled:   adUser.IsDisabled(),
+	}, nil
+}
