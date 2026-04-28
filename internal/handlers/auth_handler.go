@@ -232,17 +232,7 @@ func (h *AuthHandler) TestADConnection(c *gin.Context) {
 	validator := auth.NewADConfigValidator(h.logger)
 	result := validator.Validate(&req)
 
-	if result.Valid {
-		response.GinSuccess(c, result)
-	} else {
-		// Return errors but with 200 status (validation failure, not request error)
-		// User-friendly messages shown (per D-18, D-20)
-		c.JSON(200, gin.H{
-			"valid":         false,
-			"level":         result.Level,
-			"errors":        result.Errors,
-			"warnings":      result.Warnings,
-			"response_time": result.ResponseTime,
-		})
-	}
+	// Always return consistent format with response.GinSuccess
+	// Validation result (success/failure) is indicated by result.Valid field
+	response.GinSuccess(c, result)
 }
