@@ -6,6 +6,7 @@ import (
 	"github.com/cpic/record_v2/internal/auth"
 	"github.com/cpic/record_v2/internal/config"
 	"github.com/cpic/record_v2/internal/middleware"
+	"github.com/cpic/record_v2/internal/services"
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -13,14 +14,16 @@ import (
 
 // AdminHandler 管理员处理器
 type AdminHandler struct {
-	cfg    *config.Config
-	logger *zap.Logger
+	cfg           *config.Config
+	logger        *zap.Logger
+	configService *services.ConfigService
 }
 
-func NewAdminHandler(cfg *config.Config, logger *zap.Logger) *AdminHandler {
+func NewAdminHandler(cfg *config.Config, logger *zap.Logger, configService *services.ConfigService) *AdminHandler {
 	return &AdminHandler{
-		cfg:    cfg,
-		logger: logger,
+		cfg:           cfg,
+		logger:        logger,
+		configService: configService,
 	}
 }
 
@@ -113,6 +116,15 @@ func (h *AdminHandler) UpdateAuthConfig(c *gin.Context) {
 		h.cfg.Auth.AD.DialTimeout = req.AD.DialTimeout
 		h.cfg.Auth.AD.RequestTimeout = req.AD.RequestTimeout
 		h.cfg.Auth.AD.InsecureSkipVerify = req.AD.InsecureSkipVerify
+	}
+
+	// Persist to database
+	if h.configService != nil {
+		if err := h.configService.SaveAuthConfig(req.Mode, &req.AD); err != nil {
+			h.logger.Error("Failed to save auth config to database", zap.Error(err))
+			response.GinError(c, response.CodeInternalError, "配置保存失败")
+			return
+		}
 	}
 
 	response.GinSuccess(c, gin.H{"message": "认证配置已更新"})
