@@ -71,6 +71,7 @@ type Handlers struct {
 	Auth          *handlers.AuthHandler
 	User          *handlers.UserHandler
 	Role          *handlers.RoleHandler
+	Admin         *handlers.AdminHandler
 	VideoTask     *handlers.VideoRecordingTaskHandler
 	HuaweiConfig  *handlers.HuaweiConfigHandler
 	VideoFile     *handlers.VideoFileHandler
@@ -650,6 +651,7 @@ func (a *MinimalApp) initHandlers() error {
 		Auth:          handlers.NewAuthHandler(authService, a.logger),
 		User:          handlers.NewUserHandler(userService, a.logger),
 		Role:          handlers.NewRoleHandler(roleService, a.logger),
+		Admin:         handlers.NewAdminHandler(a.config, a.logger),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
 		HuaweiConfig:  handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, a.logger),
@@ -692,6 +694,16 @@ func (a *MinimalApp) registerRoutes() error {
 		authenticated.POST("/logout-all", a.handlers.Auth.LogoutAll)
 		authenticated.POST("/change-password", a.handlers.Auth.ChangePassword)
 		authenticated.GET("/me", a.handlers.Auth.GetCurrentUser)
+		authenticated.POST("/ad/test-connection", a.handlers.Auth.TestADConnection)
+	}
+
+	// Admin auth configuration routes (admin-only)
+	adminGroup := a.router.Group("/api/v1/admin/auth")
+	adminGroup.Use(middleware.SM4Auth(a.tokenService), middleware.RequireRole(a.db, "admin"))
+	{
+		adminGroup.GET("/config", a.handlers.Admin.GetAuthConfig)
+		adminGroup.PUT("/config", a.handlers.Admin.UpdateAuthConfig)
+		adminGroup.GET("/me", a.handlers.Admin.GetCurrentUser)
 	}
 
 	// API路由组
