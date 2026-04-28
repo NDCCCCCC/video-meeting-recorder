@@ -75,6 +75,7 @@
 | 9. Multi-Role Permissions & Shared Viewer | v1.1 | 0/0 | **Not Started** | — |
 | 10. Admin Dashboard, Audit Logs, and UI Enhancements | v1.1 | 5/5 | **Complete** | 2026-04-24 |
 | 11. IP地址登录限制 | v1.1 | 4/6 | **In Progress** | 2026-04-27 |
+| 12. Windows AD域控认证 | v1.1 | 0/0 | **Not Started** | — |
 
 ### Phase 10: Admin Dashboard, Audit Logs, and UI Enhancements
 
@@ -131,6 +132,26 @@ Plans:
 - D-10 to D-12: ClientIP() extraction, direct deployment
 - D-13 to D-15: User-friendly error messages, audit logging, no admin exemption
 - D-16 to D-17: IP check after password validation, before token generation
+
+### Phase 12: Windows AD域控认证 - 集成Windows Active Directory域控认证，支持LDAP/LDAPS双端口，实现local/ad/hybrid三种认证模式切换
+
+**Goal:** 集成Windows Active Directory域控认证，支持LDAP(389)和LDAPS(636)双端口，实现local/ad/hybrid三种认证模式切换，确保密码传输安全（前端SM4加密+LDAPS），AD用户自动映射到本地用户记录用于权限管理。
+
+**Requirements:**
+- **Spike验证:** 5个spike已验证通过（go-ldap-ad-auth, ldaps-security, auth-switch-architecture, ad-user-mapping, ad-config-validation）
+- **技术要求:** go-ldap/v3库，策略模式认证切换，配置热加载，AD连通性测试API
+- **安全要求:** 前端SM4密码加密，生产强制LDAPS(636)，内网可用LDAP(389)需风险确认，TLS 1.2+，管理员密码环境变量
+- **功能要求:** local/ad/hybrid三种模式，AD用户自动创建本地记录，审计日志，安全提示确认
+- **数据库变更:** 扩展users表（auth_source, ad_username, ad_dn, ad_guid, last_ad_login, ad_department, ad_upn）
+
+**Depends on:** Phase 11
+**Plans:** 0 plans — **ready to plan**
+
+**Spike Findings:** `.planning/spikes/` - 5个验证通过的spike，包含代码验证和架构设计
+**Skill Reference:** `./.claude/skills/spike-findings-record-v2/` - Spike技能包包含实施蓝图、约束、注意事项
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 12 to break down)
 
 ---
 *Roadmap created: 2026-04-17*

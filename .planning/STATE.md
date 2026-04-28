@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-04-27T08:18:41.848Z"
+status: Phase 11 at manual testing checkpoint
+last_updated: "2026-04-28T01:20:03.624Z"
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
-  completed_plans: 10
-  percent: 91
+  completed_plans: 11
+  percent: 100
 ---
 
 # STATE.md - Project Memory
@@ -47,6 +47,7 @@ Plan: 11-05 (Checkpoint - 4/6 tasks complete)
 ### Pause Reason
 
 Plan 11-05 (End-to-end testing) requires manual verification:
+
 - 8 test cases covering user/role IP restrictions
 - 5 security verification tests (IP spoofing, IPv6 rejection)
 - Test documentation created at `.planning/phases/11-ip-ip/11-TESTING.md`
@@ -100,6 +101,7 @@ None - awaiting manual testing completion.
 - Phase 9 added: Multi-Role Permissions & Shared Viewer (2026-04-21)
 - Phase 10 added: Admin Dashboard, Audit Logs, and UI Enhancements (2026-04-24)
 - Phase 11 added: IP地址登录限制 - 为用户和角色添加IP地址组 (2026-04-27)
+- Phase 12 added: Windows AD域控认证 - 集成Windows Active Directory域控认证，支持LDAP/LDAPS双端口 (2026-04-28)
 
 ## Accumulated Context
 
