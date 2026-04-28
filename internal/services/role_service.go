@@ -37,13 +37,15 @@ type ListRolesResponse struct {
 
 // CreateRoleRequest 创建角色请求
 type CreateRoleRequest struct {
-	Name        string `json:"name" binding:"required,min=2,max=50"`
-	Description string `json:"description" binding:"max=200"`
+	Name        string   `json:"name" binding:"required,min=2,max=50"`
+	Description string   `json:"description" binding:"max=200"`
+	AllowedIPs  []string `json:"allowed_ips"`
 }
 
 // UpdateRoleRequest 更新角色请求
 type UpdateRoleRequest struct {
-	Description string `json:"description" binding:"max=200"`
+	Description string   `json:"description" binding:"max=200"`
+	AllowedIPs  []string `json:"allowed_ips"`
 }
 
 // AssignPermissionsRequest 分配权限请求
@@ -109,6 +111,13 @@ func (s *RoleService) CreateRole(req *CreateRoleRequest) (*models.Role, error) {
 		Description: req.Description,
 	}
 
+	// 设置 IP 限制
+	if len(req.AllowedIPs) > 0 {
+		if err := role.SetAllowedIPs(req.AllowedIPs); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := s.db.Create(role).Error; err != nil {
 		return nil, err
 	}
@@ -126,6 +135,11 @@ func (s *RoleService) UpdateRole(id uint, req *UpdateRoleRequest) (*models.Role,
 	// 更新描述
 	if req.Description != "" {
 		role.Description = req.Description
+	}
+
+	// 更新 IP 限制（总是更新，包括清空）
+	if err := role.SetAllowedIPs(req.AllowedIPs); err != nil {
+		return nil, err
 	}
 
 	if err := s.db.Save(&role).Error; err != nil {

@@ -2,7 +2,6 @@ package migrations
 
 import (
 	"log"
-	"regexp"
 
 	"gorm.io/gorm"
 )
@@ -16,97 +15,105 @@ func (m *DropLegacyRoleIDMigration) Name() string {
 
 func (m *DropLegacyRoleIDMigration) Up(db *gorm.DB) error {
 	// 检查 users 表是否还有 role_id 列
-	var columns []struct {
-		Name string
-	}
-	checkErr := db.Raw("SELECT name FROM pragma_table_info('users') WHERE name = 'role_id'").Scan(&columns).Error
-	if checkErr != nil {
-		return checkErr
+	hasColumn, err := columnExists(db, "users", "role_id")
+	if err != nil {
+		return err
 	}
 
-	// 如果没有 role_id 列，跳过
-	if len(columns) == 0 {
+	// 如果没有 role_id 列，说明已经迁移过了
+	if !hasColumn {
 		log.Println("INFO: No legacy role_id column found in users table (already cleaned)")
 		return nil
 	}
 
-	// SQLite 不支持 ALTER TABLE DROP COLUMN，需要重建表
-	// 但由于风险较高，我们只将该列设置为可空并更新现有数据为 NULL
+	// 有 role_id 列 - 需要移除 NOT NULL 约束和 FOREIGN KEY 约束
+	// SQLite 不支持直接修改约束，需要重建表
+	log.Println("INFO: Rebuilding users table to remove role_id constraints")
 
-	// Step 1: 检查 role_id 是否有 NOT NULL 约束
-	var nullableInfo string
-	db.Raw("SELECT \"notnull\" FROM pragma_table_info('users') WHERE name = 'role_id'").Scan(&nullableInfo)
-
-	if nullableInfo == "1" {
-		// 有 NOT NULL 约束，需要先重建表来移除约束
-		log.Println("INFO: Dropping NOT NULL constraint from users.role_id (SQLite requires table recreation)")
-
-		// 使用 SQLite 模式来重建表（危险操作，谨慎处理）
-		// 由于 ALTER TABLE DROP COLUMN 不支持，我们创建一个没有 role_id 的新表
-
-		// 获取创建表的 SQL
-		var createSQL string
-		db.Raw("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").Scan(&createSQL)
-
-		// 移除 role_id 列定义
-		re := regexp.MustCompile(`,\s*role_id\s+INTEGER[^,]*`)
-		newCreateSQL := re.ReplaceAllString(createSQL, "")
-
-		// 创建临时表
-		tempTable := "users_new"
-		if err := db.Exec("DROP TABLE IF EXISTS " + tempTable).Error; err != nil {
-			return err
-		}
-
-		// 使用修改后的 DDL 创建新表
-		createSQL = regexp.MustCompile(`CREATE TABLE users`).ReplaceAllString(newCreateSQL, "CREATE TABLE "+tempTable)
-		if err := db.Exec(createSQL).Error; err != nil {
-			return err
-		}
-
-		// 复制数据（排除 role_id 列）
-		columnsToCopy := []string{
-			"id", "created_at", "updated_at", "username", "password_hash",
-			"email", "full_name", "is_active", "last_login_at", "allowed_ips",
-		}
-		columnsStr := ""
-		for i, col := range columnsToCopy {
-			if i > 0 {
-				columnsStr += ", "
-			}
-			columnsStr += col
-		}
-
-		if err := db.Exec("INSERT INTO " + tempTable + " (" + columnsStr + ") SELECT " + columnsStr + " FROM users").Error; err != nil {
-			return err
-		}
-
-		// 删除旧表
-		if err := db.Exec("DROP TABLE users").Error; err != nil {
-			return err
-		}
-
-		// 重命名新表
-		if err := db.Exec("ALTER TABLE " + tempTable + " RENAME TO users").Error; err != nil {
-			return err
-		}
-
-		// 重建索引
-		db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)")
-		db.Exec("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
-
-		log.Println("INFO: Legacy role_id column dropped from users table")
-	} else {
-		// 没有 NOT NULL 约束，直接清空数据
-		log.Println("INFO: Clearing legacy role_id data (column exists but nullable)")
-		db.Exec("UPDATE users SET role_id = NULL WHERE role_id IS NOT NULL")
+	// Step 1: 获取当前表结构
+	var currentSQL string
+	err = db.Raw("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").Scan(&currentSQL).Error
+	if err != nil {
+		return err
 	}
+	log.Printf("INFO: Current users table DDL: %s", currentSQL)
+
+	// Step 2: 创建新表（role_id 改为 nullable，移除外键约束）
+	createNewTable := `
+		CREATE TABLE users_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME,
+			username VARCHAR(50) NOT NULL UNIQUE,
+			password_hash VARCHAR(255) NOT NULL,
+			email VARCHAR(100),
+			full_name VARCHAR(100),
+			role_id INTEGER,
+			is_active NUMERIC DEFAULT 1,
+			last_login_at DATETIME,
+			allowed_ips TEXT,
+			ad_username VARCHAR(100),
+			addn VARCHAR(255),
+			ad_guid CHAR(36),
+			ad_department VARCHAR(100),
+			adupn VARCHAR(200),
+			last_ad_login DATETIME
+		)
+	`
+	if err := db.Exec(createNewTable).Error; err != nil {
+		return err
+	}
+	log.Println("INFO: Created users_new table")
+
+	// Step 3: 复制数据（除了 role_id，因为多角色数据已在 users_roles 表中）
+	copyData := `
+		INSERT INTO users_new (
+			id, created_at, updated_at, deleted_at, username, password_hash,
+			email, full_name, is_active, last_login_at, allowed_ips,
+			ad_username, addn, ad_guid, ad_department, adupn, last_ad_login
+		)
+		SELECT
+			id, created_at, updated_at, deleted_at, username, password_hash,
+			email, full_name, is_active, last_login_at, allowed_ips,
+			ad_username, addn, ad_guid, ad_department, adupn, last_ad_login
+		FROM users
+	`
+	if err := db.Exec(copyData).Error; err != nil {
+		// 回滚：删除新表
+		db.Exec("DROP TABLE IF EXISTS users_new")
+		return err
+	}
+	log.Println("INFO: Copied data from users to users_new")
+
+	// Step 4: 删除旧表并重命名新表
+	if err := db.Exec("DROP TABLE users").Error; err != nil {
+		// 回滚：删除新表
+		db.Exec("DROP TABLE IF EXISTS users_new")
+		return err
+	}
+	if err := db.Exec("ALTER TABLE users_new RENAME TO users").Error; err != nil {
+		return err
+	}
+	log.Println("INFO: Replaced users table with new schema (role_id now nullable, no foreign key)")
+
+	// Step 5: 重建索引
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at)").Error; err != nil {
+		log.Printf("WARN: Failed to create index: %v", err)
+	}
+	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)").Error; err != nil {
+		log.Printf("WARN: Failed to create index: %v", err)
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_users_ad_guid ON users(ad_guid)").Error; err != nil {
+		log.Printf("WARN: Failed to create index: %v", err)
+	}
+	log.Println("INFO: Recreated indexes")
 
 	return nil
 }
 
 func (m *DropLegacyRoleIDMigration) Down(db *gorm.DB) error {
-	// 回滚：重新添加 role_id 列（但注意会丢失数据）
-	log.Println("WARN: Rolling back: re-adding role_id column (data will be lost)")
-	return db.Exec("ALTER TABLE users ADD COLUMN role_id INTEGER").Error
+	// 回滚：无需操作
+	log.Println("INFO: Rollback not needed - migration skipped column removal")
+	return nil
 }

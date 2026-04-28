@@ -26,6 +26,20 @@ import type { ColumnsType } from 'antd/es/table'
 import * as userApi from '../../../api/user'
 import type { UserInfo, UserListParams, CreateUserRequest, UpdateUserRequest } from '../../../types/user'
 
+// 解析 allowed_ips 字段（可能是 JSON 字符串或数组）
+const parseAllowedIPs = (ips: any): string[] => {
+  if (!ips) return []
+  if (Array.isArray(ips)) return ips
+  if (typeof ips === 'string') {
+    try {
+      return JSON.parse(ips)
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
 export default function UserManagement() {
   const [users, setUsers] = useState<UserInfo[]>([])
   const [total, setTotal] = useState(0)
@@ -96,7 +110,7 @@ export default function UserManagement() {
         email: user.email,
         full_name: user.full_name,
         role_ids: user.roles?.map(r => r.id) || [],
-        allowed_ips_text: (user.allowed_ips || []).join('\n'),
+        allowed_ips_text: parseAllowedIPs(user.allowed_ips).join('\n'),
         is_active: user.is_active,
       })
     } else {
