@@ -21,6 +21,7 @@ type ADAuthenticator struct {
 	tokenService *SM4TokenService
 	sm4Secret   string
 	logger      *zap.Logger
+	liveConfig  *config.AuthConfig // Live config reference for dynamic settings
 }
 
 // NewADAuthenticator creates a new AD authenticator
@@ -32,6 +33,11 @@ func NewADAuthenticator(cfg *config.ADAuthConfig, db *gorm.DB, tokenService *SM4
 		sm4Secret:    sm4Secret,
 		logger:       logger,
 	}
+}
+
+// SetLiveConfig sets the live config reference for dynamic settings
+func (a *ADAuthenticator) SetLiveConfig(authConfig *config.AuthConfig) {
+	a.liveConfig = authConfig
 }
 
 // Name returns the authenticator name
@@ -197,7 +203,7 @@ func (a *ADAuthenticator) parseLDAPEntry(entry *ldap.Entry) *ADUser {
 	}
 }
 
-// findOrCreateLocalUser finds an existing local user or creates a new one
+// findOrCreateLocalUser finds an existing local user or creates a new one (if allowed)
 func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, error) {
 	// First, try to find existing user by ad_guid or username
 	var user models.User
@@ -215,6 +221,22 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 		return nil, err
 	}
 
+	// User not found - check if auto-create is allowed
+	// Default to true for backward compatibility if config is not set
+	allowAutoCreate := true
+	if a.liveConfig != nil {
+		allowAutoCreate = a.liveConfig.AD.AllowAutoCreate
+	} else if a.adConfig != nil {
+		allowAutoCreate = a.adConfig.AllowAutoCreate
+	}
+
+	if !allowAutoCreate {
+		a.logger.Warn("AD user not found in system and auto-create is disabled",
+			zap.String("username", adUser.Username))
+		return nil, errors.New("账号未在系统中注册，请联系管理员添加")
+	}
+
+	// Auto-create is allowed, proceed with user creation
 	// Not found, create new user with random password (per D-07)
 	user = models.User{
 		Username:     adUser.Username,
