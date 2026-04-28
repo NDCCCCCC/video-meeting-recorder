@@ -269,6 +269,33 @@ const AuthConfigPage: React.FC = () => {
                   <Switch />
                 </Form.Item>
 
+                <Form.Item
+                  label={
+                    <Space>
+                      跳过证书验证
+                      <Tooltip title="仅用于测试环境，生产环境不推荐">
+                        <WarningOutlined style={{ color: '#faad14' }} />
+                      </Tooltip>
+                    </Space>
+                  }
+                  name={['ad', 'insecure_skip_verify']}
+                  valuePropName="checked"
+                  tooltip="如果AD服务器使用自签名证书，可以启用此选项"
+                >
+                  <Switch />
+                </Form.Item>
+
+                {getFieldValue(['ad', 'insecure_skip_verify']) && (
+                  <Alert
+                    message="安全警告"
+                    description="⚠️ 跳过证书验证会降低连接安全性，仅建议在测试环境或内网环境中使用。"
+                    type="warning"
+                    showIcon
+                    icon={<WarningOutlined />}
+                    style={{ marginBottom: '16px' }}
+                  />
+                )}
+
                 {!getFieldValue(['ad', 'use_tls']) && (
                   <Alert
                     message="安全警告"
