@@ -16,6 +16,7 @@ type User struct {
 	Email        string     `gorm:"type:varchar(100)" json:"email"`
 	FullName     string     `gorm:"type:varchar(100)" json:"full_name"`
 	Roles        []Role     `gorm:"many2many:users_roles;" json:"roles,omitempty"`
+	RoleID       *uint      `gorm:"-" json:"-"` // Legacy field (ignored, exists in DB as nullable)
 	AllowedIPs   string     `gorm:"type:text" json:"allowed_ips"` // IP限制列表 (JSON数组)
 	IsActive     bool       `gorm:"default:true" json:"is_active"`
 	LastLoginAt  *time.Time `json:"last_login_at"`
