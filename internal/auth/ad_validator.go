@@ -103,14 +103,9 @@ func (v *ADConfigValidator) testConnection(config *ADAuthConfig) (*ldap.Conn, er
 		}
 		conn, err = ldap.DialTLS("tcp", config.Server, tlsConfig)
 	} else {
-		// LDAP mode (port 389) with StartTLS
+		// Plain LDAP mode (port 389) - NO TLS, NO StartTLS
+		// Warning: credentials will be sent in plain text
 		conn, err = ldap.Dial("tcp", config.Server)
-		if err == nil {
-			err = conn.StartTLS(&tls.Config{
-				ServerName: extractHostname(config.Server),
-				MinVersion: tls.VersionTLS12,
-			})
-		}
 	}
 
 	if err != nil {
