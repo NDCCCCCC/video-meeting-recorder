@@ -47,6 +47,7 @@ func (h *AdminHandler) GetAuthConfig(c *gin.Context) {
 			"dial_timeout":         h.cfg.Auth.AD.DialTimeout,
 			"request_timeout":      h.cfg.Auth.AD.RequestTimeout,
 			"insecure_skip_verify": h.cfg.Auth.AD.InsecureSkipVerify,
+			"allow_auto_create":    h.cfg.Auth.AD.AllowAutoCreate, // Default: true
 			// Password excluded for security
 		},
 	}
@@ -116,6 +117,7 @@ func (h *AdminHandler) UpdateAuthConfig(c *gin.Context) {
 		h.cfg.Auth.AD.DialTimeout = req.AD.DialTimeout
 		h.cfg.Auth.AD.RequestTimeout = req.AD.RequestTimeout
 		h.cfg.Auth.AD.InsecureSkipVerify = req.AD.InsecureSkipVerify
+		h.cfg.Auth.AD.AllowAutoCreate = req.AD.AllowAutoCreate
 	}
 
 	// Persist to database
