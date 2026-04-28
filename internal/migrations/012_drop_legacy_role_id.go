@@ -30,15 +30,23 @@ func (m *DropLegacyRoleIDMigration) Up(db *gorm.DB) error {
 	// SQLite 不支持直接修改约束，需要重建表
 	log.Println("INFO: Rebuilding users table to remove role_id constraints")
 
-	// Step 1: 获取当前表结构
+	// Step 1: 禁用外键约束（SQLite 需要）
+	if err := db.Exec("PRAGMA foreign_keys = OFF").Error; err != nil {
+		return err
+	}
+	log.Println("INFO: Disabled foreign key constraints for migration")
+
+	// Step 2: 获取当前表结构
 	var currentSQL string
 	err = db.Raw("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").Scan(&currentSQL).Error
 	if err != nil {
+		// 恢复外键约束
+		db.Exec("PRAGMA foreign_keys = ON")
 		return err
 	}
 	log.Printf("INFO: Current users table DDL: %s", currentSQL)
 
-	// Step 2: 创建新表（role_id 改为 nullable，移除外键约束）
+	// Step 3: 创建新表（role_id 改为 nullable，移除外键约束）
 	createNewTable := `
 		CREATE TABLE users_new (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,11 +70,12 @@ func (m *DropLegacyRoleIDMigration) Up(db *gorm.DB) error {
 		)
 	`
 	if err := db.Exec(createNewTable).Error; err != nil {
+		db.Exec("PRAGMA foreign_keys = ON")
 		return err
 	}
 	log.Println("INFO: Created users_new table")
 
-	// Step 3: 复制数据（除了 role_id，因为多角色数据已在 users_roles 表中）
+	// Step 4: 复制数据（除了 role_id，因为多角色数据已在 users_roles 表中）
 	copyData := `
 		INSERT INTO users_new (
 			id, created_at, updated_at, deleted_at, username, password_hash,
@@ -80,24 +89,27 @@ func (m *DropLegacyRoleIDMigration) Up(db *gorm.DB) error {
 		FROM users
 	`
 	if err := db.Exec(copyData).Error; err != nil {
-		// 回滚：删除新表
+		// 回滚：删除新表并恢复外键约束
 		db.Exec("DROP TABLE IF EXISTS users_new")
+		db.Exec("PRAGMA foreign_keys = ON")
 		return err
 	}
 	log.Println("INFO: Copied data from users to users_new")
 
-	// Step 4: 删除旧表并重命名新表
+	// Step 5: 删除旧表并重命名新表
 	if err := db.Exec("DROP TABLE users").Error; err != nil {
-		// 回滚：删除新表
+		// 回滚：删除新表并恢复外键约束
 		db.Exec("DROP TABLE IF EXISTS users_new")
+		db.Exec("PRAGMA foreign_keys = ON")
 		return err
 	}
 	if err := db.Exec("ALTER TABLE users_new RENAME TO users").Error; err != nil {
+		db.Exec("PRAGMA foreign_keys = ON")
 		return err
 	}
 	log.Println("INFO: Replaced users table with new schema (role_id now nullable, no foreign key)")
 
-	// Step 5: 重建索引
+	// Step 6: 重建索引
 	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at)").Error; err != nil {
 		log.Printf("WARN: Failed to create index: %v", err)
 	}
@@ -108,6 +120,13 @@ func (m *DropLegacyRoleIDMigration) Up(db *gorm.DB) error {
 		log.Printf("WARN: Failed to create index: %v", err)
 	}
 	log.Println("INFO: Recreated indexes")
+
+	// Step 7: 重新启用外键约束
+	if err := db.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+		log.Printf("WARN: Failed to re-enable foreign keys: %v", err)
+	} else {
+		log.Println("INFO: Re-enabled foreign key constraints")
+	}
 
 	return nil
 }
