@@ -1,6 +1,6 @@
 // 本地转录进度模态框
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Modal, Progress, Button, Space, Alert } from 'antd'
 import {
   CheckCircleOutlined,
@@ -64,6 +64,10 @@ export default function TranscriptionProgressModal({
   // Polling interval: 10s for cloud per D-05, 5s for local
   const pollInterval = mode === 'cloud' ? 10000 : 5000
 
+  // rerender-dependencies: 使用 ref 存储 onCompleted 回调以避免依赖问题
+  const onCompletedRef = useRef(onCompleted)
+  onCompletedRef.current = onCompleted
+
   // 轮询获取转录状态 (per D-16, 5-second interval for local, 10s for cloud per D-05)
   useEffect(() => {
     if (!open) return
@@ -88,8 +92,8 @@ export default function TranscriptionProgressModal({
           }
 
           // 转录完成
-          if (data.status === 'completed' && data.result_ppt_file_id) {
-            onCompleted(data.result_ppt_file_id)
+          if (data.status === 'completed' && data.result_ppt_file_id && onCompletedRef.current) {
+            onCompletedRef.current(data.result_ppt_file_id)
           }
         }
       } catch (error) {
