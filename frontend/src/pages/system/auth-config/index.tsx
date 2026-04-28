@@ -76,8 +76,18 @@ const AuthConfigPage: React.FC = () => {
     try {
       const values = await form.validateFields();
 
+      // If switching from local to AD mode, require AD connection test to pass
+      if (values.mode === 'ad' && config?.mode === 'local' && !validationResult?.valid) {
+        Modal.warning({
+          title: '请先测试AD连接',
+          content: '切换到AD模式前，请先配置AD服务器信息并点击"测试连接"按钮验证配置是否正确。',
+        });
+        setLoading(false);
+        return;
+      }
+
       // Show warning if using port 389 (per D-12, D-14)
-      if (values.mode === 'ad' && !values.ad.use_tls && !validationResult?.valid) {
+      if (values.mode === 'ad' && !values.ad.use_tls) {
         Modal.confirm({
           title: '安全警告',
           icon: <WarningOutlined style={{ color: '#ff4d4f' }} />,
@@ -89,9 +99,26 @@ const AuthConfigPage: React.FC = () => {
             await saveConfig(values);
           },
         });
-      } else {
-        await saveConfig(values);
+        setLoading(false);
+        return;
       }
+
+      // Show confirmation when switching to AD mode
+      if (values.mode === 'ad' && config?.mode === 'local') {
+        Modal.confirm({
+          title: '确认切换认证模式',
+          content: '切换到AD模式后，所有用户将使用域控账号登录。请确认当前AD配置已验证通过。',
+          okText: '确认切换',
+          cancelText: '取消',
+          onOk: async () => {
+            await saveConfig(values);
+          },
+        });
+        setLoading(false);
+        return;
+      }
+
+      await saveConfig(values);
     } catch (error: any) {
       message.error('保存配置失败');
     } finally {
@@ -110,18 +137,27 @@ const AuthConfigPage: React.FC = () => {
   };
 
   const handleModeSwitch = (newMode: 'local' | 'ad') => {
-    if (newMode === 'ad' && !validationResult?.valid) {
-      Modal.warning({
-        title: '无法切换到AD模式',
-        content: '请先测试AD连接并确保配置验证通过。',
-      });
+    // Allow switching to AD mode to show the configuration form
+    // The actual mode switch only happens when user saves the config
+    if (newMode === 'ad') {
+      // If switching from local to AD, show a guidance modal
+      if (config?.mode === 'local') {
+        Modal.info({
+          title: '切换到AD域控认证',
+          content: '选择AD模式后，请配置AD服务器信息并测试连接。配置验证通过后，点击"保存配置"即可切换认证模式。',
+          okText: '我知道了',
+        });
+      }
+      // Directly switch the form value to show AD configuration fields
+      form.setFieldValue('mode', newMode);
       return false;
     }
 
-    if (newMode === 'ad') {
+    // When switching back to local mode, show confirmation
+    if (newMode === 'local' && config?.mode === 'ad') {
       Modal.confirm({
-        title: '确认切换认证模式',
-        content: '切换到AD模式后，所有用户将使用域控账号登录。请确认当前AD配置已验证通过。',
+        title: '确认切换回本地认证',
+        content: '切换回本地模式后，所有用户将使用本地账号登录。',
         onOk: () => {
           form.setFieldValue('mode', newMode);
         },
