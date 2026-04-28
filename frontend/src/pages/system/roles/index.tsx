@@ -28,6 +28,20 @@ import type { TransferProps } from 'antd/es/transfer'
 import * as roleApi from '../../../api/role'
 import type { RoleInfo, RoleListParams, CreateRoleRequest, UpdateRoleRequest, Permission } from '../../../types/role'
 
+// 解析 allowed_ips 字段（可能是 JSON 字符串或数组）
+const parseAllowedIPs = (ips: any): string[] => {
+  if (!ips) return []
+  if (Array.isArray(ips)) return ips
+  if (typeof ips === 'string') {
+    try {
+      return JSON.parse(ips)
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
 export default function RoleManagement() {
   const [roles, setRoles] = useState<RoleInfo[]>([])
   const [allPermissions, setAllPermissions] = useState<Permission[]>([])
@@ -99,7 +113,7 @@ export default function RoleManagement() {
       form.setFieldsValue({
         name: role.name,
         description: role.description,
-        allowed_ips: role.allowed_ips || [],
+        allowed_ips: parseAllowedIPs(role.allowed_ips),
       })
     } else {
       form.resetFields()

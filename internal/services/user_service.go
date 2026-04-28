@@ -42,20 +42,22 @@ type ListUsersResponse struct {
 
 // CreateRequest 创建用户请求
 type CreateUserRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
-	Password string `json:"password" binding:"required,min=8"`
-	Email    string `json:"email" binding:"omitempty,email"`
-	FullName string `json:"full_name" binding:"omitempty,max=100"`
-	RoleIDs  []uint `json:"role_ids"`
-	IsActive bool   `json:"is_active"`
+	Username    string   `json:"username" binding:"required,min=3,max=50"`
+	Password    string   `json:"password" binding:"required,min=8"`
+	Email       string   `json:"email" binding:"omitempty,email"`
+	FullName    string   `json:"full_name" binding:"omitempty,max=100"`
+	RoleIDs     []uint   `json:"role_ids"`
+	AllowedIPs  []string `json:"allowed_ips"`
+	IsActive    bool     `json:"is_active"`
 }
 
 // UpdateRequest 更新用户请求
 type UpdateUserRequest struct {
-	Email    string `json:"email" binding:"omitempty,email"`
-	FullName string `json:"full_name" binding:"omitempty,max=100"`
-	RoleIDs  []uint `json:"role_ids"`
-	IsActive *bool  `json:"is_active"`
+	Email       string   `json:"email" binding:"omitempty,email"`
+	FullName    string   `json:"full_name" binding:"omitempty,max=100"`
+	RoleIDs     []uint   `json:"role_ids"`
+	AllowedIPs  []string `json:"allowed_ips"`
+	IsActive    *bool    `json:"is_active"`
 }
 
 // AssignRolesRequest 分配角色请求
@@ -163,6 +165,16 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 		}
 	}
 
+	// 设置 IP 限制
+	if len(req.AllowedIPs) > 0 {
+		if err := user.SetAllowedIPs(req.AllowedIPs); err != nil {
+			return nil, err
+		}
+		if err := s.db.Save(user).Error; err != nil {
+			return nil, err
+		}
+	}
+
 	// 重新加载用户信息
 	s.db.Preload("Roles").First(user, user.ID)
 
@@ -199,6 +211,11 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID 
 
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
+	}
+
+	// 更新 IP 限制（总是更新，包括清空）
+	if err := user.SetAllowedIPs(req.AllowedIPs); err != nil {
+		return nil, err
 	}
 
 	if err := s.db.Save(&user).Error; err != nil {

@@ -15,16 +15,32 @@ func (m *AddIPRestrictionsMigration) Name() string {
 }
 
 func (m *AddIPRestrictionsMigration) Up(db *gorm.DB) error {
-	// Step 1: Add allowed_ips column to users table
-	err := db.Exec("ALTER TABLE users ADD COLUMN allowed_ips TEXT").Error
+	// Step 1: Add allowed_ips column to users table (if not exists)
+	exists, err := columnExists(db, "users", "allowed_ips")
 	if err != nil {
-		return fmt.Errorf("failed to add allowed_ips column to users: %w", err)
+		return fmt.Errorf("failed to check allowed_ips column in users: %w", err)
+	}
+	if !exists {
+		if err := db.Exec("ALTER TABLE users ADD COLUMN allowed_ips TEXT").Error; err != nil {
+			return fmt.Errorf("failed to add allowed_ips column to users: %w", err)
+		}
+		log.Println("INFO: Added allowed_ips column to users table")
+	} else {
+		log.Println("INFO: allowed_ips column already exists in users table, skipping")
 	}
 
-	// Step 2: Add allowed_ips column to roles table
-	err = db.Exec("ALTER TABLE roles ADD COLUMN allowed_ips TEXT").Error
+	// Step 2: Add allowed_ips column to roles table (if not exists)
+	exists, err = columnExists(db, "roles", "allowed_ips")
 	if err != nil {
-		return fmt.Errorf("failed to add allowed_ips column to roles: %w", err)
+		return fmt.Errorf("failed to check allowed_ips column in roles: %w", err)
+	}
+	if !exists {
+		if err := db.Exec("ALTER TABLE roles ADD COLUMN allowed_ips TEXT").Error; err != nil {
+			return fmt.Errorf("failed to add allowed_ips column to roles: %w", err)
+		}
+		log.Println("INFO: Added allowed_ips column to roles table")
+	} else {
+		log.Println("INFO: allowed_ips column already exists in roles table, skipping")
 	}
 
 	log.Println("INFO: IP restrictions migration completed")
