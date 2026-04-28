@@ -715,7 +715,7 @@ func (a *MinimalApp) registerRoutes() error {
 
 	// API路由组
 	api := a.router.Group("/api/v1")
-	api.Use(middleware.MultiAuth(a.db, a.tokenService)) // 支持SM4 Token和API Key认证
+	api.Use(middleware.MultiAuth(a.db, a.tokenService, a.logger)) // 支持SM4 Token和API Key认证
 
 	// 用户管理
 	users := api.Group("/users")
