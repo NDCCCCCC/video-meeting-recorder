@@ -65,6 +65,31 @@ type AuthConfig struct {
 	HLSTokenDuration        time.Duration `mapstructure:"hls_token_duration" json:"hls_token_duration" yaml:"hls_token_duration"`
 	MaxDecryptFailures      int           `mapstructure:"max_decrypt_failures" json:"max_decrypt_failures" yaml:"max_decrypt_failures"`        // 最大解密失败次数
 	DecryptFailureWindow    int           `mapstructure:"decrypt_failure_window" json:"decrypt_failure_window" yaml:"decrypt_failure_window"`      // 时间窗口（秒）
+
+	// Authentication mode (local, ad) - per D-01, D-02, D-03
+	Mode string `mapstructure:"mode" json:"mode" yaml:"mode"`
+
+	// AD configuration
+	AD ADAuthConfig `mapstructure:"ad" json:"ad" yaml:"ad"`
+}
+
+// ADAuthConfig AD域控配置
+type ADAuthConfig struct {
+	Server   string `mapstructure:"server" json:"server" yaml:"server"`
+	BindDN   string `mapstructure:"bind_dn" json:"bind_dn" yaml:"bind_dn"`
+	Password string `mapstructure:"password" json:"-" yaml:"password"`
+	BaseDN   string `mapstructure:"base_dn" json:"base_dn" yaml:"base_dn"`
+	UseTLS   bool   `mapstructure:"use_tls" json:"use_tls" yaml:"use_tls"`
+
+	// Connection pool settings
+	PoolSize int `mapstructure:"pool_size" json:"pool_size" yaml:"pool_size"`
+
+	// Timeout settings
+	DialTimeout    int `mapstructure:"dial_timeout" json:"dial_timeout" yaml:"dial_timeout"`
+	RequestTimeout int `mapstructure:"request_timeout" json:"request_timeout" yaml:"request_timeout"`
+
+	// Test mode (for development only)
+	InsecureSkipVerify bool `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 }
 
 // LoggingConfig 日志配置
@@ -354,6 +379,21 @@ func setDefaults(cfg *Config) {
 	if cfg.Auth.DecryptFailureWindow == 0 {
 		cfg.Auth.DecryptFailureWindow = 300 // 5分钟时间窗口
 	}
+	// Default to local mode (safest option per D-02)
+	if cfg.Auth.Mode == "" {
+		cfg.Auth.Mode = "local"
+	}
+	// Set AD configuration defaults
+	if cfg.Auth.AD.PoolSize == 0 {
+		cfg.Auth.AD.PoolSize = 10
+	}
+	if cfg.Auth.AD.DialTimeout == 0 {
+		cfg.Auth.AD.DialTimeout = 10 // seconds
+	}
+	if cfg.Auth.AD.RequestTimeout == 0 {
+		cfg.Auth.AD.RequestTimeout = 30 // seconds
+	}
+	// Never default InsecureSkipVerify to true (security)
 
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"
