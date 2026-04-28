@@ -46,3 +46,19 @@ type ADConfigValidationResult struct {
 	ServerInfo    string   `json:"server_info"`
 	ResponseTime  int64    `json:"response_time"` // milliseconds
 }
+
+// Authenticator defines the authentication interface (strategy pattern per Spike 003)
+type Authenticator interface {
+	// Login authenticates a user and returns a login response
+	Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error)
+
+	// Logout logs out a user by revoking their token
+	Logout(token string) error
+
+	// ValidateToken validates a token and returns the associated user
+	ValidateToken(token string) (*UserDTO, error)
+
+	// Name returns the authenticator name
+	Name() string
+}
+

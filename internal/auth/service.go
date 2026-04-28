@@ -3,12 +3,10 @@ package auth
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -22,6 +20,10 @@ type Service struct {
 	logger            *zap.Logger
 	rateLimiter       *RateLimiter
 	auditLogger       *audit.AuditLogService
+
+	// NEW: Strategy pattern - authenticators (per Spike 003)
+	localAuth Authenticator
+	adAuth   Authenticator
 }
 
 // LoginRequest 登录请求
@@ -78,6 +80,10 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 	passwordValidator := NewPasswordValidator(8, true, true, true, false)
 	rateLimiter := NewRateLimiterFromConfig(cfg)
 
+	// Create authenticators (strategy pattern per Spike 003)
+	localAuth := NewLocalAuthenticator(db, tokenService, &cfg.Auth, logger, rateLimiter)
+	adAuth := NewADAuthenticator(&cfg.Auth.AD, db, tokenService, logger)
+
 	return &Service{
 		db:                db,
 		tokenService:      tokenService,
@@ -85,108 +91,38 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 		cfg:               cfg,
 		logger:            logger,
 		rateLimiter:       rateLimiter,
+		localAuth:         localAuth,
+		adAuth:           adAuth,
 	}
 }
 
 // SetAuditService 设置审计服务
 func (s *Service) SetAuditService(auditService *audit.AuditLogService) {
 	s.auditLogger = auditService
+	// Update local authenticator with audit service
+	if localAuth, ok := s.localAuth.(*LocalAuthenticator); ok {
+		localAuth.SetAuditService(auditService)
+	}
 }
 
 // Login 用户登录
 func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
-	// 1. 查找用户（预加载角色和权限）
-	var user models.User
-	err := s.db.Preload("Roles.Permissions").Where("username = ?", req.Username).First(&user).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("用户名或密码错误")
-		}
-		return nil, err
+	// Select authenticator based on config mode (per D-01, D-03)
+	// Uses strategy pattern from Spike 003
+	var authenticator Authenticator
+
+	switch s.cfg.Auth.Mode {
+	case "local":
+		authenticator = s.localAuth
+	case "ad":
+		authenticator = s.adAuth
+	default:
+		s.logger.Error("Invalid authentication mode", zap.String("mode", s.cfg.Auth.Mode))
+		return nil, errors.New("无效的认证模式")
 	}
 
-	// 2. 检查解密失败速率限制
-	if s.rateLimiter.ShouldBlock(req.Username) {
-		s.logger.Warn("Decrypt failure rate limit exceeded",
-			zap.String("ip", ipAddress),
-		)
-		return nil, errors.New("登录尝试过于频繁，请稍后再试")
-	}
-
-	// 3. 验证 SM4 密钥配置（如果使用加密密码）
-	if utils.IsEncryptedPassword(req.Password) {
-		if s.cfg.Auth.SM4Secret != "" {
-			if err := utils.ValidateSM4Secret(s.cfg.Auth.SM4Secret); err != nil {
-				s.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
-				return nil, errors.New("系统配置错误")
-			}
-		}
-	}
-
-	// 4. 尝试解密密码（如果已加密）
-	passwordToCheck := req.Password
-	if utils.IsEncryptedPassword(req.Password) {
-		decrypted, err := utils.DecryptPasswordECB(req.Password, s.cfg.Auth.SM4Secret)
-		if err != nil {
-			// 记录解密失败
-			s.rateLimiter.RecordFailure(req.Username)
-
-			// 移除用户名，仅记录解密失败事件
-			s.logger.Warn("Failed to decrypt password",
-				// zap.String("username", req.Username),  // 移除敏感信息
-			)
-			return nil, errors.New("用户名或密码错误")
-		}
-		passwordToCheck = decrypted
-		// 移除用户名，仅记录解密成功事件
-		s.logger.Debug("Password decrypted for login",
-			// zap.String("username", req.Username),  // 移除敏感信息
-		)
-	}
-
-	// 5. 检查密码（使用解密后的密码）
-	if !user.CheckPassword(passwordToCheck) {
-		// 记录密码验证失败
-		s.rateLimiter.RecordFailure(req.Username)
-		return nil, errors.New("用户名或密码错误")
-	}
-
-	// 登录成功，清除失败记录
-	s.rateLimiter.Clear(req.Username)
-
-	// 4. 检查用户状态
-	if !user.IsActive {
-		return nil, errors.New("用户已被禁用")
-	}
-
-	// 5. 检查IP限制 (D-16, D-17)
-	if err := s.CheckIPRestriction(&user, ipAddress); err != nil {
-		return nil, err
-	}
-
-	// 6. 生成Token
-	tokenPair, err := s.tokenService.GenerateTokenPair(&user)
-	if err != nil {
-		return nil, err
-	}
-
-	// 7. 更新最后登录时间
-	now := time.Now()
-	user.LastLoginAt = &now
-	s.db.Save(&user)
-
-	// 8. 创建session记录（可选，用于token撤销）
-	if err := s.tokenService.CreateSession(user.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt); err != nil {
-		s.logger.Warn("Failed to create session", zap.Error(err))
-	}
-
-	// 9. 返回响应
-	return &LoginResponse{
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		ExpiresIn:    int64(s.tokenService.expireHours * 3600),
-		User:         s.toUserDTO(&user),
-	}, nil
+	// Route to selected authenticator (no fallback per D-04)
+	return authenticator.Login(req, ipAddress, userAgent)
 }
 
 // CheckIPRestriction 检查用户IP限制
@@ -211,6 +147,15 @@ func (s *Service) CheckIPRestriction(user *models.User, clientIP string) error {
 	// If no restrictions, allow all IPs
 	if len(allowedIPs) == 0 {
 		return nil
+	}
+
+	// Debug logging for IP restriction check
+	if s.logger != nil {
+		s.logger.Info("IP restriction check",
+			zap.String("client_ip", clientIP),
+			zap.Uint("user_id", user.ID),
+			zap.Strings("allowed_ips", allowedIPs),
+		)
 	}
 
 	// Check if client IP is allowed
@@ -273,11 +218,8 @@ func (s *Service) RefreshToken(refreshToken string) (*RefreshTokenResponse, erro
 
 // Logout 用户登出
 func (s *Service) Logout(token string) error {
-	// 撤销token
-	if err := s.tokenService.RevokeSession(token); err != nil {
-		s.logger.Warn("Failed to revoke session", zap.Error(err))
-	}
-	return nil
+	// Use local authenticator for logout (both modes use same token service)
+	return s.localAuth.Logout(token)
 }
 
 // LogoutAll 登出所有设备
