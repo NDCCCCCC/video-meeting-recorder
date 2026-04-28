@@ -20,11 +20,13 @@ import {
   EditOutlined,
   DeleteOutlined,
   LockOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  UserOutlined
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import * as userApi from '../../../api/user'
 import type { UserInfo, UserListParams, CreateUserRequest, UpdateUserRequest } from '../../../types/user'
+import { lookupADUser } from '../../../api/auth'
 
 // 解析 allowed_ips 字段（可能是 JSON 字符串或数组）
 const parseAllowedIPs = (ips: any): string[] => {
@@ -48,6 +50,7 @@ export default function UserManagement() {
   const [passwordModalVisible, setPasswordModalVisible] = useState(false)
   const [editingUser, setEditingUser] = useState<UserInfo | null>(null)
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+  const [adLookupLoading, setAdLookupLoading] = useState(false)
   const [form] = Form.useForm()
   const [passwordForm] = Form.useForm()
 
@@ -129,6 +132,36 @@ export default function UserManagement() {
     setModalVisible(false)
     setEditingUser(null)
     form.resetFields()
+  }
+
+  // AD用户查找
+  const handleADLookup = async () => {
+    const username = form.getFieldValue('username')
+    if (!username || username.trim() === '') {
+      message.warning('请先输入用户名')
+      return
+    }
+    setAdLookupLoading(true)
+    try {
+      const response = await lookupADUser(username.trim())
+      if (response.data?.found) {
+        const adUser = response.data
+        // Auto-fill fields only if they are currently empty
+        if (!form.getFieldValue('full_name') && adUser.full_name) {
+          form.setFieldsValue({ full_name: adUser.full_name })
+        }
+        if (!form.getFieldValue('email') && adUser.email) {
+          form.setFieldsValue({ email: adUser.email })
+        }
+        message.success(`已找到AD用户: ${adUser.full_name || adUser.username}${adUser.department ? ' (' + adUser.department + ')' : ''}`)
+      } else {
+        message.info(response.data?.message || '未在域控中找到该用户')
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '域控查询失败')
+    } finally {
+      setAdLookupLoading(false)
+    }
   }
 
   // 提交表单
@@ -410,7 +443,21 @@ export default function UserManagement() {
               { min: 3, max: 50, message: '用户名长度为3-50个字符' },
             ]}
           >
-            <Input placeholder="请输入用户名" disabled={!!editingUser} />
+            <Space.Compact style={{ width: '100%' }}>
+              <Input
+                placeholder="请输入用户名"
+                disabled={!!editingUser}
+                style={{ width: '100%' }}
+              />
+              <Button
+                icon={<UserOutlined />}
+                loading={adLookupLoading}
+                onClick={handleADLookup}
+                title="从域控查找用户信息"
+              >
+                AD查找
+              </Button>
+            </Space.Compact>
           </Form.Item>
 
           {!editingUser && (

@@ -95,3 +95,20 @@ export interface UpdateAuthConfigRequest {
   mode: 'local' | 'ad'
   ad: ADAuthConfig
 }
+
+// AD User Lookup
+export interface ADUserLookupRequest {
+  username: string
+}
+
+export interface ADUserLookupResult {
+  found: boolean
+  username: string
+  email?: string
+  full_name?: string
+  department?: string
+  upn?: string
+  dn?: string
+  disabled?: boolean
+  message?: string
+}

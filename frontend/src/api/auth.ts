@@ -6,7 +6,8 @@ import {
   LoginResponse,
   ChangePasswordRequest,
   ValidationResult,
-  User
+  User,
+  ADUserLookupResult
 } from '../types/auth'
 import { apiRequest, clearToken as apiClearToken, saveToken } from './apiClient'
 import { encryptPassword, getEncryptionKey } from '../utils/sm4'
@@ -146,5 +147,17 @@ export async function testADConnection(
   return apiRequest<ADValidationResult>('/api/v1/auth/ad/test-connection', {
     method: 'POST',
     body: JSON.stringify(config),
+  })
+}
+
+/**
+ * Lookup AD user by username
+ */
+export async function lookupADUser(
+  username: string
+): Promise<ApiResponse<ADUserLookupResult>> {
+  return apiRequest<ADUserLookupResult>('/api/v1/admin/auth/lookup-ad-user', {
+    method: 'POST',
+    body: JSON.stringify({ username }),
   })
 }
