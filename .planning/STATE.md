@@ -17,7 +17,7 @@ progress:
 **Project:** Record V2
 **Milestone:** v1.1 - 文件管理与编辑增强
 **Last Updated:** 2026-04-28
-**Last Activity:** 2026-04-28 - Completed quick task 260428-m9t: 登录后右上角去掉个人信息按钮，为系统设置添加路由，创建认证管理菜单
+**Last Activity:** 2026-04-28 - Completed quick task 260428-mlh: 前端域控账号登录使用SM4加密密码
 
 ---
 
@@ -78,6 +78,7 @@ Run `/gsd-execute-phase 12-windows-ad` to start implementation
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260428-mlh | 前端域控账号登录使用SM4加密密码，后端解密后传给域控服务器 | 2026-04-28 | 1500094 | [260428-mlh-sm4](./quick/260428-mlh-sm4/) |
 | 260428-m9t | 登录后右上角去掉个人信息按钮，为系统设置添加路由，创建认证管理菜单 | 2026-04-28 | 0d872a8 | [260428-m9t-sidebar](./quick/260428-m9t-sidebar/) |
 | 260423-f7v | 文件管理页面添加视频上传功能 | 2026-04-23 | d4f78f7 | [260423-f7v-add-video-upload-feature](./quick/260423-f7v-add-video-upload-feature/) |
 
