@@ -17,13 +17,15 @@ type AdminHandler struct {
 	cfg           *config.Config
 	logger        *zap.Logger
 	configService *services.ConfigService
+	authService   *auth.Service
 }
 
-func NewAdminHandler(cfg *config.Config, logger *zap.Logger, configService *services.ConfigService) *AdminHandler {
+func NewAdminHandler(cfg *config.Config, logger *zap.Logger, configService *services.ConfigService, authService *auth.Service) *AdminHandler {
 	return &AdminHandler{
 		cfg:           cfg,
 		logger:        logger,
 		configService: configService,
+		authService:   authService,
 	}
 }
 
@@ -147,4 +149,48 @@ func (h *AdminHandler) GetCurrentUser(c *gin.Context) {
 		"user_id":  userID,
 		"username": username,
 	})
+}
+
+// LookupADUser 查询AD用户信息
+// @Summary 查询AD用户信息
+// @Description 根据用户名从Active Directory查询用户信息
+// @Tags 系统管理
+// @Security Bearer
+// @Accept json
+// @Produce json
+// @Param request body object{username=string} true "用户名"
+// @Success 200 {object} response.Response{data=auth.ADUserLookupResult}
+// @Router /api/v1/admin/auth/lookup-ad-user [post]
+func (h *AdminHandler) LookupADUser(c *gin.Context) {
+	var req struct {
+		Username string `json:"username" binding:"required,min=1,max=100"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	// Check if current auth mode is AD
+	if h.cfg.Auth.Mode != "ad" {
+		response.GinError(c, response.CodeInvalidRequest, "当前认证模式不是AD域控模式")
+		return
+	}
+
+	// Get AD authenticator from auth service
+	adAuth := h.authService.GetADAuthenticator()
+	if adAuth == nil {
+		response.GinError(c, response.CodeInternalError, "AD认证器未初始化")
+		return
+	}
+
+	// Perform AD lookup
+	result, err := adAuth.LookupUser(req.Username)
+	if err != nil {
+		h.logger.Error("AD user lookup failed", zap.String("username", req.Username), zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "域控查询失败: "+err.Error())
+		return
+	}
+
+	response.GinSuccess(c, result)
 }

@@ -107,6 +107,14 @@ func (s *Service) SetAuditService(auditService *audit.AuditLogService) {
 	}
 }
 
+// GetADAuthenticator returns the AD authenticator (nil if not available)
+func (s *Service) GetADAuthenticator() *ADAuthenticator {
+	if adAuth, ok := s.adAuth.(*ADAuthenticator); ok {
+		return adAuth
+	}
+	return nil
+}
+
 // Login 用户登录
 func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	// Select authenticator based on config mode (per D-01, D-03)

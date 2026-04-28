@@ -658,7 +658,7 @@ func (a *MinimalApp) initHandlers() error {
 		Auth:          handlers.NewAuthHandler(authService, a.logger),
 		User:          handlers.NewUserHandler(userService, a.logger),
 		Role:          handlers.NewRoleHandler(roleService, a.logger),
-		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService),
+		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
 		HuaweiConfig:  handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, a.logger),
@@ -711,6 +711,7 @@ func (a *MinimalApp) registerRoutes() error {
 		adminGroup.GET("/config", a.handlers.Admin.GetAuthConfig)
 		adminGroup.PUT("/config", a.handlers.Admin.UpdateAuthConfig)
 		adminGroup.GET("/me", a.handlers.Admin.GetCurrentUser)
+		adminGroup.POST("/lookup-ad-user", a.handlers.Admin.LookupADUser)
 	}
 
 	// API路由组

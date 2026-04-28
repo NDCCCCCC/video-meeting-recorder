@@ -51,6 +51,19 @@ type ADConfigValidationResult struct {
 	ResponseTime  int64    `json:"response_time"` // milliseconds
 }
 
+// ADUserLookupResult holds the result of an AD user lookup
+type ADUserLookupResult struct {
+	Found      bool   `json:"found"`
+	Username   string `json:"username"`
+	Email      string `json:"email,omitempty"`
+	FullName   string `json:"full_name,omitempty"`
+	Department string `json:"department,omitempty"`
+	UPN        string `json:"upn,omitempty"`
+	DN         string `json:"dn,omitempty"`
+	Disabled   bool   `json:"disabled,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
 // Authenticator defines the authentication interface (strategy pattern per Spike 003)
 type Authenticator interface {
 	// Login authenticates a user and returns a login response
