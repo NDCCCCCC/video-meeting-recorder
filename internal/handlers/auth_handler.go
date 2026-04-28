@@ -211,3 +211,38 @@ func (h *AuthHandler) ValidatePassword(c *gin.Context) {
 	result := h.authService.ValidatePassword(req.Password)
 	response.GinSuccess(c, result)
 }
+
+// TestADConnection 测试AD连接
+// @Summary 测试AD域控连接
+// @Description 验证AD配置是否正确（四层验证，per Spike 005）
+// @Tags 认证
+// @Security Bearer
+// @Accept json
+// @Produce json
+// @Param request body auth.ADAuthConfig true "AD配置"
+// @Success 200 {object} response.Response{data=auth.ADConfigValidationResult}
+// @Router /api/v1/auth/ad/test-connection [post]
+func (h *AuthHandler) TestADConnection(c *gin.Context) {
+	var req auth.ADAuthConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	validator := auth.NewADConfigValidator(h.logger)
+	result := validator.Validate(&req)
+
+	if result.Valid {
+		response.GinSuccess(c, result)
+	} else {
+		// Return errors but with 200 status (validation failure, not request error)
+		// User-friendly messages shown (per D-18, D-20)
+		c.JSON(200, gin.H{
+			"valid":         false,
+			"level":         result.Level,
+			"errors":        result.Errors,
+			"warnings":      result.Warnings,
+			"response_time": result.ResponseTime,
+		})
+	}
+}
