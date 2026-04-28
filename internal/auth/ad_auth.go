@@ -19,15 +19,17 @@ type ADAuthenticator struct {
 	adConfig    *config.ADAuthConfig
 	db          *gorm.DB
 	tokenService *SM4TokenService
+	sm4Secret   string
 	logger      *zap.Logger
 }
 
 // NewADAuthenticator creates a new AD authenticator
-func NewADAuthenticator(cfg *config.ADAuthConfig, db *gorm.DB, tokenService *SM4TokenService, logger *zap.Logger) *ADAuthenticator {
+func NewADAuthenticator(cfg *config.ADAuthConfig, db *gorm.DB, tokenService *SM4TokenService, logger *zap.Logger, sm4Secret string) *ADAuthenticator {
 	return &ADAuthenticator{
 		adConfig:     cfg,
 		db:           db,
 		tokenService: tokenService,
+		sm4Secret:    sm4Secret,
 		logger:       logger,
 	}
 }
@@ -83,8 +85,30 @@ func (a *ADAuthenticator) Login(req *LoginRequest, ipAddress, userAgent string) 
 		return nil, errors.New("域控账号已禁用")
 	}
 
+	// Step 4.5: Decrypt SM4 password if needed (follow same pattern as local_auth.go)
+	passwordForBind := req.Password
+	if utils.IsEncryptedPassword(req.Password) {
+		if a.sm4Secret != "" {
+			if err := utils.ValidateSM4Secret(a.sm4Secret); err != nil {
+				a.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
+				return nil, errors.New("系统配置错误")
+			}
+			decrypted, err := utils.DecryptPasswordECB(req.Password, a.sm4Secret)
+			if err != nil {
+				a.logger.Warn("Failed to decrypt password", zap.String("username", req.Username))
+				return nil, errors.New("域控密码错误")
+			}
+			passwordForBind = decrypted
+			a.logger.Debug("Password decrypted for AD login", zap.String("username", req.Username))
+		} else {
+			// SM4 password received but no secret configured - treat as error
+			a.logger.Warn("SM4 encrypted password received but SM4_SECRET not configured")
+			return nil, errors.New("域控密码错误")
+		}
+	}
+
 	// Step 5: Bind as user to authenticate (verify password)
-	err = conn.Bind(userDN, req.Password)
+	err = conn.Bind(userDN, passwordForBind)
 	if err != nil {
 		a.logger.Warn("AD user bind failed", zap.String("username", req.Username))
 		return nil, errors.New("域控密码错误") // per D-20
