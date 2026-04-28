@@ -20,6 +20,14 @@ type User struct {
 	IsActive     bool       `gorm:"default:true" json:"is_active"`
 	LastLoginAt  *time.Time `json:"last_login_at"`
 	APIKeys      []APIKey   `gorm:"foreignKey:UserID" json:"api_keys,omitempty"`
+
+	// AD fields (nullable for local users, per D-21, D-22, D-23)
+	ADUsername   string     `gorm:"type:varchar(100)" json:"ad_username"`
+	ADDN         string     `gorm:"type:varchar(255)" json:"ad_dn"`
+	ADGUID       string     `gorm:"type:char(36);index" json:"ad_guid"`
+	ADDepartment string     `gorm:"type:varchar(100)" json:"ad_department"`
+	ADUPN        string     `gorm:"type:varchar(200)" json:"ad_upn"`
+	LastADLogin  *time.Time `json:"last_ad_login"`
 }
 
 // SetPassword 设置密码
