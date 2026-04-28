@@ -60,3 +60,38 @@ export interface AuthState {
   refreshToken: string | null
   isAuthenticated: boolean
 }
+
+// AD authentication configuration
+export interface ADAuthConfig {
+  server: string
+  bind_dn: string
+  password: string
+  base_dn: string
+  use_tls: boolean
+  pool_size?: number
+  dial_timeout?: number
+  request_timeout?: number
+  insecure_skip_verify?: boolean
+}
+
+// Authentication configuration response
+export interface AuthConfigResponse {
+  mode: 'local' | 'ad'
+  ad: Omit<ADAuthConfig, 'password'> // Password excluded from response
+}
+
+// AD configuration validation result
+export interface ADValidationResult {
+  valid: boolean
+  level: number
+  errors?: string[]
+  warnings?: string[]
+  response_time?: number
+  server_info?: string
+}
+
+// Update auth config request
+export interface UpdateAuthConfigRequest {
+  mode: 'local' | 'ad'
+  ad: ADAuthConfig
+}

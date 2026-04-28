@@ -108,3 +108,43 @@ export async function validatePassword(password: string): Promise<ApiResponse<Va
 
 // 导出 clearToken
 export { apiClearToken as clearToken }
+
+// ============= AD 认证配置 API =============
+
+import type {
+  AuthConfigResponse,
+  UpdateAuthConfigRequest,
+  ADValidationResult,
+  ADAuthConfig
+} from '../types/auth'
+
+/**
+ * Get current authentication configuration
+ */
+export async function getAuthConfig(): Promise<ApiResponse<AuthConfigResponse>> {
+  return apiRequest<AuthConfigResponse>('/api/v1/admin/auth/config')
+}
+
+/**
+ * Update authentication configuration
+ */
+export async function updateAuthConfig(
+  data: UpdateAuthConfigRequest
+): Promise<ApiResponse<{ message: string }>> {
+  return apiRequest<{ message: string }>('/api/v1/admin/auth/config', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Test AD connection
+ */
+export async function testADConnection(
+  config: ADAuthConfig
+): Promise<ApiResponse<ADValidationResult>> {
+  return apiRequest<ADValidationResult>('/api/v1/auth/ad/test-connection', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+}
