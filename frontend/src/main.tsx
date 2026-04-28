@@ -1,15 +1,17 @@
-import { StrictMode } from 'react'
+import { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
-import zhCN from 'antd/locale/zh_CN'
 import { designTokens } from './styles/theme'
 import App from './App'
 import './styles/global.css'
+import './styles/performance.css'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
+// bundle-defer-third-party: 延迟加载 antd locale 以减少初始包大小
+const AntdConfigProvider = lazy(async () => {
+  const { default: zhCN } = await import('antd/locale/zh_CN')
+  return {
+    default: ({ children }: { children: React.ReactNode }) => (
       <ConfigProvider
         locale={zhCN}
         theme={{
@@ -31,8 +33,20 @@ createRoot(document.getElementById('root')!).render(
           },
         }}
       >
-        <App />
+        {children}
       </ConfigProvider>
+    ),
+  }
+})
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>加载中...</div>}>
+        <AntdConfigProvider>
+          <App />
+        </AntdConfigProvider>
+      </Suspense>
     </BrowserRouter>
   </StrictMode>,
 )
