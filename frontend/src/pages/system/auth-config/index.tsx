@@ -177,7 +177,7 @@ const AuthConfigPage: React.FC = () => {
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ mode: 'local', ad: { use_tls: true } }}
+        initialValues={{ mode: 'local', ad: { use_tls: true, allow_auto_create: true } }}
       >
         <Form.Item
           label="认证模式"
@@ -306,6 +306,34 @@ const AuthConfigPage: React.FC = () => {
                     style={{ marginBottom: '16px' }}
                   />
                 )}
+
+                <Form.Item
+                  label={
+                    <Space>
+                      自动创建域控账号
+                      <Tooltip title="启用后，首次登录的域控账号会自动在系统中创建。禁用后，只有预先添加的域控账号才能登录。">
+                        <WarningOutlined style={{ color: '#1890ff' }} />
+                      </Tooltip>
+                    </Space>
+                  }
+                  name={['ad', 'allow_auto_create']}
+                  valuePropName="checked"
+                  tooltip="关闭后只允许已存在的域控账号登录（白名单模式）"
+                >
+                  <Switch />
+                </Form.Item>
+
+                <Form.Item>
+                  <Alert
+                    message={
+                      getFieldValue(['ad', 'allow_auto_create'])
+                        ? '自动创建模式：首次登录的域控账号将自动在系统中创建'
+                        : '白名单模式：只有预先在系统中添加的域控账号才能登录'
+                    }
+                    type={getFieldValue(['ad', 'allow_auto_create']) ? 'info' : 'warning'}
+                    style={{ marginBottom: '16px' }}
+                  />
+                </Form.Item>
 
                 <Form.Item>
                   <Space>

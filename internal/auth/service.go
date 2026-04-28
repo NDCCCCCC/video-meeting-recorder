@@ -83,6 +83,8 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 	// Create authenticators (strategy pattern per Spike 003)
 	localAuth := NewLocalAuthenticator(db, tokenService, &cfg.Auth, logger, rateLimiter)
 	adAuth := NewADAuthenticator(&cfg.Auth.AD, db, tokenService, logger, cfg.Auth.SM4Secret)
+	// Set live config reference for AD authenticator to get dynamic settings
+	adAuth.SetLiveConfig(&cfg.Auth)
 
 	return &Service{
 		db:                db,

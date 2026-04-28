@@ -35,6 +35,10 @@ type ADAuthConfig struct {
 
 	// Test mode (for development only)
 	InsecureSkipVerify bool `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify"` // Default: false
+
+	// AllowAutoCreate controls whether AD users are automatically created on first login
+	// If false, only pre-existing AD users in the system can log in (whitelist mode)
+	AllowAutoCreate bool `mapstructure:"allow_auto_create" json:"allow_auto_create"` // Default: true
 }
 
 // ADConfigValidationResult holds the result of AD configuration validation
