@@ -13,9 +13,10 @@ import (
 
 const (
 	// Setting keys for auth config persistence
-	keyAuthMode     = "auth.mode"
-	keyAuthAD       = "auth.ad"
-	keyAuthADPassword = "auth.ad.password"
+	keyAuthMode        = "auth.mode"
+	keyAuthAD          = "auth.ad"
+	keyAuthADPassword  = "auth.ad.password"
+	keyAuthADAllowAutoCreate = "auth.ad.allow_auto_create"
 )
 
 // ConfigService handles loading/saving system configuration from/to database
@@ -59,6 +60,7 @@ func (s *ConfigService) LoadAuthConfig() error {
 		s.cfg.Auth.AD.DialTimeout = adConfig.DialTimeout
 		s.cfg.Auth.AD.RequestTimeout = adConfig.RequestTimeout
 		s.cfg.Auth.AD.InsecureSkipVerify = adConfig.InsecureSkipVerify
+		s.cfg.Auth.AD.AllowAutoCreate = adConfig.AllowAutoCreate
 		s.logger.Info("Loaded AD config from database")
 	}
 

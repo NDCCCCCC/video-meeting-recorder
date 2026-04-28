@@ -218,10 +218,14 @@ func (a *MinimalApp) initDatabase() error {
 func (a *MinimalApp) migrateDatabase() error {
 	a.logger.Info("正在执行数据库迁移...")
 
-	// 先执行 AutoMigrate 创建基础表结构
-	// User 模型包含 RoleID 字段（使用 gorm:"-" 忽略），保留数据库中的 legacy role_id 列
+	// 临时禁用外键约束，避免重建表时的约束冲突
+	a.db.Exec("PRAGMA foreign_keys = OFF")
+	defer a.db.Exec("PRAGMA foreign_keys = ON")
+
+	// 使用 GORM AutoMigrate 自动管理所有表结构
+	// User 模型的 RoleID 字段已删除，与数据库 schema 一致
 	err := a.db.AutoMigrate(
-		&models.User{}, // 重新加入 - RoleID 字段被 gorm:"-" 忽略
+		&models.User{},
 		&models.Role{},
 		&models.Permission{},
 		&models.APIKey{},
@@ -239,16 +243,11 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.UserNotificationSetting{},
 		&models.TranscriptionTask{},
 		&models.TranscriptionText{},
-		// 注意：TaskHuaweiConfig 表由自定义迁移管理，不在这里处理
+		&models.SystemSetting{},
 	)
 
 	if err != nil {
-		return fmt.Errorf("migration failed: %w", err)
-	}
-
-	// 执行自定义迁移（在 AutoMigrate 之后，添加额外字段和索引）
-	if err := a.runCustomMigrations(); err != nil {
-		return err
+		return fmt.Errorf("AutoMigrate failed: %w", err)
 	}
 
 	a.logger.Info("数据库迁移完成")
@@ -647,12 +646,19 @@ func (a *MinimalApp) initHandlers() error {
 	// 仪表板服务
 	dashboardService := services.NewDashboardService(a.db, a.logger)
 
+	// 配置服务 - 用于持久化系统配置到数据库
+	configService := services.NewConfigService(a.db, a.logger, a.config)
+	// 从数据库加载持久化的认证配置（覆盖 YAML 默认值）
+	if err := configService.LoadAuthConfig(); err != nil {
+		a.logger.Warn("Failed to load persisted auth config, using YAML defaults", zap.Error(err))
+	}
+
 	// 创建handlers
 	a.handlers = &Handlers{
 		Auth:          handlers.NewAuthHandler(authService, a.logger),
 		User:          handlers.NewUserHandler(userService, a.logger),
 		Role:          handlers.NewRoleHandler(roleService, a.logger),
-		Admin:         handlers.NewAdminHandler(a.config, a.logger),
+		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
 		HuaweiConfig:  handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, a.logger),
