@@ -177,6 +177,8 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 	if err == nil {
 		// Found existing user, update AD information
 		a.updateADInfo(&user, adUser)
+		// Reload with Roles.Permissions for toUserDTO
+		a.db.Preload("Roles.Permissions").First(&user, user.ID)
 		return &user, nil
 	}
 
@@ -210,13 +212,23 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 		a.logger.Error("Default viewer role not found", zap.Error(err))
 		return nil, fmt.Errorf("系统配置错误：默认角色不存在")
 	}
-	user.Roles = []models.Role{defaultRole}
 
+	// Create user first
 	if err := a.db.Create(&user).Error; err != nil {
 		return nil, err
 	}
 
+	// Then associate the role via users_roles junction table (many2many)
+	if err := a.db.Model(&user).Association("Roles").Append(&defaultRole); err != nil {
+		a.logger.Error("Failed to assign default role to AD user", zap.Error(err))
+		// Cleanup: delete the user if role assignment fails
+		a.db.Delete(&user)
+		return nil, fmt.Errorf("分配默认角色失败: %w", err)
+	}
+
 	a.logger.Info("Created local user for AD user", zap.String("username", adUser.Username))
+	// Reload with Roles.Permissions for toUserDTO
+	a.db.Preload("Roles.Permissions").First(&user, user.ID)
 	return &user, nil
 }
 
