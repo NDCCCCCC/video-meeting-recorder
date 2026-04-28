@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 11 at manual testing checkpoint
-last_updated: "2026-04-28T01:20:03.624Z"
+status: executing
+last_updated: "2026-04-28T04:46:48.618Z"
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 2
-  total_plans: 11
+  total_plans: 17
   completed_plans: 11
-  percent: 100
+  percent: 65
 ---
 
 # STATE.md - Project Memory
 
 **Project:** Record V2
-**Milestone:** v1.0 - 视频切割与会议转录PPT
-**Last Updated:** 2026-04-17
+**Milestone:** v1.1 - 文件管理与编辑增强
+**Last Updated:** 2026-04-28
 
 ---
 
@@ -38,27 +38,38 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 
 ## Current Position
 
-Phase: 11 - IP地址登录限制 (PAUSED - awaiting manual testing)
-Plan: 11-05 (Checkpoint - 4/6 tasks complete)
+Phase: --phase (12) — EXECUTING
+Plan: 1 of --name
+**Phase:** 12 - Windows AD域控认证
+**Status:** Executing Phase --phase
+**Progress:** [░░░░░░░░░░] 0%
+
+### Phase Summary
+
+集成Windows Active Directory域控认证，支持LDAP(389)和LDAPS(636)双端口，实现local/ad两种认证模式切换。
+
+### To Execute
+
+Run `/gsd-execute-phase 12-windows-ad` to start implementation
+
+### Dependencies
+
+- Requires: Phase 11 (IP登录限制) - *PAUSED at manual testing*
+- Spike验证: 5个spike全部通过 (go-ldap-ad-auth, ldaps-security, auth-switch-architecture, ad-user-mapping, ad-config-validation)
+
+---
+
+## Phase 11 Status (Previous)
+
 **Phase:** 11 - IP地址登录限制
-**Status:** Phase 11 at manual testing checkpoint
+**Status:** PAUSED at manual testing checkpoint
 **Progress:** [███████░░░] 83%
-
-### Pause Reason
-
-Plan 11-05 (End-to-end testing) requires manual verification:
 
 - 8 test cases covering user/role IP restrictions
 - 5 security verification tests (IP spoofing, IPv6 rejection)
 - Test documentation created at `.planning/phases/11-ip-ip/11-TESTING.md`
 
-### To Resume
-
-Run `/gsd-execute-phase 11-ip-ip` to continue testing verification
-
-### Blockers
-
-None - awaiting manual testing completion.
+**To Resume Phase 11:** Run `/gsd-execute-phase 11-ip-ip`
 
 ---
 
@@ -275,4 +286,4 @@ None - awaiting manual testing completion.
 
 *STATE.md initialized: 2026-04-17*
 
-**Planned Phase:** 11 (IP地址登录限制) — 6 plans — 2026-04-27T07:35:46.988Z
+**Planned Phase:** 12 (Windows AD域控认证) — 6 plans — 2026-04-28T12:30:00.000Z
