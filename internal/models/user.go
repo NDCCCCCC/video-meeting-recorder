@@ -12,11 +12,10 @@ import (
 type User struct {
 	Base
 	Username     string     `gorm:"type:varchar(50);uniqueIndex;not null" json:"username"`
-	PasswordHash string     `gorm:"type:varchar(255);not null" json:"-"`
+	PasswordHash *string    `gorm:"type:varchar(255)" json:"-"` // nullable for AD users
 	Email        string     `gorm:"type:varchar(100)" json:"email"`
 	FullName     string     `gorm:"type:varchar(100)" json:"full_name"`
 	Roles        []Role     `gorm:"many2many:users_roles;" json:"roles,omitempty"`
-	RoleID       *uint      `gorm:"-" json:"-"` // Legacy field (ignored, exists in DB as nullable)
 	AllowedIPs   string     `gorm:"type:text" json:"allowed_ips"` // IP限制列表 (JSON数组)
 	IsActive     bool       `gorm:"default:true" json:"is_active"`
 	LastLoginAt  *time.Time `json:"last_login_at"`
@@ -42,13 +41,17 @@ func (u *User) SetPassword(password string) error {
 		return err
 	}
 
-	u.PasswordHash = string(hash)
+	hashStr := string(hash)
+	u.PasswordHash = &hashStr
 	return nil
 }
 
 // CheckPassword 验证密码
 func (u *User) CheckPassword(password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
+	if u.PasswordHash == nil {
+		return false
+	}
+	err := bcrypt.CompareHashAndPassword([]byte(*u.PasswordHash), []byte(password))
 	return err == nil
 }
 
