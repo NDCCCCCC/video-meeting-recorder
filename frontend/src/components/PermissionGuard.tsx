@@ -85,7 +85,7 @@ export function MenuPermissionGuard({ path, fallback = null, children }: MenuPer
       '/files': 'files:view',
       '/system/users': 'users:view',
       '/system/roles': 'roles:view',
-      '/system/huawei-configs': 'configs:view',
+      '/system/input-configs': 'configs:view',
     }
 
     const required = MENU_PERMISSIONS[path]

@@ -12,7 +12,7 @@ const routeImports: Record<string, () => Promise<unknown>> = {
   '/system/users': () => import('../pages/system/users'),
   '/system/roles': () => import('../pages/system/roles'),
   '/system/apikeys': () => import('../pages/system/apikeys'),
-  '/system/huawei-configs': () => import('../pages/system/huawei-configs'),
+  '/system/input-configs': () => import('../pages/system/input-configs'),
   '/system/auth-config': () => import('../pages/system/auth-config'),
   '/system/settings': () => import('../pages/system/settings'),
 }
