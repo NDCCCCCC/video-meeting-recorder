@@ -8,8 +8,9 @@ import (
 
 // ConfigType 配置类型常量
 const (
-	ConfigTypeUSB    = "usb"
-	ConfigTypeStream = "stream"
+	ConfigTypeHuaweiAuto = "huawei_auto"
+	ConfigTypeUSB        = "usb"
+	ConfigTypeStream     = "stream"
 )
 
 // InputConfig 输入配置模型
@@ -120,6 +121,16 @@ func (c *InputConfig) Validate() error {
 
 	// 根据配置类型验证录制源字段
 	switch c.ConfigType {
+	case ConfigTypeHuaweiAuto:
+		// 华为自动模式：如果未启用华为控制，必须有USB或流媒体录制源
+		if !c.HuaweiEnabled {
+			hasUSB := c.USBCameraDevice != ""
+			hasStream := c.StreamURL != ""
+			if !hasUSB && !hasStream {
+				return errors.New("华为控制关闭时，必须选择USB或流媒体录制源")
+			}
+		}
+
 	case ConfigTypeUSB:
 		if c.USBCameraDevice == "" {
 			return errors.New("USB配置必须指定摄像头设备")
