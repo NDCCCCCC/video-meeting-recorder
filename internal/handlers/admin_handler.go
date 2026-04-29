@@ -282,6 +282,17 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 			continue
 		}
 
+			// Determine config_type based on existing configuration
+			// Priority: USB device > Stream > default to USB
+			configType := "usb"
+			if hc.USBCameraDevice == "" && hc.StreamURL != "" {
+				configType = "stream"
+			}
+
+			// Determine huawei_enabled based on whether Huawei fields are configured
+			huaweiEnabled := hc.Server != "" && hc.Username != "" && hc.TerminalNumber != ""
+
+
 		// Insert into input_configs
 		insertSQL := `
 			INSERT INTO input_configs (
@@ -300,7 +311,7 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 		result := tx.Exec(insertSQL,
 			hc.CreatedAt, hc.UpdatedAt, hc.DeletedAt,
 			hc.Name, hc.Description,
-			"huawei_auto", true, // D-10: set config_type and huawei_enabled
+			configType, huaweiEnabled, // D-10: set config_type and huawei_enabled
 			hc.Server, hc.Port, hc.Username, hc.Password, hc.TerminalNumber, hc.ConferenceNumber,
 			hc.CameraBackend, hc.USBCameraName, hc.USBCameraDevice, hc.CameraBindingStatus,
 			hc.AudioBackend, hc.USBAudioName, hc.USBAudioDevice, hc.AudioBindingStatus,
