@@ -62,7 +62,7 @@ export const MENU_PERMISSIONS: Record<string, string> = {
   '/system/users': PERMISSIONS.USER_VIEW,
   '/system/roles': PERMISSIONS.ROLE_VIEW,
   '/system/apikeys': PERMISSIONS.APIKEY_VIEW,
-  '/system/huawei-configs': PERMISSIONS.CONFIG_VIEW,
+  '/system/input-configs': PERMISSIONS.CONFIG_VIEW,
   '/system/auth-config': PERMISSIONS.AUTH_CONFIG_VIEW,
   '/system/settings': PERMISSIONS.SYSTEM_SETTINGS,
 }
@@ -72,7 +72,7 @@ export const SUBMENU_PERMISSIONS: Record<string, string> = {
   '/system/users': PERMISSIONS.USER_VIEW,
   '/system/roles': PERMISSIONS.ROLE_VIEW,
   '/system/apikeys': PERMISSIONS.APIKEY_VIEW,
-  '/system/huawei-configs': PERMISSIONS.CONFIG_VIEW,
+  '/system/input-configs': PERMISSIONS.CONFIG_VIEW,
   '/system/auth-config': PERMISSIONS.AUTH_CONFIG_VIEW,
   '/system/settings': PERMISSIONS.SYSTEM_SETTINGS,
 }

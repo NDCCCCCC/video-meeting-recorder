@@ -64,7 +64,7 @@ function BasicLayout() {
       canAccessPath('/system/users', user) ||
       canAccessPath('/system/roles', user) ||
       canAccessPath('/system/apikeys', user) ||
-      canAccessPath('/system/huawei-configs', user) ||
+      canAccessPath('/system/input-configs', user) ||
       canAccessPath('/system/auth-config', user) ||
       canAccessPath('/system/settings', user)
 
@@ -81,7 +81,7 @@ function BasicLayout() {
           canAccessPath('/system/users', user) ? { key: '/system/users', icon: <TeamOutlined />, label: '用户管理' } : null,
           canAccessPath('/system/roles', user) ? { key: '/system/roles', icon: <SafetyOutlined />, label: '角色管理' } : null,
           canAccessPath('/system/apikeys', user) ? { key: '/system/apikeys', icon: <KeyOutlined />, label: 'API密钥' } : null,
-          canAccessPath('/system/huawei-configs', user) ? { key: '/system/huawei-configs', icon: <CloudServerOutlined />, label: '华为配置' } : null,
+          canAccessPath('/system/input-configs', user) ? { key: '/system/input-configs', icon: <CloudServerOutlined />, label: '输入配置' } : null,
           canAccessPath('/system/auth-config', user) ? { key: '/system/auth-config', icon: <SafetyCertificateOutlined />, label: '认证管理' } : null,
           canAccessPath('/system/settings', user) ? { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' } : null,
         ].filter((item): item is NonNullable<typeof item> => item !== null),
