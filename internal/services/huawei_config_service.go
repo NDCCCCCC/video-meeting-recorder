@@ -428,6 +428,8 @@ func (s *HuaweiConfigService) TestStreamConnection(req *TestStreamRequest) error
 	}
 
 	// 构建输入参数
+	// 注意：FFprobe 不支持 -t 选项（那是 FFmpeg 的选项）
+	// 测试连接时只需要确认流可访问，不需要限制分析时长
 	var inputArgs []string
 	switch req.Protocol {
 	case "rtmp":
@@ -467,14 +469,13 @@ func (s *HuaweiConfigService) TestStreamConnection(req *TestStreamRequest) error
 	// 构建完整的 FFprobe 命令
 	// -show_streams: 显示流信息
 	// -loglevel error: 只显示错误信息
-	// -t 3: 只分析 3 秒的数据（快速测试）
+	// 注意：-t 选项已作为输入选项放在 inputArgs 中（必须在 -i 之前）
 	args := []string{
 		"-hide_banner",
 		"-loglevel", "error",
 		"-show_streams",
 		"-show_format",
 		"-print_format", "json",
-		"-t", "3", // 只读取 3 秒数据用于测试
 	}
 	args = append(args, inputArgs...)
 

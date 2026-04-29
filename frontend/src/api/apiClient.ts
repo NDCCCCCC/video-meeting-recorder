@@ -51,8 +51,6 @@ function onTokenRefreshed(token: string) {
 // 获取 Token - 使用缓存
 export const getToken = (): string | null => {
   updateTokenCache()
-  console.log('[DEBUG] getToken called, cachedToken:', cachedToken ? `${cachedToken.substring(0, 20)}...` : null)
-  console.log('[DEBUG] authStorageString:', authStorageString ? `${authStorageString.substring(0, 50)}...` : null)
   return cachedToken
 }
 
@@ -64,14 +62,12 @@ const getRefreshToken = (): string | null => {
 
 // 保存 Token（用于刷新后更新）
 const saveToken = (accessToken: string, refreshToken: string): void => {
-  console.log('[DEBUG] saveToken called, accessToken:', accessToken ? `${accessToken.substring(0, 20)}...` : null)
   // 同时更新 localStorage 和 authStore
   localStorage.setItem('access_token', accessToken)
   localStorage.setItem('refresh_token', refreshToken)
 
   // 更新 authStore
   const authStorage = localStorage.getItem('auth-storage')
-  console.log('[DEBUG] saveToken - authStorage before:', authStorage ? `${authStorage.substring(0, 50)}...` : null)
   if (authStorage) {
     const parsed = JSON.parse(authStorage)
     parsed.state.token = accessToken
@@ -80,13 +76,11 @@ const saveToken = (accessToken: string, refreshToken: string): void => {
     localStorage.setItem('auth-storage', JSON.stringify(parsed))
     // 关键修复：同时更新 authStorageString 缓存，保持一致性
     authStorageString = JSON.stringify(parsed)
-    console.log('[DEBUG] saveToken - authStorage after:', localStorage.getItem('auth-storage')?.substring(0, 50) + '...')
   }
 
   // 立即更新缓存变量，避免下次读取时使用旧值
   cachedToken = accessToken
   cachedRefreshToken = refreshToken
-  console.log('[DEBUG] saveToken - cachedToken now:', cachedToken ? `${cachedToken.substring(0, 20)}...` : null)
 }
 
 // 清除 Token

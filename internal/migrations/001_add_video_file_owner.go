@@ -307,5 +307,6 @@ func GetRegisteredMigrations() []interface{} {
 		&MultiRoleMigration{},
 		&AddIPRestrictionsMigration{},
 		&DropLegacyRoleIDMigration{},
+		&Migration014_CreateInputConfigs{},
 	}
 }
