@@ -74,6 +74,7 @@ type Handlers struct {
 	Admin         *handlers.AdminHandler
 	VideoTask     *handlers.VideoRecordingTaskHandler
 	HuaweiConfig  *handlers.HuaweiConfigHandler
+	InputConfig   *handlers.InputConfigHandler
 	VideoFile     *handlers.VideoFileHandler
 	File          *handlers.FileHandler
 	Audit         *handlers.AuditHandler
@@ -571,6 +572,7 @@ func (a *MinimalApp) initHandlers() error {
 	a.videoFileService = services.NewVideoFileService(a.db, a.logger, a.config.Storage.RecordingsPath, ffprobePath)
 	a.videoFileService.SetHLSPath(a.config.Storage.HLSPath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
+	inputConfigService := services.NewInputConfigService(a.db, a.logger, a.config, usbScanner)
 	fileService := storage.NewFileService(a.db, a.logger, a.config)
 	fileHandler := handlers.NewFileHandler(fileService, a.logger)
 
@@ -658,9 +660,10 @@ func (a *MinimalApp) initHandlers() error {
 		Auth:          handlers.NewAuthHandler(authService, a.logger),
 		User:          handlers.NewUserHandler(userService, a.logger),
 		Role:          handlers.NewRoleHandler(roleService, a.logger),
-		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService),
+		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
 		HuaweiConfig:  handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
+		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, a.logger),
 		File:          fileHandler,
 		Audit:         auditHandler,
@@ -789,18 +792,54 @@ func (a *MinimalApp) registerRoutes() error {
 		tasks.POST("/:id/snapshot", a.handlers.Split.GenerateSnapshot)   // 生成录制快照
 	}
 
-	// 华为配置管理
+	// 华为配置管理（向后兼容，重定向到输入配置）
 	huaweiConfigs := api.Group("/huawei-configs")
 	{
-		huaweiConfigs.GET("/scan-devices", a.handlers.HuaweiConfig.ScanUSBDevices)             // 扫描USB设备
-		huaweiConfigs.GET("/recommended-device", a.handlers.HuaweiConfig.GetRecommendedDevice) // 获取推荐设备
-		huaweiConfigs.GET("", a.handlers.HuaweiConfig.ListConfigs)                             // 获取配置列表
-		huaweiConfigs.GET("/active", a.handlers.HuaweiConfig.GetActiveConfigs)                 // 获取可用配置
-		huaweiConfigs.GET("/:id", a.handlers.HuaweiConfig.GetConfig)                           // 获取配置详情
-		huaweiConfigs.POST("", a.handlers.HuaweiConfig.CreateConfig)                           // 创建配置
-		huaweiConfigs.POST("/test-stream", a.handlers.HuaweiConfig.TestStream)                 // 测试流媒体连接
-		huaweiConfigs.PUT("/:id", a.handlers.HuaweiConfig.UpdateConfig)                        // 更新配置
-		huaweiConfigs.DELETE("/:id", a.handlers.HuaweiConfig.DeleteConfig)                     // 删除配置
+		// GET请求：重定向到input-configs并保留查询参数
+		huaweiConfigs.GET("", func(c *gin.Context) {
+			query := c.Request.URL.RawQuery
+			target := "/api/v1/input-configs"
+			if query != "" {
+				target = target + "?" + query
+			}
+			c.Redirect(307, target)
+		})
+		huaweiConfigs.GET("/scan-devices", func(c *gin.Context) {
+			c.Redirect(307, "/api/v1/input-configs/usb-devices")
+		})
+		huaweiConfigs.GET("/active", func(c *gin.Context) {
+			c.Redirect(307, "/api/v1/input-configs/active")
+		})
+		huaweiConfigs.GET("/:id", func(c *gin.Context) {
+			c.Redirect(307, "/api/v1/input-configs/"+c.Param("id"))
+		})
+
+		// POST/PUT/DELETE：使用307保留HTTP方法
+		huaweiConfigs.POST("", func(c *gin.Context) {
+			c.Redirect(307, "/api/v1/input-configs")
+		})
+		huaweiConfigs.POST("/test-stream", func(c *gin.Context) {
+			c.Redirect(307, "/api/v1/input-configs/test-stream")
+		})
+		huaweiConfigs.PUT("/:id", func(c *gin.Context) {
+			c.Redirect(307, "/api/v1/input-configs/"+c.Param("id"))
+		})
+		huaweiConfigs.DELETE("/:id", func(c *gin.Context) {
+			c.Redirect(307, "/api/v1/input-configs/"+c.Param("id"))
+		})
+	}
+
+	// 输入配置管理（新的统一配置API）
+	inputConfigs := api.Group("/input-configs")
+	{
+		inputConfigs.GET("/usb-devices", a.handlers.InputConfig.ScanUSBDevices)      // 扫描USB设备
+		inputConfigs.GET("/active", a.handlers.InputConfig.GetActiveConfigs)        // 获取可用配置
+		inputConfigs.GET("", a.handlers.InputConfig.ListConfigs)                    // 获取配置列表
+		inputConfigs.GET("/:id", a.handlers.InputConfig.GetConfig)                  // 获取配置详情
+		inputConfigs.POST("", a.handlers.InputConfig.CreateConfig)                  // 创建配置
+		inputConfigs.PUT("/:id", a.handlers.InputConfig.UpdateConfig)               // 更新配置
+		inputConfigs.DELETE("/:id", a.handlers.InputConfig.DeleteConfig)            // 删除配置
+		inputConfigs.POST("/:id/test", a.handlers.InputConfig.TestConnection)       // 测试连接
 	}
 
 	// 文件存储管理
