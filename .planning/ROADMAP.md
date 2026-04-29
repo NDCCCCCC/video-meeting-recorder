@@ -76,6 +76,7 @@
 | 10. Admin Dashboard, Audit Logs, and UI Enhancements | v1.1 | 5/5 | **Complete** | 2026-04-24 |
 | 11. IP地址登录限制 | v1.1 | 4/6 | **In Progress** | 2026-04-27 |
 | 12. Windows AD域控认证 | v1.1 | 0/0 | **Not Started** | — |
+| 13. 重构华为配置，支持USB设备和流媒体录制模式 | v1.1 | 0/5 | **Ready to Execute** | — |
 
 ### Phase 10: Admin Dashboard, Audit Logs, and UI Enhancements
 
@@ -112,11 +113,11 @@ Plans:
 **Plans:** 6/6 plans ready
 
 Plans:
-- [ ] 11-00-PLAN.md — Wave 0: Test infrastructure for IP validation and restriction — Wave 0
-- [ ] 11-01-PLAN.md — Backend IP validation, model fields, and login enforcement (TDD) — Wave 1
-- [ ] 11-02-PLAN.md — Audit logging integration for IP restriction failures — Wave 2
-- [ ] 11-03-PLAN.md — Frontend TypeScript types and API client support — Wave 2
-- [ ] 11-04-PLAN.md — Frontend UI components for IP management (with checkpoints) — Wave 2
+- [x] 11-00-PLAN.md — Wave 0: Test infrastructure for IP validation and restriction — Wave 0
+- [x] 11-01-PLAN.md — Backend IP validation, model fields, and login enforcement (TDD) — Wave 1
+- [x] 11-02-PLAN.md — Audit logging integration for IP restriction failures — Wave 2
+- [x] 11-03-PLAN.md — Frontend TypeScript types and API client support — Wave 2
+- [x] 11-04-PLAN.md — Frontend UI components for IP management (with checkpoints) — Wave 2
 - [ ] 11-05-PLAN.md — Comprehensive testing and documentation (with checkpoints) — Wave 3
 
 **Wave Structure:**
@@ -148,11 +149,61 @@ Plans:
 **Plans:** 0 plans — **ready to plan**
 
 **Spike Findings:** `.planning/spikes/` - 5个验证通过的spike，包含代码验证和架构设计
-**Skill Reference:** `./.claude/skills/spike-findings-record-v2/` - Spike技能包包含实施蓝图、约束、注意事项
+**Skill Reference:** `./.claude/skills/spike-findings-record-v2/SKILL.md` - Spike技能包包含实施蓝图、约束、注意事项
 
 Plans:
 - [ ] TBD (run /gsd-plan-phase 12 to break down)
 
+### Phase 13: 重构华为配置，支持USB设备和流媒体录制模式
+
+**Goal:** 重构录制配置架构，将华为终端控制从"必填"改为"可选"，支持USB直录和流媒体(RTMP/RTSP)录制模式；修改前端页面名称从"华为配置"改为"输入配置"。
+
+**Requirements:**
+- D-01 to D-03: 单一配置模型，配置类型互斥，华为开关控制
+- D-04 to D-05: 录制源必填验证，测试连接功能
+- D-06: 统一调度器（所有类型配置都可创建定时任务）
+- D-07 to D-08: 全面重命名，配置表单重构
+- D-09 to D-11: 数据库变更（新建input_configs表，数据迁移可选，关联表更新）
+- D-12 to D-13: API变更（路由重命名，录制任务API）
+
+**Depends on:** Phase 12
+**Plans:** 5/5 plans ready
+
+Plans:
+- [x] 13-00-PLAN.md — Wave 0: Test infrastructure stubs (4 test files, 28 test stubs) — Wave 0
+- [x] 13-01-PLAN.md — InputConfig model with config_type and huawei_enabled fields — Wave 1
+- [x] 13-02-PLAN.md — Database migration for input_configs and task_input_configs tables — Wave 1
+- [x] 13-03-PLAN.md — InputConfigService with validation and connection testing — Wave 2
+- [x] 13-04-PLAN.md — InputConfigHandler API endpoints and route registration — Wave 2
+- [x] 13-05-PLAN.md — Frontend refactoring (types, API client, management page, routing/menu) — Wave 3
+
+**Wave Structure:**
+- Wave 0 (sequential): 13-00 (test stubs for all InputConfig functionality)
+- Wave 1 (parallel): 13-01 (InputConfig model), 13-02 (database migration)
+- Wave 2 (parallel): 13-03 (InputConfigService), 13-04 (InputConfigHandler + routes)
+- Wave 3 (sequential): 13-05 (frontend refactoring with 2 checkpoints)
+
+**Key Decisions:**
+- D-01: 单一配置模型 - 保持现有配置表结构，华为终端字段改为可选
+- D-02: 配置类型互斥 - 添加 config_type 字段：huawei_auto | usb | stream
+- D-03: 华为开关控制 - 添加 huawei_enabled 布尔字段
+- D-04: 录制源必填验证 - 至少需要填写一个录制源
+- D-05: 测试连接功能 - USB调用扫描API，流媒体调用连通性API
+- D-06: 统一调度器 - 所有类型配置都可以创建定时任务
+- D-07: 全面重命名 - 路由、API、文件、类型、组件、菜单全部改名
+- D-08: 配置表单重构 - 添加类型选择器、华为开关、动态字段显示
+- D-09: 新建 input_configs 表 - 创建新表，旧表保留
+- D-10: 数据迁移（可选） - 提供迁移功能，旧数据转为 huawei_auto 类型
+- D-11: 关联表更新 - task_huawei_configs 表保留，支持多配置关联
+- D-12: API 路由重命名 - /api/input-configs 替代 /api/huawei-configs
+- D-13: 录制任务 API - huawei_config_id 改为可选，支持多配置关联
+
+**变更范围:**
+- 华为配置可选化（当前为必填）
+- 新增录制模式：USB直录、流媒体(RTMP/RTSP)、华为终端
+- 前端页面改名：华为配置 → 输入配置
+- 调度器支持多种触发方式
+
 ---
 *Roadmap created: 2026-04-17*
-*Last updated: 2026-04-27 - Phase 11 planning complete (6 plans)*
+*Last updated: 2026-04-29 - Phase 13 planning complete (6 plans including Wave 0)*
