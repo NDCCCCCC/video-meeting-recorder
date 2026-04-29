@@ -15,8 +15,10 @@ type VideoRecordingTask struct {
 	PreJoinMinutes     int                      `gorm:"default:5" json:"pre_join_minutes"`
 	RecordDelayMinutes int                      `gorm:"default:0" json:"record_delay_minutes"`
 	ConferenceNumber   string                   `gorm:"type:varchar(50);not null;index" json:"conference_number"`
-	HuaweiConfigID     *uint                    `gorm:"index" json:"huawei_config_id,omitempty"` // 华为配置ID（可选，用于向后兼容），新版本应使用 TaskHuaweiConfigs 关联表
+	HuaweiConfigID     *uint                    `gorm:"index" json:"huawei_config_id,omitempty"` // 华为配置ID（可选，用于向后兼容）
 	HuaweiConfig       *HuaweiConfig            `gorm:"foreignKey:HuaweiConfigID" json:"huawei_config,omitempty"`
+	InputConfigID      *uint                    `gorm:"index" json:"input_config_id,omitempty"` // 输入配置ID（新版本推荐使用）
+	InputConfig        *InputConfig             `gorm:"foreignKey:InputConfigID" json:"input_config,omitempty"`
 	RTSPStreamURL      string                   `gorm:"type:varchar(500)" json:"rtsp_stream_url"` // RTSP流地址（可选，与USB设备同级）
 	Status             VideoRecordingTaskStatus `gorm:"type:varchar(20);index" json:"status"`
 	RecordingFile      string                   `gorm:"type:varchar(500)" json:"recording_file"` // 兼容旧字段，指向MKV文件
@@ -34,8 +36,11 @@ type VideoRecordingTask struct {
 	CreatedBy             uint             `gorm:"not null" json:"created_by"`
 	Creator               *User            `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
 
-	// TaskHuaweiConfigs 任务关联的华为配置列表（多配置支持）
+	// TaskHuaweiConfigs 任务关联的华为配置列表（多配置支持，向后兼容）
 	TaskHuaweiConfigs []TaskHuaweiConfig `gorm:"foreignKey:TaskID" json:"task_huawei_configs,omitempty"`
+
+	// TaskInputConfigs 任务关联的输入配置列表（新版本推荐使用）
+	TaskInputConfigs  []TaskInputConfig  `gorm:"foreignKey:TaskID" json:"task_input_configs,omitempty"`
 }
 
 // VideoRecordingTaskStatus 任务状态枚举
@@ -88,9 +93,16 @@ func (t *VideoRecordingTask) IsValid() error {
 	if t.ConferenceNumber == "" {
 		return errors.New("会议号不能为空")
 	}
-	if t.HuaweiConfigID == nil || *t.HuaweiConfigID == 0 {
-		return errors.New("必须指定华为配置")
+
+	// 至少需要指定一种输入配置（华为配置或输入配置）
+	hasHuaweiConfig := t.HuaweiConfigID != nil && *t.HuaweiConfigID > 0
+	hasInputConfig := t.InputConfigID != nil && *t.InputConfigID > 0
+	hasMultiConfigs := len(t.TaskHuaweiConfigs) > 0 || len(t.TaskInputConfigs) > 0
+
+	if !hasHuaweiConfig && !hasInputConfig && !hasMultiConfigs {
+		return errors.New("必须指定至少一种输入配置（华为配置或输入配置）")
 	}
+
 	return nil
 }
 

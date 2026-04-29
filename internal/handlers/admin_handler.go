@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cpic/record_v2/internal/auth"
 	"github.com/cpic/record_v2/internal/config"
@@ -10,6 +12,7 @@ import (
 	"github.com/cpic/record_v2/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // AdminHandler 管理员处理器
@@ -18,14 +21,16 @@ type AdminHandler struct {
 	logger        *zap.Logger
 	configService *services.ConfigService
 	authService   *auth.Service
+	db            *gorm.DB
 }
 
-func NewAdminHandler(cfg *config.Config, logger *zap.Logger, configService *services.ConfigService, authService *auth.Service) *AdminHandler {
+func NewAdminHandler(cfg *config.Config, logger *zap.Logger, configService *services.ConfigService, authService *auth.Service, db *gorm.DB) *AdminHandler {
 	return &AdminHandler{
 		cfg:           cfg,
 		logger:        logger,
 		configService: configService,
 		authService:   authService,
+		db:            db,
 	}
 }
 
@@ -193,4 +198,147 @@ func (h *AdminHandler) LookupADUser(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, result)
+}
+
+// MigrateInputConfigs 迁移华为配置到输入配置
+// @Summary 迁移华为配置到输入配置
+// @Description 将 huawei_configs 表数据迁移到 input_configs 表（可选操作）
+// @Tags 系统管理
+// @Security Bearer
+// @Success 200 {object} response.Response{data=map[string]interface{}}
+// @Router /api/v1/admin/migrate-input-configs [post]
+func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
+	h.logger.Info("Starting migration from huawei_configs to input_configs")
+
+	// Start transaction
+	tx := h.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Count existing huawei_configs
+	var totalCount int64
+	if err := tx.Table("huawei_configs").Count(&totalCount).Error; err != nil {
+		h.logger.Error("Failed to count huawei_configs", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "迁移失败：无法读取源数据")
+		return
+	}
+
+	// Fetch all huawei_configs
+	type HuaweiConfigRow struct {
+		ID                 uint
+		Name               string
+		Description        string
+		Server             string
+		Port               int
+		Username           string
+		Password           string
+		TerminalNumber     string
+		ConferenceNumber   string
+		CameraBackend      string
+		USBCameraName      string
+		USBCameraDevice    string
+		CameraBindingStatus string
+		AudioBackend       string
+		USBAudioName       string
+		USBAudioDevice     string
+		AudioBindingStatus string
+		OutputFormat       string
+		StreamProtocol     string
+		StreamURL          string
+		StreamUsername     string
+		StreamPassword     string
+		StreamEnabled      bool
+		IsActive           bool
+		IsLocked           bool
+		LockedBy           *uint
+		LockedAt           *time.Time
+		CreatedAt          time.Time
+		UpdatedAt          time.Time
+		DeletedAt          *time.Time
+	}
+
+	var huaweiConfigs []HuaweiConfigRow
+	if err := tx.Table("huawei_configs").Find(&huaweiConfigs).Error; err != nil {
+		h.logger.Error("Failed to fetch huawei_configs", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "迁移失败：无法读取源数据")
+		return
+	}
+
+	migratedCount := 0
+	skippedCount := 0
+
+	for _, hc := range huaweiConfigs {
+		// Check if already migrated (by name matching)
+		var existingCount int64
+		tx.Table("input_configs").
+			Where("name = ? AND created_at = ?", hc.Name, hc.CreatedAt).
+			Count(&existingCount)
+
+		if existingCount > 0 {
+			skippedCount++
+			continue
+		}
+
+		// Insert into input_configs
+		insertSQL := `
+			INSERT INTO input_configs (
+				created_at, updated_at, deleted_at,
+				name, description,
+				config_type, huawei_enabled,
+				server, port, username, password, terminal_number, conference_number,
+				camera_backend, usb_camera_name, usb_camera_device, camera_binding_status,
+				audio_backend, usb_audio_name, usb_audio_device, audio_binding_status,
+				output_format,
+				stream_protocol, stream_url, stream_username, stream_password, stream_enabled,
+				is_active, is_locked, locked_by, locked_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`
+
+		result := tx.Exec(insertSQL,
+			hc.CreatedAt, hc.UpdatedAt, hc.DeletedAt,
+			hc.Name, hc.Description,
+			"huawei_auto", true, // D-10: set config_type and huawei_enabled
+			hc.Server, hc.Port, hc.Username, hc.Password, hc.TerminalNumber, hc.ConferenceNumber,
+			hc.CameraBackend, hc.USBCameraName, hc.USBCameraDevice, hc.CameraBindingStatus,
+			hc.AudioBackend, hc.USBAudioName, hc.USBAudioDevice, hc.AudioBindingStatus,
+			hc.OutputFormat,
+			hc.StreamProtocol, hc.StreamURL, hc.StreamUsername, hc.StreamPassword, hc.StreamEnabled,
+			hc.IsActive, hc.IsLocked, hc.LockedBy, hc.LockedAt,
+		)
+
+		if result.Error != nil {
+			h.logger.Error("Failed to migrate config",
+				zap.Uint("config_id", hc.ID),
+				zap.Error(result.Error),
+			)
+			tx.Rollback()
+			response.GinError(c, response.CodeInternalError, "迁移失败：无法写入目标数据")
+			return
+		}
+
+		migratedCount++
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		h.logger.Error("Failed to commit migration", zap.Error(err))
+		response.GinError(c, response.CodeInternalError, "迁移失败：无法提交事务")
+		return
+	}
+
+	h.logger.Info("Migration completed",
+		zap.Int64("total", totalCount),
+		zap.Int("migrated", migratedCount),
+		zap.Int("skipped", skippedCount),
+	)
+
+	response.GinSuccess(c, gin.H{
+		"total":    totalCount,
+		"migrated": migratedCount,
+		"skipped":  skippedCount,
+		"message":  fmt.Sprintf("成功迁移 %d 条配置（跳过 %d 条已存在记录）", migratedCount, skippedCount),
+	})
 }

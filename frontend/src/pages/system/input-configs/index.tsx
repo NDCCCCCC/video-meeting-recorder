@@ -54,7 +54,7 @@ export default function InputConfigManagement() {
   const [form] = Form.useForm()
 
   // 表单状态管理
-  const [configType, setConfigType] = useState<ConfigType>('huawei_auto')
+  const [configType, setConfigType] = useState<ConfigType>('usb')
   const [huaweiEnabled, setHuaweiEnabled] = useState(false)
 
   // USB设备扫描相关状态
@@ -127,11 +127,11 @@ export default function InputConfigManagement() {
         output_format: config.output_format || 'mp4',
       })
     } else {
-      setConfigType('huawei_auto')
+      setConfigType('usb')
       setHuaweiEnabled(false)
       form.resetFields()
       form.setFieldsValue({
-        config_type: 'huawei_auto',
+        config_type: 'usb',
         huawei_enabled: false,
         output_format: 'mp4',
         stream_enabled: false,
@@ -148,7 +148,7 @@ export default function InputConfigManagement() {
     form.resetFields()
     setDetectedCameras([])
     setDetectedAudios([])
-    setConfigType('huawei_auto')
+    setConfigType('usb')
     setHuaweiEnabled(false)
   }
 
@@ -319,7 +319,6 @@ export default function InputConfigManagement() {
 
   // 配置类型显示映射
   const configTypeMap = {
-    huawei_auto: { text: '华为自动', color: 'blue', icon: <CloudServerOutlined /> },
     usb: { text: 'USB直录', color: 'green', icon: <VideoCameraOutlined /> },
     stream: { text: '流媒体', color: 'orange', icon: <PlayCircleOutlined /> },
   }
@@ -504,19 +503,7 @@ export default function InputConfigManagement() {
                         onChange={(value) => {
                           setConfigType(value)
                           // 重置依赖字段
-                          if (value !== 'huawei_auto') {
-                            setHuaweiEnabled(false)
-                            form.setFieldsValue({
-                              huawei_enabled: false,
-                              server: undefined,
-                              port: undefined,
-                              username: undefined,
-                              password: undefined,
-                              terminal_number: undefined,
-                              conference_number: undefined,
-                            })
-                          }
-                          if (value !== 'usb' && value !== 'huawei_auto') {
+                          if (value !== 'usb') {
                             form.setFieldsValue({
                               usb_camera_device: undefined,
                               usb_camera_name: undefined,
@@ -537,45 +524,42 @@ export default function InputConfigManagement() {
                           }
                         }}
                         options={[
-                          { label: '华为自动控制', value: 'huawei_auto' },
                           { label: 'USB设备直录', value: 'usb' },
                           { label: '流媒体录制', value: 'stream' },
                         ]}
                       />
                     </Form.Item>
 
-                    {/* 华为终端控制开关 - 仅当 config_type 为 huawei_auto 时显示 */}
-                    {configType === 'huawei_auto' && (
-                      <Form.Item
-                        label="启用华为终端控制"
-                      >
-                        <Space>
-                          <Switch
-                            checked={huaweiEnabled}
-                            onChange={(checked) => {
-                              setHuaweiEnabled(checked)
-                              form.setFieldsValue({ huawei_enabled: checked })
-                              if (!checked) {
-                                // 禁用时清空华为字段
-                                form.setFieldsValue({
-                                  server: undefined,
-                                  port: undefined,
-                                  username: undefined,
-                                  password: undefined,
-                                  terminal_number: undefined,
-                                  conference_number: undefined,
-                                })
-                              }
-                            }}
-                            checkedChildren="自动控制"
-                            unCheckedChildren="手动模式"
-                          />
-                          <span style={{ color: '#666', fontSize: '12px' }}>
-                            {huaweiEnabled ? '启用后将自动控制华为终端' : '手动模式需要手动操作USB设备'}
-                          </span>
-                        </Space>
-                      </Form.Item>
-                    )}
+                    {/* 华为终端控制开关 - 所有配置类型都可以启用 */}
+                    <Form.Item
+                      label="启用华为终端控制"
+                    >
+                      <Space>
+                        <Switch
+                          checked={huaweiEnabled}
+                          onChange={(checked) => {
+                            setHuaweiEnabled(checked)
+                            form.setFieldsValue({ huawei_enabled: checked })
+                            if (!checked) {
+                              // 禁用时清空华为字段
+                              form.setFieldsValue({
+                                server: undefined,
+                                port: undefined,
+                                username: undefined,
+                                password: undefined,
+                                terminal_number: undefined,
+                                conference_number: undefined,
+                              })
+                            }
+                          }}
+                          checkedChildren="启用"
+                          unCheckedChildren="禁用"
+                        />
+                        <span style={{ color: '#666', fontSize: '12px' }}>
+                          {huaweiEnabled ? '启用后将自动控制华为终端（可选功能）' : '不使用华为终端控制'}
+                        </span>
+                      </Space>
+                    </Form.Item>
 
                     {/* 输出格式 - 所有类型通用 */}
                     <Form.Item
@@ -597,10 +581,10 @@ export default function InputConfigManagement() {
               {
                 key: 'huawei',
                 label: '华为终端配置',
-                disabled: configType !== 'huawei_auto' || !huaweiEnabled,
+                disabled: !huaweiEnabled,
                 children: (
                   <>
-                    {configType === 'huawei_auto' && huaweiEnabled ? (
+                    {huaweiEnabled ? (
                       <>
                         <Space size="large" style={{ width: '100%' }}>
                           <Form.Item
@@ -654,7 +638,7 @@ export default function InputConfigManagement() {
                       </>
                     ) : (
                       <div style={{ color: '#999', textAlign: 'center', padding: '40px' }}>
-                        请先选择"华为自动控制"类型并启用华为终端控制
+                        请先启用华为终端控制
                       </div>
                     )}
                   </>
@@ -663,10 +647,10 @@ export default function InputConfigManagement() {
               {
                 key: 'usb',
                 label: 'USB设备配置',
-                disabled: configType !== 'usb' && !(configType === 'huawei_auto' && !huaweiEnabled),
+                disabled: configType !== 'usb',
                 children: (
                   <>
-                    {(configType === 'usb' || (configType === 'huawei_auto' && !huaweiEnabled)) ? (
+                    {configType === 'usb' ? (
                       <>
                         <div style={{ marginBottom: 16 }}>
                           <Button
@@ -796,9 +780,7 @@ export default function InputConfigManagement() {
                       </>
                     ) : (
                       <div style={{ color: '#999', textAlign: 'center', padding: '40px' }}>
-                        {configType === 'huawei_auto' && huaweiEnabled
-                          ? '华为自动控制模式下，USB设备由华为终端管理'
-                          : '请先选择"USB设备直录"类型或"华为自动控制"的手动模式'}
+                        请先选择"USB设备直录"类型
                       </div>
                     )}
                   </>
@@ -903,7 +885,7 @@ export default function InputConfigManagement() {
               </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="华为终端控制" span={2}>
-              {viewingConfig.config_type === 'huawei_auto' ? (
+              {viewingConfig.config_type === 'usb' ? (
                 <Tag color={viewingConfig.huawei_enabled ? 'green' : 'orange'}>
                   {viewingConfig.huawei_enabled ? '启用自动控制' : '手动模式'}
                 </Tag>
@@ -928,7 +910,7 @@ export default function InputConfigManagement() {
             </Descriptions.Item>
 
             {/* 华为终端字段 */}
-            {viewingConfig.config_type === 'huawei_auto' && viewingConfig.huawei_enabled && (
+            {viewingConfig.config_type === 'usb' && viewingConfig.huawei_enabled && (
               <>
                 <Descriptions.Item label="服务器">{viewingConfig.server || '-'}</Descriptions.Item>
                 <Descriptions.Item label="端口">{viewingConfig.port || '-'}</Descriptions.Item>
@@ -941,7 +923,7 @@ export default function InputConfigManagement() {
             )}
 
             {/* USB设备字段 */}
-            {(viewingConfig.config_type === 'usb' || (viewingConfig.config_type === 'huawei_auto' && !viewingConfig.huawei_enabled)) && (
+            {(viewingConfig.config_type === 'usb' || (viewingConfig.config_type === 'usb' && !viewingConfig.huawei_enabled)) && (
               <>
                 <Descriptions.Item label="摄像头名称" span={2}>
                   {viewingConfig.usb_camera_name || '-'}

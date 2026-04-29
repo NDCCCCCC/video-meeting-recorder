@@ -10,7 +10,7 @@ export interface USBDeviceInfo {
 }
 
 // 配置类型
-export type ConfigType = 'huawei_auto' | 'usb' | 'stream'
+export type ConfigType = 'usb' | 'stream'
 
 // 输入配置
 export interface InputConfig {
