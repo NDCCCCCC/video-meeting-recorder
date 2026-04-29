@@ -30,7 +30,6 @@ import {
   VideoCameraOutlined,
   AudioOutlined,
   PlayCircleOutlined,
-  CloudServerOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import * as inputConfigApi from '../../../api/input-config'
@@ -923,7 +922,7 @@ export default function InputConfigManagement() {
             )}
 
             {/* USB设备字段 */}
-            {(viewingConfig.config_type === 'usb' || (viewingConfig.config_type === 'usb' && !viewingConfig.huawei_enabled)) && (
+            {viewingConfig.config_type === 'usb' && (
               <>
                 <Descriptions.Item label="摄像头名称" span={2}>
                   {viewingConfig.usb_camera_name || '-'}
