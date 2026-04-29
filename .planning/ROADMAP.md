@@ -11,7 +11,7 @@
 - D-12 to D-13: API变更（路由重命名，录制任务API）
 
 **Depends on:** Phase 12
-**Plans:** 5/5 plans ready
+**Plans:** 4/6 plans complete
 
 Plans:
 - [x] 13-00-PLAN.md — Wave 0: Test infrastructure stubs (4 test files, 28 test stubs) — Wave 0
