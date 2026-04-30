@@ -74,8 +74,7 @@ export interface CreateTaskRequest {
   pre_join_minutes?: number
   record_delay_minutes?: number
   conference_number: string
-  huawei_config_id?: number  // 单配置（向后兼容）
-  huawei_config_ids?: number[] // 多配置支持
+  input_config_ids?: number[]  // 输入配置ID列表
 }
 
 // 更新任务请求

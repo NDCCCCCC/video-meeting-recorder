@@ -30,7 +30,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import * as taskApi from '../../api/task'
-import * as huaweiConfigApi from '../../api/huawei-config'
+import * as inputConfigApi from '../../api/input-config'
 import { apiRequest } from '../../api/apiClient'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
@@ -59,7 +59,7 @@ import type {
   CreateTaskRequest,
   UpdateTaskRequest,
 } from '../../types/task'
-import type { HuaweiConfig } from '../../types/huawei-config'
+import type { InputConfig } from '../../types/input-config'
 
 // 动态导入 HLSPreview 组件（命名导出需要包装为默认导出）
 const HLSPreview = lazy(() =>
@@ -76,7 +76,7 @@ const CONFIG_TYPE_TAGS: Record<ConfigType, { color: string; label: string }> = {
   none: { color: 'default', label: '未配置' },
 }
 
-const getConfigType = (config: HuaweiConfig): ConfigType => {
+const getConfigType = (config: InputConfig): ConfigType => {
   const hasUSB = config.usb_camera_device || config.usb_audio_device
   const hasStream = config.stream_enabled && config.stream_url
 
@@ -85,7 +85,7 @@ const getConfigType = (config: HuaweiConfig): ConfigType => {
   return 'none'
 }
 
-const getConfigTypeTagConfig = (config: HuaweiConfig) => {
+const getConfigTypeTagConfig = (config: InputConfig) => {
   const type = getConfigType(config)
   const tagConfig = CONFIG_TYPE_TAGS[type]
   const label = type === 'stream'
@@ -190,8 +190,8 @@ export default function TaskManagement() {
   const [editingTask, setEditingTask] = useState<VideoRecordingTask | null>(null)
   const [form] = Form.useForm()
 
-  // 华为配置列表
-  const [huaweiConfigs, setHuaweiConfigs] = useState<HuaweiConfig[]>([])
+  // 输入配置列表
+  const [huaweiConfigs, setHuaweiConfigs] = useState<InputConfig[]>([])
   const [configsLoading, setConfigsLoading] = useState(false)
 
   // 行选择状态
@@ -229,16 +229,16 @@ export default function TaskManagement() {
   // 存储最新的 loadTasks 引用
   loadTasksRef.current = loadTasks
 
-  // 加载华为配置列表
+  // 加载输入配置列表（使用 input_configs 表）
   const loadHuaweiConfigs = useCallback(async () => {
     setConfigsLoading(true)
     try {
-      const response = await huaweiConfigApi.getActiveHuaweiConfigs()
+      const response = await inputConfigApi.getActiveInputConfigs()
       if (response.data) {
         setHuaweiConfigs(response.data)
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '加载华为配置失败')
+      message.error(error instanceof Error ? error.message : '加载输入配置失败')
     } finally {
       setConfigsLoading(false)
     }
@@ -355,7 +355,7 @@ export default function TaskManagement() {
       const requestData = {
         ...values,
         huawei_config_id: Array.isArray(values.huawei_config_id) ? values.huawei_config_id[0] : values.huawei_config_id,
-        huawei_config_ids: Array.isArray(values.huawei_config_id)
+        input_config_ids: Array.isArray(values.huawei_config_id)
           ? values.huawei_config_id
           : values.huawei_config_id
             ? [values.huawei_config_id]
@@ -588,7 +588,7 @@ export default function TaskManagement() {
   }, [handleStart, handleStop, handleCancel, handleRetry, handleDelete, openModal, handleGenerateSnapshot, snapshotGenerating])
 
   // 渲染配置类型标签
-  const renderConfigTypeTag = useCallback((config: HuaweiConfig): React.ReactElement => {
+  const renderConfigTypeTag = useCallback((config: InputConfig): React.ReactElement => {
     const tagConfig = getConfigTypeTagConfig(config)
     return <Tag color={tagConfig.color}>{tagConfig.label}</Tag>
   }, [])
@@ -802,28 +802,28 @@ export default function TaskManagement() {
 
           <Form.Item
             name="huawei_config_id"
-            label="华为配置（最多选一路USB和一路流媒体）"
+            label="输入配置（可选，最多选一路USB和一路流媒体）"
             rules={[
               {
                 validator: async (_, value) => {
-                  if (!value || (Array.isArray(value) && value.length === 0) || (!Array.isArray(value) && !value)) {
-                    throw new Error('请选择华为配置')
-                  }
-                  const ids = Array.isArray(value) ? value : [value]
-                  const selectedConfigs = huaweiConfigs.filter(c => ids.includes(c.id))
-                  const usbCount = selectedConfigs.filter(c => getConfigType(c) === 'usb').length
-                  const streamCount = selectedConfigs.filter(c => getConfigType(c) === 'stream').length
+                  // 输入配置是可选的，如果用户选择了配置则验证
+                  if (value && (Array.isArray(value) ? value.length > 0 : value)) {
+                    const ids = Array.isArray(value) ? value : [value]
+                    const selectedConfigs = huaweiConfigs.filter(c => ids.includes(c.id))
+                    const usbCount = selectedConfigs.filter(c => getConfigType(c) === 'usb').length
+                    const streamCount = selectedConfigs.filter(c => getConfigType(c) === 'stream').length
 
-                  if (usbCount > 1) {
-                    throw new Error('最多只能选择1个USB配置')
-                  }
-                  if (streamCount > 1) {
-                    throw new Error('最多只能选择1个流媒体配置')
-                  }
+                    if (usbCount > 1) {
+                      throw new Error('最多只能选择1个USB配置')
+                    }
+                    if (streamCount > 1) {
+                      throw new Error('最多只能选择1个流媒体配置')
+                    }
 
-                  const invalidConfigs = selectedConfigs.filter(c => getConfigType(c) === 'none')
-                  if (invalidConfigs.length > 0) {
-                    throw new Error(`配置"${invalidConfigs[0].name}"未配置USB设备或流媒体`)
+                    const invalidConfigs = selectedConfigs.filter(c => getConfigType(c) === 'none')
+                    if (invalidConfigs.length > 0) {
+                      throw new Error(`配置"${invalidConfigs[0].name}"未配置USB设备或流媒体`)
+                    }
                   }
                 }
               }
@@ -831,7 +831,7 @@ export default function TaskManagement() {
           >
             <Select
               mode="multiple"
-              placeholder="请选择华为配置（最多选一路USB和一路流媒体）"
+              placeholder="请选择输入配置（可选，最多选一路USB和一路流媒体）"
               loading={configsLoading}
               showSearch
               optionFilterProp="label"
@@ -853,14 +853,24 @@ export default function TaskManagement() {
                 )
               }}
             >
-              {huaweiConfigs.map((config) => (
-                <Select.Option key={config.id} value={config.id}>
-                  <Space>
-                    {config.name} ({config.server}:{config.port})
-                    {renderConfigTypeTag(config)}
-                  </Space>
-                </Select.Option>
-              ))}
+              {huaweiConfigs.map((config) => {
+                const configType = getConfigType(config)
+                // 根据配置类型显示不同信息
+                const detailInfo = configType === 'usb'
+                  ? `${config.usb_camera_device || '无摄像头'}`
+                  : configType === 'stream'
+                  ? `${config.stream_protocol || 'RTMP'}:${config.stream_url || '无地址'}`
+                  : `${config.server || '无服务器'}:${config.port || 80}`
+
+                return (
+                  <Select.Option key={config.id} value={config.id}>
+                    <Space>
+                      {config.name} ({detailInfo})
+                      {renderConfigTypeTag(config)}
+                    </Space>
+                  </Select.Option>
+                )
+              })}
             </Select>
           </Form.Item>
 

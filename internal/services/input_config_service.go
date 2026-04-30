@@ -37,6 +37,15 @@ type InputConfigListResponse struct {
 	Items []models.InputConfig `json:"items"`
 }
 
+
+// ListConfigsRequest 查询输入配置列表请求
+type ListConfigsRequest struct {
+	Page       int     `form:"page" binding:"required,min=1"`
+	PageSize   int     `form:"page_size" binding:"required,min=1,max=100"`
+	Keyword    string  `form:"keyword"`
+	IsActive   *bool   `form:"is_active"`
+	ConfigType string  `form:"config_type" binding:"omitempty,oneof=usb stream huawei_auto"`
+}
 // CreateInputConfigRequest 创建输入配置请求
 type CreateInputConfigRequest struct {
 	Name             string `json:"name" binding:"required,max=100"`

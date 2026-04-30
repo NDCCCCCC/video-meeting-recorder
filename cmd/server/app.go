@@ -73,7 +73,6 @@ type Handlers struct {
 	Role          *handlers.RoleHandler
 	Admin         *handlers.AdminHandler
 	VideoTask     *handlers.VideoRecordingTaskHandler
-	HuaweiConfig  *handlers.HuaweiConfigHandler
 	InputConfig   *handlers.InputConfigHandler
 	VideoFile     *handlers.VideoFileHandler
 	File          *handlers.FileHandler
@@ -93,10 +92,10 @@ type huaweiDBAdapter struct {
 }
 
 func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huaweiapi.HuaweiConfigDB, error) {
-	var config models.HuaweiConfig
+	var config models.InputConfig
 	if err := a.db.First(&config, configID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("华为配置不存在: ID=%d", configID)
+			return nil, fmt.Errorf("输入配置不存在: ID=%d", configID)
 		}
 		return nil, err
 	}
@@ -232,7 +231,8 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.APIKey{},
 		&models.APIKeyUsageLog{},
 		&models.Session{},
-		&models.HuaweiConfig{},
+		&models.InputConfig{},
+			&models.TaskInputConfig{},
 		&models.VideoRecordingTask{},
 		&models.VideoFile{},
 		&models.PPTFile{},
@@ -555,7 +555,6 @@ func (a *MinimalApp) initHandlers() error {
 	a.tokenService = auth.NewSM4TokenService(a.config, a.db, a.logger)
 	authService := auth.NewService(a.config, a.db, a.logger)
 	roleService := services.NewRoleService(a.db, a.logger)
-	huaweiConfigService := services.NewHuaweiConfigService(a.db, a.logger, a.config)
 	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
 	// 优先使用配置中的 ffprobe_path，否则从 ffmpeg 路径推导
 	ffprobePath := a.config.FFmpeg.FFProbePath
@@ -662,7 +661,6 @@ func (a *MinimalApp) initHandlers() error {
 		Role:          handlers.NewRoleHandler(roleService, a.logger),
 		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
-		HuaweiConfig:  handlers.NewHuaweiConfigHandler(huaweiConfigService, a.logger, usbScanner),
 		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, a.logger),
 		File:          fileHandler,
@@ -791,56 +789,19 @@ func (a *MinimalApp) registerRoutes() error {
 		tasks.POST("/clear-stuck", a.handlers.VideoTask.ClearStuckTasks) // 清理卡住的任务
 		tasks.POST("/:id/snapshot", a.handlers.Split.GenerateSnapshot)   // 生成录制快照
 	}
-
-	// 华为配置管理（向后兼容，重定向到输入配置）
-	huaweiConfigs := api.Group("/huawei-configs")
-	{
-		// GET请求：重定向到input-configs并保留查询参数
-		huaweiConfigs.GET("", func(c *gin.Context) {
-			query := c.Request.URL.RawQuery
-			target := "/api/v1/input-configs"
-			if query != "" {
-				target = target + "?" + query
+			// 输入配置管理
+			inputConfigs := api.Group("/input-configs")
+			{
+				inputConfigs.GET("", a.handlers.InputConfig.ListConfigs)
+				inputConfigs.GET("/active", a.handlers.InputConfig.GetActiveConfigs)
+				inputConfigs.GET("/:id", a.handlers.InputConfig.GetConfig)
+				inputConfigs.POST("", a.handlers.InputConfig.CreateConfig)
+				inputConfigs.PUT("/:id", a.handlers.InputConfig.UpdateConfig)
+				inputConfigs.DELETE("/:id", a.handlers.InputConfig.DeleteConfig)
+				inputConfigs.POST("/:id/test", a.handlers.InputConfig.TestConnection)
+				inputConfigs.POST("/scan-usb", a.handlers.InputConfig.ScanUSBDevices)
 			}
-			c.Redirect(307, target)
-		})
-		huaweiConfigs.GET("/scan-devices", func(c *gin.Context) {
-			c.Redirect(307, "/api/v1/input-configs/usb-devices")
-		})
-		huaweiConfigs.GET("/active", func(c *gin.Context) {
-			c.Redirect(307, "/api/v1/input-configs/active")
-		})
-		huaweiConfigs.GET("/:id", func(c *gin.Context) {
-			c.Redirect(307, "/api/v1/input-configs/"+c.Param("id"))
-		})
 
-		// POST/PUT/DELETE：使用307保留HTTP方法
-		huaweiConfigs.POST("", func(c *gin.Context) {
-			c.Redirect(307, "/api/v1/input-configs")
-		})
-		huaweiConfigs.POST("/test-stream", func(c *gin.Context) {
-			c.Redirect(307, "/api/v1/input-configs/test-stream")
-		})
-		huaweiConfigs.PUT("/:id", func(c *gin.Context) {
-			c.Redirect(307, "/api/v1/input-configs/"+c.Param("id"))
-		})
-		huaweiConfigs.DELETE("/:id", func(c *gin.Context) {
-			c.Redirect(307, "/api/v1/input-configs/"+c.Param("id"))
-		})
-	}
-
-	// 输入配置管理（新的统一配置API）
-	inputConfigs := api.Group("/input-configs")
-	{
-		inputConfigs.GET("/usb-devices", a.handlers.InputConfig.ScanUSBDevices)      // 扫描USB设备
-		inputConfigs.GET("/active", a.handlers.InputConfig.GetActiveConfigs)        // 获取可用配置
-		inputConfigs.GET("", a.handlers.InputConfig.ListConfigs)                    // 获取配置列表
-		inputConfigs.GET("/:id", a.handlers.InputConfig.GetConfig)                  // 获取配置详情
-		inputConfigs.POST("", a.handlers.InputConfig.CreateConfig)                  // 创建配置
-		inputConfigs.PUT("/:id", a.handlers.InputConfig.UpdateConfig)               // 更新配置
-		inputConfigs.DELETE("/:id", a.handlers.InputConfig.DeleteConfig)            // 删除配置
-		inputConfigs.POST("/:id/test", a.handlers.InputConfig.TestConnection)       // 测试连接
-	}
 
 	// 文件存储管理
 	storage := api.Group("/storage")
@@ -1020,7 +981,7 @@ type taskServiceAdapter struct {
 // GetTask 获取任务
 func (a *taskServiceAdapter) GetTask(id uint) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := a.db.Preload("HuaweiConfig").First(&task, id).Error; err != nil {
+	if err := a.db.Preload("InputConfig").Preload("TaskInputConfigs").First(&task, id).Error; err != nil {
 		return nil, err
 	}
 	return &task, nil
@@ -1030,7 +991,7 @@ func (a *taskServiceAdapter) GetTask(id uint) (*models.VideoRecordingTask, error
 func (a *taskServiceAdapter) GetPendingTasks() ([]*models.VideoRecordingTask, error) {
 	var tasks []*models.VideoRecordingTask
 	if err := a.db.Where("status = ?", models.VideoStatusPending).
-		Preload("HuaweiConfig").
+		Preload("InputConfig").Preload("TaskInputConfigs").
 		Order("start_time ASC").
 		Find(&tasks).Error; err != nil {
 		return nil, err
@@ -1076,9 +1037,9 @@ func (a *taskServiceAdapter) UpdateRecordingPaths(id uint, mkvPath, hlsPath stri
 	return nil
 }
 
-// GetHuaweiConfig 获取华为配置
-func (a *taskServiceAdapter) GetHuaweiConfig(id uint) (*models.HuaweiConfig, error) {
-	var config models.HuaweiConfig
+// GetInputConfig 获取输入配置
+func (a *taskServiceAdapter) GetInputConfig(id uint) (*models.InputConfig, error) {
+	var config models.InputConfig
 	if err := a.db.First(&config, id).Error; err != nil {
 		return nil, err
 	}

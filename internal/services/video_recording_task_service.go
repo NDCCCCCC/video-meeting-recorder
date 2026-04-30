@@ -64,8 +64,7 @@ type CreateTaskRequest struct {
 	PreJoinMinutes     int    `json:"pre_join_minutes" binding:"min=0,max=60"`
 	RecordDelayMinutes int    `json:"record_delay_minutes" binding:"min=0,max=60"`
 	ConferenceNumber   string `json:"conference_number" binding:"required,max=50"`
-	HuaweiConfigID     uint   `json:"huawei_config_id"`  // 单配置（向后兼容）
-	HuaweiConfigIDs    []uint `json:"huawei_config_ids"` // 多配置支持
+	InputConfigIDs     []uint `json:"input_config_ids"` // 输入配置ID列表
 }
 
 // CreateTaskAutoRequest 自动创建任务请求（不需要传入华为配置）
@@ -94,7 +93,7 @@ func (s *VideoRecordingTaskService) ListTasks(req *ListTasksRequest) (*ListTasks
 	var tasks []models.VideoRecordingTask
 	var total int64
 
-	query := s.db.Model(&models.VideoRecordingTask{}).Preload("HuaweiConfig").Preload("Creator")
+	query := s.db.Model(&models.VideoRecordingTask{}).Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator")
 
 	// 关键词搜索
 	if req.Keyword != "" {
@@ -178,7 +177,7 @@ func (s *VideoRecordingTaskService) ListTasks(req *ListTasksRequest) (*ListTasks
 // GetTaskByID 根据ID获取任务
 func (s *VideoRecordingTaskService) GetTaskByID(id uint) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.Preload("HuaweiConfig").Preload("Creator").First(&task, id).Error; err != nil {
+	if err := s.db.Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator").First(&task, id).Error; err != nil {
 		return nil, err
 	}
 	return &task, nil
@@ -220,27 +219,23 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 		zap.String("end_time_utc", endTimeUTC.Format(time.RFC3339)),
 	)
 
-	// 确定使用的配置列表
-	configIDs := req.HuaweiConfigIDs
-	if len(configIDs) == 0 && req.HuaweiConfigID > 0 {
-		configIDs = []uint{req.HuaweiConfigID}
-	}
-	if len(configIDs) == 0 {
-		return nil, errors.New("必须指定华为配置")
-	}
-
-	// 验证配置类型
-	if err := s.validateConfigTypes(configIDs); err != nil {
-		return nil, err
+	// 输入配置现在是可选的，允许创建 USB/纯流录制任务
+	// 仅当有配置时才验证配置类型和存在性
+	if len(req.InputConfigIDs) > 0 {
+		// 验证配置存在（使用 input_configs 表）
+		var firstConfig models.InputConfig
+		if err := s.db.First(&firstConfig, req.InputConfigIDs[0]).Error; err != nil {
+			return nil, errors.New("输入配置不存在")
+		}
 	}
 
-	// 验证华为配置存在
-	var firstConfig models.HuaweiConfig
-	if err := s.db.First(&firstConfig, configIDs[0]).Error; err != nil {
-		return nil, errors.New("华为配置不存在")
+	// 创建任务
+	// 设置主配置ID（用于兼容 IsValid 检查）
+	var primaryConfigID *uint
+	if len(req.InputConfigIDs) > 0 {
+		primaryConfigID = &req.InputConfigIDs[0]
 	}
 
-	// 创建任务（使用第一个配置ID作为主配置，保持向后兼容）
 	task := &models.VideoRecordingTask{
 		Name:               req.Name,
 		Description:        req.Description,
@@ -249,9 +244,9 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 		PreJoinMinutes:     req.PreJoinMinutes,
 		RecordDelayMinutes: req.RecordDelayMinutes,
 		ConferenceNumber:   req.ConferenceNumber,
-		HuaweiConfigID:     &configIDs[0],
 		Status:             models.VideoStatusPending,
 		CreatedBy:          createdBy,
+		InputConfigID:      primaryConfigID,
 	}
 
 	// 验证任务数据
@@ -264,8 +259,8 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 	}
 
 	// 创建关联表记录
-	for _, configID := range configIDs {
-		var config models.HuaweiConfig
+	for _, configID := range req.InputConfigIDs {
+		var config models.InputConfig
 		if err := s.db.First(&config, configID).Error; err != nil {
 			s.logger.Warn("加载华为配置失败，跳过关联",
 				zap.Uint("config_id", configID),
@@ -274,21 +269,36 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 			continue
 		}
 
-		configType := "usb"
-		if config.StreamEnabled && config.StreamURL != "" {
-			configType = "stream"
+		// 确定配置类型
+		var configType string
+		if config.HuaweiEnabled {
+			// 华为控制启用，标记为huawei_auto
+			configType = models.ConfigTypeHuaweiAuto
+		} else if config.StreamEnabled && config.StreamURL != "" {
+			// 流媒体配置
+			configType = models.ConfigTypeStream
+		} else if config.USBCameraDevice != "" || config.USBAudioDevice != "" {
+			// USB配置
+			configType = models.ConfigTypeUSB
+		} else {
+			// 既没有华为控制，也没有流媒体或USB，跳过
+			s.logger.Warn("配置未指定任何输入源（华为/USB/流媒体），跳过",
+				zap.Uint("config_id", configID),
+				zap.String("config_name", config.Name),
+			)
+			continue
 		}
 
-		taskConfig := models.TaskHuaweiConfig{
-			TaskID:         task.ID,
-			HuaweiConfigID: configID,
-			ConfigType:     configType,
+		taskConfig := models.TaskInputConfig{
+			TaskID:        task.ID,
+			InputConfigID: configID,
+			ConfigType:    configType,
 		}
 		s.db.Create(&taskConfig)
 	}
 
 	// 重新加载关联数据
-	s.db.Preload("HuaweiConfig").Preload("Creator").Preload("TaskHuaweiConfigs").First(task, task.ID)
+	s.db.Preload("Creator").Preload("TaskInputConfigs").First(task, task.ID)
 
 	s.logger.Info("录制任务已创建",
 		zap.Uint("task_id", task.ID),
@@ -328,7 +338,7 @@ func (s *VideoRecordingTaskService) CreateTaskAuto(req *CreateTaskAutoRequest, c
 		PreJoinMinutes:     req.PreJoinMinutes,
 		RecordDelayMinutes: req.RecordDelayMinutes,
 		ConferenceNumber:   req.ConferenceNumber,
-		HuaweiConfigID:     1,
+		InputConfigIDs:     []uint{}, // Empty for auto mode
 	}
 	return s.CreateTask(standardReq, createdBy)
 }
@@ -422,7 +432,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 	}
 
 	// 重新加载数据
-	s.db.Preload("HuaweiConfig").Preload("Creator").First(&task, id)
+	s.db.Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator").First(&task, id)
 
 	// 验证更新后的数据
 	if err := task.IsValid(); err != nil {
@@ -455,17 +465,19 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin boo
 		return errors.New("无权限删除此任务")
 	}
 
-	// 删除前先解锁终端（防止锁遗留）
-	// 如果任务有华为配置ID，尝试解锁该配置
-	if task.HuaweiConfigID != nil && *task.HuaweiConfigID > 0 {
-		updates := map[string]interface{}{
-			"is_locked": false,
-			"locked_by": nil,
+	// 删除前先解锁所有关联的输入配置（防止锁遗留）
+	var taskConfigs []models.TaskInputConfig
+	if err := s.db.Where("task_id = ?", id).Find(&taskConfigs).Error; err == nil {
+		for _, tc := range taskConfigs {
+			updates := map[string]interface{}{
+				"is_locked": false,
+				"locked_by": nil,
+			}
+			s.db.Model(&models.InputConfig{}).Where("id = ?", tc.InputConfigID).Updates(updates)
 		}
-		s.db.Model(&models.HuaweiConfig{}).Where("id = ?", *task.HuaweiConfigID).Updates(updates)
 		s.logger.Info("删除任务时解锁终端",
 			zap.Uint("task_id", id),
-			zap.Uint("huawei_config_id", *task.HuaweiConfigID),
+			zap.Int("unlocked_configs", len(taskConfigs)),
 		)
 	}
 
@@ -559,14 +571,17 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 		return result, errors.New("没有可删除的任务")
 	}
 
-	// 删除前先解锁所有待删除任务的终端（防止锁遗留）
-	for _, task := range tasks {
-		if task.HuaweiConfigID != nil && *task.HuaweiConfigID > 0 {
-			updates := map[string]interface{}{
-				"is_locked": false,
-				"locked_by": nil,
+	// 删除前先解锁所有待删除任务的输入配置（防止锁遗留）
+	for _, taskID := range result.DeletedIDs {
+		var taskConfigs []models.TaskInputConfig
+		if err := s.db.Where("task_id = ?", taskID).Find(&taskConfigs).Error; err == nil {
+			for _, tc := range taskConfigs {
+				updates := map[string]interface{}{
+					"is_locked": false,
+					"locked_by": nil,
+				}
+				s.db.Model(&models.InputConfig{}).Where("id = ?", tc.InputConfigID).Updates(updates)
 			}
-			s.db.Model(&models.HuaweiConfig{}).Where("id = ?", *task.HuaweiConfigID).Updates(updates)
 		}
 	}
 	s.logger.Info("批量删除任务时解锁终端",
@@ -859,10 +874,10 @@ func (s *VideoRecordingTaskService) UpdateRecordingPaths(id uint, mkvPath, hlsPa
 // validateConfigTypes 验证配置类型（不能多选同类型）
 func (s *VideoRecordingTaskService) validateConfigTypes(configIDs []uint) error {
 	if len(configIDs) == 0 {
-		return errors.New("至少需要选择一个华为配置")
+		return nil
 	}
 
-	var configs []models.HuaweiConfig
+	var configs []models.InputConfig
 	if err := s.db.Where("id IN ?", configIDs).Find(&configs).Error; err != nil {
 		return err
 	}
@@ -897,6 +912,14 @@ func (s *VideoRecordingTaskService) validateConfigTypes(configIDs []uint) error 
 
 	return nil
 }
+// GetInputConfig 获取输入配置（供调度器使用）
+func (s *VideoRecordingTaskService) GetInputConfig(id uint) (*models.InputConfig, error) {
+	var config models.InputConfig
+	if err := s.db.First(&config, id).Error; err != nil {
+		return nil, err
+	}
+	return &config, nil}
+
 
 // GetDB 获取数据库连接（供调度器使用）
 func (s *VideoRecordingTaskService) GetDB() *gorm.DB {
@@ -952,21 +975,25 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearS
 		}
 		result.ClearedTaskIDs = append(result.ClearedTaskIDs, task.ID)
 
-		// 释放终端锁
-		if task.HuaweiConfigID != nil && *task.HuaweiConfigID > 0 {
-			updates := map[string]interface{}{
-				"is_locked": false,
-				"locked_by": nil,
-				"locked_at": nil,
-			}
-			if err := s.db.Model(&models.HuaweiConfig{}).Where("id = ?", *task.HuaweiConfigID).Updates(updates).Error; err == nil {
-				result.UnlockedConfigIDs = append(result.UnlockedConfigIDs, *task.HuaweiConfigID)
+			// 释放所有关联的输入配置锁
+			var taskConfigs []models.TaskInputConfig
+			if err := s.db.Where("task_id = ?", task.ID).Find(&taskConfigs).Error; err == nil {
+				for _, tc := range taskConfigs {
+					updates := map[string]interface{}{
+						"is_locked": false,
+						"locked_by": nil,
+						"locked_at": nil,
+					}
+					if err := s.db.Model(&models.InputConfig{}).Where("id = ?", tc.InputConfigID).Updates(updates).Error; err == nil {
+						result.UnlockedConfigIDs = append(result.UnlockedConfigIDs, tc.InputConfigID)
+					}
+				}
 				s.logger.Info("已释放终端锁",
 					zap.Uint("task_id", task.ID),
-					zap.Uint("config_id", *task.HuaweiConfigID),
+					zap.Int("unlocked_count", len(taskConfigs)),
 				)
 			}
-		}
+
 	}
 
 	result.TotalCleared = len(result.ClearedTaskIDs)

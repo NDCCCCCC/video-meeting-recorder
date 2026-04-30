@@ -38,10 +38,10 @@ type huaweiDBAdapter struct {
 }
 
 func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huawei.HuaweiConfigDB, error) {
-	var config models.HuaweiConfig
+	var config models.InputConfig
 	if err := a.db.First(&config, configID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("华为配置不存在: ID=%d", configID)
+			return nil, fmt.Errorf("输入配置不存在: ID=%d", configID)
 		}
 		return nil, err
 	}
@@ -233,12 +233,12 @@ func (c *HuaweiConferenceConnector) IsTerminalAvailable(ctx context.Context, con
 }
 
 // LockTerminal 锁定终端（供外部调用）
-func (c *HuaweiConferenceConnector) LockTerminal(ctx context.Context, taskID uint, config *models.HuaweiConfig) error {
+func (c *HuaweiConferenceConnector) LockTerminal(ctx context.Context, taskID uint, config *models.InputConfig) error {
 	return c.lockTerminal(ctx, taskID, config)
 }
 
 // lockTerminal 锁定终端
-func (c *HuaweiConferenceConnector) lockTerminal(ctx context.Context, taskID uint, config *models.HuaweiConfig) error {
+func (c *HuaweiConferenceConnector) lockTerminal(ctx context.Context, taskID uint, config *models.InputConfig) error {
 	// 检查是否已被锁定
 	if config.IsLocked {
 		// 检查是否被同一任务锁定
@@ -284,7 +284,7 @@ func (c *HuaweiConferenceConnector) lockTerminal(ctx context.Context, taskID uin
 
 // unlockTerminal 解锁终端
 func (c *HuaweiConferenceConnector) unlockTerminal(configID uint) error {
-	var config models.HuaweiConfig
+	var config models.InputConfig
 	if err := c.db.First(&config, configID).Error; err != nil {
 		return fmt.Errorf("配置不存在: %w", err)
 	}
@@ -309,7 +309,7 @@ func (c *HuaweiConferenceConnector) unlockTerminal(configID uint) error {
 // 此方法用于任务取消时强制解锁，即使任务对象无法完整获取
 func (c *HuaweiConferenceConnector) UnlockTerminalByTaskID(taskID uint) error {
 	// 通过任务ID查找华为配置
-	var config models.HuaweiConfig
+	var config models.InputConfig
 	if err := c.db.Where("locked_by = ?", taskID).First(&config).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.logger.Info("未找到被此任务锁定的终端",
@@ -353,7 +353,7 @@ func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
 	c.logger.Info("开始清理过期的终端锁")
 
 	// 查询所有被锁定的华为配置
-	var lockedConfigs []models.HuaweiConfig
+	var lockedConfigs []models.InputConfig
 	if err := c.db.Where("is_locked = ?", true).Find(&lockedConfigs).Error; err != nil {
 		return fmt.Errorf("查询被锁定的华为配置失败: %w", err)
 	}
@@ -423,11 +423,11 @@ func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
 }
 
 // getHuaweiConfig 获取华为配置
-func (c *HuaweiConferenceConnector) getHuaweiConfig(configID uint) (*models.HuaweiConfig, error) {
-	var config models.HuaweiConfig
+func (c *HuaweiConferenceConnector) getHuaweiConfig(configID uint) (*models.InputConfig, error) {
+	var config models.InputConfig
 	if err := c.db.First(&config, configID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("华为配置不存在: ID=%d", configID)
+			return nil, fmt.Errorf("输入配置不存在: ID=%d", configID)
 		}
 		return nil, err
 	}
@@ -457,14 +457,14 @@ func (c *HuaweiConferenceConnector) ValidateConference(ctx context.Context, conf
 }
 
 // GetActiveTerminals 获取所有可用的终端
-func (c *HuaweiConferenceConnector) GetActiveTerminals(ctx context.Context) ([]models.HuaweiConfig, error) {
-	var configs []models.HuaweiConfig
+func (c *HuaweiConferenceConnector) GetActiveTerminals(ctx context.Context) ([]models.InputConfig, error) {
+	var configs []models.InputConfig
 	if err := c.db.Where("is_active = ?", true).Find(&configs).Error; err != nil {
 		return nil, err
 	}
 
 	// 过滤掉已锁定的配置
-	var available []models.HuaweiConfig
+	var available []models.InputConfig
 	for _, config := range configs {
 		if !config.IsLocked {
 			available = append(available, config)
@@ -474,10 +474,13 @@ func (c *HuaweiConferenceConnector) GetActiveTerminals(ctx context.Context) ([]m
 	return available, nil
 }
 
-// getConfigID 从任务获取华为配置ID（支持指针类型）
+// getConfigID 从任务获取华为配置ID
+// 从 TaskInputConfigs 中查找 ConfigType 为 huawei_auto 的配置
 func getConfigID(task *models.VideoRecordingTask) (uint, error) {
-	if task.HuaweiConfigID == nil {
-		return 0, fmt.Errorf("华为配置ID未设置")
+	for _, tc := range task.TaskInputConfigs {
+		if tc.ConfigType == models.ConfigTypeHuaweiAuto {
+			return tc.InputConfigID, nil
+		}
 	}
-	return *task.HuaweiConfigID, nil
+	return 0, fmt.Errorf("华为配置ID未设置")
 }

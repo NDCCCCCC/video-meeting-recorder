@@ -37,7 +37,7 @@ type RecordingProcess struct {
 	// 自动重连支持
 	ConfigType      string                     // 配置类型: usb 或 stream
 	Task            *models.VideoRecordingTask // 任务信息（用于重连）
-	HuaweiConfig    *models.HuaweiConfig       // 华为配置（用于重连）
+	HuaweiConfig    *models.InputConfig       // 华为配置（用于重连）
 	ReconnectCount  int                        // 当前重连次数
 	MaxReconnects   int                        // 最大重连次数
 	ReconnectDelay  time.Duration              // 重连间隔
@@ -83,13 +83,13 @@ func NewSimpleRecordingCoordinator(logger *zap.Logger, cfg *config.Config) *Simp
 }
 
 // StartRecording 启动录制
-func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig) error {
+func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingTask, huaweiConfig *models.InputConfig) error {
 	// 默认使用 USB 类型
 	return c.StartRecordingWithConfig(task, huaweiConfig, "usb")
 }
 
 // StartRecordingWithConfig 启动指定配置类型的录制
-func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig, configType string) error {
+func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.VideoRecordingTask, huaweiConfig *models.InputConfig, configType string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -509,7 +509,7 @@ func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPat
 }
 
 // buildRecordingInput 构建录制输入配置
-func (c *SimpleRecordingCoordinator) buildRecordingInput(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig) RecordingInput {
+func (c *SimpleRecordingCoordinator) buildRecordingInput(task *models.VideoRecordingTask, huaweiConfig *models.InputConfig) RecordingInput {
 	input := RecordingInput{
 		CameraBackend: huaweiConfig.CameraBackend,
 		AudioBackend:  huaweiConfig.AudioBackend,
