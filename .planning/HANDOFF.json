@@ -1,43 +1,55 @@
 {
   "version": "1.0",
-  "timestamp": "2026-04-30T06:24:08.663Z",
+  "timestamp": "2026-04-30T06:37:21Z",
   "phase": "14",
-  "phase_name": "batch-operations",
+  "phase_name": "14-batch-operations",
   "phase_dir": ".planning/phases/14-batch-operations",
-  "plan": 1,
-  "task": 4,
-  "total_tasks": 7,
+  "plan": 3,
+  "task": 1,
+  "total_tasks": 4,
   "status": "paused",
   "completed_tasks": [
     {"id": 1, "name": "Wave 0: 测试基础设施", "status": "done", "summary": "14-00-SUMMARY.md created"},
-    {"id": 2, "name": "Wave 1 Task 1: 后端批量下载服务层", "status": "done", "files": ["internal/services/video_file_service.go"]},
-    {"id": 3, "name": "Wave 1 Task 2: 后端批量下载Handler", "status": "done", "files": ["internal/handlers/video_file_handler.go", "cmd/server/app.go"]},
-    {"id": 4, "name": "Wave 1 Task 3: 前端批量下载API客户端", "status": "done", "files": ["frontend/src/api/video-file.ts", "frontend/src/types/video-file.ts"]}
+    {"id": 2, "name": "Wave 1: 后端批量下载", "status": "done", "summary": "14-01-SUMMARY.md created"},
+    {"id": 3, "name": "Wave 2: 后端批量转录", "status": "done", "summary": "14-02-SUMMARY.md created"}
   ],
   "remaining_tasks": [
-    {"id": 5, "name": "Wave 2: Plan 14-02 后端批量转录", "status": "not_started", "plan": "14-02"},
-    {"id": 6, "name": "Wave 3: Plan 14-03 前端批量操作UI", "status": "not_started", "plan": "14-03"}
+    {"id": 1, "name": "Wave 3 Task 1: 在文件列表页添加批量选择功能", "status": "not_started"},
+    {"id": 2, "name": "Wave 3 Task 2: 添加批量下载按钮和点击处理", "status": "not_started"},
+    {"id": 3, "name": "Wave 3 Task 3: 添加批量转录按钮和配置对话框", "status": "not_started"},
+    {"id": 4, "name": "Wave 3 Task 4: 显示成功/失败统计反馈", "status": "not_started"}
   ],
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [
     {"decision": "使用 TDD 工作流", "rationale": "Plan 14-00 创建了测试桩，Wave 1 实现时遵循 TDD 模式", "phase": "14"},
     {"decision": "使用 io.Pipe 实现流式 ZIP 响应", "rationale": "避免大文件占用内存，使用 goroutine 后台写入 ZIP", "phase": "14"},
-    {"decision": "文件按类型分组到 ZIP 文件夹", "rationale": "video/, ppt/, other/ 文件夹组织结构", "phase": "14"}
+    {"decision": "文件按类型分组到 ZIP 文件夹", "rationale": "video/, ppt/, other/ 文件夹组织结构", "phase": "14"},
+    {"decision": "使用 TranscriptionJobGroup 模型管理批量转录任务", "rationale": "支持进度跟踪和顺序执行，避免资源耗尽", "phase": "14"},
+    {"decision": "任务组进度在任务完成/失败时自动更新", "rationale": "确保实时跟踪批量任务进度", "phase": "14"}
   ],
   "uncommitted_files": [
     ".planning/STATE.md",
+    ".planning/phases/14-batch-operations/14-02-SUMMARY.md",
     "cmd/server/app.go",
+    "frontend/src/api/transcription.ts",
     "frontend/src/api/video-file.ts",
+    "frontend/src/types/transcription.ts",
     "frontend/src/types/video-file.ts",
-    "internal/handlers/transcription_handler_test.go",
+    "internal/handlers/transcription_handler.go",
     "internal/handlers/video_file_handler.go",
-    "internal/handlers/video_file_handler_test.go",
-    "internal/models/transcription_job_group_test.go",
-    "internal/services/transcription_service_test.go",
+    "internal/migrations/001_add_video_file_owner.go",
+    "internal/migrations/015_add_transcription_job_groups.go",
+    "internal/models/transcription_task.go",
+    "internal/models/transcription_job_group.go",
+    "internal/services/transcription_service.go",
     "internal/services/video_file_service.go",
-    "internal/services/video_file_service_test.go"
+    "internal/services/transcription_service_test.go",
+    "internal/services/video_file_service_test.go",
+    "internal/handlers/transcription_handler_test.go",
+    "internal/handlers/video_file_handler_test.go",
+    "internal/models/transcription_job_group_test.go"
   ],
-  "next_action": "执行 Wave 2 - Plan 14-02 后端批量转录",
-  "context_notes": "Wave 0 和 Wave 1 已完成。Wave 1 包含人工验证检查点，但批量下载按钮需要在 Wave 3 的前端 UI 实现中添加。建议先完成 Wave 2，然后 Wave 3 添加 UI 后进行人工验证。"
+  "next_action": "开始 Wave 3 (14-03) - 在 frontend/src/pages/files/index.tsx 中添加批量操作UI",
+  "context_notes": "Wave 2 后端批量转录已完成。包括：1) TranscriptionJobGroup 模型和迁移 2) SubmitBatchTranscription 服务层方法 3) 批量转录 Handler 和路由 4) 前端 API 客户端。所有代码编译通过。下一步是实现前端批量操作 UI，包括文件多选、批量下载按钮、批量转录按钮和配置对话框。"
 }
