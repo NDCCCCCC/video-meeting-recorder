@@ -32,6 +32,8 @@ type TranscriptionTask struct {
 	Mode            string     `gorm:"type:varchar(20);default:'local'" json:"mode"`     // local, cloud
 	CloudTaskID     string     `gorm:"type:varchar(100)" json:"cloud_task_id,omitempty"` // Tingwu task ID
 	OSSURL          string     `gorm:"type:varchar(500)" json:"oss_url,omitempty"`       // OSS presigned URL
+	JobGroupID      *uint      `gorm:"index" json:"job_group_id,omitempty"`              // 关联的任务组ID
+	JobGroup        *TranscriptionJobGroup `gorm:"foreignKey:JobGroupID" json:"job_group,omitempty"`
 	SlideTimestamps string     `gorm:"type:text" json:"slide_timestamps,omitempty"`     // JSON: [{"slide_number":1,"timestamp":0.0},...]
 }
 

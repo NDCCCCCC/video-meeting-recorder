@@ -319,3 +319,49 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 		},
 	})
 }
+
+// --- Phase 14 Batch Download Handler ---
+
+// BatchDownloadFiles 批量下载文件（打包为ZIP）
+func (h *VideoFileHandler) BatchDownloadFiles(c *gin.Context) {
+	var req struct {
+		IDs []uint `json:"ids" binding:"required,min=1,dive,min=1"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "参数错误")
+		return
+	}
+
+	// 获取用户信息
+	userID := middleware.GetUserID(c)
+	isAdmin := middleware.GetIsAdmin(c)
+
+	// 调用服务层
+	resp, err := h.fileService.BatchDownloadFiles(req.IDs, userID, isAdmin)
+	if err != nil {
+		h.logger.Error("批量下载文件失败",
+			zap.Uint("user_id", userID),
+			zap.Int("file_count", len(req.IDs)),
+			zap.Error(err),
+		)
+		response.GinError(c, response.CodeInternalError, err.Error())
+		return
+	}
+	defer resp.Reader.Close()
+
+	// 设置响应头
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", resp.Filename))
+	c.Header("Content-Type", resp.ContentType)
+	c.Header("Accept-Ranges", "none") // ZIP 不支持范围请求
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Type")
+
+	// 流式响应
+	c.DataFromReader(200, -1, resp.ContentType, resp.Reader, nil)
+
+	h.logger.Info("批量下载文件成功",
+		zap.Uint("user_id", userID),
+		zap.Int("file_count", resp.FileCount),
+		zap.String("filename", resp.Filename),
+	)
+}

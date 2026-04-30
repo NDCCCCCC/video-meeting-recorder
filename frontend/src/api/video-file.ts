@@ -210,3 +210,53 @@ export function uploadVideoFile(
     xhr.send(formData)
   })
 }
+
+// --- Phase 14 Batch Download API ---
+
+import { message } from 'antd'
+import dayjs from 'dayjs'
+
+// 批量下载文件（打包为ZIP）
+export function batchDownloadFiles(ids: number[]): void {
+  const token = getToken()
+  const url = `${API_BASE_URL}/api/v1/files/batch/download`
+
+  // 显示加载提示
+  const hide = message.loading('正在打包文件，请稍候...', 0)
+
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ ids }),
+  })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`下载失败: ${response.status}`)
+      }
+      return response.blob()
+    })
+    .then(blob => {
+      // 从响应头获取文件名
+      const filename = `files_batch_${dayjs().format('YYYYMMDD_HHmmss')}.zip`
+
+      // 创建下载链接
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(blobUrl)
+
+      message.success(`成功下载 ${ids.length} 个文件`)
+    })
+    .catch(error => {
+      console.error('批量下载失败:', error)
+      message.error(error instanceof Error ? error.message : '批量下载失败')
+    })
+    .finally(() => {
+      hide()
+    })
+}

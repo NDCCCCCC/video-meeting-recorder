@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/cpic/record_v2/internal/middleware"
@@ -310,3 +311,98 @@ func (h *TranscriptionHandler) GetTimestampMapHandler(c *gin.Context) {
 		"slide_timestamps": timestamps,
 	})
 }
+
+// SubmitBatchTranscription handles POST /api/v1/transcriptions/batch
+func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
+	var req struct {
+		VideoFileIDs []uint  `json:"video_file_ids" binding:"required,min=1,dive,min=1"`
+		SamplingRate float64 `json:"sampling_rate"`
+		Mode         string  `json:"mode"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "参数错误")
+		return
+	}
+
+	// 设置默认值
+	if req.Mode == "" {
+		req.Mode = "local"
+	}
+	if req.Mode == "local" && req.SamplingRate == 0 {
+		req.SamplingRate = 0.5
+	}
+
+	// 验证模式
+	validModes := map[string]bool{"local": true, "cloud": true}
+	if !validModes[req.Mode] {
+		response.GinError(c, response.CodeInvalidRequest, "无效的转录模式，必须是 local 或 cloud")
+		return
+	}
+
+	// 获取用户信息
+	userID := middleware.GetUserID(c)
+	isAdmin := middleware.CanAccessAllData(c)
+
+	// 验证文件所有权
+	for _, videoFileID := range req.VideoFileIDs {
+		file, err := h.videoFileService.GetFileByID(videoFileID)
+		if err != nil {
+			response.GinError(c, response.CodeNotFound, fmt.Sprintf("视频文件 %d 不存在", videoFileID))
+			return
+		}
+		if !isAdmin && file.CreatedBy != userID {
+			response.GinError(c, response.CodeForbidden, fmt.Sprintf("无权操作视频文件 %d", videoFileID))
+			return
+		}
+	}
+
+	// 调用服务层
+	batchReq := &services.BatchTranscriptionRequest{
+		VideoFileIDs: req.VideoFileIDs,
+		SamplingRate: req.SamplingRate,
+		Mode:         req.Mode,
+		UserID:       userID,
+	}
+	result, err := h.transcriptionService.SubmitBatchTranscription(batchReq)
+	if err != nil {
+		h.logger.Error("批量转录失败",
+			zap.Uint("user_id", userID),
+			zap.Int("file_count", len(req.VideoFileIDs)),
+			zap.Error(err),
+		)
+		response.GinError(c, response.CodeInternalError, "批量转录失败: "+err.Error())
+		return
+	}
+
+	h.logger.Info("批量转录成功",
+		zap.Uint("user_id", userID),
+		zap.Uint("job_group_id", result.JobGroupID),
+		zap.Int("total", result.TotalCount),
+		zap.Int("submitted", result.SubmittedCount),
+		zap.Int("failed", result.FailedCount),
+	)
+
+	response.GinSuccess(c, result)
+}
+
+// GetBatchTranscriptionStatus handles GET /api/v1/transcriptions/batch/:id
+func (h *TranscriptionHandler) GetBatchTranscriptionStatus(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的任务组ID")
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	isAdmin := middleware.CanAccessAllData(c)
+
+	jobGroup, err := h.transcriptionService.GetJobGroupStatus(uint(id), userID, isAdmin)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "任务组不存在")
+		return
+	}
+
+	response.GinSuccess(c, jobGroup)
+}
+

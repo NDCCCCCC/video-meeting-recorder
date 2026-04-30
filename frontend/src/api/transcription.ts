@@ -8,6 +8,9 @@ import type {
   TranscriptionTextResponse,
   TranscriptionMode,
   TimestampMapResponse,
+  BatchTranscriptionRequest,
+  BatchTranscriptionResult,
+  TranscriptionJobGroup,
 } from '../types/transcription'
 import { apiRequest } from './apiClient'
 
@@ -103,4 +106,23 @@ export async function getTimestampMap(
   return apiRequest<TimestampMapResponse>(
     `/api/v1/transcriptions/${videoFileId}/timestamps`
   )
+}
+
+// === Batch transcription API (Phase 14) ===
+
+// 批量提交转录任务
+export async function submitBatchTranscription(
+  request: BatchTranscriptionRequest
+): Promise<ApiResponse<BatchTranscriptionResult>> {
+  return apiRequest<BatchTranscriptionResult>('/api/v1/transcriptions/batch', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+// 获取批量转录任务组状态
+export async function getBatchTranscriptionStatus(
+  jobGroupId: number
+): Promise<ApiResponse<TranscriptionJobGroup>> {
+  return apiRequest<TranscriptionJobGroup>(`/api/v1/transcriptions/batch/${jobGroupId}`)
 }

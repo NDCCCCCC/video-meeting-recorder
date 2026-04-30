@@ -1648,3 +1648,62 @@ func TestListFiles_MultipleSharedViewersSeeSameData(t *testing.T) {
 	//         Verify both lists include all files in system
 	//         Verify total counts match
 }
+
+// --- Phase 14 Batch Download Test Stubs (Wave 0) ---
+// These tests verify batch download functionality (D-01 to D-07)
+
+// TestVideoFileService_BatchDownloadFiles_EmptyList verifies that empty file list returns empty ZIP
+func TestVideoFileService_BatchDownloadFiles_EmptyList(t *testing.T) {
+	t.Skip("Wave 0: Test stub for batch download - to be implemented in Wave 1")
+	// Setup: Create test service
+	// Action: Call BatchDownloadFiles with empty ID list
+	// Assert: Returns empty ZIP or error
+}
+
+// TestVideoFileService_BatchDownloadFiles_SingleFile verifies single file is packaged into ZIP
+func TestVideoFileService_BatchDownloadFiles_SingleFile(t *testing.T) {
+	t.Skip("Wave 0: Test stub for batch download - to be implemented in Wave 1")
+	// Setup: Create test service and one video file
+	// Action: Call BatchDownloadFiles with single file ID
+	// Assert: Returns ZIP containing the single file
+}
+
+// TestVideoFileService_BatchDownloadFiles_MultipleFiles verifies multiple files are grouped by type
+func TestVideoFileService_BatchDownloadFiles_MultipleFiles(t *testing.T) {
+	t.Skip("Wave 0: Test stub for batch download - to be implemented in Wave 1")
+	// Setup: Create test service with video, ppt, and other files
+	// Action: Call BatchDownloadFiles with multiple file IDs
+	// Assert: ZIP contains files grouped into video/, ppt/, other/ folders
+}
+
+// TestVideoFileService_BatchDownloadFiles_FileNotFound verifies non-existent files are skipped
+func TestVideoFileService_BatchDownloadFiles_FileNotFound(t *testing.T) {
+	t.Skip("Wave 0: Test stub for batch download - to be implemented in Wave 1")
+	// Setup: Create test service with mix of existing and non-existent file IDs
+	// Action: Call BatchDownloadFiles
+	// Assert: Non-existent files are skipped, valid files are packaged
+}
+
+// TestVideoFileService_BatchDownloadFiles_FileGrouping verifies file type grouping (D-07)
+func TestVideoFileService_BatchDownloadFiles_FileGrouping(t *testing.T) {
+	t.Skip("Wave 0: Test stub for batch download - to be implemented in Wave 1")
+	// Setup: Create files with different extensions (.mp4, .mkv, .pptx, .pdf, .txt)
+	// Action: Call BatchDownloadFiles
+	// Assert: ZIP structure is video/*.mp4, video/*.mkv, ppt/*.pptx, other/*.pdf, other/*.txt
+}
+
+// TestVideoFileService_BatchDownloadFiles_LargeFiles verifies streaming for large files (D-06)
+func TestVideoFileService_BatchDownloadFiles_LargeFiles(t *testing.T) {
+	t.Skip("Wave 0: Test stub for batch download - to be implemented in Wave 1")
+	// Setup: Create test service with large files (>100MB)
+	// Action: Call BatchDownloadFiles
+	// Assert: Uses io.Pipe for streaming, memory usage stays low
+}
+
+// TestVideoFileService_BatchDownloadFiles_ZIPStructure verifies ZIP internal structure
+func TestVideoFileService_BatchDownloadFiles_ZIPStructure(t *testing.T) {
+	t.Skip("Wave 0: Test stub for batch download - to be implemented in Wave 1")
+	// Setup: Create test service with multiple files
+	// Action: Call BatchDownloadFiles, read returned ZIP
+	// Assert: Verify ZIP structure using archive/zip reader
+}

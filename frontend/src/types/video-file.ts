@@ -62,3 +62,17 @@ export interface VideoFileStats {
   total_size: number
   total_size_gb: number
 }
+
+// --- Phase 14 Batch Download Types ---
+
+// 批量下载请求
+export interface BatchDownloadFilesRequest {
+  ids: number[]
+}
+
+// 批量下载结果（元数据）
+export interface BatchDownloadFilesResult {
+  file_count: number
+  filename: string
+  content_type: string
+}
