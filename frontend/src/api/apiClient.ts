@@ -6,10 +6,12 @@ import { message } from 'antd'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
-// 正在刷新 token 的标志，防止并发刷新
-let isRefreshing = false
-// 等待刷新完成的回调队列
-let refreshSubscribers: Array<(token: string) => void> = []
+// 正在刷新 token 的 Promise，防止并发刷新
+let refreshingPromise: Promise<string> | null = null
+// 上次刷新失败的时间戳，用于防止频繁重试
+let lastRefreshFailureTime = 0
+// 刷新失败后的冷却时间（毫秒）
+const REFRESH_COOLDOWN = 5000
 
 // 缓存 localStorage 读取以避免频繁解析 JSON (client-localstorage-schema)
 let cachedToken: string | null = null
@@ -35,17 +37,6 @@ const updateTokenCache = () => {
       cachedRefreshToken = localStorage.getItem('refresh_token')
     }
   }
-}
-
-// 将回调加入队列
-function subscribeTokenRefresh(callback: (token: string) => void) {
-  refreshSubscribers.push(callback)
-}
-
-// 通知所有订阅者 token 已刷新
-function onTokenRefreshed(token: string) {
-  refreshSubscribers.forEach((callback) => callback(token))
-  refreshSubscribers = []
 }
 
 // 获取 Token - 使用缓存
@@ -164,41 +155,48 @@ export async function apiRequest<T>(
         throw new Error('Unauthorized - no refresh token')
       }
 
-      // 如果正在刷新，等待刷新完成
-      if (isRefreshing) {
-        return new Promise<ApiResponse<T>>((resolve, reject) => {
-          subscribeTokenRefresh((newToken: string) => {
-            // 使用新 token 重试请求
-            const newHeaders = { ...headers, Authorization: `Bearer ${newToken}` }
-            fetch(url, { ...options, headers: newHeaders })
-              .then(async (res) => {
-                const data = await res.json()
-                if (!res.ok) {
-                  reject(new Error(data.message || 'Request failed'))
-                } else {
-                  resolve(data)
-                }
-              })
-              .catch(reject)
-          })
-        })
+      // 检查是否在冷却期内（上次刷新失败后 5 秒内）
+      const now = Date.now()
+      if (lastRefreshFailureTime > 0 && now - lastRefreshFailureTime < REFRESH_COOLDOWN) {
+        handleUnauthorized()
+        throw new Error('Token refresh failed recently, please login again')
       }
 
-      // 开始刷新 token
-      isRefreshing = true
+      // 关键修复：使用 Promise 缓存防止并发刷新
+      // 如果正在刷新，直接返回现有的 Promise，而不是创建新的刷新请求
+      if (refreshingPromise) {
+        try {
+          const newToken = await refreshingPromise
+          // 使用新 token 重试原始请求
+          const newHeaders = { ...headers, Authorization: `Bearer ${newToken}` }
+          const retryResponse = await fetch(url, { ...options, headers: newHeaders })
+          if (retryResponse.status === 401) {
+            handleUnauthorized()
+            throw new Error('Session expired')
+          }
+          const data = await retryResponse.json()
+          if (!retryResponse.ok) {
+            throw new Error(data.message || 'Request failed')
+          }
+          return data
+        } catch (error) {
+          handleUnauthorized()
+          throw error
+        }
+      }
+
+      // 开始刷新 token - 创建 Promise 并缓存
+      refreshingPromise = refreshAccessToken(refreshToken)
 
       try {
-        const newToken = await refreshAccessToken(refreshToken)
-        onTokenRefreshed(newToken)
+        const newToken = await refreshingPromise
+
+        // 刷新成功，清除失败时间戳
+        lastRefreshFailureTime = 0
 
         // 使用新 token 重试原始请求
-        const newHeaders = { ...headers }
-        newHeaders['Authorization'] = `Bearer ${newToken}`
-
-        const retryResponse = await fetch(url, {
-          ...options,
-          headers: newHeaders,
-        })
+        const newHeaders = { ...headers, Authorization: `Bearer ${newToken}` }
+        const retryResponse = await fetch(url, { ...options, headers: newHeaders })
 
         if (retryResponse.status === 401) {
           // 刷新后仍然 401，token 已彻底失效
@@ -213,13 +211,13 @@ export async function apiRequest<T>(
 
         return data
       } catch (error) {
-        // 刷新失败，跳转登录
+        // 刷新失败，记录失败时间并跳转登录
+        lastRefreshFailureTime = Date.now()
         handleUnauthorized()
         throw error
       } finally {
-        // 确保在重试请求完成后才清除刷新标志
-        // 这防止并发 401 请求都尝试刷新 token
-        isRefreshing = false
+        // 清除 Promise 缓存，允许下次刷新（但在冷却期内）
+        refreshingPromise = null
       }
     }
 
