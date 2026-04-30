@@ -72,6 +72,28 @@ export async function getPptsByVideo(videoFileId: number): Promise<ApiResponse<P
   return apiRequest<PPTListResponse>(`/api/v1/videos/${videoFileId}/ppts`)
 }
 
+// 批量检查多个视频的 PPT 结果
+export interface BatchCheckRequest {
+  video_ids: number[]
+}
+
+export interface BatchCheckResult {
+  has_ppt: boolean
+  count?: number
+  error?: string
+}
+
+export interface BatchCheckResponse {
+  results: Record<number, BatchCheckResult>
+}
+
+export async function batchCheckPpts(videoIds: number[]): Promise<ApiResponse<BatchCheckResponse>> {
+  return apiRequest<BatchCheckResponse>('/api/v1/ppts/batch-check', {
+    method: 'POST',
+    body: JSON.stringify({ video_ids: videoIds }),
+  })
+}
+
 // 合并幻灯片
 export async function mergeSlides(req: MergeRequest): Promise<ApiResponse<MergeResponse>> {
   return apiRequest<MergeResponse>('/api/v1/ppts/merge', {

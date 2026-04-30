@@ -42,7 +42,7 @@ import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import * as videoFileApi from '../../api/video-file'
 import { submitTranscriptionWithMode, getActiveTranscriptionTasks } from '../../api/transcription'
-import { getPptsByVideo } from '../../api/ppt'
+import { batchCheckPpts } from '../../api/ppt'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
 import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
@@ -168,27 +168,6 @@ export default function FileManagement() {
     }
   }, [])
 
-  // 检查视频是否有 PPT 结果
-  const checkHasPpt = useCallback(async (videoFileId: number) => {
-    // 先检查缓存
-    if (videosWithPpt.has(videoFileId)) {
-      return true
-    }
-
-    try {
-      const response = await getPptsByVideo(videoFileId)
-      if (response.data && response.data.ppts && response.data.ppts.length > 0) {
-        // 添加到缓存
-        setVideosWithPpt(prev => new Set(prev).add(videoFileId))
-        return true
-      }
-      return false
-    } catch (error) {
-      // PPT check failure is non-critical, silently ignore
-      return false
-    }
-  }, [videosWithPpt])
-
   // 加载活跃的转录任务
   const loadActiveTranscriptions = useCallback(async () => {
     try {
@@ -213,21 +192,39 @@ export default function FileManagement() {
     Promise.all([loadFiles(), loadStats(), loadActiveTranscriptions()])
   }, [loadFiles, loadStats, loadActiveTranscriptions])
 
-  // 检查当前页面的视频是否有 PPT 结果
+  // 检查当前页面的视频是否有 PPT 结果（使用批量 API 减少请求）
   useEffect(() => {
     const checkPptResults = async () => {
-      const checks = files.map(async (file) => {
-        if (file.format === 'mp4' && file.status === 'ready') {
-          await checkHasPpt(file.id)
+      // 收集需要检查的视频 ID
+      const videoIds = files
+        .filter(file => file.format === 'mp4' && file.status === 'ready')
+        .map(file => file.id)
+
+      if (videoIds.length === 0) return
+
+      try {
+        // 使用批量 API 一次性检查所有视频
+        const response = await batchCheckPpts(videoIds)
+        if (response.data && response.data.results) {
+          // 更新缓存
+          const newPptSet = new Set<number>()
+          Object.entries(response.data.results).forEach(([videoIdStr, result]) => {
+            if (result.has_ppt) {
+              newPptSet.add(Number(videoIdStr))
+            }
+          })
+          setVideosWithPpt(newPptSet)
         }
-      })
-      await Promise.all(checks)
+      } catch (error) {
+        // 批量检查失败，静默忽略
+        console.warn('Batch PPT check failed:', error)
+      }
     }
 
     if (files.length > 0) {
       checkPptResults()
     }
-  }, [files, checkHasPpt])
+  }, [files])
 
   // 自动刷新文件列表 (SCAN-02)
   useEffect(() => {

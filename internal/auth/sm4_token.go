@@ -375,14 +375,7 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 
 	return newTokenPair, nil
 }
-	}
 
-	if !user.IsActive {
-		return nil, errors.New("user is inactive")
-	}
-
-	return s.GenerateTokenPair(&user)
-}
 
 // CreateSession 创建会话记录
 func (s *SM4TokenService) CreateSession(userID uint, token string, ipAddress, userAgent string, expiresAt time.Time) error {
