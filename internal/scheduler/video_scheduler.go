@@ -71,14 +71,14 @@ type TaskServiceInterface interface {
 	GetPendingTasks() ([]*models.VideoRecordingTask, error)
 	UpdateTaskStatus(id uint, status models.VideoRecordingTaskStatus, errorMsg string) error
 	UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error
-	GetHuaweiConfig(id uint) (*models.HuaweiConfig, error)
+	GetInputConfig(id uint) (*models.InputConfig, error)
 	GetDB() *gorm.DB
 }
 
 // RecorderCoordinatorInterface 录制协调器接口
 type RecorderCoordinatorInterface interface {
-	StartRecording(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig) error
-	StartRecordingWithConfig(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig, configType string) error
+	StartRecording(task *models.VideoRecordingTask, config *models.InputConfig) error
+	StartRecordingWithConfig(task *models.VideoRecordingTask, config *models.InputConfig, configType string) error
 	StopRecording(taskID uint) error
 	HealthCheck() error
 }
@@ -306,8 +306,25 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		return
 	}
 
-	// 连接华为会议
-	if s.connector != nil {
+	// 加载任务关联的所有输入配置
+	var taskConfigs []models.TaskInputConfig
+	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs).Error; err != nil {
+		s.logger.Error("加载任务关联配置失败", zap.Error(err))
+		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
+		return
+	}
+
+	// 检查是否有华为控制配置
+	hasHuaweiAuto := false
+	for _, tc := range taskConfigs {
+		if tc.ConfigType == models.ConfigTypeHuaweiAuto {
+			hasHuaweiAuto = true
+			break
+		}
+	}
+
+	// 连接华为会议（如果有华为控制配置）
+	if s.connector != nil && hasHuaweiAuto {
 		s.logger.Info("开始连接华为会议",
 			zap.Uint("task_id", taskID),
 			zap.String("conference_number", task.ConferenceNumber),
@@ -323,6 +340,10 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		s.logger.Info("华为会议连接成功",
 			zap.Uint("task_id", taskID),
 		)
+	} else {
+		s.logger.Info("跳过华为会议连接（无华为控制配置）",
+			zap.Uint("task_id", taskID),
+		)
 	}
 
 	// 等待录制延迟
@@ -334,55 +355,58 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		time.Sleep(time.Duration(task.RecordDelayMinutes) * time.Minute)
 	}
 
-	// 加载华为配置（用于连接华为会议）
-	if task.HuaweiConfigID == nil {
-		s.logger.Error("华为配置ID未设置")
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, "华为配置ID未设置")
-		return
-	}
-
-	// 加载任务关联的所有华为配置
-	var taskConfigs []models.TaskHuaweiConfig
+	// 重新加载任务关联的所有输入配置（可能已更新）
+	taskConfigs = nil
 	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs).Error; err != nil {
-		s.logger.Error("加载任务关联配置失败", zap.Error(err))
+		s.logger.Error("重新加载任务关联配置失败", zap.Error(err))
 		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
 		return
 	}
 
-	// 如果没有关联配置，使用主配置创建一个
+	// 如果没有关联配置，则无法录制
 	if len(taskConfigs) == 0 {
-		taskConfigs = []models.TaskHuaweiConfig{
-			{
-				TaskID:         taskID,
-				HuaweiConfigID: *task.HuaweiConfigID,
-				ConfigType:     "usb", // 默认为USB类型
-			},
-		}
+		s.logger.Info("无录制配置，任务无法执行",
+			zap.Uint("task_id", taskID),
+		)
+		s.updateTaskStatus(taskID, models.VideoStatusFailed, "无录制配置：请至少添加一个输入配置（USB/流媒体）")
+		return
 	}
 
+
 	// 加载所有关联的华为配置
-	var huaweiConfigs []models.HuaweiConfig
+	var inputConfigs []models.InputConfig
 	for _, tc := range taskConfigs {
-		var config models.HuaweiConfig
-		if err := s.taskService.GetDB().First(&config, tc.HuaweiConfigID).Error; err != nil {
+		var config models.InputConfig
+		if err := s.taskService.GetDB().First(&config, tc.InputConfigID).Error; err != nil {
 			s.logger.Error("加载华为配置失败",
-				zap.Uint("config_id", tc.HuaweiConfigID),
+				zap.Uint("config_id", tc.InputConfigID),
 				zap.Error(err),
 			)
 			continue
 		}
-		huaweiConfigs = append(huaweiConfigs, config)
+		inputConfigs = append(inputConfigs, config)
 	}
 
-	if len(huaweiConfigs) == 0 {
-		s.logger.Error("没有可用的华为配置")
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, "没有可用的华为配置")
+	// 验证配置中至少有 USB 或流媒体可用
+	hasValidInputSource := false
+	for _, config := range inputConfigs {
+		hasUSB := config.USBCameraDevice != "" || config.USBAudioDevice != ""
+		hasStream := config.StreamEnabled && config.StreamURL != ""
+		if hasUSB || hasStream {
+			hasValidInputSource = true
+			break
+		}
+	}
+
+	if !hasValidInputSource {
+		s.logger.Error("配置中没有可用的输入源（USB或流媒体）")
+		s.updateTaskStatus(taskID, models.VideoStatusFailed, "配置中没有可用的输入源（USB或流媒体）")
 		return
 	}
 
-	s.logger.Info("任务关联的华为配置",
+	s.logger.Info("任务关联的输入配置",
 		zap.Uint("task_id", taskID),
-		zap.Int("config_count", len(huaweiConfigs)),
+		zap.Int("config_count", len(inputConfigs)),
 	)
 
 	// 更新状态为录制中
@@ -393,10 +417,14 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 	// 启动多路录制
 	var recordingErrors []error
-	for _, config := range huaweiConfigs {
-		configType := "usb"
-		if config.StreamEnabled && config.StreamURL != "" {
-			configType = "stream"
+	for _, config := range inputConfigs {
+		// 从TaskInputConfigs中获取正确的ConfigType
+		configType := "usb" // 默认值
+		for _, tc := range taskConfigs {
+			if tc.InputConfigID == config.ID {
+				configType = tc.ConfigType
+				break
+			}
 		}
 
 		s.logger.Info("启动录制",
@@ -416,19 +444,18 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	}
 
 	// 如果所有录制都失败，则返回错误
-	if len(recordingErrors) == len(huaweiConfigs) {
+	if len(recordingErrors) == len(inputConfigs) {
 		s.updateTaskStatus(taskID, models.VideoStatusFailed, "所有录制启动失败")
 		// 清理：断开华为会议连接，解锁终端
-		if s.connector != nil {
+		if s.connector != nil && len(taskConfigs) > 0 {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			// 重新加载主配置用于清理
-			mainConfig, err := s.taskService.GetHuaweiConfig(*task.HuaweiConfigID)
 			if err == nil {
 				// 创建临时任务对象用于清理
 				cleanupTask := *task
-				cleanupTask.HuaweiConfig = mainConfig
+				// cleanupTask.HuaweiConfig = mainConfig  // TODO: 更新为InputConfig
 				_ = s.connector.DisconnectFromConference(cleanupCtx, &cleanupTask)
 			}
 		}
@@ -534,13 +561,26 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 		zap.Uint("task_id", taskID),
 	)
 
+	// 加载任务关联的输入配置
+	var taskConfigs []models.TaskInputConfig
+	s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs)
+	
+	// 检查是否有华为控制配置
+	hasHuaweiAuto := false
+	for _, tc := range taskConfigs {
+		if tc.ConfigType == models.ConfigTypeHuaweiAuto {
+			hasHuaweiAuto = true
+			break
+		}
+	}
+	
 	// 加载任务（用于断开华为会议连接）
 	task, err := s.taskService.GetTask(taskID)
 	if err != nil {
 		s.logger.Error("加载任务失败", zap.Error(err))
 	} else {
-		// 断开华为会议连接
-		if s.connector != nil {
+		// 断开华为会议连接（仅当有华为控制配置时）
+		if s.connector != nil && hasHuaweiAuto {
 			s.logger.Info("断开华为会议连接",
 				zap.Uint("task_id", taskID),
 				zap.String("conference_number", task.ConferenceNumber),
@@ -1162,28 +1202,41 @@ func (s *VideoSimpleScheduler) UpdateTaskEndTime(taskID uint, newEndTime time.Ti
 	return nil
 }
 
-// releaseHuaweiDevice 释放华为设备（在取消任务时调用）
-// 此函数会尝试完整地断开会议连接并解锁终端，即使获取任务信息失败也会尝试解锁
 func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
+	// 加载任务关联的输入配置
+	var taskConfigs []models.TaskInputConfig
+	s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs)
+	
+	// 检查是否有华为控制配置
+	hasHuaweiAuto := false
+	for _, tc := range taskConfigs {
+		if tc.ConfigType == models.ConfigTypeHuaweiAuto {
+			hasHuaweiAuto = true
+			break
+		}
+	}
+	
 	// 加载任务信息用于断开连接和提交转换
 	task, err := s.taskService.GetTask(taskID)
 
 	if err == nil && task != nil {
-		// 正常情况：成功获取任务信息，完整地断开连接
-		s.logger.Info("取消任务时断开华为会议连接",
-			zap.Uint("task_id", taskID),
-		)
-		ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancelCtx()
-		if disconnectErr := s.connector.DisconnectFromConference(ctx, task); disconnectErr != nil {
-			s.logger.Warn("断开华为会议连接失败",
-				zap.Uint("task_id", taskID),
-				zap.Error(disconnectErr),
-			)
-		} else {
-			s.logger.Info("华为会议连接已断开",
+		// 正常情况：成功获取任务信息，完整地断开连接（仅当有华为控制配置时）
+		if hasHuaweiAuto {
+			s.logger.Info("取消任务时断开华为会议连接",
 				zap.Uint("task_id", taskID),
 			)
+			ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancelCtx()
+			if disconnectErr := s.connector.DisconnectFromConference(ctx, task); disconnectErr != nil {
+				s.logger.Warn("断开华为会议连接失败",
+					zap.Uint("task_id", taskID),
+					zap.Error(disconnectErr),
+				)
+			} else {
+				s.logger.Info("华为会议连接已断开",
+					zap.Uint("task_id", taskID),
+				)
+			}
 		}
 
 		// 创建视频文件记录（如果 videoFileService 可用）

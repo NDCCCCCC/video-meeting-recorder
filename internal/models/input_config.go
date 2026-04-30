@@ -13,6 +13,14 @@ const (
 	ConfigTypeStream     = "stream"
 )
 
+// DeviceStatus 设备绑定状态常量
+const (
+	DeviceStatusUnbound = "unbound"
+	DeviceStatusBinding = "binding"
+	DeviceStatusBound   = "bound"
+	DeviceStatusError   = "error"
+)
+
 // InputConfig 输入配置模型
 // 重构自华为配置，支持多种录制输入源：华为终端控制、USB设备直录、流媒体录制
 // 一个配置可以同时包含华为控制信息和录制源信息

@@ -189,7 +189,6 @@ export async function apiRequest<T>(
 
       try {
         const newToken = await refreshAccessToken(refreshToken)
-        isRefreshing = false
         onTokenRefreshed(newToken)
 
         // 使用新 token 重试原始请求
@@ -214,10 +213,13 @@ export async function apiRequest<T>(
 
         return data
       } catch (error) {
-        isRefreshing = false
         // 刷新失败，跳转登录
         handleUnauthorized()
         throw error
+      } finally {
+        // 确保在重试请求完成后才清除刷新标志
+        // 这防止并发 401 请求都尝试刷新 token
+        isRefreshing = false
       }
     }
 
