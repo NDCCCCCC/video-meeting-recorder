@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-04-30T06:24:08.663Z",
+  "phase": "14",
+  "phase_name": "batch-operations",
+  "phase_dir": ".planning/phases/14-batch-operations",
+  "plan": 1,
+  "task": 4,
+  "total_tasks": 7,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Wave 0: 测试基础设施", "status": "done", "summary": "14-00-SUMMARY.md created"},
+    {"id": 2, "name": "Wave 1 Task 1: 后端批量下载服务层", "status": "done", "files": ["internal/services/video_file_service.go"]},
+    {"id": 3, "name": "Wave 1 Task 2: 后端批量下载Handler", "status": "done", "files": ["internal/handlers/video_file_handler.go", "cmd/server/app.go"]},
+    {"id": 4, "name": "Wave 1 Task 3: 前端批量下载API客户端", "status": "done", "files": ["frontend/src/api/video-file.ts", "frontend/src/types/video-file.ts"]}
+  ],
+  "remaining_tasks": [
+    {"id": 5, "name": "Wave 2: Plan 14-02 后端批量转录", "status": "not_started", "plan": "14-02"},
+    {"id": 6, "name": "Wave 3: Plan 14-03 前端批量操作UI", "status": "not_started", "plan": "14-03"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "使用 TDD 工作流", "rationale": "Plan 14-00 创建了测试桩，Wave 1 实现时遵循 TDD 模式", "phase": "14"},
+    {"decision": "使用 io.Pipe 实现流式 ZIP 响应", "rationale": "避免大文件占用内存，使用 goroutine 后台写入 ZIP", "phase": "14"},
+    {"decision": "文件按类型分组到 ZIP 文件夹", "rationale": "video/, ppt/, other/ 文件夹组织结构", "phase": "14"}
+  ],
+  "uncommitted_files": [
+    ".planning/STATE.md",
+    "cmd/server/app.go",
+    "frontend/src/api/video-file.ts",
+    "frontend/src/types/video-file.ts",
+    "internal/handlers/transcription_handler_test.go",
+    "internal/handlers/video_file_handler.go",
+    "internal/handlers/video_file_handler_test.go",
+    "internal/models/transcription_job_group_test.go",
+    "internal/services/transcription_service_test.go",
+    "internal/services/video_file_service.go",
+    "internal/services/video_file_service_test.go"
+  ],
+  "next_action": "执行 Wave 2 - Plan 14-02 后端批量转录",
+  "context_notes": "Wave 0 和 Wave 1 已完成。Wave 1 包含人工验证检查点，但批量下载按钮需要在 Wave 3 的前端 UI 实现中添加。建议先完成 Wave 2，然后 Wave 3 添加 UI 后进行人工验证。"
+}
