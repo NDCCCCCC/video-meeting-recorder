@@ -241,6 +241,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 				zap.Any("panic", r))
 			s.updateProgress(task.VideoFileID, "", 0, 0, 0, "panic: "+fmt.Sprint(r), nil)
 			s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "panic: "+fmt.Sprint(r), 0, nil)
+			// 更新任务组进度
+			if task.JobGroupID != nil {
+				s.updateJobGroupProgress(*task.JobGroupID)
+			}
 		}
 	}()
 
@@ -249,6 +253,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		s.logger.Error("Failed to load task", zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		// 更新任务组进度
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 		return
 	}
 
@@ -266,6 +274,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		// 更新任务组进度
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 		return
 	}
 	// Cleanup temp directory per D-05
@@ -283,6 +295,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		// 更新任务组进度
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 		return
 	}
 
@@ -298,6 +314,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		// 更新任务组进度
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 		return
 	}
 
@@ -311,6 +331,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Uint("video_file_id", task.VideoFileID))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, "帧提取返回空结果", nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "帧提取返回空结果", 0, nil)
+		// 更新任务组进度
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 		return
 	}
 
@@ -440,6 +464,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Int("black_frames", blackFrameCount))
 		s.updateProgress(task.VideoFileID, "", len(frames), len(frames), 100, "", nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "视频无有效内容，无法生成PPT", 0, nil)
+		// 更新任务组进度
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 		return
 	}
 
@@ -457,6 +485,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 				zap.Error(err))
 			s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 			s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+			// 更新任务组进度
+			if task.JobGroupID != nil {
+				s.updateJobGroupProgress(*task.JobGroupID)
+			}
 			return
 		}
 		// Verify the file was actually created
@@ -476,6 +508,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Int("unique_frames", len(uniqueFrames)))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, "所有帧提取失败", nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "所有帧提取失败", 0, nil)
+		// 更新任务组进度
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 		return
 	}
 
@@ -494,6 +530,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		// 更新任务组进度
+			if task.JobGroupID != nil {
+				s.updateJobGroupProgress(*task.JobGroupID)
+			}
 		return
 	}
 
@@ -511,6 +551,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		return
+		// 更新任务组进度
+			if task.JobGroupID != nil {
+				s.updateJobGroupProgress(*task.JobGroupID)
+			}
 	}
 
 	// Create PPTFile record in database
@@ -532,10 +576,18 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		return
 	}
 
+		// 更新任务组进度
+			if task.JobGroupID != nil {
+				s.updateJobGroupProgress(*task.JobGroupID)
+			}
 	// Update task as completed
 	s.updateProgress(task.VideoFileID, "", len(frames), len(frames), 100, "", &pptFile.ID)
 	s.updateTaskStatus(task.ID, models.TranscriptionStatusCompleted, "", 0, &pptFile.ID)
 
+	// 更新任务组进度
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 	s.logger.Info("转录任务完成",
 		zap.Uint("task_id", task.ID),
 		zap.Uint("video_file_id", task.VideoFileID),
@@ -922,4 +974,164 @@ func (s *TranscriptionService) GetActiveTasks() ([]models.TranscriptionTask, err
 		Order("created_at DESC").
 		Find(&tasks).Error
 	return tasks, err
+}
+
+// BatchTranscriptionRequest 批量转录请求
+type BatchTranscriptionRequest struct {
+	VideoFileIDs []uint  `json:"video_file_ids"`
+	SamplingRate float64 `json:"sampling_rate"`
+	Mode         string  `json:"mode"`
+	UserID       uint    `json:"-"`
+}
+
+// BatchTranscriptionResult 批量转录结果
+type BatchTranscriptionResult struct {
+	JobGroupID     uint     `json:"job_group_id"`
+	TotalCount     int      `json:"total_count"`
+	SubmittedCount int      `json:"submitted_count"`
+	FailedCount    int      `json:"failed_count"`
+	Errors         []string `json:"errors"`
+}
+
+// SubmitBatchTranscription 批量提交转录任务
+func (s *TranscriptionService) SubmitBatchTranscription(req *BatchTranscriptionRequest) (*BatchTranscriptionResult, error) {
+	// 验证转录模式
+	if req.Mode != models.TranscriptionModeLocal && req.Mode != models.TranscriptionModeCloud {
+		return nil, fmt.Errorf("无效的转录模式: %s", req.Mode)
+	}
+
+	// 对于本地转录，验证采样率
+	if req.Mode == models.TranscriptionModeLocal {
+		validRates := map[float64]bool{1.0: true, 0.5: true, 0.2: true, 0.1: true, 0.05: true}
+		if req.SamplingRate == 0 {
+			req.SamplingRate = 0.5 // 默认值
+		}
+		if !validRates[req.SamplingRate] {
+			return nil, fmt.Errorf("无效的采样率: %.2f (支持: 0.05, 0.1, 0.2, 0.5, 1.0)", req.SamplingRate)
+		}
+	}
+
+	// 创建任务组
+	jobGroup := &models.TranscriptionJobGroup{
+		UserID:     req.UserID,
+		Status:     models.JobGroupStatusPending,
+		TotalCount: len(req.VideoFileIDs),
+	}
+	if err := s.db.Create(jobGroup).Error; err != nil {
+		return nil, fmt.Errorf("创建任务组失败: %w", err)
+	}
+
+	// 结果统计
+	result := &BatchTranscriptionResult{
+		JobGroupID: jobGroup.ID,
+		TotalCount: len(req.VideoFileIDs),
+		Errors:     make([]string, 0),
+	}
+
+	// 顺序创建任务
+	for i, videoFileID := range req.VideoFileIDs {
+		// 创建转录任务
+		task := &models.TranscriptionTask{
+			VideoFileID:  videoFileID,
+			JobGroupID:   &jobGroup.ID,
+			SamplingRate: req.SamplingRate,
+			Mode:         req.Mode,
+			Status:       models.TranscriptionStatusPending,
+			CreatedBy:    req.UserID,
+		}
+
+		if err := s.db.Create(task).Error; err != nil {
+			result.FailedCount++
+			result.Errors = append(result.Errors, fmt.Sprintf("文件 %d 创建任务失败: %v", videoFileID, err))
+			s.logger.Warn("批量转录创建任务失败",
+				zap.Uint("video_file_id", videoFileID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		// 提交到队列
+		select {
+		case s.taskQueue <- task:
+			result.SubmittedCount++
+			s.logger.Info("批量转录任务已提交",
+				zap.Uint("job_group_id", jobGroup.ID),
+				zap.Uint("task_id", task.ID),
+				zap.Int("index", i+1),
+				zap.Int("total", len(req.VideoFileIDs)),
+			)
+		default:
+			result.FailedCount++
+			result.Errors = append(result.Errors, fmt.Sprintf("文件 %d 队列已满", videoFileID))
+			s.logger.Warn("批量转录队列已满",
+				zap.Uint("video_file_id", videoFileID),
+			)
+		}
+	}
+
+	// 更新任务组状态
+	if result.SubmittedCount > 0 {
+		jobGroup.Status = models.JobGroupStatusProcessing
+		jobGroup.CompletedCount = result.SubmittedCount
+		jobGroup.FailedCount = result.FailedCount
+		jobGroup.UpdateStatus()
+		s.db.Save(jobGroup)
+	}
+
+	return result, nil
+}
+
+// GetJobGroupStatus 获取批量转录任务组状态
+func (s *TranscriptionService) GetJobGroupStatus(jobGroupID uint, userID uint, isAdmin bool) (*models.TranscriptionJobGroup, error) {
+	var jobGroup models.TranscriptionJobGroup
+	err := s.db.Where("id = ?", jobGroupID).
+		Preload("Tasks").
+		First(&jobGroup).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// 验证权限
+	if !isAdmin && jobGroup.UserID != userID {
+		return nil, fmt.Errorf("无权访问此任务组")
+	}
+
+	// 重新计算进度
+	var completedCount, failedCount int
+	for _, task := range jobGroup.Tasks {
+		if task.Status == models.TranscriptionStatusCompleted {
+			completedCount++
+		} else if task.Status == models.TranscriptionStatusFailed {
+			failedCount++
+		}
+	}
+	jobGroup.CompletedCount = completedCount
+	jobGroup.FailedCount = failedCount
+	jobGroup.UpdateStatus()
+	s.db.Save(&jobGroup)
+
+	return &jobGroup, nil
+}
+
+// updateJobGroupProgress 更新任务组进度
+func (s *TranscriptionService) updateJobGroupProgress(jobGroupID uint) {
+	var jobGroup models.TranscriptionJobGroup
+	if err := s.db.Preload("Tasks").First(&jobGroup, jobGroupID).Error; err != nil {
+		s.logger.Error("更新任务组进度失败", zap.Uint("job_group_id", jobGroupID), zap.Error(err))
+		return
+	}
+
+	var completedCount, failedCount int
+	for _, task := range jobGroup.Tasks {
+		if task.Status == models.TranscriptionStatusCompleted {
+			completedCount++
+		} else if task.Status == models.TranscriptionStatusFailed {
+			failedCount++
+		}
+	}
+
+	jobGroup.CompletedCount = completedCount
+	jobGroup.FailedCount = failedCount
+	jobGroup.UpdateStatus()
+	s.db.Save(&jobGroup)
 }

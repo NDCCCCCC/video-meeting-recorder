@@ -19,6 +19,7 @@ import {
   Radio,
   Dropdown,
   Spin,
+  Alert,
 } from 'antd'
 import {
   SearchOutlined,
@@ -36,12 +37,13 @@ import {
   EditOutlined,
   UploadOutlined,
   FilePptOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import * as videoFileApi from '../../api/video-file'
-import { submitTranscriptionWithMode, getActiveTranscriptionTasks } from '../../api/transcription'
+import { submitTranscriptionWithMode, getActiveTranscriptionTasks, submitBatchTranscription } from '../../api/transcription'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
 import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
@@ -53,7 +55,7 @@ import type {
   VideoFileStats,
   VideoFileStatus,
 } from '../../types/video-file'
-import type { SamplingRateOption, TranscriptionMode } from '../../types/transcription'
+import type { SamplingRateOption, TranscriptionMode, BatchTranscriptionRequest } from '../../types/transcription'
 
 // 状态配置
 const STATUS_CONFIG: Record<VideoFileStatus, { label: string; color: string }> = {
@@ -103,6 +105,13 @@ export default function FileManagement() {
   const [viewingFile, setViewingFile] = useState<VideoFile | null>(null)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
+  const [batchDownloading, setBatchDownloading] = useState(false)
+
+  // Batch transcription state
+  const [batchTranscribeModalOpen, setBatchTranscribeModalOpen] = useState(false)
+  const [batchTranscribing, setBatchTranscribing] = useState(false)
+  const [batchSamplingRate, setBatchSamplingRate] = useState<number>(0.5)
+  const [batchTranscribeMode, setBatchTranscribeMode] = useState<TranscriptionMode>('local')
 
   // Transcription state
   const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false)
@@ -268,6 +277,107 @@ export default function FileManagement() {
       setBatchDeleting(false)
     }
   }, [selectedRowKeys, loadFiles, loadStats])
+
+  // 批量下载文件
+  const handleBatchDownload = useCallback(async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要下载的文件')
+      return
+    }
+
+    // 计算文件总大小
+    const selectedFiles = files.filter(f => selectedRowKeys.includes(f.id))
+    const totalSize = selectedFiles.reduce((sum, f) => sum + f.file_size, 0)
+    const totalSizeGB = totalSize / (1024 * 1024 * 1024)
+
+    // 如果文件很大，显示警告
+    if (totalSizeGB > 1 || selectedRowKeys.length > 100) {
+      Modal.confirm({
+        title: '批量下载警告',
+        content: `您即将下载 ${selectedRowKeys.length} 个文件，总大小约为 ${totalSizeGB.toFixed(2)} GB。这可能需要一些时间，确定要继续吗？`,
+        okText: '继续下载',
+        cancelText: '取消',
+        onOk: async () => {
+          await performBatchDownload()
+        },
+      })
+    } else {
+      await performBatchDownload()
+    }
+  }, [selectedRowKeys, files])
+
+  const performBatchDownload = useCallback(async () => {
+    setBatchDownloading(true)
+    try {
+      videoFileApi.batchDownloadFiles(selectedRowKeys as number[])
+      setSelectedRowKeys([])
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '批量下载失败')
+    } finally {
+      setBatchDownloading(false)
+    }
+  }, [selectedRowKeys])
+
+  // 打开批量转录对话框
+  const handleBatchTranscribeClick = useCallback(() => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要转录的文件')
+      return
+    }
+
+    // 检查是否都是视频文件
+    const selectedFiles = files.filter(f => selectedRowKeys.includes(f.id))
+    const nonVideoFiles = selectedFiles.filter(f => f.format !== 'mp4' && f.format !== 'mkv')
+
+    if (nonVideoFiles.length > 0) {
+      message.warning(`只能转录视频文件，已忽略 ${nonVideoFiles.length} 个非视频文件`)
+    }
+
+    setBatchSamplingRate(0.5) // 重置为默认值
+    setBatchTranscribeMode('local') // 重置为默认模式
+    setBatchTranscribeModalOpen(true)
+  }, [selectedRowKeys, files])
+
+  // 确认批量转录
+  const confirmBatchTranscription = useCallback(async () => {
+    if (selectedRowKeys.length === 0) {
+      return
+    }
+
+    setBatchTranscribing(true)
+    try {
+      const request: BatchTranscriptionRequest = {
+        video_file_ids: selectedRowKeys as number[],
+        sampling_rate: batchTranscribeMode === 'local' ? batchSamplingRate : undefined,
+        mode: batchTranscribeMode,
+      }
+
+      const response = await submitBatchTranscription(request)
+
+      if (response.data) {
+        const { submitted_count, failed_count, errors } = response.data
+
+        if (failed_count > 0) {
+          const errorMsg = errors.length > 0
+            ? `。错误详情：${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`
+            : ''
+          message.warning(`转录任务创建完成：成功 ${submitted_count} 个，失败 ${failed_count} 个${errorMsg}`)
+        } else {
+          message.success(`成功创建 ${submitted_count} 个转录任务`)
+        }
+
+        setBatchTranscribeModalOpen(false)
+        setSelectedRowKeys([])
+
+        // 刷新活跃转录任务列表
+        loadActiveTranscriptions()
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '批量转录失败')
+    } finally {
+      setBatchTranscribing(false)
+    }
+  }, [selectedRowKeys, batchSamplingRate, batchTranscribeMode, loadActiveTranscriptions])
 
   // 查看详情
   const viewDetail = useCallback((file: VideoFile) => {
@@ -686,11 +796,34 @@ export default function FileManagement() {
                   danger
                   icon={<DeleteOutlined />}
                   loading={batchDeleting}
+                  disabled={batchDeleting || batchDownloading || batchTranscribing}
                 >
                   批量删除 ({selectedRowKeys.length})
                 </Button>
               </Popconfirm>
             </PermissionGuard>
+          )}
+          {selectedRowKeys.length > 0 && (
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={batchDownloading}
+              disabled={batchDeleting || batchDownloading || batchTranscribing}
+              onClick={handleBatchDownload}
+            >
+              批量下载 ({selectedRowKeys.length})
+            </Button>
+          )}
+          {selectedRowKeys.length > 0 && (
+            <Button
+              type="primary"
+              icon={<ThunderboltOutlined />}
+              loading={batchTranscribing}
+              disabled={batchDeleting || batchDownloading || batchTranscribing}
+              onClick={handleBatchTranscribeClick}
+            >
+              批量转录 ({selectedRowKeys.length})
+            </Button>
           )}
           <PermissionGuard permission={PERMISSIONS.FILE_SCAN}>
             <Button
@@ -892,6 +1025,64 @@ export default function FileManagement() {
           loadStats()
         }}
       />
+
+      {/* 批量转录配置对话框 */}
+      <Modal
+        title="批量转录配置"
+        open={batchTranscribeModalOpen}
+        onOk={confirmBatchTranscription}
+        onCancel={() => setBatchTranscribeModalOpen(false)}
+        okText="提交转录任务"
+        cancelText="取消"
+        confirmLoading={batchTranscribing}
+        width={600}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <span>已选择 {selectedRowKeys.length} 个文件进行批量转录</span>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 8, fontWeight: 500 }}>转录模式</div>
+          <Radio.Group
+            value={batchTranscribeMode}
+            onChange={(e) => setBatchTranscribeMode(e.target.value)}
+            disabled={batchTranscribing}
+          >
+            <Radio value="local">本地转录（快速，免费）</Radio>
+            <Radio value="cloud">云端转录（阿里通义听悟，更准确）</Radio>
+          </Radio.Group>
+        </div>
+
+        {batchTranscribeMode === 'local' && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>采样率</div>
+            <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
+              采样率决定每秒提取的帧数，数值越小精度越高但文件越大
+            </div>
+            <Radio.Group
+              value={batchSamplingRate}
+              onChange={(e) => setBatchSamplingRate(e.target.value)}
+              disabled={batchTranscribing}
+            >
+              {samplingRateOptions.map(opt => (
+                <Radio key={opt.value} value={opt.value} style={{ display: 'block', marginBottom: 8 }}>
+                  {opt.label} ({opt.description})
+                </Radio>
+              ))}
+            </Radio.Group>
+          </div>
+        )}
+
+        {batchTranscribeMode === 'cloud' && (
+          <div style={{ marginBottom: 16 }}>
+            <Alert
+              message="云端转录使用阿里通义听悟服务，支持更准确的语音识别和PPT提取，但需要消耗API配额"
+              type="info"
+              showIcon
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

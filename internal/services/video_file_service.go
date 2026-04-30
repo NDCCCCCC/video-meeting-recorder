@@ -1,10 +1,12 @@
 package services
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1479,4 +1481,128 @@ func (s *VideoFileService) DeleteSplitSegmentsByParentID(parentID uint, userID u
 	)
 
 	return deletedCount, nil
+}
+
+
+// BatchDownloadFilesRequest 批量下载请求
+type BatchDownloadFilesRequest struct {
+	IDs []uint `json:"ids" binding:"required,min=1,dive,min=1"`
+}
+
+// BatchDownloadFilesResponse 批量下载响应
+type BatchDownloadFilesResponse struct {
+	Reader      io.ReadCloser
+	Filename    string
+	ContentType string
+	FileCount   int
+	TotalSize   int64
+}
+
+// BatchDownloadFiles 批量下载文件（打包为ZIP）
+func (s *VideoFileService) BatchDownloadFiles(ids []uint, userID uint, isAdmin bool) (*BatchDownloadFilesResponse, error) {
+	// 查询所有文件
+	var files []models.VideoFile
+	if err := s.db.Where("id IN ?", ids).Find(&files).Error; err != nil {
+		return nil, fmt.Errorf("查询文件失败: %w", err)
+	}
+
+	// 验证所有权并检查文件存在性
+	var validFiles []models.VideoFile
+	for _, file := range files {
+		// 权限检查：管理员或文件所有者
+		if !isAdmin && file.CreatedBy != userID {
+			s.logger.Warn("跳过无权限文件",
+				zap.Uint("file_id", file.ID),
+				zap.Uint("file_owner", file.CreatedBy),
+				zap.Uint("user_id", userID),
+			)
+			continue
+		}
+
+		// 检查物理文件是否存在
+		if file.Exists() {
+			validFiles = append(validFiles, file)
+		} else {
+			s.logger.Warn("文件不存在，跳过",
+				zap.Uint("file_id", file.ID),
+				zap.String("file_path", file.FilePath),
+			)
+		}
+	}
+
+	if len(validFiles) == 0 {
+		return nil, errors.New("没有有效的文件可下载")
+	}
+
+	// 创建流式 ZIP
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+		zipWriter := zip.NewWriter(pw)
+		defer zipWriter.Close()
+
+		for _, file := range validFiles {
+			folder := s.getFileFolder(file)
+			if err := s.addFileToZip(zipWriter, &file, folder); err != nil {
+				s.logger.Warn("添加文件到ZIP失败",
+					zap.Uint("file_id", file.ID),
+					zap.Error(err),
+				)
+			}
+		}
+	}()
+
+	// 生成文件名
+	filename := fmt.Sprintf("files_batch_%s.zip", time.Now().Format("20060102_150405"))
+
+	return &BatchDownloadFilesResponse{
+		Reader:      pr,
+		Filename:    filename,
+		ContentType: "application/zip",
+		FileCount:   len(validFiles),
+		TotalSize:   0, // 流式响应无法预先知道大小
+	}, nil
+}
+
+// getFileFolder 根据文件类型返回ZIP内文件夹
+func (s *VideoFileService) getFileFolder(file models.VideoFile) string {
+	ext := strings.ToLower(filepath.Ext(file.FilePath))
+	switch ext {
+	case ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm":
+		return "video"
+	case ".pptx":
+		return "ppt"
+	default:
+		return "other"
+	}
+}
+
+// addFileToZip 添加文件到ZIP
+func (s *VideoFileService) addFileToZip(zipWriter *zip.Writer, file *models.VideoFile, folder string) error {
+	// 打开文件
+	f, err := os.Open(file.FilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// 创建ZIP内文件路径
+	zipPath := filepath.Join(folder, filepath.Base(file.FilePath))
+
+	// 创建ZIP文件头
+	header := &zip.FileHeader{
+		Name:   zipPath,
+		Method: zip.Deflate, // 使用压缩
+	}
+	header.SetModTime(time.Now())
+
+	// 创建ZIP写入器
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	// 复制文件内容
+	_, err = io.Copy(writer, f)
+	return err
 }

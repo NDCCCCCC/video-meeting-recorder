@@ -113,3 +113,48 @@ export interface TimestampMapResponse {
   success: boolean
   slide_timestamps: SlideTimestamp[]
 }
+
+// === Batch transcription types (Phase 14) ===
+
+// 批量转录请求
+export interface BatchTranscriptionRequest {
+  video_file_ids: number[]
+  sampling_rate?: number  // 仅用于 local 模式
+  mode?: TranscriptionMode  // local 或 cloud，默认 local
+}
+
+// 批量转录结果
+export interface BatchTranscriptionResult {
+  job_group_id: number
+  total_count: number
+  submitted_count: number
+  failed_count: number
+  errors: string[]
+}
+
+// 转录任务组状态
+export interface TranscriptionJobGroup {
+  id: number
+  user_id: number
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  total_count: number
+  completed_count: number
+  failed_count: number
+  tasks?: TranscriptionTaskInGroup[]
+  created_at: string
+  updated_at: string
+  percentage?: number  // 计算属性
+}
+
+// 任务组中的转录任务
+export interface TranscriptionTaskInGroup {
+  id: number
+  video_file_id: number
+  status: TranscriptionTaskStatus
+  mode: TranscriptionMode
+  sampling_rate: number
+  current_stage: AnyTranscriptionStage | ''
+  percentage: number
+  error_message: string
+  result_ppt_file_id?: number
+}
