@@ -267,78 +267,80 @@ func (s *SM4TokenService) validateClaims(claims *Claims, expectedType string) er
 
 // RefreshAccessToken 使用Refresh Token刷新，生成新的Token对。
 // 实现宽限期机制：5秒内重复刷新请求返回相同的 token 对（幂等性）。
-// 如果检测到真正的重放攻击（超过宽限期），撤销该用户所有会话。
+// 关键：在宽限期内不撤销旧 token，只有在超过宽限期后才撤销。
 func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, error) {
 	claims, err := s.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
 
-	// 【关键修复】宽限期机制：检查缓存
+	now := time.Now()
+
+	// 步骤1: 检查缓存 - 快速路径
 	s.tokenCacheMutex.RLock()
 	cachedEntry, exists := s.tokenCache[refreshToken]
 	s.tokenCacheMutex.RUnlock()
 
 	if exists {
-		// 检查是否在宽限期内
-		if time.Since(cachedEntry.ExpiresAt) < GracePeriod {
-			s.logger.Debug("宽限期内重复刷新，返回缓存的 token 对",
+		// 检查缓存是否过期
+		if now.Before(cachedEntry.ExpiresAt) {
+			s.logger.Debug("宽限期内重复刷新（缓存），返回缓存的 token 对",
 				zap.Uint("user_id", claims.UserID),
 				zap.String("token_prefix", refreshToken[:8]),
 			)
-			// 更新 session 的 last_used_at 时间
-			now := time.Now()
-			s.db.Model(&models.Session{}).
-				Where("token = ?", refreshToken).
-				Update("last_used_at", now)
-
 			return cachedEntry.TokenPair, nil
 		}
-		// 超过宽限期，清理缓存
+		// 缓存过期，清理
 		s.tokenCacheMutex.Lock()
 		delete(s.tokenCache, refreshToken)
 		s.tokenCacheMutex.Unlock()
 	}
 
-	// 检查该 refresh token 是否已被使用过（重放检测）
+	// 步骤2: 查找当前 token 的 session
 	var session models.Session
-	result := s.db.Where("token = ? AND is_active = ?", refreshToken, false).First(&session)
-	if result.Error == nil {
-		// 检查是否在宽限期内使用
-		if session.LastUsedAt != nil {
-			timeSinceLastUse := time.Since(*session.LastUsedAt)
-			if timeSinceLastUse < GracePeriod {
-				// 在宽限期内，查询最近生成的 token
-				var newSession models.Session
-				err := s.db.Where("user_id = ? AND created_at > ?",
-					claims.UserID,
-					time.Now().Add(-GracePeriod),
-				).Order("created_at DESC").First(&newSession).Error
+	result := s.db.Where("token = ?", refreshToken).First(&session)
 
-				if err == nil && newSession.Token != "" {
-					s.logger.Debug("宽限期内重试，返回数据库中的 token",
-						zap.Uint("user_id", claims.UserID),
-					)
-					// 返回已生成的新 token
-					return &TokenPair{
-						AccessToken:  newSession.Token, // 这里简化处理，实际应该返回完整的 token 对
-						RefreshToken: newSession.Token,
-						ExpiresAt:    newSession.ExpiresAt,
-					}, nil
+	if result.Error != nil {
+		// session 不存在，可能是其他地方创建的 token
+		// 继续正常流程
+	} else {
+		// session 存在，检查状态
+		if !session.IsActive {
+			// token 已被使用过
+			if session.LastUsedAt != nil {
+				timeSinceLastUse := now.Sub(*session.LastUsedAt)
+				if timeSinceLastUse < GracePeriod {
+					// 在宽限期内，查找最近生成的新 token
+					var newSession models.Session
+					err := s.db.Where("user_id = ? AND created_at > ?",
+						claims.UserID,
+						now.Add(-GracePeriod),
+					).Order("created_at DESC").First(&newSession).Error
+
+					if err == nil {
+						s.logger.Debug("宽限期内重复刷新（数据库），返回新 token",
+							zap.Uint("user_id", claims.UserID),
+						)
+						return &TokenPair{
+							AccessToken:  newSession.Token,
+							RefreshToken: newSession.Token,
+							ExpiresAt:    newSession.ExpiresAt,
+						}, nil
+					}
 				}
 			}
-		}
 
-		// 超过宽限期的重放攻击 -> 撤销所有会话
-		s.logger.Warn("检测到Refresh Token重放攻击（超过宽限期）",
-			zap.Uint("user_id", claims.UserID),
-			zap.String("token_prefix", refreshToken[:8]),
-		)
-		_ = s.RevokeUserSessions(claims.UserID)
-		return nil, errors.New("token reuse detected")
+			// 超过宽限期的重放攻击
+			s.logger.Warn("检测到Refresh Token重放攻击（超过宽限期）",
+				zap.Uint("user_id", claims.UserID),
+				zap.String("token_prefix", refreshToken[:8]),
+			)
+			_ = s.RevokeUserSessions(claims.UserID)
+			return nil, errors.New("token reuse detected")
+		}
 	}
 
-	// 正常流程：生成新的 token 对
+	// 步骤3: 正常流程 - 第一次使用此 refresh token
 	var user models.User
 	if err := s.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
 		return nil, errors.New("user not found")
@@ -353,18 +355,15 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 		return nil, err
 	}
 
-	// 更新 session 的 last_used_at 并撤销旧 token
-	now := time.Now()
+	// 关键修复：只更新 last_used_at，不立即撤销 token
+	// 这样在宽限期内重复使用时，session 仍然是 active 的
 	if err := s.db.Model(&models.Session{}).
 		Where("token = ?", refreshToken).
-		Updates(map[string]interface{}{
-			"is_active":     false,
-			"last_used_at":  now,
-		}).Error; err != nil {
-		s.logger.Warn("更新session状态失败", zap.Error(err))
+		Update("last_used_at", now).Error; err != nil {
+		s.logger.Warn("更新session last_used_at失败", zap.Error(err))
 	}
 
-	// 缓存新生成的 token 对
+	// 缓存新生成的 token 对，设置宽限期过期时间
 	s.tokenCacheMutex.Lock()
 	s.tokenCache[refreshToken] = &TokenCacheEntry{
 		TokenPair:    newTokenPair,
@@ -372,6 +371,14 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 		RefreshToken: refreshToken,
 	}
 	s.tokenCacheMutex.Unlock()
+
+	// 启动后台任务：在宽限期过后撤销旧 token
+	go func() {
+		time.Sleep(GracePeriod)
+		s.db.Model(&models.Session{}).
+			Where("token = ? AND is_active = ?", refreshToken, true).
+			Update("is_active", false)
+	}()
 
 	return newTokenPair, nil
 }
