@@ -864,6 +864,7 @@ func (a *MinimalApp) registerRoutes() error {
 			ppts.POST(":id/reorder", a.handlers.PPT.ReorderSlidesHandler)					// 重排序幻灯片
 			ppts.POST(":id/capture", a.handlers.PPT.CaptureFrameHandler)					// 捕获视频帧
 			ppts.POST(":id/slides", a.handlers.PPT.InsertSlideHandler)					// 插入幻灯片
+			ppts.POST("/batch-check", a.handlers.PPT.BatchGetPptsByVideos)                     // 批量检查视频PPT结果
 		}
 
 
