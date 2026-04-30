@@ -46,3 +46,4 @@ Windows AD域控认证功能可行性研究 - 评估在现有Go项目中集成Wi
 | 003 | auth-switch-architecture | standard | Given本地认证和AD认证两种方式，当切换认证模式时，系统能够正确路由认证请求 | ✅ VALIDATED | architecture, authentication, strategy-pattern, local, ad |
 | 004 | ad-user-mapping | standard | Given AD用户认证成功，当查找本地同名用户时，能够正确映射并分配权限 | ✅ VALIDATED | ldap, user-mapping, permissions, synchronization |
 | 005 | ad-config-validation | standard | Given AD配置信息，当系统启动或切换认证模式时，能够验证配置的完整性和连通性 | ✅ VALIDATED | configuration, validation, health-check, ad |
+| 006 | ppt-menu-lazy-loading | research | Given文件管理页面自动刷新问题，当评估不同PPT状态获取方案时，能够确定最佳实现方式 | ✅ VALIDATED | ppt, optimization, ui, frontend, backend |

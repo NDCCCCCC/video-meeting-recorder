@@ -122,6 +122,36 @@ func (s *VideoFileService) ListFiles(req *ListFilesRequest) (*ListFilesResponse,
 		return nil, err
 	}
 
+	// 批量检查 PPT 状态（优化方案：使用 SQL EXISTS）
+	if len(files) > 0 {
+		videoIDs := make([]uint, len(files))
+		for i, f := range files {
+			videoIDs[i] = f.ID
+		}
+
+		// 使用 EXISTS 查询批量获取 PPT 状态
+		var pptResults []struct {
+			VideoFileID uint `gorm:"column:video_file_id"`
+		}
+
+		s.db.Table("ppt_files").
+			Select("DISTINCT source_video_file_id as video_file_id").
+			Where("source_video_file_id IN ?", videoIDs).
+			Where("source_video_file_id IS NOT NULL").
+			Scan(&pptResults)
+
+		// 构建 PPT 状态映射
+		hasPptMap := make(map[uint]bool)
+		for _, r := range pptResults {
+			hasPptMap[r.VideoFileID] = true
+		}
+
+		// 填充 HasPpt 字段
+		for i := range files {
+			files[i].HasPpt = hasPptMap[files[i].ID]
+		}
+	}
+
 	return &ListFilesResponse{
 		Total:       stats.Count,
 		Items:       files,

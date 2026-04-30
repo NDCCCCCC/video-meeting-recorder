@@ -33,6 +33,7 @@ export interface VideoFile {
   status: VideoFileStatus
   thumbnail_path: string | null
   recorded_at: string | null
+  has_ppt?: boolean              // 是否有PPT结果（后端动态填充）
   created_at: string
   updated_at: string
 }
