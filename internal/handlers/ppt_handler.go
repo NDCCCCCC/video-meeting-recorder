@@ -200,6 +200,63 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 	})
 }
 
+// BatchGetPptsByVideos handles POST /api/v1/ppts/batch-check
+// 批量检查多个视频的 PPT 结果，减少请求次数
+func (h *PPThandler) BatchGetPptsByVideos(c *gin.Context) {
+	var req struct {
+		VideoIDs []uint `json:"video_ids" binding:"required,min=1,max=100"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "请求参数错误")
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	isAdmin := middleware.GetIsAdmin(c)
+
+	// 批量查询 PPT 结果
+	results := make(map[uint]interface{})
+	for _, videoID := range req.VideoIDs {
+		// 检查单个视频的 PPT
+		ppts, err := h.pptFileService.GetPptsByVideoFile(videoID)
+		if err != nil {
+			results[videoID] = gin.H{
+				"has_ppt": false,
+				"error":   err.Error(),
+			}
+			continue
+		}
+
+		// 权限检查
+		videoFile, err := h.videoFileService.GetFileByID(videoID)
+		if err != nil {
+			results[videoID] = gin.H{
+				"has_ppt": false,
+				"error":   "视频不存在",
+			}
+			continue
+		}
+
+		if !isAdmin && videoFile.CreatedBy != userID {
+			results[videoID] = gin.H{
+				"has_ppt": false,
+				"error":   "无权访问",
+			}
+			continue
+		}
+
+		results[videoID] = gin.H{
+			"has_ppt": len(ppts) > 0,
+			"count":   len(ppts),
+		}
+	}
+
+	response.GinSuccess(c, gin.H{
+		"results": results,
+	})
+}
+
 // MergeSlides handles POST /api/v1/ppts/merge (per D-13 to D-18)
 func (h *PPThandler) MergeSlides(c *gin.Context) {
 	// Read body for logging before binding (since binding consumes it)
