@@ -35,6 +35,7 @@ import {
   LaptopOutlined,
   EditOutlined,
   UploadOutlined,
+  FilePptOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -445,6 +446,16 @@ export default function FileManagement() {
           ],
         })
       }
+    }
+
+    // 预览PPT（使用后端返回的 has_ppt 字段）
+    if (record.has_ppt) {
+      moreMenuItems.push({
+        key: 'preview-ppt',
+        icon: <FilePptOutlined />,
+        label: '预览PPT',
+        onClick: () => navigate(`/results/${record.id}`),
+      })
     }
 
     // 分隔线

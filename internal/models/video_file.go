@@ -28,6 +28,7 @@ type VideoFile struct {
 	Status         string              `gorm:"type:varchar(20);default:'ready';index:idx_status_created,priority:1" json:"status"` // ready, processing, error
 	ThumbnailPath  *string             `json:"thumbnail_path,omitempty"`
 	RecordedAt     *time.Time          `gorm:"index" json:"recorded_at,omitempty"`
+	HasPpt         bool                `gorm:"-" json:"has_ppt,omitempty"` // 是否有PPT结果（不存储到数据库，仅用于API响应）
 }
 
 // 文件状态常量
