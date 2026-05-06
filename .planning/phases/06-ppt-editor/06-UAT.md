@@ -1,5 +1,5 @@
 ---
-status: testing
+status: deferred
 phase: 06-ppt-editor
 source:
   - 06-01-SUMMARY.md
@@ -9,6 +9,8 @@ source:
   - 06-05-SUMMARY.md
 started: 2026-04-20T14:35:00Z
 updated: 2026-04-20T14:35:00Z
+completed: 2026-05-06T14:24:00Z
+note: 13 pending UI interaction tests. Acknowledged at milestone close - these are complex UI tests (duplicate detection, slide capture, video sync) that require manual runtime testing.
 ---
 
 ## Current Test
