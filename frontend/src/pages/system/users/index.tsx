@@ -27,6 +27,7 @@ import type { ColumnsType } from 'antd/es/table'
 import * as userApi from '../../../api/user'
 import type { UserInfo, UserListParams, CreateUserRequest, UpdateUserRequest } from '../../../types/user'
 import { lookupADUser } from '../../../api/auth'
+import { useAuthStore } from '../../../stores/authStore'
 
 // 解析 allowed_ips 字段（可能是 JSON 字符串或数组）
 const parseAllowedIPs = (ips: any): string[] => {
@@ -53,6 +54,7 @@ export default function UserManagement() {
   const [adLookupLoading, setAdLookupLoading] = useState(false)
   const [form] = Form.useForm()
   const [passwordForm] = Form.useForm()
+  const { user } = useAuthStore()
 
   // 查询参数
   const [params, setParams] = useState<UserListParams>({
