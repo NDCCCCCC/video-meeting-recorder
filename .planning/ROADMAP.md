@@ -56,10 +56,12 @@
 
 ### Phase 1: 新功能：在视频播放中添加外挂字幕支持（预览视频、切割视频、预览PPT页面）
 
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 0
-**Plans:** 0 plans
+**Goal:** 在VideoPlayerModal、切割视频页面、PPTPreview三个视频播放场景中实现外挂字幕功能，使用WebVTT格式，字幕显示在视频下方独立区域，支持开关、字号调整和样式配置。
+**Requirements**: D-01 through D-11 (from CONTEXT.md)
+**Depends on:** None (standalone feature)
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 1 to break down)
+- [ ] 01-01-PLAN.md -- Backend subtitle API endpoints + frontend type definitions
+- [ ] 01-02-PLAN.md -- Subtitle sync hook + SubtitlePanel component with style controls
+- [ ] 01-03-PLAN.md -- Integration into VideoPlayerModal and PPTPreview
