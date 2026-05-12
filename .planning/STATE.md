@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-30T06:23:17.870Z"
+last_updated: "2026-05-06T06:45:23.615Z"
 last_activity: 2026-04-30
 progress:
-  total_phases: 3
-  completed_phases: 1
-  total_plans: 10
-  completed_plans: 8
-  percent: 80
+  total_phases: 16
+  completed_phases: 12
+  total_plans: 68
+  completed_plans: 66
+  percent: 97
 ---
 
 # STATE.md - Project Memory
@@ -123,6 +123,7 @@ Run `/gsd-execute-phase 12-windows-ad` to start implementation
 - Phase 12 added: Windows AD域控认证 - 集成Windows Active Directory域控认证，支持LDAP/LDAPS双端口 (2026-04-28)
 - Phase 13 added: 重构华为配置，支持USB设备和流媒体录制模式 (2026-04-29)
 - Phase 14 added: 文件管理页面添加批量下载和批量转录功能 (2026-04-30)
+- Phase 1 added: 新功能 - 在视频播放中添加外挂字幕支持（预览视频、切割视频、预览PPT页面） (2026-05-12)
 
 ## Accumulated Context
 
