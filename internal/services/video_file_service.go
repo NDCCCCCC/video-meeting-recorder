@@ -262,7 +262,7 @@ func (s *VideoFileService) GetFileByID(id uint) (*models.VideoFile, error) {
 	return &file, nil
 }
 
-// DeleteFile 删除文件（同时删除整个任务目录和任务记录）
+// DeleteFile 删除文件（支持录制文件和孤立文件）
 func (s *VideoFileService) DeleteFile(id uint) error {
 	var file models.VideoFile
 	if err := s.db.First(&file, id).Error; err != nil {
@@ -276,7 +276,8 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 	// 获取任务ID
 	taskID := file.TaskID
 	if taskID == nil {
-		return errors.New("文件没有关联任务，无法删除")
+		// 孤立文件（用户上传文件等），使用孤立文件删除逻辑
+		return s.deleteOrphanFile(&file)
 	}
 
 	// 使用事务删除数据库记录
@@ -782,7 +783,7 @@ func (s *VideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, f
 	}
 
 	// 创建新文件记录
-	return s.createNewFile(filePath, &task.ID, nil, formatStr, task.CreatedBy)
+	return s.createNewFile(filePath, &task.ID, nil, formatStr, task.CreatedBy, models.SourceTypeRecording)
 }
 
 // getTaskFilePath 获取任务文件路径
@@ -824,7 +825,7 @@ func (s *VideoFileService) findExistingFile(filePath string) (*models.VideoFile,
 }
 
 // createNewFile 创建新的文件记录
-func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recordedAt *time.Time, format string, createdBy uint) (*models.VideoFile, error) {
+func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recordedAt *time.Time, format string, createdBy uint, sourceType string) (*models.VideoFile, error) {
 	// 提取元数据
 	metadata, err := s.extractVideoMetadata(filePath)
 	if err != nil {
@@ -870,6 +871,7 @@ func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recorded
 		TaskID:     taskID,
 		CreatedBy:  createdBy,
 		RecordedAt: recordedAt,
+		SourceType: sourceType,
 	}
 
 	if err := s.createWithDuplicateCheck(videoFile); err != nil {
@@ -924,7 +926,7 @@ func (s *VideoFileService) isDuplicateError(err error) bool {
 }
 
 // CreateFile 从文件路径创建文件记录（通用方法）
-func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt *time.Time) (*models.VideoFile, error) {
+func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt *time.Time, sourceType ...string) (*models.VideoFile, error) {
 	if filePath == "" {
 		return nil, errors.New("创建文件记录失败：文件路径为空")
 	}
@@ -949,7 +951,13 @@ func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt 
 		}
 	}
 
-	return s.createNewFile(filePath, taskID, recordedAt, format, createdBy)
+	// 确定 sourceType：默认为 recording，如果有传入则使用传入值
+	st := models.SourceTypeRecording
+	if len(sourceType) > 0 && sourceType[0] != "" {
+		st = sourceType[0]
+	}
+
+	return s.createNewFile(filePath, taskID, recordedAt, format, createdBy, st)
 }
 
 // CreateSegmentFile 创建分割段文件记录
@@ -1027,31 +1035,56 @@ func (s *VideoFileService) GetSegmentsByParentID(parentID uint) ([]models.VideoF
 	return segments, err
 }
 
-// fileInfoWithPath 包含文件路径和推断的任务ID
+// fileInfoWithPath 包含文件路径、推断的任务ID和来源类型
 type fileInfoWithPath struct {
-	filePath string
-	taskID   *uint
+	filePath   string
+	taskID     *uint
+	sourceType string
 }
 
-// ScanFiles 扫描录制目录并导入未入库的文件
+// ScanFiles 扫描录制目录和手动上传目录并导入未入库的文件
 func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 	result := &ScanResult{}
 
-	files, err := s.findVideoFiles(s.recordingsPath)
-	if err != nil {
-		return result, fmt.Errorf("查找视频文件失败: %w", err)
+	// 定义扫描路径及其对应的来源类型
+	type scanPathConfig struct {
+		path       string
+		sourceType string
+	}
+	scanPaths := []scanPathConfig{
+		{s.recordingsPath, models.SourceTypeRecording},   // 录制文件: ./data/recordings
+		{"./data/files/videos", models.SourceTypeUpload}, // 手动上传的视频文件: ./data/files/videos
 	}
 
-	result.Scanned = len(files)
+	var allFiles []fileInfoWithPath
 
-	if len(files) == 0 {
-		s.logger.Info("扫描目录为空", zap.String("directory", s.recordingsPath))
+	// 扫描所有目录
+	for _, scanConfig := range scanPaths {
+		files, err := s.findVideoFiles(scanConfig.path, scanConfig.sourceType)
+		if err != nil {
+			s.logger.Warn("扫描目录失败", zap.String("directory", scanConfig.path), zap.Error(err))
+			continue
+		}
+		allFiles = append(allFiles, files...)
+		result.Scanned += len(files)
+	}
+
+	if len(allFiles) == 0 {
+		paths := make([]string, len(scanPaths))
+		for i, p := range scanPaths {
+			paths[i] = p.path
+		}
+		s.logger.Info("扫描目录为空", zap.Strings("directories", paths))
 		return result, nil
 	}
 
-	s.logger.Info("开始扫描录制文件",
-		zap.Int("total_files", len(files)),
-		zap.String("directory", s.recordingsPath),
+	paths := make([]string, len(scanPaths))
+	for i, p := range scanPaths {
+		paths[i] = p.path
+	}
+	s.logger.Info("开始扫描视频文件",
+		zap.Int("total_files", len(allFiles)),
+		zap.Strings("scan_paths", paths),
 	)
 
 	// 批量查询已存在的文件
@@ -1061,7 +1094,7 @@ func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 	}
 
 	// 处理文件
-	s.processFiles(files, existingMap, result)
+	s.processFiles(allFiles, existingMap, result)
 
 	s.logger.Info("文件扫描完成",
 		zap.Int("scanned", result.Scanned),
@@ -1097,7 +1130,7 @@ func (s *VideoFileService) processFiles(files []fileInfoWithPath, existingMap ma
 			continue
 		}
 
-		if _, err := s.CreateFile(file.filePath, file.taskID, nil); err != nil {
+		if _, err := s.CreateFile(file.filePath, file.taskID, nil, file.sourceType); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("创建记录 %s 失败: %v", file.filePath, err))
 			continue
 		}
@@ -1249,7 +1282,7 @@ func (s *VideoFileService) validateTaskID(taskID uint) bool {
 }
 
 // findVideoFiles 查找目录下所有视频文件
-func (s *VideoFileService) findVideoFiles(dir string) ([]fileInfoWithPath, error) {
+func (s *VideoFileService) findVideoFiles(dir string, sourceType string) ([]fileInfoWithPath, error) {
 	var files []fileInfoWithPath
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -1261,8 +1294,9 @@ func (s *VideoFileService) findVideoFiles(dir string) ([]fileInfoWithPath, error
 		// 只扫描 MP4 文件，忽略 MKV（MKV 是中间格式，MP4 是最终格式）
 		if ext == ".mp4" {
 			files = append(files, fileInfoWithPath{
-				filePath: path,
-				taskID:   s.extractTaskIDFromPath(path),
+				filePath:   path,
+				taskID:     s.extractTaskIDFromPath(path),
+				sourceType: sourceType,
 			})
 		}
 
@@ -1396,6 +1430,7 @@ func (s *VideoFileService) extractTaskIDFromPath(path string) *uint {
 // Parameters:
 //   - parentID: parent video file ID
 //   - userID: user ID requesting the deletion (for ownership validation)
+//
 // Returns:
 //   - count: number of segments deleted
 //   - error: error if deletion fails
@@ -1482,7 +1517,6 @@ func (s *VideoFileService) DeleteSplitSegmentsByParentID(parentID uint, userID u
 
 	return deletedCount, nil
 }
-
 
 // BatchDownloadFilesRequest 批量下载请求
 type BatchDownloadFilesRequest struct {

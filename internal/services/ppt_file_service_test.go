@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 )
 
 func setupPPTServiceTest(t *testing.T) (*PPTFileService, *gorm.DB, string) {
@@ -32,7 +32,7 @@ func setupPPTServiceTest(t *testing.T) (*PPTFileService, *gorm.DB, string) {
 func TestPPTFileService_RenamePPTFile_Success(t *testing.T) {
 	service, db, tempDir := setupPPTServiceTest(t)
 	userID := uint(1)
-	
+
 	videoFile := &models.VideoFile{
 		FileName:  "source.mp4",
 		FilePath:  createTestVideoFile(t, tempDir, "source.mp4", "video"),

@@ -22,13 +22,13 @@ import (
 
 // PPThandler handles PPT-related API requests
 type PPThandler struct {
-	pptFileService     *services.PPTFileService
-	slideCacheService  *services.SlideCacheService
-	mergeService       *services.PPTMergeService
-	videoFileService   *services.VideoFileService
-	pptEditorService   *services.PPTEditorService
+	pptFileService      *services.PPTFileService
+	slideCacheService   *services.SlideCacheService
+	mergeService        *services.PPTMergeService
+	videoFileService    *services.VideoFileService
+	pptEditorService    *services.PPTEditorService
 	frameCaptureService *services.FrameCaptureService
-	logger             *zap.Logger
+	logger              *zap.Logger
 }
 
 // NewPPThandler creates a new PPT handler
@@ -42,13 +42,13 @@ func NewPPThandler(
 	logger *zap.Logger,
 ) *PPThandler {
 	return &PPThandler{
-		pptFileService:     pptFileService,
-		slideCacheService:  slideCacheService,
-		mergeService:       mergeService,
-		videoFileService:   videoFileService,
-		pptEditorService:   pptEditorService,
+		pptFileService:      pptFileService,
+		slideCacheService:   slideCacheService,
+		mergeService:        mergeService,
+		videoFileService:    videoFileService,
+		pptEditorService:    pptEditorService,
 		frameCaptureService: frameCaptureService,
-		logger:             logger,
+		logger:              logger,
 	}
 }
 
@@ -510,9 +510,9 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 	response.GinSuccess(c, gin.H{
 		"message": "重命名成功",
 		"data": gin.H{
-			"id":         pptFile.ID,
-			"file_name":  pptFile.FileName,
-			"file_path":  pptFile.FilePath,
+			"id":        pptFile.ID,
+			"file_name": pptFile.FileName,
+			"file_path": pptFile.FilePath,
 		},
 	})
 }
@@ -561,8 +561,8 @@ func (h *PPThandler) DetectDuplicatesHandler(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, gin.H{
-		"groups":        groups,
-		"total_scanned": pptFile.PageCount,
+		"groups":          groups,
+		"total_scanned":   pptFile.PageCount,
 		"duplicate_count": len(groups),
 	})
 }
@@ -641,7 +641,7 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
 		response.GinSuccess(c, gin.H{
-			"message": "幻灯片删除成功",
+			"message":        "幻灯片删除成功",
 			"deleted_slides": req.Slides,
 		})
 		return
@@ -651,10 +651,10 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 	deletedSlides, _ := updatedPPT.GetDeletedSlides()
 
 	response.GinSuccess(c, gin.H{
-		"message":       "幻灯片删除成功",
-		"page_count":    updatedPPT.PageCount,
+		"message":        "幻灯片删除成功",
+		"page_count":     updatedPPT.PageCount,
 		"deleted_slides": deletedSlides,
-		"backup_path":   updatedPPT.BackupPath,
+		"backup_path":    updatedPPT.BackupPath,
 	})
 }
 
@@ -700,15 +700,15 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
 		response.GinSuccess(c, gin.H{
-			"message": "回滚成功",
+			"message":  "回滚成功",
 			"restored": true,
 		})
 		return
 	}
 
 	response.GinSuccess(c, gin.H{
-		"message": "回滚成功",
-		"restored": true,
+		"message":    "回滚成功",
+		"restored":   true,
 		"page_count": updatedPPT.PageCount,
 	})
 }
@@ -858,19 +858,19 @@ func (h *PPThandler) InsertSlideHandler(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
 		response.GinSuccess(c, gin.H{
-			"success":              true,
-			"page_count":           pptFile.PageCount + 1,
+			"success":               true,
+			"page_count":            pptFile.PageCount + 1,
 			"inserted_slide_number": req.InsertPosition,
 		})
 		return
 	}
 
 	response.GinSuccess(c, gin.H{
-		"success":              true,
-		"page_count":           updatedPPT.PageCount,
+		"success":               true,
+		"page_count":            updatedPPT.PageCount,
 		"inserted_slide_number": req.InsertPosition,
-		"new_slide_url":        fmt.Sprintf("/api/v1/ppts/%d/slides/fullsize/slide_%03d_captured.jpg", uint(id), req.InsertPosition),
-		"backup_path":          updatedPPT.BackupPath,
+		"new_slide_url":         fmt.Sprintf("/api/v1/ppts/%d/slides/fullsize/slide_%03d_captured.jpg", uint(id), req.InsertPosition),
+		"backup_path":           updatedPPT.BackupPath,
 	})
 }
 

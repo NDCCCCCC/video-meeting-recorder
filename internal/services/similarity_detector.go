@@ -20,12 +20,12 @@ type SimilarityDetector struct {
 
 // DetectionResult 检测结果
 type DetectionResult struct {
-	Changed         bool    // 是否检测到变化
-	SSIMScore       float64 // SSIM分数 (0.0-1.0)
-	PHashDistance   int     // pHash汉明距离
-	EdgeChangeRate  float64 // 边缘变化率 (0.0-1.0)
-	IsBlackFrame    bool    // 当前帧是否为黑色/空白帧
-	PrevIsBlackFrame bool   // 上一帧是否为黑色/空白帧
+	Changed          bool    // 是否检测到变化
+	SSIMScore        float64 // SSIM分数 (0.0-1.0)
+	PHashDistance    int     // pHash汉明距离
+	EdgeChangeRate   float64 // 边缘变化率 (0.0-1.0)
+	IsBlackFrame     bool    // 当前帧是否为黑色/空白帧
+	PrevIsBlackFrame bool    // 上一帧是否为黑色/空白帧
 }
 
 // NewSimilarityDetector 创建相似度检测器
@@ -49,7 +49,7 @@ func (d *SimilarityDetector) IsFrameChanged(prevImg, currImg image.Image) (*Dete
 	currIsBlack := d.isBlackFrame(currImg)
 
 	result := &DetectionResult{
-		IsBlackFrame:    currIsBlack,
+		IsBlackFrame:     currIsBlack,
 		PrevIsBlackFrame: prevIsBlack,
 	}
 

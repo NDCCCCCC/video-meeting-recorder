@@ -96,6 +96,18 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 		return
 	}
 
+	// 检查数据访问权限
+	// shared_viewer 和 admin 可以访问所有文件，普通用户只能访问自己创建的文件
+	userID := middleware.GetUserID(c)
+	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
+		h.logger.Warn("用户无权访问文件",
+			zap.Uint("user_id", userID),
+			zap.Uint("file_id", id),
+			zap.Uint("file_owner", file.CreatedBy))
+		response.GinError(c, response.CodeForbidden, "无权访问此文件")
+		return
+	}
+
 	if !file.Exists() {
 		response.GinError(c, response.CodeNotFound, "物理文件不存在")
 		return
@@ -313,9 +325,9 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 	response.GinSuccess(c, gin.H{
 		"message": "重命名成功",
 		"data": gin.H{
-			"id":         file.ID,
-			"file_name":  file.FileName,
-			"file_path":  file.FilePath,
+			"id":        file.ID,
+			"file_name": file.FileName,
+			"file_path": file.FilePath,
 		},
 	})
 }

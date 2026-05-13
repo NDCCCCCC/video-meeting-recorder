@@ -15,19 +15,19 @@ import (
 
 // PythonDependencyInfo contains information about Python dependencies
 type PythonDependencyInfo struct {
-	OK           bool              `json:"ok"`
+	OK            bool              `json:"ok"`
 	PythonVersion string            `json:"python_version,omitempty"`
-	Packages     map[string]string `json:"packages,omitempty"`
-	Error        string            `json:"error,omitempty"`
-	Command      string            `json:"command,omitempty"` // "python", "uv", "python3"
+	Packages      map[string]string `json:"packages,omitempty"`
+	Error         string            `json:"error,omitempty"`
+	Command       string            `json:"command,omitempty"` // "python", "uv", "python3"
 }
 
 // PythonDepsManager manages Python dependencies for the application
 type PythonDepsManager struct {
-	logger       *zap.Logger
-	projectRoot  string
-	checkScript  string
-	preferUV     bool // Whether to prefer uv over system Python
+	logger      *zap.Logger
+	projectRoot string
+	checkScript string
+	preferUV    bool // Whether to prefer uv over system Python
 }
 
 // NewPythonDepsManager creates a new Python dependencies manager

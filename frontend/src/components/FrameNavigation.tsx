@@ -1,5 +1,6 @@
 import { Button, Space, Tooltip } from 'antd'
 import { StepForwardOutlined, UndoOutlined } from '@ant-design/icons'
+import { memo } from 'react'
 import { useVideoFrameNavigation } from '../hooks/useVideoFrameNavigation'
 
 // ==================== Types ====================
@@ -20,7 +21,8 @@ interface FrameNavigationProps {
  * @param videoRef - React ref to the HTMLVideoElement
  * @param disabled - Whether the controls are disabled
  */
-export function FrameNavigation({ videoRef, disabled = false }: FrameNavigationProps) {
+// 使用 memo 包裹组件避免不必要的重渲染 (rerender-memo)
+export const FrameNavigation = memo(function FrameNavigation({ videoRef, disabled = false }: FrameNavigationProps) {
   const { nextFrame, prevFrame, supportsFrameCallback } = useVideoFrameNavigation(videoRef)
 
   // Don't render if browser doesn't support frame-level navigation
@@ -56,4 +58,4 @@ export function FrameNavigation({ videoRef, disabled = false }: FrameNavigationP
       </Tooltip>
     </Space>
   )
-}
+})

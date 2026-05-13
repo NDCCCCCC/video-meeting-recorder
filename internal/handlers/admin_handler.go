@@ -73,8 +73,8 @@ func (h *AdminHandler) GetAuthConfig(c *gin.Context) {
 // @Router /api/v1/admin/auth/config [put]
 func (h *AdminHandler) UpdateAuthConfig(c *gin.Context) {
 	var req struct {
-		Mode string             `json:"mode" binding:"required,oneof=local ad"`
-		AD   auth.ADAuthConfig  `json:"ad"`
+		Mode string            `json:"mode" binding:"required,oneof=local ad"`
+		AD   auth.ADAuthConfig `json:"ad"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -228,36 +228,36 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 
 	// Fetch all huawei_configs
 	type HuaweiConfigRow struct {
-		ID                 uint
-		Name               string
-		Description        string
-		Server             string
-		Port               int
-		Username           string
-		Password           string
-		TerminalNumber     string
-		ConferenceNumber   string
-		CameraBackend      string
-		USBCameraName      string
-		USBCameraDevice    string
+		ID                  uint
+		Name                string
+		Description         string
+		Server              string
+		Port                int
+		Username            string
+		Password            string
+		TerminalNumber      string
+		ConferenceNumber    string
+		CameraBackend       string
+		USBCameraName       string
+		USBCameraDevice     string
 		CameraBindingStatus string
-		AudioBackend       string
-		USBAudioName       string
-		USBAudioDevice     string
-		AudioBindingStatus string
-		OutputFormat       string
-		StreamProtocol     string
-		StreamURL          string
-		StreamUsername     string
-		StreamPassword     string
-		StreamEnabled      bool
-		IsActive           bool
-		IsLocked           bool
-		LockedBy           *uint
-		LockedAt           *time.Time
-		CreatedAt          time.Time
-		UpdatedAt          time.Time
-		DeletedAt          *time.Time
+		AudioBackend        string
+		USBAudioName        string
+		USBAudioDevice      string
+		AudioBindingStatus  string
+		OutputFormat        string
+		StreamProtocol      string
+		StreamURL           string
+		StreamUsername      string
+		StreamPassword      string
+		StreamEnabled       bool
+		IsActive            bool
+		IsLocked            bool
+		LockedBy            *uint
+		LockedAt            *time.Time
+		CreatedAt           time.Time
+		UpdatedAt           time.Time
+		DeletedAt           *time.Time
 	}
 
 	var huaweiConfigs []HuaweiConfigRow
@@ -282,16 +282,15 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 			continue
 		}
 
-			// Determine config_type based on existing configuration
-			// Priority: USB device > Stream > default to USB
-			configType := "usb"
-			if hc.USBCameraDevice == "" && hc.StreamURL != "" {
-				configType = "stream"
-			}
+		// Determine config_type based on existing configuration
+		// Priority: USB device > Stream > default to USB
+		configType := "usb"
+		if hc.USBCameraDevice == "" && hc.StreamURL != "" {
+			configType = "stream"
+		}
 
-			// Determine huawei_enabled based on whether Huawei fields are configured
-			huaweiEnabled := hc.Server != "" && hc.Username != "" && hc.TerminalNumber != ""
-
+		// Determine huawei_enabled based on whether Huawei fields are configured
+		huaweiEnabled := hc.Server != "" && hc.Username != "" && hc.TerminalNumber != ""
 
 		// Insert into input_configs
 		insertSQL := `

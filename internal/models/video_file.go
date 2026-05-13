@@ -42,6 +42,7 @@ const (
 // 视频来源类型常量
 const (
 	SourceTypeRecording = "recording"
+	SourceTypeUpload    = "upload"
 	SourceTypeSnapshot  = "snapshot"
 	SourceTypeSplit     = "split"
 )

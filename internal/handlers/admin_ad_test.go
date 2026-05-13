@@ -79,10 +79,10 @@ func TestAdminHandler_UpdateAuthConfig_ADMode_ValidConfig(t *testing.T) {
 	requestBody := map[string]interface{}{
 		"mode": "ad",
 		"ad": map[string]interface{}{
-			"server":   "ad.example.com:636",
-			"bind_dn":  "cn=admin,cn=users,dc=example,dc=com",
-			"base_dn":  "dc=example,dc=com",
-			"use_tls":  true,
+			"server":  "ad.example.com:636",
+			"bind_dn": "cn=admin,cn=users,dc=example,dc=com",
+			"base_dn": "dc=example,dc=com",
+			"use_tls": true,
 		},
 	}
 	_ = requestBody // Used in TODO implementation
@@ -108,10 +108,10 @@ func TestAdminHandler_UpdateAuthConfig_ADMode_InvalidConfig(t *testing.T) {
 	requestBody := map[string]interface{}{
 		"mode": "ad",
 		"ad": map[string]interface{}{
-			"server":   "", // Empty server - invalid
-			"bind_dn":  "cn=admin,cn=users,dc=example,dc=com",
-			"base_dn":  "dc=example,dc=com",
-			"use_tls":  true,
+			"server":  "", // Empty server - invalid
+			"bind_dn": "cn=admin,cn=users,dc=example,dc=com",
+			"base_dn": "dc=example,dc=com",
+			"use_tls": true,
 		},
 	}
 	_ = requestBody // Used in TODO implementation

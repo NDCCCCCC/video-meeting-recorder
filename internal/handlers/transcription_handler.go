@@ -299,7 +299,7 @@ func (h *TranscriptionHandler) GetTimestampMapHandler(c *gin.Context) {
 	if err != nil {
 		// Return empty array instead of error for graceful degradation
 		response.GinSuccess(c, gin.H{
-			"success":         true,
+			"success":          true,
 			"slide_timestamps": []interface{}{},
 		})
 		return
@@ -405,4 +405,3 @@ func (h *TranscriptionHandler) GetBatchTranscriptionStatus(c *gin.Context) {
 
 	response.GinSuccess(c, jobGroup)
 }
-

@@ -531,9 +531,9 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
-			if task.JobGroupID != nil {
-				s.updateJobGroupProgress(*task.JobGroupID)
-			}
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 		return
 	}
 
@@ -552,9 +552,9 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		return
 		// 更新任务组进度
-			if task.JobGroupID != nil {
-				s.updateJobGroupProgress(*task.JobGroupID)
-			}
+		if task.JobGroupID != nil {
+			s.updateJobGroupProgress(*task.JobGroupID)
+		}
 	}
 
 	// Create PPTFile record in database
@@ -576,18 +576,18 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		return
 	}
 
-		// 更新任务组进度
-			if task.JobGroupID != nil {
-				s.updateJobGroupProgress(*task.JobGroupID)
-			}
+	// 更新任务组进度
+	if task.JobGroupID != nil {
+		s.updateJobGroupProgress(*task.JobGroupID)
+	}
 	// Update task as completed
 	s.updateProgress(task.VideoFileID, "", len(frames), len(frames), 100, "", &pptFile.ID)
 	s.updateTaskStatus(task.ID, models.TranscriptionStatusCompleted, "", 0, &pptFile.ID)
 
 	// 更新任务组进度
-		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
-		}
+	if task.JobGroupID != nil {
+		s.updateJobGroupProgress(*task.JobGroupID)
+	}
 	s.logger.Info("转录任务完成",
 		zap.Uint("task_id", task.ID),
 		zap.Uint("video_file_id", task.VideoFileID),
