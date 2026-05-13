@@ -678,6 +678,7 @@ export default function FileManagement() {
       render: (sourceType: string, record: VideoFile) => {
         const SOURCE_CONFIG: Record<string, { label: string; color: string }> = {
           recording: { label: '录制', color: 'blue' },
+          upload: { label: '上传', color: 'purple' },
           snapshot: { label: '快照', color: 'green' },
           split: { label: '分割', color: 'orange' },
         }

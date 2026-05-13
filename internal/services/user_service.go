@@ -42,22 +42,22 @@ type ListUsersResponse struct {
 
 // CreateRequest 创建用户请求
 type CreateUserRequest struct {
-	Username    string   `json:"username" binding:"required,min=3,max=50"`
-	Password    string   `json:"password" binding:"required,min=8"`
-	Email       string   `json:"email" binding:"omitempty,email"`
-	FullName    string   `json:"full_name" binding:"omitempty,max=100"`
-	RoleIDs     []uint   `json:"role_ids"`
-	AllowedIPs  []string `json:"allowed_ips"`
-	IsActive    bool     `json:"is_active"`
+	Username   string   `json:"username" binding:"required,min=3,max=50"`
+	Password   string   `json:"password" binding:"required,min=8"`
+	Email      string   `json:"email" binding:"omitempty,email"`
+	FullName   string   `json:"full_name" binding:"omitempty,max=100"`
+	RoleIDs    []uint   `json:"role_ids"`
+	AllowedIPs []string `json:"allowed_ips"`
+	IsActive   bool     `json:"is_active"`
 }
 
 // UpdateRequest 更新用户请求
 type UpdateUserRequest struct {
-	Email       string   `json:"email" binding:"omitempty,email"`
-	FullName    string   `json:"full_name" binding:"omitempty,max=100"`
-	RoleIDs     []uint   `json:"role_ids"`
-	AllowedIPs  []string `json:"allowed_ips"`
-	IsActive    *bool    `json:"is_active"`
+	Email      string   `json:"email" binding:"omitempty,email"`
+	FullName   string   `json:"full_name" binding:"omitempty,max=100"`
+	RoleIDs    []uint   `json:"role_ids"`
+	AllowedIPs []string `json:"allowed_ips"`
+	IsActive   *bool    `json:"is_active"`
 }
 
 // AssignRolesRequest 分配角色请求

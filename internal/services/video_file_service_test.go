@@ -75,7 +75,7 @@ func createTestTask(t *testing.T, db *gorm.DB, mkvPath, mp4Path string) *models.
 	task := &models.VideoRecordingTask{
 		Name:             "测试任务",
 		ConferenceNumber: "123456789",
-		HuaweiConfigID:   &configID,
+		InputConfigID:    &configID,
 		Status:           models.VideoStatusCompleted,
 		StartTime:        time.Now().Add(-1 * time.Hour),
 		EndTime:          time.Now(),
@@ -688,7 +688,7 @@ func TestDeleteFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// 测试 findVideoFiles 方法
-		files, err := service.findVideoFiles(recordingsDir)
+		files, err := service.findVideoFiles(recordingsDir, models.SourceTypeRecording)
 		assert.NoError(t, err)
 		assert.Len(t, files, 1) // 只找到 mp4 文件
 		assert.Equal(t, mp4File, files[0].filePath)
@@ -715,7 +715,7 @@ func TestDeleteFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// 查找所有文件
-		files, err := service.findVideoFiles(recordingsDir)
+		files, err := service.findVideoFiles(recordingsDir, models.SourceTypeRecording)
 		assert.NoError(t, err)
 		assert.Len(t, files, 2)
 
@@ -749,7 +749,7 @@ func TestDeleteFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// 查找文件
-		files, err := service.findVideoFiles(recordingsDir)
+		files, err := service.findVideoFiles(recordingsDir, models.SourceTypeRecording)
 
 		// 验证只返回 .mp4 文件（findVideoFiles 只扫描 .mp4）
 		assert.NoError(t, err)
@@ -784,7 +784,7 @@ func TestFindVideoFiles(t *testing.T) {
 		require.NoError(t, err)
 
 		// 查找文件
-		files, err := service.findVideoFiles(tempDir)
+		files, err := service.findVideoFiles(tempDir, models.SourceTypeRecording)
 
 		// 验证只找到 .mp4 文件（3个）
 		assert.NoError(t, err)
@@ -1076,7 +1076,7 @@ func TestVideoFileService_RenameVideoFile_RollbackOnFilesystemError(t *testing.T
 	// Verify database was NOT updated (transaction rolled back)
 	var updated models.VideoFile
 	err = db.First(&updated, videoFile.ID).Error
-		require.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, videoFile.FileName, updated.FileName, "FileName should not change")
 	assert.Equal(t, videoFile.FilePath, updated.FilePath, "FilePath should not change")
 }
@@ -1346,13 +1346,13 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 
 		// Create segment with thumbnail
 		seg := &models.VideoFile{
-			FileName:   "segment_001.mp4",
-			FilePath:   segPath,
-			FileSize:   12,
-			Status:     models.FileStatusReady,
-			SourceType: models.SourceTypeSplit,
-			ParentID:   &parent.ID,
-			CreatedBy:  userID,
+			FileName:      "segment_001.mp4",
+			FilePath:      segPath,
+			FileSize:      12,
+			Status:        models.FileStatusReady,
+			SourceType:    models.SourceTypeSplit,
+			ParentID:      &parent.ID,
+			CreatedBy:     userID,
 			ThumbnailPath: &thumbPath,
 		}
 		err = db.Create(seg).Error

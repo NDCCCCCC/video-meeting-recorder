@@ -1,6 +1,6 @@
 import { Select } from 'antd'
 import { DashboardOutlined } from '@ant-design/icons'
-import { useState, useCallback, useEffect } from 'react'
+import { memo, useState, useCallback, useEffect } from 'react'
 
 // ==================== 常量 ====================
 
@@ -51,7 +51,8 @@ interface PlaybackSpeedControlProps {
 
 // ==================== 组件 ====================
 
-export function PlaybackSpeedControl({
+// 使用 memo 包裹组件避免不必要的重渲染 (rerender-memo)
+export const PlaybackSpeedControl = memo(function PlaybackSpeedControl({
   currentSpeed,
   onSpeedChange,
   style
@@ -66,4 +67,4 @@ export function PlaybackSpeedControl({
       prefix={<DashboardOutlined />}
     />
   )
-}
+})

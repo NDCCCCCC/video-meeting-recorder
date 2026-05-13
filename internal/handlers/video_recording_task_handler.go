@@ -106,6 +106,20 @@ func (h *VideoRecordingTaskHandler) GetTask(c *gin.Context) {
 		return
 	}
 
+	// 检查用户是否有权限访问此任务
+	if !middleware.CanAccessAllData(c) {
+		userID := middleware.GetUserID(c)
+		// 非管理员和共享查看者只能访问自己创建的任务
+		if task.CreatedBy != userID {
+			h.logger.Warn("用户尝试访问无权限的录制任务",
+				zap.Uint("user_id", userID),
+				zap.Uint("task_id", id),
+				zap.Uint("task_created_by", task.CreatedBy))
+			response.GinError(c, response.CodeForbidden, "无权访问此任务")
+			return
+		}
+	}
+
 	response.GinSuccess(c, task)
 }
 

@@ -42,11 +42,11 @@ type ListTasksRequest struct {
 	StartDate string                          `form:"start_date"`
 	EndDate   string                          `form:"end_date"`
 	// 数据范围过滤字段
-	UserID         uint          `form:"-"` // 当前用户ID（不从query读取，由handler设置）
-	IsAdmin        bool          `form:"-"` // 是否管理员（不从query读取，由handler设置）
-	ApplyDataScope bool          `form:"-"` // 是否应用数据范围过滤
+	UserID         uint         `form:"-"` // 当前用户ID（不从query读取，由handler设置）
+	IsAdmin        bool         `form:"-"` // 是否管理员（不从query读取，由handler设置）
+	ApplyDataScope bool         `form:"-"` // 是否应用数据范围过滤
 	User           *models.User `form:"-"` // User object with Roles preloaded for visibility control (D-11, D-12)
-	RoleIDs        []uint        `form:"-"` // Role IDs from token claims for shared_viewer check (D-02)
+	RoleIDs        []uint       `form:"-"` // Role IDs from token claims for shared_viewer check (D-02)
 }
 
 // ListTasksResponse 任务列表响应
@@ -912,14 +912,15 @@ func (s *VideoRecordingTaskService) validateConfigTypes(configIDs []uint) error 
 
 	return nil
 }
+
 // GetInputConfig 获取输入配置（供调度器使用）
 func (s *VideoRecordingTaskService) GetInputConfig(id uint) (*models.InputConfig, error) {
 	var config models.InputConfig
 	if err := s.db.First(&config, id).Error; err != nil {
 		return nil, err
 	}
-	return &config, nil}
-
+	return &config, nil
+}
 
 // GetDB 获取数据库连接（供调度器使用）
 func (s *VideoRecordingTaskService) GetDB() *gorm.DB {
@@ -975,24 +976,24 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearS
 		}
 		result.ClearedTaskIDs = append(result.ClearedTaskIDs, task.ID)
 
-			// 释放所有关联的输入配置锁
-			var taskConfigs []models.TaskInputConfig
-			if err := s.db.Where("task_id = ?", task.ID).Find(&taskConfigs).Error; err == nil {
-				for _, tc := range taskConfigs {
-					updates := map[string]interface{}{
-						"is_locked": false,
-						"locked_by": nil,
-						"locked_at": nil,
-					}
-					if err := s.db.Model(&models.InputConfig{}).Where("id = ?", tc.InputConfigID).Updates(updates).Error; err == nil {
-						result.UnlockedConfigIDs = append(result.UnlockedConfigIDs, tc.InputConfigID)
-					}
+		// 释放所有关联的输入配置锁
+		var taskConfigs []models.TaskInputConfig
+		if err := s.db.Where("task_id = ?", task.ID).Find(&taskConfigs).Error; err == nil {
+			for _, tc := range taskConfigs {
+				updates := map[string]interface{}{
+					"is_locked": false,
+					"locked_by": nil,
+					"locked_at": nil,
 				}
-				s.logger.Info("已释放终端锁",
-					zap.Uint("task_id", task.ID),
-					zap.Int("unlocked_count", len(taskConfigs)),
-				)
+				if err := s.db.Model(&models.InputConfig{}).Where("id = ?", tc.InputConfigID).Updates(updates).Error; err == nil {
+					result.UnlockedConfigIDs = append(result.UnlockedConfigIDs, tc.InputConfigID)
+				}
 			}
+			s.logger.Info("已释放终端锁",
+				zap.Uint("task_id", task.ID),
+				zap.Int("unlocked_count", len(taskConfigs)),
+			)
+		}
 
 	}
 

@@ -190,7 +190,7 @@ func (s *PPTFileService) RenamePPTFile(id uint, newName string, userID uint, has
 			// Update cache directory name to match new filename
 			cacheDir := filepath.Dir(pptFile.SlideCachePath)
 			newSlideCachePath = filepath.Join(cacheDir, newFileName+"_cache")
-			
+
 			// Attempt to rename cache directory (non-critical)
 			if err := os.Rename(pptFile.SlideCachePath, newSlideCachePath); err != nil {
 				s.logger.Warn("重命名slide缓存目录失败",

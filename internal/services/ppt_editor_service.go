@@ -21,21 +21,21 @@ import (
 
 // DuplicateGroup represents a group of duplicate slides
 type DuplicateGroup struct {
-	Slides       []int   `json:"slides"`
-	Similarity   float64 `json:"similarity"`
-	SSIMScore    float64 `json:"ssim_score"`
-	PHashDist    int     `json:"phash_distance"`
-	EdgeChange   float64 `json:"edge_change_rate"`
+	Slides     []int   `json:"slides"`
+	Similarity float64 `json:"similarity"`
+	SSIMScore  float64 `json:"ssim_score"`
+	PHashDist  int     `json:"phash_distance"`
+	EdgeChange float64 `json:"edge_change_rate"`
 }
 
 // DuplicatePair represents a single duplicate detection result
 type DuplicatePair struct {
-	Slide1       int     `json:"slide1"`
-	Slide2       int     `json:"slide2"`
-	Similarity   float64 `json:"similarity"`
-	SSIMScore    float64 `json:"ssim_score"`
-	PHashDist    int     `json:"phash_distance"`
-	EdgeChange   float64 `json:"edge_change_rate"`
+	Slide1     int     `json:"slide1"`
+	Slide2     int     `json:"slide2"`
+	Similarity float64 `json:"similarity"`
+	SSIMScore  float64 `json:"ssim_score"`
+	PHashDist  int     `json:"phash_distance"`
+	EdgeChange float64 `json:"edge_change_rate"`
 }
 
 // PPTEditorService handles PPT editing operations
@@ -448,8 +448,8 @@ func (s *PPTEditorService) Rollback(pptFileID uint) error {
 	}
 
 	updates := map[string]interface{}{
-		"page_count":    originalCount,
-		"backup_path":   "",
+		"page_count":     originalCount,
+		"backup_path":    "",
 		"deleted_slides": "[]",
 	}
 
@@ -557,10 +557,10 @@ func (s *PPTEditorService) InsertCapturedFrame(pptFileID uint, frameBytes []byte
 		s.db.First(&pptFile, pptFileID)
 	}
 
-		// WR-06: Check for overflow before validation
-		if pptFile.PageCount == 2147483647 { // math.MaxInt32
-			return fmt.Errorf("cannot insert slide: maximum page count reached")
-		}
+	// WR-06: Check for overflow before validation
+	if pptFile.PageCount == 2147483647 { // math.MaxInt32
+		return fmt.Errorf("cannot insert slide: maximum page count reached")
+	}
 
 	// Validate insert position
 	if insertPosition < 1 || insertPosition > pptFile.PageCount+1 {
@@ -923,4 +923,3 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 
 	return newOrder, nil
 }
-

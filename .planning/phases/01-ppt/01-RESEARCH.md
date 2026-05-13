@@ -396,7 +396,7 @@ func (h *VideoFileHandler) DownloadSubtitle(c *gin.Context) {
 
 **If this table is empty:** All claims in this research were verified or cited — no user confirmation needed.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **字幕生成服务的具体实现**
    - What we know: 使用单独的字幕生成服务（D-02），技术方案待定

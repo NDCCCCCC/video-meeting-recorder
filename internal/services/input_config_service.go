@@ -33,25 +33,25 @@ func NewInputConfigService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, 
 
 // InputConfigListResponse 输入配置列表响应
 type InputConfigListResponse struct {
-	Total int64               `json:"total"`
+	Total int64                `json:"total"`
 	Items []models.InputConfig `json:"items"`
 }
 
-
 // ListConfigsRequest 查询输入配置列表请求
 type ListConfigsRequest struct {
-	Page       int     `form:"page" binding:"required,min=1"`
-	PageSize   int     `form:"page_size" binding:"required,min=1,max=100"`
-	Keyword    string  `form:"keyword"`
-	IsActive   *bool   `form:"is_active"`
-	ConfigType string  `form:"config_type" binding:"omitempty,oneof=usb stream huawei_auto"`
+	Page       int    `form:"page" binding:"required,min=1"`
+	PageSize   int    `form:"page_size" binding:"required,min=1,max=100"`
+	Keyword    string `form:"keyword"`
+	IsActive   *bool  `form:"is_active"`
+	ConfigType string `form:"config_type" binding:"omitempty,oneof=usb stream huawei_auto"`
 }
+
 // CreateInputConfigRequest 创建输入配置请求
 type CreateInputConfigRequest struct {
-	Name             string `json:"name" binding:"required,max=100"`
-	Description      string `json:"description" binding:"max=500"`
-	ConfigType       string `json:"config_type" binding:"required,oneof=usb stream"`
-	HuaweiEnabled    bool   `json:"huawei_enabled"`
+	Name          string `json:"name" binding:"required,max=100"`
+	Description   string `json:"description" binding:"max=500"`
+	ConfigType    string `json:"config_type" binding:"required,oneof=usb stream"`
+	HuaweiEnabled bool   `json:"huawei_enabled"`
 	// 华为终端字段
 	Server           string `json:"server" binding:"omitempty,max=100"`
 	Port             int    `json:"port" binding:"omitempty,min=1,max=65535"`
@@ -60,12 +60,12 @@ type CreateInputConfigRequest struct {
 	TerminalNumber   string `json:"terminal_number" binding:"omitempty,max=50"`
 	ConferenceNumber string `json:"conference_number" binding:"omitempty,max=50"`
 	// USB字段
-	CameraBackend     string `json:"camera_backend" binding:"omitempty,max=20"`
-	USBCameraName    string `json:"usb_camera_name" binding:"omitempty,max=100"`
-	USBCameraDevice  string `json:"usb_camera_device" binding:"omitempty,max=100"`
-	AudioBackend     string `json:"audio_backend" binding:"omitempty,max=20"`
-	USBAudioName     string `json:"usb_audio_name" binding:"omitempty,max=100"`
-	USBAudioDevice   string `json:"usb_audio_device" binding:"omitempty,max=100"`
+	CameraBackend   string `json:"camera_backend" binding:"omitempty,max=20"`
+	USBCameraName   string `json:"usb_camera_name" binding:"omitempty,max=100"`
+	USBCameraDevice string `json:"usb_camera_device" binding:"omitempty,max=100"`
+	AudioBackend    string `json:"audio_backend" binding:"omitempty,max=20"`
+	USBAudioName    string `json:"usb_audio_name" binding:"omitempty,max=100"`
+	USBAudioDevice  string `json:"usb_audio_device" binding:"omitempty,max=100"`
 	// 流媒体字段
 	StreamProtocol string `json:"stream_protocol" binding:"omitempty,oneof=rtmp rtsp srt hls"`
 	StreamURL      string `json:"stream_url" binding:"omitempty,max=500"`
@@ -78,9 +78,9 @@ type CreateInputConfigRequest struct {
 
 // UpdateInputConfigRequest 更新输入配置请求
 type UpdateInputConfigRequest struct {
-	Name             *string `json:"name" binding:"omitempty,max=100"`
-	Description      *string `json:"description" binding:"omitempty,max=500"`
-	HuaweiEnabled    *bool   `json:"huawei_enabled"`
+	Name          *string `json:"name" binding:"omitempty,max=100"`
+	Description   *string `json:"description" binding:"omitempty,max=500"`
+	HuaweiEnabled *bool   `json:"huawei_enabled"`
 	// 华为终端字段
 	Server           *string `json:"server" binding:"omitempty,max=100"`
 	Port             *int    `json:"port" binding:"omitempty,min=1,max=65535"`
@@ -89,7 +89,7 @@ type UpdateInputConfigRequest struct {
 	TerminalNumber   *string `json:"terminal_number" binding:"omitempty,max=50"`
 	ConferenceNumber *string `json:"conference_number" binding:"omitempty,max=50"`
 	// USB字段
-	CameraBackend    *string `json:"camera_backend" binding:"omitempty,max=20"`
+	CameraBackend   *string `json:"camera_backend" binding:"omitempty,max=20"`
 	USBCameraName   *string `json:"usb_camera_name" binding:"omitempty,max=100"`
 	USBCameraDevice *string `json:"usb_camera_device" binding:"omitempty,max=100"`
 	AudioBackend    *string `json:"audio_backend" binding:"omitempty,max=20"`
@@ -103,18 +103,18 @@ type UpdateInputConfigRequest struct {
 	StreamEnabled  *bool   `json:"stream_enabled"`
 	// 录制配置
 	OutputFormat *string `json:"output_format" binding:"omitempty,max=20"`
-	IsActive      *bool   `json:"is_active"`
+	IsActive     *bool   `json:"is_active"`
 }
 
 // TestConnectionRequest 测试连接请求
 type TestConnectionRequest struct {
-	ConfigType      string `json:"config_type" binding:"required,oneof=usb stream"`
+	ConfigType string `json:"config_type" binding:"required,oneof=usb stream"`
 	// 华为字段
-	Server          string `json:"server" binding:"omitempty,max=100"`
-	Port            int    `json:"port" binding:"omitempty,min=1,max=65535"`
-	Username        string `json:"username" binding:"omitempty,max=50"`
-	Password        string `json:"password" binding:"omitempty,max=100"`
-	TerminalNumber  string `json:"terminal_number" binding:"omitempty,max=50"`
+	Server         string `json:"server" binding:"omitempty,max=100"`
+	Port           int    `json:"port" binding:"omitempty,min=1,max=65535"`
+	Username       string `json:"username" binding:"omitempty,max=50"`
+	Password       string `json:"password" binding:"omitempty,max=100"`
+	TerminalNumber string `json:"terminal_number" binding:"omitempty,max=50"`
 	// USB字段
 	USBCameraDevice string `json:"usb_camera_device" binding:"omitempty,max=100"`
 	// 流媒体字段
@@ -171,29 +171,29 @@ func (s *InputConfigService) GetConfigByID(id uint) (*models.InputConfig, error)
 // CreateConfig 创建输入配置
 func (s *InputConfigService) CreateConfig(req *CreateInputConfigRequest) (*models.InputConfig, error) {
 	config := &models.InputConfig{
-		Name:          req.Name,
-		Description:   req.Description,
-		ConfigType:    req.ConfigType,
-		HuaweiEnabled: req.HuaweiEnabled,
-		Server:        req.Server,
-		Port:          req.Port,
-		Username:      req.Username,
-		Password:      req.Password,
-		TerminalNumber: req.TerminalNumber,
+		Name:             req.Name,
+		Description:      req.Description,
+		ConfigType:       req.ConfigType,
+		HuaweiEnabled:    req.HuaweiEnabled,
+		Server:           req.Server,
+		Port:             req.Port,
+		Username:         req.Username,
+		Password:         req.Password,
+		TerminalNumber:   req.TerminalNumber,
 		ConferenceNumber: req.ConferenceNumber,
-		CameraBackend: req.CameraBackend,
-		USBCameraName: req.USBCameraName,
-		USBCameraDevice: req.USBCameraDevice,
-		AudioBackend:  req.AudioBackend,
-		USBAudioName:  req.USBAudioName,
-		USBAudioDevice: req.USBAudioDevice,
-		StreamProtocol: req.StreamProtocol,
-		StreamURL:     req.StreamURL,
-		StreamUsername: req.StreamUsername,
-		StreamPassword: req.StreamPassword,
-		StreamEnabled:  req.StreamEnabled,
-		OutputFormat:   req.OutputFormat,
-		IsActive:       true,
+		CameraBackend:    req.CameraBackend,
+		USBCameraName:    req.USBCameraName,
+		USBCameraDevice:  req.USBCameraDevice,
+		AudioBackend:     req.AudioBackend,
+		USBAudioName:     req.USBAudioName,
+		USBAudioDevice:   req.USBAudioDevice,
+		StreamProtocol:   req.StreamProtocol,
+		StreamURL:        req.StreamURL,
+		StreamUsername:   req.StreamUsername,
+		StreamPassword:   req.StreamPassword,
+		StreamEnabled:    req.StreamEnabled,
+		OutputFormat:     req.OutputFormat,
+		IsActive:         true,
 	}
 
 	// 设置默认值

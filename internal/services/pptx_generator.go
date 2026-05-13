@@ -21,7 +21,7 @@ type PPTXGenerator struct {
 	pythonCmd     string   // "python", "python3", or "uv"
 	pythonCmdArgs []string // Additional args (e.g., ["run", "python"] for uv)
 	preferUV      bool
-	baseDir       string   // Directory where scripts are located (executable directory)
+	baseDir       string // Directory where scripts are located (executable directory)
 }
 
 // NewPPTXGenerator creates a new PPTX generator instance

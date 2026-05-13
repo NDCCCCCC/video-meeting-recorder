@@ -144,9 +144,9 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 		}
 	}
 
-	// 5. 生成文件路径
-	ext := filepath.Ext(req.File.Filename)
-	fileName := generateUUID() + ext
+	// 5. 生成文件路径 - 使用原始文件名，处理同名冲突
+	baseName := filepath.Base(req.File.Filename)
+	fileName := s.generateUniqueFileName(ctx, req.Folder, baseName)
 	relativePath := filepath.Join(req.Folder, time.Now().Format("2006/01/02"), fileName)
 
 	// 6. 上传文件
@@ -580,4 +580,36 @@ func generateAccessToken() string {
 // generateShareToken 生成分享令牌
 func generateShareToken() string {
 	return fmt.Sprintf("share_%d", time.Now().UnixNano())
+}
+
+// generateUniqueFileName 生成唯一文件名，保持原始文件名，处理同名冲突
+func (s *FileService) generateUniqueFileName(ctx context.Context, folder, baseName string) string {
+	// 检查文件名是否已存在
+	var count int64
+	err := s.db.Model(&models.UploadedFile{}).
+		Where("file_name = ? AND status = ?", baseName, models.FileStatusActive).
+		Count(&count).Error
+
+	if err != nil || count == 0 {
+		// 文件名不存在，直接使用原始文件名
+		return baseName
+	}
+
+	// 文件名已存在，添加后缀
+	ext := filepath.Ext(baseName)
+	nameWithoutExt := strings.TrimSuffix(baseName, ext)
+
+	// 尝试添加 (1), (2), ... 后缀
+	for i := 1; i <= 1000; i++ {
+		newName := fmt.Sprintf("%s (%d)%s", nameWithoutExt, i, ext)
+		err := s.db.Model(&models.UploadedFile{}).
+			Where("file_name = ? AND status = ?", newName, models.FileStatusActive).
+			Count(&count).Error
+		if err != nil || count == 0 {
+			return newName
+		}
+	}
+
+	// 如果尝试1000次仍然冲突（极不可能），使用时间戳作为后备
+	return fmt.Sprintf("%s_%d%s", nameWithoutExt, time.Now().UnixNano(), ext)
 }

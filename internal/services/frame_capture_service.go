@@ -79,11 +79,11 @@ func (s *FrameCaptureService) CaptureFrame(ctx context.Context, videoPath string
 	// -vframes 1 to capture single frame
 	// -q:v 2 for high quality JPEG (quality 95)
 	args := []string{
-		"-y",                    // Overwrite output file
+		"-y",                                           // Overwrite output file
 		"-ss", fmt.Sprintf("%.3f", validatedTimestamp), // Timestamp in seconds
-		"-i", videoPath,         // Input file
-		"-vframes", "1",         // Capture only one frame
-		"-q:v", "2",             // JPEG quality 2 (high quality, range 1-31)
+		"-i", videoPath, // Input file
+		"-vframes", "1", // Capture only one frame
+		"-q:v", "2", // JPEG quality 2 (high quality, range 1-31)
 		outputPath,
 	}
 

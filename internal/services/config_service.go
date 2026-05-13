@@ -13,9 +13,9 @@ import (
 
 const (
 	// Setting keys for auth config persistence
-	keyAuthMode        = "auth.mode"
-	keyAuthAD          = "auth.ad"
-	keyAuthADPassword  = "auth.ad.password"
+	keyAuthMode              = "auth.mode"
+	keyAuthAD                = "auth.ad"
+	keyAuthADPassword        = "auth.ad.password"
 	keyAuthADAllowAutoCreate = "auth.ad.allow_auto_create"
 )
 

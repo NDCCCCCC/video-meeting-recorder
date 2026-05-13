@@ -8,6 +8,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 // 正在刷新 token 的 Promise，防止并发刷新
 let refreshingPromise: Promise<string> | null = null
+// 正在登出的标志，防止并发请求重复登出
+let isLoggingOut = false
 // 上次刷新失败的时间戳，用于防止频繁重试
 let lastRefreshFailureTime = 0
 // 刷新失败后的冷却时间（毫秒）
@@ -53,20 +55,28 @@ const getRefreshToken = (): string | null => {
 
 // 保存 Token（用于刷新后更新）
 const saveToken = (accessToken: string, refreshToken: string): void => {
+  // 重置登出标志，允许后续的登出操作
+  isLoggingOut = false
+
   // 同时更新 localStorage 和 authStore
   localStorage.setItem('access_token', accessToken)
   localStorage.setItem('refresh_token', refreshToken)
 
-  // 更新 authStore
+  // 更新 authStore（通过直接修改 localStorage，zustand persist 会自动同步）
   const authStorage = localStorage.getItem('auth-storage')
   if (authStorage) {
-    const parsed = JSON.parse(authStorage)
-    parsed.state.token = accessToken
-    parsed.state.refreshToken = refreshToken
-    parsed.state.isAuthenticated = true
-    localStorage.setItem('auth-storage', JSON.stringify(parsed))
-    // 关键修复：同时更新 authStorageString 缓存，保持一致性
-    authStorageString = JSON.stringify(parsed)
+    try {
+      const parsed = JSON.parse(authStorage)
+      parsed.state.token = accessToken
+      parsed.state.refreshToken = refreshToken
+      parsed.state.isAuthenticated = true
+      const newAuthStorage = JSON.stringify(parsed)
+      localStorage.setItem('auth-storage', newAuthStorage)
+      // 关键修复：同时更新 authStorageString 缓存，保持一致性
+      authStorageString = newAuthStorage
+    } catch (e) {
+      console.warn('Failed to update auth-storage:', e)
+    }
   }
 
   // 立即更新缓存变量，避免下次读取时使用旧值
@@ -111,14 +121,23 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
 }
 
 // 处理 401 未授权 - 清除认证状态并跳转登录页
+// 使用 isLoggingOut 标志防止并发请求重复登出
 function handleUnauthorized() {
+  // 防止并发请求重复触发登出
+  if (isLoggingOut) {
+    return
+  }
+
+  isLoggingOut = true
   clearToken()
+
   // 使用 window.location.href 确保在所有情况下都能跳转
   // 保存当前路径以便登录后返回
   const currentPath = window.location.pathname
   if (currentPath !== '/auth/login') {
     sessionStorage.setItem('redirectAfterLogin', currentPath)
   }
+
   window.location.href = '/auth/login'
 }
 

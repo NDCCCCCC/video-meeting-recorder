@@ -161,16 +161,32 @@ export function uploadVideoFile(
 
     // Handle completion
     xhr.addEventListener('load', () => {
+      console.log('[Upload Debug] Status:', xhr.status, xhr.statusText)
+      console.log('[Upload Debug] Response:', xhr.responseText)
+
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText)
+          console.log('[Upload Debug] Parsed response:', response)
+          console.log('[Upload Debug] response.data:', response?.data)
+          console.log('[Upload Debug] response.data.file_id:', response?.data?.file_id)
+
           // Validate response structure
-          if (!response || !response.data || !response.data.file_id) {
-            reject(new Error('服务器返回的响应格式无效'))
+          if (!response) {
+            reject(new Error('服务器返回的响应为空'))
+            return
+          }
+          if (!response.data) {
+            reject(new Error('服务器返回的响应缺少 data 字段'))
+            return
+          }
+          if (response.data.file_id === undefined || response.data.file_id === null) {
+            reject(new Error(`服务器返回的响应缺少 file_id 字段. data: ${JSON.stringify(response.data)}`))
             return
           }
           resolve(response)
         } catch (error) {
+          console.error('[Upload Debug] Parse error:', error)
           reject(new Error('解析响应失败'))
         }
       } else {
@@ -178,6 +194,7 @@ export function uploadVideoFile(
         let errorMsg = `上传失败: ${xhr.status} ${xhr.statusText}`
         try {
           const errorResponse = JSON.parse(xhr.responseText)
+          console.error('[Upload Debug] Error response:', errorResponse)
           if (errorResponse.message) {
             errorMsg = errorResponse.message
           }

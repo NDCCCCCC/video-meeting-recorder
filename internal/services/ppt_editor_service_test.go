@@ -102,13 +102,13 @@ func TestPPTEditorService_CreateBackup_AlreadyExists(t *testing.T) {
 	pptPath := createTestPPTFile(t, tempDir, "test.pptx")
 
 	pptFile := &models.PPTFile{
-		FileName:    "test.pptx",
-		FilePath:    pptPath,
-		FileSize:    1024,
-		PageCount:   10,
-		Format:      "pptx",
-		SourceType:  models.PPTSourceTypeTranscription,
-		BackupPath:  "/some/existing/backup.pptx",
+		FileName:   "test.pptx",
+		FilePath:   pptPath,
+		FileSize:   1024,
+		PageCount:  10,
+		Format:     "pptx",
+		SourceType: models.PPTSourceTypeTranscription,
+		BackupPath: "/some/existing/backup.pptx",
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
@@ -248,14 +248,14 @@ func TestPPTEditorService_Rollback_Success(t *testing.T) {
 	require.NoError(t, os.WriteFile(backupPath, []byte("original content"), 0644))
 
 	pptFile := &models.PPTFile{
-		FileName:       "test.pptx",
-		FilePath:       pptPath,
-		FileSize:       1024,
-		PageCount:      5,
-		Format:         "pptx",
-		SourceType:     models.PPTSourceTypeTranscription,
-		BackupPath:     backupPath,
-		DeletedSlides:  "[1,3]",
+		FileName:      "test.pptx",
+		FilePath:      pptPath,
+		FileSize:      1024,
+		PageCount:     5,
+		Format:        "pptx",
+		SourceType:    models.PPTSourceTypeTranscription,
+		BackupPath:    backupPath,
+		DeletedSlides: "[1,3]",
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
