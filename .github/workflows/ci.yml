@@ -1,0 +1,193 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 后端：Go 测试 + Lint
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.25']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Download modules
+        working-directory: .
+        run: go mod download
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -trimpath -ldflags "-s -w" -o /tmp/record-v2-test ./cmd/server
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        env:
+          # 测试用环境变量（go test 不需要真实密钥）
+          SM4_SECRET: 0123456789abcdef0123456789abcdef
+          HLS_TOKEN_SECRET: 0123456789abcdef0123456789abcdef
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Upload coverage
+        if: matrix.go-version == '1.25' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-backend
+          path: coverage.out
+
+  # ---------------------------------------------------------------------------
+  # 后端：交叉编译矩阵（4 个目标）
+  # ---------------------------------------------------------------------------
+  cross-build:
+    name: Cross-build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    needs: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-amd64
+            goos: windows
+            goarch: amd64
+            ext: '.exe'
+          - target: windows-arm64
+            goos: windows
+            goarch: arm64
+            ext: '.exe'
+          - target: linux-amd64
+            goos: linux
+            goarch: amd64
+            ext: ''
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+            ext: ''
+          - target: darwin-amd64
+            goos: darwin
+            goarch: amd64
+            ext: ''
+          - target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+            ext: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Sync frontend dist for embed
+        run: |
+          rm -rf internal/frontend/dist
+          mkdir -p internal/frontend/dist
+          cp -r frontend/dist/. internal/frontend/dist/
+
+      - name: Cross-compile ${{ matrix.target }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p bin
+          go build -trimpath -ldflags "-s -w" \
+            -o bin/record-v2-${{ matrix.target }}${{ matrix.ext }} \
+            ./cmd/server
+          ls -lh bin/
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: record-v2-${{ matrix.target }}
+          path: bin/record-v2-${{ matrix.target }}${{ matrix.ext }}
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 前端：Lint + Type check + Build
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Type check & build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
+  # ---------------------------------------------------------------------------
+  # 汇总：所有 job 成功后输出
+  # ---------------------------------------------------------------------------
+  ci-status:
+    name: CI Status
+    runs-on: ubuntu-latest
+    needs: [backend, cross-build, frontend]
+    if: always()
+    steps:
+      - name: Report
+        run: |
+          if [ "${{ needs.backend.result }}" != "success" ] || \
+             [ "${{ needs.cross-build.result }}" != "success" ] || \
+             [ "${{ needs.frontend.result }}" != "success" ]; then
+            echo "::error::One or more CI jobs failed"
+            exit 1
+          fi
+          echo "All CI jobs passed"
