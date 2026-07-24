@@ -55,10 +55,10 @@ func newMockTaskService() *mockTaskService {
 		panic(fmt.Sprintf("创建GORM失败: %v", err))
 	}
 
-	// 自动迁移需要的表
+	// 自动迁移需要的表（Phase 13 重构后使用 InputConfig 架构）
 	err = db.AutoMigrate(
-		&models.TaskHuaweiConfig{},
-		&models.HuaweiConfig{},
+		&models.InputConfig{},
+		&models.TaskInputConfig{},
 		&models.VideoRecordingTask{},
 	)
 	if err != nil {
@@ -99,17 +99,22 @@ func (m *mockTaskService) UpdateTaskStatus(id uint, status models.VideoRecording
 	return nil
 }
 
-func (m *mockTaskService) GetHuaweiConfig(id uint) (*models.HuaweiConfig, error) {
-	return &models.HuaweiConfig{
-		Base:          models.Base{ID: id},
-		Name:          "Test Config",
-		Server:        "192.168.1.100",
-		Port:          80,
-		Username:      "admin",
-		Password:      "password",
-		OutputFormat:  "mp4",
-		CameraBackend: "dshow",
-		AudioBackend:  "dshow",
+func (m *mockTaskService) GetInputConfig(id uint) (*models.InputConfig, error) {
+	return &models.InputConfig{
+		Base:           models.Base{ID: id},
+		Name:           "Test Config",
+		ConfigType:     models.ConfigTypeUSB,
+		Server:         "192.168.1.100",
+		Port:           80,
+		Username:       "admin",
+		Password:       "password",
+		OutputFormat:   "mp4",
+		CameraBackend:  "dshow",
+		USBCameraName:  "Integrated Camera",
+		USBCameraDevice: "Integrated Camera",
+		AudioBackend:   "dshow",
+		USBAudioName:   "Microphone",
+		USBAudioDevice: "Microphone",
 	}, nil
 }
 
@@ -134,11 +139,11 @@ func newMockCoordinator() *mockCoordinator {
 	return &mockCoordinator{}
 }
 
-func (m *mockCoordinator) StartRecording(task *models.VideoRecordingTask, config *models.HuaweiConfig) error {
+func (m *mockCoordinator) StartRecording(task *models.VideoRecordingTask, config *models.InputConfig) error {
 	return nil
 }
 
-func (m *mockCoordinator) StartRecordingWithConfig(task *models.VideoRecordingTask, huaweiConfig *models.HuaweiConfig, configType string) error {
+func (m *mockCoordinator) StartRecordingWithConfig(task *models.VideoRecordingTask, inputConfig *models.InputConfig, configType string) error {
 	return nil
 }
 
@@ -161,24 +166,29 @@ func createTestTask(id uint, name string, startTime time.Time) *models.VideoReco
 		PreJoinMinutes:     5,
 		RecordDelayMinutes: 0,
 		ConferenceNumber:   "123456",
-		HuaweiConfigID:     &configID,
+		InputConfigID:      &configID,
 		Status:             models.VideoStatusPending,
 	}
 }
 
-// setupTestDBData 设置测试数据库中的华为配置数据
+// setupTestDBData 设置测试数据库中的输入配置数据
 func setupTestDBData(db *gorm.DB) {
-	// 创建测试华为配置
-	config := &models.HuaweiConfig{
-		Base:          models.Base{ID: 1},
-		Name:          "Test Config",
-		Server:        "192.168.1.100",
-		Port:          80,
-		Username:      "admin",
-		Password:      "password",
-		OutputFormat:  "mp4",
-		CameraBackend: "dshow",
-		AudioBackend:  "dshow",
+	// 创建测试输入配置
+	config := &models.InputConfig{
+		Base:            models.Base{ID: 1},
+		Name:            "Test Config",
+		ConfigType:      models.ConfigTypeUSB,
+		Server:          "192.168.1.100",
+		Port:            80,
+		Username:        "admin",
+		Password:        "password",
+		OutputFormat:    "mp4",
+		CameraBackend:   "dshow",
+		USBCameraName:   "Integrated Camera",
+		USBCameraDevice: "Integrated Camera",
+		AudioBackend:    "dshow",
+		USBAudioName:    "Microphone",
+		USBAudioDevice:  "Microphone",
 	}
 	db.Create(config)
 }
@@ -188,12 +198,12 @@ func setupTaskWithConfig(taskSvc *mockTaskService, task *models.VideoRecordingTa
 	taskSvc.tasks[task.ID] = task
 	// 设置测试数据库数据
 	setupTestDBData(taskSvc.db)
-	// 创建任务配置关联
-	if task.HuaweiConfigID != nil {
-		taskConfig := &models.TaskHuaweiConfig{
-			TaskID:         task.ID,
-			HuaweiConfigID: *task.HuaweiConfigID,
-			ConfigType:     "usb",
+	// 创建任务配置关联（使用新的 TaskInputConfig 多对多表）
+	if task.InputConfigID != nil {
+		taskConfig := &models.TaskInputConfig{
+			TaskID:        task.ID,
+			InputConfigID: *task.InputConfigID,
+			ConfigType:    models.ConfigTypeUSB,
 		}
 		taskSvc.db.Create(taskConfig)
 	}

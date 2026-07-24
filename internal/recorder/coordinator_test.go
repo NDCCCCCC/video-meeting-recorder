@@ -47,13 +47,14 @@ func TestBuildRecordingInput(t *testing.T) {
 	task := &models.VideoRecordingTask{
 		RTSPStreamURL: "",
 	}
-	huaweiConfig := &models.HuaweiConfig{
+	inputConfig := &models.InputConfig{
+		ConfigType:      models.ConfigTypeUSB,
 		CameraBackend:   "dshow",
 		USBCameraDevice: "Integrated Camera",
 		USBAudioDevice:  "Microphone",
 	}
 
-	input := coordinator.buildRecordingInput(task, huaweiConfig)
+	input := coordinator.buildRecordingInput(task, inputConfig)
 
 	assert.Equal(t, InputSourceUSB, input.Type)
 	assert.Equal(t, "Integrated Camera", input.CameraDevice)
@@ -78,9 +79,9 @@ func TestBuildRecordingInput_RTSP(t *testing.T) {
 	task := &models.VideoRecordingTask{
 		RTSPStreamURL: "rtsp://192.168.1.100:554/stream",
 	}
-	huaweiConfig := &models.HuaweiConfig{}
+	inputConfig := &models.InputConfig{}
 
-	input := coordinator.buildRecordingInput(task, huaweiConfig)
+	input := coordinator.buildRecordingInput(task, inputConfig)
 
 	assert.Equal(t, InputSourceRTSP, input.Type)
 	assert.Equal(t, "rtsp://192.168.1.100:554/stream", input.RTSPURL)
@@ -104,11 +105,11 @@ func TestBuildRecordingInput_Mixed(t *testing.T) {
 	task := &models.VideoRecordingTask{
 		RTSPStreamURL: "rtsp://192.168.1.100:554/stream",
 	}
-	huaweiConfig := &models.HuaweiConfig{
+	inputConfig := &models.InputConfig{
 		USBAudioDevice: "Microphone",
 	}
 
-	input := coordinator.buildRecordingInput(task, huaweiConfig)
+	input := coordinator.buildRecordingInput(task, inputConfig)
 
 	assert.Equal(t, InputSourceMixed, input.Type)
 	assert.Equal(t, "rtsp://192.168.1.100:554/stream", input.RTSPURL)
