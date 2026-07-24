@@ -1,0 +1,113 @@
+# 视频会议录制系统 V2.0 配置文件 - 示例模板
+#
+# 部署说明：
+#   1. 复制本文件为 config.yaml：cp config.yaml.example config.yaml
+#   2. 根据实际环境修改以下占位符值
+#   3. 敏感密钥应通过环境变量注入，避免硬编码到本文件中
+#
+# 所有 SM4_* / *_secret / *_password 字段都可以通过环境变量覆盖，
+# 优先级：环境变量 > config.yaml 中本字段值。
+
+server:
+  host: "0.0.0.0"
+  port: 5443                  # 仅 HTTPS，不监听 HTTP
+  environment: "production"
+  read_timeout: 30
+  write_timeout: 30
+  tls_enabled: true
+  https_port: 5443
+  tls_cert_file: "./certs/server.crt"
+  tls_key_file: "./certs/server.key"
+  redirect_http_to_https: false
+
+database:
+  driver: "sqlite"
+  path: "./data/record.db"
+  journal_mode: "WAL"
+  synchronous: "NORMAL"
+  cache_size: 2000
+  busy_timeout: 5000
+  max_open_conns: 1
+  max_idle_conns: 1
+  conn_max_lifetime: 3600
+
+auth:
+  # SM4 密钥（用于 Token 加密和密码传输加密）
+  # 生成命令: openssl rand -hex 16
+  # 推荐通过环境变量 SM4_SECRET 注入，避免写入版本控制
+  sm4_secret: "CHANGE_ME_USE_ENV_SM4_SECRET"
+  access_token_duration: "2h"
+  refresh_token_duration: "168h"   # 7 days
+  max_session_duration: "720h"     # 30 days
+  hls_token_secret: "CHANGE_ME_USE_ENV_HLS_TOKEN_SECRET"
+  hls_token_duration: "5m"
+
+logging:
+  level: "info"
+  format: "json"
+  output: "logs"
+  max_size: 100
+  max_backups: 10
+  max_age: 30
+  compress: true
+
+storage:
+  recordings_path: "./data/recordings"
+  hls_path: "./data/hls"
+  temp_path: "./data/temp"
+  max_disk_usage: 90
+  local:
+    base_path: "./data/files"
+    # 部署到内网时改为实际服务地址；公网请使用域名
+    base_url: "http://localhost:8080/files"
+  max_file_size: 5368709120  # 5GB
+  allowed_extensions:
+    - ".mp4"
+    - ".mkv"
+    - ".avi"
+    - ".mov"
+    - ".wmv"
+    - ".flv"
+    - ".ppt"
+    - ".pptx"
+    - ".pdf"
+    - ".doc"
+    - ".docx"
+
+# 华为会议系统配置（可选）
+# 推荐通过环境变量 HUAWEI_CONF_SERVER / HUAWEI_USERNAME / HUAWEI_PASSWORD 注入
+huawei:
+  conference_server: "CHANGE_ME_HUAWEI_CONF_SERVER"
+  conference_port: 80
+  username: "CHANGE_ME_HUAWEI_USERNAME"
+  password: "CHANGE_ME_HUAWEI_PASSWORD_USE_ENV"
+  https: true
+  insecure_skip_verify: false
+  api_timeout: "30s"
+  session_timeout: "3600s"
+  keep_alive_interval: "300s"
+  min_tls_version: "1.0"
+
+ffmpeg:
+  path: "./bin/ffmpeg"
+  ffprobe_path: "./bin/ffprobe"
+  max_processes: 5
+  timeout: "5m"
+  default_codec: "h264"
+  default_format: "mp4"
+  default_audio_bitrate: "128"
+  crf: 23
+  preset: "medium"
+  max_video_bitrate: "3M"
+  video_bufsize: "6M"
+  dshow_buffer_size: 2097152
+  dshow_thread_queue_size: 8
+  hls_segment_duration: 10
+  hls_list_size: 5
+  max_recording_duration: "24h"
+
+rtsp:
+  enabled: false
+  max_streams: 10
+  reconnect_timeout: "30s"
+  buffer_size: 1048576
