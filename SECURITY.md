@@ -4,7 +4,25 @@ Record V2 项目安全策略与上传前检查清单。
 
 ## ⚠️ 历史密钥事件
 
-2026-07-24 发现以下文件曾被提交进 git 历史，已通过 `git-filter-repo` 全部清除：
+### 事件 #2: Release v2.0.0 二进制泄露密钥 (2026-07-24)
+
+**发现**: 远端 release v2.0.0 二进制资产 (`record-v2-windows-amd64.exe` 等 4 个) 通过 Go embed 嵌入了前端构建产物，而前端的 `frontend/.env.production` 在 build 时被 Vite 注入，含有真实 SM4 密钥和内网 IP。
+
+**影响**:
+- 任何下载 release 资产的人都能获取 SM4 密钥
+- 知道内网 API 地址（10.62.0.123）
+
+**响应**:
+1. 重新生成 SM4 密钥（`openssl rand -hex 16`）
+2. 重新构建前端 + 4 平台二进制
+3. 通过 GitHub API 删除旧 release 资产，上传新资产
+4. **旧密钥已废止，所有部署需更新 `config.yaml` 与 `frontend/.env.production`**
+
+**新密钥**: 通过环境变量注入，仓库中**永远不存真实值**。
+
+### 事件 #1: 初始清理 (2026-07-24)
+
+发现以下文件曾被提交进 git 历史，已通过 `git-filter-repo` 全部清除：
 
 | 文件 | 暴露内容 | 风险 |
 |------|---------|------|
