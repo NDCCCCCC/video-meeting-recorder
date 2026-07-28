@@ -134,8 +134,8 @@ func (a *LocalAuthenticator) Login(req *LoginRequest, ipAddress, userAgent strin
 		a.logger.Error("Login: failed to update last login", zap.Error(err))
 	}
 
-	// 10. 创建session记录
-	if err := a.tokenService.CreateSession(user.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt); err != nil {
+	// 10. 创建session记录（按 RefreshToken 存储，便于 RefreshAccessToken 中的宽限期查找）
+	if err := a.tokenService.CreateSession(user.ID, tokenPair.RefreshToken, ipAddress, userAgent, tokenPair.ExpiresAt); err != nil {
 		a.logger.Warn("Failed to create session", zap.Error(err))
 	}
 

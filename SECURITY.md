@@ -70,7 +70,7 @@ certs/*.crt *.pem *.key  # TLS 证书与私钥
 git ls-files | grep -iE "(\\.env$|config\\.yaml$|certs/|\\.key$|\\.crt$)"
 
 # 检查历史中是否还有敏感关键字（输出应为空）
-git rev-list --all --objects | grep -E "(TYTW_APP_KEY|sm4_secret|68a905ced9d1a78d87e9315b273ccb70)"
+git rev-list --all --objects | grep -E "(TYTW_APP_KEY|sm4_secret|<redacted-old-sm4-key>)"
 
 # 检查源代码中是否有硬编码密钥
 grep -rIn -E "(VITE_SM4_SECRET|sm4_secret|TYTW_APP_KEY)" --include="*.go" --include="*.ts" \

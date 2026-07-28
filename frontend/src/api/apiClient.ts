@@ -186,20 +186,21 @@ export async function apiRequest<T>(
       if (refreshingPromise) {
         try {
           const newToken = await refreshingPromise
-          // 使用新 token 重试原始请求
+          // 修复 Bug #3：refresh 成功后，retry 即使仍 401 也不应登出
+          // （因为 refresh 服务端已确认新 token 有效，retry 401 通常是瞬时错误）
           const newHeaders = { ...headers, Authorization: `Bearer ${newToken}` }
           const retryResponse = await fetch(url, { ...options, headers: newHeaders })
-          if (retryResponse.status === 401) {
-            handleUnauthorized()
-            throw new Error('Session expired')
-          }
           const data = await retryResponse.json()
           if (!retryResponse.ok) {
-            throw new Error(data.message || 'Request failed')
+            throw new Error(data.message || 'Request failed after token refresh')
           }
           return data
         } catch (error) {
-          handleUnauthorized()
+          // 只有 refresh 本身抛错（Failed to refresh token）时才登出
+          // refresh 成功后的 retry 失败 → 抛错给调用方处理，不强制登出
+          if (error instanceof Error && error.message.includes('Failed to refresh')) {
+            handleUnauthorized()
+          }
           throw error
         }
       }
@@ -213,26 +214,25 @@ export async function apiRequest<T>(
         // 刷新成功，清除失败时间戳
         lastRefreshFailureTime = 0
 
-        // 使用新 token 重试原始请求
+        // 修复 Bug #3：refresh 成功后，retry 即使仍 401 也不应登出
+        // 这里和上面 refreshingPromise 分支保持一致——refresh 成功 = session 有效
         const newHeaders = { ...headers, Authorization: `Bearer ${newToken}` }
         const retryResponse = await fetch(url, { ...options, headers: newHeaders })
 
-        if (retryResponse.status === 401) {
-          // 刷新后仍然 401，token 已彻底失效
-          handleUnauthorized()
-          throw new Error('Session expired')
-        }
-
         const data = await retryResponse.json()
         if (!retryResponse.ok) {
-          throw new Error(data.message || 'Request failed')
+          throw new Error(data.message || 'Request failed after token refresh')
         }
 
         return data
       } catch (error) {
-        // 刷新失败，记录失败时间并跳转登录
-        lastRefreshFailureTime = Date.now()
-        handleUnauthorized()
+        // 区分两种失败：refresh 失败 vs refresh 成功后 retry 失败
+        if (error instanceof Error && error.message.includes('Failed to refresh')) {
+          // refresh 本身失败：记录冷却时间并登出
+          lastRefreshFailureTime = Date.now()
+          handleUnauthorized()
+        }
+        // retry 失败（refresh 已成功）：仅抛错，不强制登出
         throw error
       } finally {
         // 清除 Promise 缓存，允许下次刷新（但在冷却期内）

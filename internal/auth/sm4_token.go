@@ -318,14 +318,32 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 					).Order("created_at DESC").First(&newSession).Error
 
 					if err == nil {
-						s.logger.Debug("宽限期内重复刷新（数据库），返回新 token",
+						// 修复 Bug #2：原代码直接把 newSession.Token（旧 refresh token）同时作为 AT 和 RT 返回，
+						// 导致 AT == RT 且用户下一次 refresh 时 token type 校验失败被踢。
+						// 正确做法：在宽限期内重新生成新的 token 对并缓存。
+						s.logger.Debug("宽限期内重复刷新（数据库），生成新 token 对",
 							zap.Uint("user_id", claims.UserID),
 						)
-						return &TokenPair{
-							AccessToken:  newSession.Token,
-							RefreshToken: newSession.Token,
-							ExpiresAt:    newSession.ExpiresAt,
-						}, nil
+
+						var user models.User
+						if err := s.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
+							return nil, errors.New("user not found")
+						}
+						newTokenPair, err := s.GenerateTokenPair(&user)
+						if err != nil {
+							return nil, err
+						}
+
+						// 缓存新生成的 token 对，避免再次进入数据库查询路径
+						s.tokenCacheMutex.Lock()
+						s.tokenCache[refreshToken] = &TokenCacheEntry{
+							TokenPair:    newTokenPair,
+							ExpiresAt:    now.Add(GracePeriod),
+							RefreshToken: refreshToken,
+						}
+						s.tokenCacheMutex.Unlock()
+
+						return newTokenPair, nil
 					}
 				}
 			}
