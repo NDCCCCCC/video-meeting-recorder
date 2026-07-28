@@ -1,0 +1,25 @@
+/* D-08.1 — 404 页面布局
+   使用 designTokens.colors.surface (CSS 变量回退保留以兼容未注入 design tokens 的环境)
+   居中布局 + 24px 内边距 + 全局视图高度
+*/
+
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 64px);
+  padding: 24px;
+  background: var(--color-surface, #f8fafc);
+}
+
+.content {
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+}
+
+.iconWrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
