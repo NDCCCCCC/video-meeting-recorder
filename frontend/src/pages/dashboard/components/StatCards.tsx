@@ -10,6 +10,7 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons'
 import type { TaskStats, FileStats, SystemStats } from '../../../types/dashboard'
+import { designTokens } from '../../../styles/theme'
 
 interface StatCardsProps {
   taskStats: TaskStats
@@ -41,7 +42,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
             prefix={<LoadingOutlined />}
             suffix="个"
             loading={loading}
-            valueStyle={{ color: '#1890ff' }}
+            valueStyle={{ color: designTokens.colors.primary }}
           />
         </Card>
       </Col>
@@ -53,7 +54,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
             prefix={<CheckCircleOutlined />}
             suffix="个"
             loading={loading}
-            valueStyle={{ color: '#52c41a' }}
+            valueStyle={{ color: designTokens.colors.success }}
           />
         </Card>
       </Col>
@@ -65,7 +66,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
             prefix={<CloseCircleOutlined />}
             suffix="个"
             loading={loading}
-            valueStyle={{ color: '#ff4d4f' }}
+            valueStyle={{ color: designTokens.colors.error }}
           />
         </Card>
       </Col>
@@ -137,8 +138,8 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
             loading={loading}
             precision={1}
             valueStyle={{
-              color: systemStats.disk_usage_percent > 80 ? '#ff4d4f' :
-                     systemStats.disk_usage_percent > 60 ? '#faad14' : '#52c41a'
+              color: systemStats.disk_usage_percent > 80 ? designTokens.colors.error :
+                     systemStats.disk_usage_percent > 60 ? designTokens.colors.warning : designTokens.colors.success
             }}
           />
         </Card>
@@ -160,7 +161,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
             title="最近错误数"
             value={systemStats.error_count}
             loading={loading}
-            valueStyle={{ color: systemStats.error_count > 10 ? '#ff4d4f' : 'inherit' }}
+            valueStyle={{ color: systemStats.error_count > 10 ? designTokens.colors.error : 'inherit' }}
           />
         </Card>
       </Col>

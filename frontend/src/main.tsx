@@ -16,14 +16,23 @@ const AntdConfigProvider = lazy(async () => {
         locale={zhCN}
         theme={{
           token: {
-            colorPrimary: designTokens.colors.primary,
+            colorPrimary: designTokens.colors.accent,
             colorSuccess: designTokens.colors.success,
             colorWarning: designTokens.colors.warning,
             colorError: designTokens.colors.error,
             colorText: designTokens.colors.text.primary,
             colorTextSecondary: designTokens.colors.text.secondary,
             colorTextDisabled: designTokens.colors.text.disabled,
-            borderRadius: designTokens.borderRadius,
+            colorBgContainer: '#ffffff',
+            colorBorder: designTokens.colors.border,
+            // antd 6 flat motion tokens (NOT nested under motion — verified seeds.d.ts:163-210)
+            motion: true,
+            motionUnit: 100,
+            motionEaseOut: designTokens.motion.easing.standard,
+            motionEaseInOut: designTokens.motion.easing.standard,
+            boxShadow: designTokens.elevation.sm,
+            boxShadowSecondary: designTokens.elevation.md,
+            borderRadius: designTokens.borderRadius.base,
             fontSize: designTokens.fontSize.base,
             marginXS: designTokens.spacing.xs,
             marginSM: designTokens.spacing.sm,

@@ -1,3 +1,11 @@
+:root {
+  --color-accent: #0F766E;
+  --color-accent-hover: #0d9488;
+  --color-border: #e2e8f0;
+  --color-surface: #f8fafc;
+  --color-muted: #94a3b8;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -21,12 +29,12 @@ body {
 }
 
 a {
-  color: #1890ff;
+  color: var(--color-accent);
   text-decoration: none;
 }
 
 a:hover {
-  color: #40a9ff;
+  color: var(--color-accent-hover);
 }
 
 /* 通用布局工具类 */
