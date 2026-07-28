@@ -113,7 +113,7 @@ function BasicLayout() {
     <Layout className="basic-layout">
       <Sider width={240} theme="light">
         <div className="logo">
-          <h2>录制管理系统</h2>
+          <h2>录播服务系统</h2>
         </div>
         <Menu
           mode="inline"

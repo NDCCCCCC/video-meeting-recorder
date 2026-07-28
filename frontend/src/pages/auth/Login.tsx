@@ -29,8 +29,7 @@ export default function Login() {
     <div className="login-container">
       <Card className="login-card" bordered={false}>
         <div className="login-header">
-          <h1>录制管理系统</h1>
-          <p>Record V2 管理平台</p>
+          <h1>录播服务系统</h1>
         </div>
 
         <Form

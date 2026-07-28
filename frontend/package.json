@@ -2,7 +2,7 @@
   "name": "record-v2-frontend",
   "version": "2.0.0",
   "type": "module",
-  "description": "视频会议录制管理系统 V2.0 前端",
+  "description": "录播服务系统前端",
   "scripts": {
     "dev": "vite --mode development",
     "build": "tsc -b && vite build --mode production",
