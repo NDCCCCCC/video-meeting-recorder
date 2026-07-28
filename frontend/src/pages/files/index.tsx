@@ -20,6 +20,7 @@ import {
   Dropdown,
   Spin,
   Alert,
+  Empty,
 } from 'antd'
 import {
   SearchOutlined,
@@ -49,6 +50,9 @@ import { PERMISSIONS } from '../../utils/permissions'
 import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
 const TranscriptionProgressModal = lazy(() => import('../../components/TranscriptionProgressModal'))
 import VideoUploadModal from '../../components/VideoUploadModal'
+import EmptyFiles from '@/assets/illustrations/EmptyFiles'
+import ErrorNetwork from '@/assets/illustrations/ErrorNetwork'
+import { designTokens } from '@/styles/theme'
 import type {
   VideoFile,
   VideoFileListParams,
@@ -100,6 +104,8 @@ export default function FileManagement() {
   const [stats, setStats] = useState<VideoFileStats | null>(null)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+  // D-05.2 — 保留加载失败的具体原因，用于错误态展示
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
   const [detailVisible, setDetailVisible] = useState(false)
   const [viewingFile, setViewingFile] = useState<VideoFile | null>(null)
@@ -133,6 +139,9 @@ export default function FileManagement() {
   // Upload modal state
   const [uploadModalVisible, setUploadModalVisible] = useState(false)
 
+  // 搜索框受控值（用于"清空筛选"时同步清空输入）
+  const [searchInput, setSearchInput] = useState('')
+
   const [params, setParams] = useState<VideoFileListParams>({
     page: 1,
     page_size: DEFAULT_PAGE_SIZE,
@@ -148,9 +157,12 @@ export default function FileManagement() {
         setFiles(response.data.items)
         setTotal(response.data.total)
       }
+      setLoadError(null)
     } catch (error) {
+      const reason = error instanceof Error ? error.message : '网络连接中断'
+      setLoadError(reason)
       if (showLoading) {
-        message.error(error instanceof Error ? error.message : '加载文件列表失败')
+        message.error(`加载失败：${reason}`)
       }
     } finally {
       if (showLoading) setLoading(false)
@@ -208,6 +220,12 @@ export default function FileManagement() {
   // 搜索处理
   const handleSearch = useCallback((value: string) => {
     setParams(prev => ({ ...prev, keyword: value, page: 1 }))
+  }, [])
+
+  // D-05.1 — 清空筛选条件，回到完整列表
+  const handleClearFilters = useCallback(() => {
+    setSearchInput('')
+    setParams({ page: 1, page_size: DEFAULT_PAGE_SIZE, format: DEFAULT_FORMAT })
   }, [])
 
   // 状态筛选
@@ -723,6 +741,67 @@ export default function FileManagement() {
 
   const isReady = viewingFile?.status === 'ready'
 
+  // D-05.1 / D-05.2 — 空态与错误态分支
+  const isFiltered = Boolean(params.keyword || params.status)
+  const showErrorState = !loading && Boolean(loadError)
+  const showEmptyState = !loading && !loadError && files.length === 0
+
+  // D-05.2 — 加载失败：带回具体原因 + 重试
+  const errorState = (
+    <Empty
+      style={{ padding: '48px 24px' }}
+      image={<ErrorNetwork style={{ width: 180, height: 126, color: designTokens.colors.error }} />}
+      imageStyle={{ height: 126 }}
+      description={
+        <div>
+          <div style={{ color: designTokens.colors.text.primary }}>加载失败：{loadError}</div>
+          <div style={{ color: designTokens.colors.muted, fontSize: 13, marginTop: 4 }}>
+            检查网络或稍后再试
+          </div>
+        </div>
+      }
+    >
+      <Button type="primary" icon={<ReloadOutlined />} onClick={() => { loadFiles(); loadStats() }}>
+        重试
+      </Button>
+    </Empty>
+  )
+
+  // D-05.1 — 空态：一句话文案 + 一个主操作
+  const emptyState = isFiltered ? (
+    <Empty
+      style={{ padding: '48px 24px' }}
+      image={<EmptyFiles style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
+      imageStyle={{ height: 126 }}
+      description={
+        <div>
+          <div style={{ color: designTokens.colors.text.primary }}>没有匹配的文件</div>
+          <div style={{ color: designTokens.colors.muted, fontSize: 13, marginTop: 4 }}>
+            换个关键词，或清空筛选条件
+          </div>
+        </div>
+      }
+    >
+      <Button type="primary" onClick={handleClearFilters}>清空筛选</Button>
+    </Empty>
+  ) : (
+    <Empty
+      style={{ padding: '48px 24px' }}
+      image={<EmptyFiles style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
+      imageStyle={{ height: 126 }}
+      description={
+        <div>
+          <div style={{ color: designTokens.colors.text.primary }}>还没有文件</div>
+          <div style={{ color: designTokens.colors.muted, fontSize: 13, marginTop: 4 }}>
+            上传视频，或扫描录制目录导入
+          </div>
+        </div>
+      }
+    >
+      <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadModalVisible(true)}>上传视频</Button>
+    </Empty>
+  )
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ marginBottom: '16px' }}>
@@ -771,6 +850,8 @@ export default function FileManagement() {
             placeholder="搜索文件名或路径"
             allowClear
             style={{ width: 300 }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             onSearch={handleSearch}
             enterButton={<SearchOutlined />}
           />
@@ -778,6 +859,7 @@ export default function FileManagement() {
             placeholder="筛选状态"
             allowClear
             style={{ width: 120 }}
+            value={params.status}
             onChange={handleStatusFilter}
             options={STATUS_OPTIONS}
           />
@@ -846,28 +928,30 @@ export default function FileManagement() {
         </Space>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={files}
-        rowKey="id"
-        loading={loading}
-        scroll={{ x: 1400 }}
-        rowSelection={{
-          selectedRowKeys,
-          onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys),
-          getCheckboxProps: (record: VideoFile) => ({
-            disabled: record.status === 'processing',
-          }),
-        }}
-        pagination={{
-          current: params.page,
-          pageSize: params.page_size,
-          total,
-          showSizeChanger: true,
-          showTotal: (t) => `共 ${t} 条`,
-        }}
-        onChange={handleTableChange}
-      />
+      {showErrorState ? errorState : showEmptyState ? emptyState : (
+        <Table
+          columns={columns}
+          dataSource={files}
+          rowKey="id"
+          loading={loading}
+          scroll={{ x: 1400 }}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys),
+            getCheckboxProps: (record: VideoFile) => ({
+              disabled: record.status === 'processing',
+            }),
+          }}
+          pagination={{
+            current: params.page,
+            pageSize: params.page_size,
+            total,
+            showSizeChanger: true,
+            showTotal: (t) => `共 ${t} 条`,
+          }}
+          onChange={handleTableChange}
+        />
+      )}
 
       {/* 文件详情对话框 */}
       <Modal
@@ -1004,7 +1088,7 @@ export default function FileManagement() {
           <Input
             value={newFileName}
             onChange={(e) => setNewFileName(e.target.value)}
-            placeholder="请输入新文件名"
+            placeholder="新文件名（不含扩展名）"
             maxLength={200}
             autoFocus
             onPressEnter={confirmRename}

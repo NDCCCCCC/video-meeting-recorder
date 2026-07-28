@@ -14,6 +14,7 @@ import {
   Tag,
   DatePicker,
   Tooltip,
+  Empty,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -52,6 +53,9 @@ import {
   canEditAllFields,
 } from './constants'
 import { formatDuration, hasActiveTasks } from './utils'
+import EmptyTasks from '@/assets/illustrations/EmptyTasks'
+import ErrorNetwork from '@/assets/illustrations/ErrorNetwork'
+import { designTokens } from '@/styles/theme'
 import type {
   VideoRecordingTask,
   VideoRecordingTaskStatus,
@@ -186,6 +190,12 @@ export default function TaskManagement() {
   const [tasks, setTasks] = useState<VideoRecordingTask[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+  // D-05.2 — 保留加载失败的具体原因，用于错误态展示
+  const [loadError, setLoadError] = useState<string | null>(null)
+  // 搜索框受控值（用于"清空筛选"时同步清空输入）
+  const [searchInput, setSearchInput] = useState('')
+  // 日期范围受控值
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingTask, setEditingTask] = useState<VideoRecordingTask | null>(null)
   const [form] = Form.useForm()
@@ -219,8 +229,11 @@ export default function TaskManagement() {
         setTasks(response.data.items)
         setTotal(response.data.total)
       }
+      setLoadError(null)
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '加载任务列表失败')
+      const reason = error instanceof Error ? error.message : '网络连接中断'
+      setLoadError(reason)
+      message.error(`加载失败：${reason}`)
     } finally {
       if (showLoading) setLoading(false)
     }
@@ -271,8 +284,16 @@ export default function TaskManagement() {
     setParams(prev => ({ ...prev, status: value, page: 1 }))
   }, [])
 
+  // D-05.1 — 清空筛选条件，回到完整列表
+  const handleClearFilters = useCallback(() => {
+    setSearchInput('')
+    setDateRange(null)
+    setParams({ page: 1, page_size: DEFAULT_PAGE_SIZE })
+  }, [])
+
   // 日期范围筛选
   const handleDateRangeChange = useCallback((dates: unknown) => {
+    setDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs] | null)
     if (dates && Array.isArray(dates) && dates.length === 2) {
       setParams(prev => ({
         ...prev,
@@ -665,6 +686,69 @@ export default function TaskManagement() {
     </div>
   )
 
+  // D-05.1 / D-05.2 — 空态与错误态分支
+  const isFiltered = Boolean(params.keyword || params.status || params.start_date || params.end_date)
+  const showErrorState = !loading && Boolean(loadError)
+  const showEmptyState = !loading && !loadError && tasks.length === 0
+
+  // D-05.2 — 加载失败：带回具体原因 + 重试
+  const errorState = (
+    <Empty
+      style={{ padding: '48px 24px' }}
+      image={<ErrorNetwork style={{ width: 180, height: 126, color: designTokens.colors.error }} />}
+      imageStyle={{ height: 126 }}
+      description={
+        <div>
+          <div style={{ color: designTokens.colors.text.primary }}>加载失败：{loadError}</div>
+          <div style={{ color: designTokens.colors.muted, fontSize: 13, marginTop: 4 }}>
+            检查网络或稍后再试
+          </div>
+        </div>
+      }
+    >
+      <Button type="primary" icon={<ReloadOutlined />} onClick={() => loadTasks(true)}>
+        重试
+      </Button>
+    </Empty>
+  )
+
+  // D-05.1 — 空态：一句话文案 + 一个主操作
+  const emptyState = isFiltered ? (
+    <Empty
+      style={{ padding: '48px 24px' }}
+      image={<EmptyTasks style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
+      imageStyle={{ height: 126 }}
+      description={
+        <div>
+          <div style={{ color: designTokens.colors.text.primary }}>没有匹配的任务</div>
+          <div style={{ color: designTokens.colors.muted, fontSize: 13, marginTop: 4 }}>
+            换个关键词，或清空筛选条件
+          </div>
+        </div>
+      }
+    >
+      <Button type="primary" onClick={handleClearFilters}>清空筛选</Button>
+    </Empty>
+  ) : (
+    <Empty
+      style={{ padding: '48px 24px' }}
+      image={<EmptyTasks style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
+      imageStyle={{ height: 126 }}
+      description={
+        <div>
+          <div style={{ color: designTokens.colors.text.primary }}>还没有录制任务</div>
+          <div style={{ color: designTokens.colors.muted, fontSize: 13, marginTop: 4 }}>
+            填会议号和时间，到点自动开录
+          </div>
+        </div>
+      }
+    >
+      <PermissionGuard permission={PERMISSIONS.TASK_CREATE}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>开始录制</Button>
+      </PermissionGuard>
+    </Empty>
+  )
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -696,6 +780,8 @@ export default function TaskManagement() {
             placeholder="搜索任务名称、会议号"
             allowClear
             style={{ width: 250 }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             onSearch={handleSearch}
             enterButton={<SearchOutlined />}
           />
@@ -703,11 +789,13 @@ export default function TaskManagement() {
             placeholder="选择状态"
             allowClear
             style={{ width: 120 }}
+            value={params.status}
             onChange={handleStatusFilter}
             options={STATUS_OPTIONS}
           />
           <RangePicker
             placeholder={['开始日期', '结束日期']}
+            value={dateRange}
             onChange={handleDateRangeChange}
           />
           <Button icon={<ReloadOutlined />} onClick={() => loadTasks(true)}>
@@ -724,22 +812,24 @@ export default function TaskManagement() {
         </Space>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={tasks}
-        rowKey="id"
-        loading={loading}
-        scroll={{ x: 1500 }}
-        rowSelection={rowSelection}
-        pagination={{
-          current: params.page,
-          pageSize: params.page_size,
-          total,
-          showSizeChanger: true,
-          showTotal: (t) => `共 ${t} 条`,
-        }}
-        onChange={handleTableChange}
-      />
+      {showErrorState ? errorState : showEmptyState ? emptyState : (
+        <Table
+          columns={columns}
+          dataSource={tasks}
+          rowKey="id"
+          loading={loading}
+          scroll={{ x: 1500 }}
+          rowSelection={rowSelection}
+          pagination={{
+            current: params.page,
+            pageSize: params.page_size,
+            total,
+            showSizeChanger: true,
+            showTotal: (t) => `共 ${t} 条`,
+          }}
+          onChange={handleTableChange}
+        />
+      )}
 
       {/* 新建/编辑任务对话框 */}
       <Modal
@@ -769,7 +859,7 @@ export default function TaskManagement() {
             ]}
           >
             <Input
-              placeholder="请输入任务名称"
+              placeholder="例：周例会（2026-07-28）"
               disabled={!!editingTask && !canEditAllFields(editingTask.status)}
             />
           </Form.Item>
@@ -780,7 +870,7 @@ export default function TaskManagement() {
             rules={[{ max: 500, message: '描述最多500个字符' }]}
           >
             <Input.TextArea
-              placeholder="请输入任务描述"
+              placeholder="会议主题、参会人或备注"
               rows={3}
               disabled={!!editingTask && !canEditAllFields(editingTask.status)}
             />
@@ -795,7 +885,7 @@ export default function TaskManagement() {
             ]}
           >
             <Input
-              placeholder="请输入华为会议号"
+              placeholder="华为会议号，如 987654321"
               disabled={!!editingTask && !canEditAllFields(editingTask.status)}
             />
           </Form.Item>
@@ -831,7 +921,7 @@ export default function TaskManagement() {
           >
             <Select
               mode="multiple"
-              placeholder="请选择输入配置（可选，最多选一路USB和一路流媒体）"
+              placeholder="最多一路 USB + 一路流媒体"
               loading={configsLoading}
               showSearch
               optionFilterProp="label"
