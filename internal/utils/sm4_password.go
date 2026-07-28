@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/tjfoc/gmsm/sm4"
@@ -20,6 +21,11 @@ func ValidateSM4Secret(secret string) error {
 	// 验证密钥长度（建议至少 16 字符）
 	if len(secret) < 16 {
 		return errors.New("SM4 密钥长度不足，至少需要 16 字符")
+	}
+
+	// 验证密钥必须是可解码的 Base64（避免「无错误即视为通过」导致的 panic）
+	if _, err := base64.StdEncoding.DecodeString(secret); err != nil {
+		return fmt.Errorf("SM4 密钥不是有效的 Base64: %w", err)
 	}
 
 	return nil

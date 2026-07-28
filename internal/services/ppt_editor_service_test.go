@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -15,6 +16,25 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+// requireExtractSlidesDeps 跳过无法在当前环境运行 PPT 抽取的集成测试。
+//
+// 抽取依赖 scripts/extract_slides.py，而该脚本依赖 LibreOffice（或 soffice）
+// 把 PPTX 转成 PDF/图片。仅 Python/uv 不足以让抽取成功，因此判定跳过需看
+// LibreOffice/soffice 是否存在。如要强制执行可设置
+// RECORD_V2_FORCE_INTEGRATION_TESTS=1。
+func requireExtractSlidesDeps(t *testing.T) {
+	t.Helper()
+	if os.Getenv("RECORD_V2_FORCE_INTEGRATION_TESTS") == "1" {
+		return
+	}
+	for _, bin := range []string{"libreoffice", "soffice"} {
+		if _, err := exec.LookPath(bin); err == nil {
+			return
+		}
+	}
+	t.Skip("skipping PPT extraction integration test: LibreOffice/soffice not available")
+}
 
 func setupPPTEditorServiceTest(t *testing.T) (*PPTEditorService, *gorm.DB, string) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -126,6 +146,7 @@ func TestPPTEditorService_CreateBackup_PPTNotFound(t *testing.T) {
 }
 
 func TestPPTEditorService_DeleteSlides_Success(t *testing.T) {
+	requireExtractSlidesDeps(t)
 	service, db, tempDir := setupPPTEditorServiceTest(t)
 
 	// Create test PPT file
@@ -303,6 +324,7 @@ func TestPPTEditorService_Rollback_PPTNotFound(t *testing.T) {
 }
 
 func TestPPTEditorService_DetectDuplicateSlides_LessThanTwoSlides(t *testing.T) {
+	requireExtractSlidesDeps(t)
 	service, db, tempDir := setupPPTEditorServiceTest(t)
 
 	pptPath := createTestPPTFile(t, tempDir, "test.pptx")

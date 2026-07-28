@@ -242,13 +242,25 @@ func (s *FrameCaptureService) validatePath(path string) error {
 		}
 	}
 
+	// Verify the raw input doesn't target sensitive POSIX system directories.
+	// filepath.Abs on Windows rewrites forward-slash paths to <drive>:\etc\...,
+	// which would defeat a prefix check on the resolved path; checking the raw
+	// input closes that gap on every platform.
+	for _, prefix := range []string{"/etc", "/sys", "/proc", "/root"} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return fmt.Errorf("access to system directory not allowed: %s", path)
+		}
+	}
+
 	// Resolve absolute path
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("cannot resolve absolute path: %w", err)
 	}
 
-	// Verify path doesn't escape to sensitive system directories
+	// Belt-and-braces: also verify the resolved path doesn't escape to sensitive
+	// system directories (this matches the original Linux-only expectation and
+	// remains a no-op on Windows where POSIX prefixes are not produced).
 	if strings.HasPrefix(absPath, "/etc") || strings.HasPrefix(absPath, "/sys") ||
 		strings.HasPrefix(absPath, "/proc") || strings.HasPrefix(absPath, "/root") {
 		return fmt.Errorf("access to system directory not allowed: %s", path)
