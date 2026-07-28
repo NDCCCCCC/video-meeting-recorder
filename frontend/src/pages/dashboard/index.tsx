@@ -30,15 +30,7 @@ export default function DashboardPage() {
     )
   }
 
-  // Mock chart data (will be replaced with real API in future phase)
-  const taskTrendData = [
-    { date: '2024-04-20', count: 12 },
-    { date: '2024-04-21', count: 18 },
-    { date: '2024-04-22', count: 15 },
-    { date: '2024-04-23', count: 22 },
-    { date: '2024-04-24', count: 25 },
-  ]
-
+  // Real stats from /api/v1/dashboard/stats (D-07.1, D-07.2 — no mock data, no trend chart)
   const taskStatusData = [
     { status: '成功', count: stats.task_stats.success },
     { status: '失败', count: stats.task_stats.fail },
@@ -69,7 +61,6 @@ export default function DashboardPage() {
         />
       </div>
       <ChartsSection
-        taskTrendData={taskTrendData}
         taskStatusData={taskStatusData}
         fileTypeData={fileTypeData}
         loading={loading}
