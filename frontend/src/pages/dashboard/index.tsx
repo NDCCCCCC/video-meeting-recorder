@@ -1,29 +1,32 @@
 // Dashboard main page
 
 import { PageHeader } from '@ant-design/pro-layout'
+import { m } from 'framer-motion'
 import { StatCards } from './components/StatCards'
 import { ChartsSection } from './components/ChartsSection'
 import { QuickActions } from './components/QuickActions'
 import { useDashboardStats } from '../../hooks/useDashboardStats'
+import { fadeIn } from '../../motion/motionConfig'
+import { designTokens } from '../../styles/theme'
 
 export default function DashboardPage() {
   const { stats, loading, error, refresh } = useDashboardStats()
 
   if (error) {
     return (
-      <div style={{ padding: 24 }}>
+      <m.div variants={fadeIn} initial="hidden" animate="visible" style={{ padding: 24 }}>
         <PageHeader title="管理员仪表板" />
         <div>加载失败: {error.message}</div>
-      </div>
+      </m.div>
     )
   }
 
   if (!stats) {
     return (
-      <div style={{ padding: 24 }}>
+      <m.div variants={fadeIn} initial="hidden" animate="visible" style={{ padding: 24 }}>
         <PageHeader title="管理员仪表板" />
         <div>加载中...</div>
-      </div>
+      </m.div>
     )
   }
 
@@ -49,7 +52,12 @@ export default function DashboardPage() {
   ]
 
   return (
-    <div style={{ padding: 24, background: '#f0f2f5', minHeight: '100vh' }}>
+    <m.div
+      variants={fadeIn}
+      initial="hidden"
+      animate="visible"
+      style={{ padding: 24, background: designTokens.colors.surface, minHeight: '100vh' }}
+    >
       <PageHeader title="管理员仪表板" />
       <QuickActions onRefresh={refresh} />
       <div style={{ marginBottom: 24 }}>
@@ -66,6 +74,6 @@ export default function DashboardPage() {
         fileTypeData={fileTypeData}
         loading={loading}
       />
-    </div>
+    </m.div>
   )
 }

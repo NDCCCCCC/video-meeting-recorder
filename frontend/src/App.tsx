@@ -1,7 +1,9 @@
 import { memo } from 'react'
-import { useRoutes } from 'react-router-dom'
+import { useRoutes, useLocation } from 'react-router-dom'
 import { Spin } from 'antd'
+import { AnimatePresence, m } from 'framer-motion'
 import routes from './router'
+import { routeFade } from './motion/motionConfig'
 import './styles/global.css'
 
 // 提取加载组件为静态常量 (rendering-hoist-jsx)
@@ -13,10 +15,19 @@ const LoadingFallback = (
 
 function App() {
   const element = useRoutes(routes)
+  const location = useLocation()
   return (
-    <div>
-      {element || LoadingFallback}
-    </div>
+    <AnimatePresence mode="wait">
+      <m.div
+        key={location.pathname}
+        variants={routeFade}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+      >
+        {element || LoadingFallback}
+      </m.div>
+    </AnimatePresence>
   )
 }
 

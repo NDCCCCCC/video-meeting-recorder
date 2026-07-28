@@ -7,6 +7,8 @@ import {
   ClearOutlined,
   ReloadOutlined,
 } from '@ant-design/icons'
+import { m } from 'framer-motion'
+import { fadeIn } from '../../../motion/motionConfig'
 
 interface QuickActionsProps {
   onRefresh: () => void
@@ -17,34 +19,36 @@ interface QuickActionsProps {
 
 export function QuickActions({ onRefresh, onStartTask, onStopTask, onCleanup }: QuickActionsProps) {
   return (
-    <Card title="快速操作" style={{ marginBottom: 16 }}>
-      <Space size="middle">
-        <Button
-          type="primary"
-          icon={<PlayCircleOutlined />}
-          onClick={onStartTask}
-        >
-          启动录制任务
-        </Button>
-        <Button
-          icon={<PauseCircleOutlined />}
-          onClick={onStopTask}
-        >
-          停止任务
-        </Button>
-        <Button
-          icon={<ClearOutlined />}
-          onClick={onCleanup}
-        >
-          任务清理
-        </Button>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={onRefresh}
-        >
-          刷新数据
-        </Button>
-      </Space>
-    </Card>
+    <m.div variants={fadeIn} initial="hidden" animate="visible">
+      <Card title="快速操作" style={{ marginBottom: 16 }}>
+        <Space size="middle">
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={onStartTask}
+          >
+            启动录制任务
+          </Button>
+          <Button
+            icon={<PauseCircleOutlined />}
+            onClick={onStopTask}
+          >
+            停止任务
+          </Button>
+          <Button
+            icon={<ClearOutlined />}
+            onClick={onCleanup}
+          >
+            任务清理
+          </Button>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={onRefresh}
+          >
+            刷新数据
+          </Button>
+        </Space>
+      </Card>
+    </m.div>
   )
 }

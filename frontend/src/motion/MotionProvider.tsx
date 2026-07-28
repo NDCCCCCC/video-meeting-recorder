@@ -1,6 +1,10 @@
 // Root motion provider — wraps the app ONCE.
 // LazyMotion + domAnimation: tree-shakeable motion runtime (~12KB gz vs ~25KB for full motion).
-// strict: forces children to use m.* (lowercase) from 'framer-motion/m' instead of motion.*
+// strict: forces children to use m.* (lowercase) instead of motion.* (which would
+// bypass LazyMotion and pull the full ~25KB bundle). m + AnimatePresence are imported
+// from the main 'framer-motion' package; framer-motion 12.34.0's '/m' subpath exports
+// only element-named components, not the `m` namespace. With sideEffects:false +
+// LazyMotion, the main-package `m` proxy stays tree-shaken.
 //   this is what keeps the bundle small per D-04.4.
 // MotionConfig reducedMotion="user": honors OS-level prefers-reduced-motion automatically.
 //
