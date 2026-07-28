@@ -39,6 +39,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/.{idea,git,cache,output,temp}/**',
+      'e2e/**', // Playwright specs use `test`/`expect` from @playwright/test — not vitest
       'src/utils/sm4.test.ts',
       'src/types/__tests__/transcription.test.ts',
       'src/pages/files/__tests__/TranscriptionDropdown.test.ts',
