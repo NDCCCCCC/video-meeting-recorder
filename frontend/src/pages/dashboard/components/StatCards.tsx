@@ -22,6 +22,30 @@ interface StatCardsProps {
 }
 
 export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCardsProps) {
+  // D-07.4: when all stat categories are zero, show honest empty-state copy
+  // instead of 13 zero cards (which look like a failure, not "no data yet").
+  const isAllZero =
+    taskStats.total === 0 &&
+    fileStats.total_videos === 0 &&
+    systemStats.error_count === 0
+  if (isAllZero && !loading) {
+    return (
+      <div
+        style={{
+          padding: '32px 24px',
+          textAlign: 'center',
+          color: designTokens.colors.muted,
+          background: designTokens.colors.surface,
+          borderRadius: designTokens.borderRadius.md,
+          border: `1px solid ${designTokens.colors.border}`,
+        }}
+      >
+        <div style={{ fontSize: 14, color: designTokens.colors.text.secondary }}>暂无数据</div>
+        <div style={{ fontSize: 13, marginTop: 4 }}>开始录制或上传文件后，这里会显示实时统计</div>
+      </div>
+    )
+  }
+
   return (
     <m.div
       variants={staggerContainer}
