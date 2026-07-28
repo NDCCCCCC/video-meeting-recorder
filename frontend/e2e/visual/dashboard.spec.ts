@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { mockAuth } from './auth-helpers'
 
 const mockStats = {
   data: {
@@ -50,6 +51,7 @@ test.describe('仪表板', () => {
         body: JSON.stringify(authMe),
       })
     )
+    await mockAuth(page)
     await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
     await expect(page).toHaveScreenshot('dashboard-loaded.png', {
@@ -73,6 +75,7 @@ test.describe('仪表板', () => {
         body: JSON.stringify(authMe),
       })
     )
+    await mockAuth(page)
     await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
     await expect(page).toHaveScreenshot('dashboard-empty.png', {
@@ -96,6 +99,7 @@ test.describe('仪表板', () => {
         body: JSON.stringify(authMe),
       })
     )
+    await mockAuth(page)
     await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
     await expect(page).toHaveScreenshot('dashboard-error.png', {

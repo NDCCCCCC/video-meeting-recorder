@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { mockAuth } from './auth-helpers'
 
 const authMe = {
   data: { id: 1, username: 'admin', is_admin: true },
@@ -23,6 +24,7 @@ test.describe('文件管理', () => {
         body: JSON.stringify({ data: { items: [], total: 0 }, message: 'ok' }),
       })
     )
+    await mockAuth(page)
     await page.goto('/files')
     await page.waitForLoadState('networkidle')
     await expect(page).toHaveScreenshot('files-empty.png', {
