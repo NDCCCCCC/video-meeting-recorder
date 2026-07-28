@@ -8,7 +8,8 @@ export default defineConfig({
   workers: 1,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    // vite preview binds `localhost` only (not IPv4 127.0.0.1) on Windows — use localhost to match.
+    baseURL: 'http://localhost:4173',
     trace: 'retain-on-failure',
     viewport: { width: 1440, height: 900 },
     locale: 'zh-CN',
@@ -16,7 +17,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'npm run build && npm run preview -- --port 4173 --strictPort',
-    url: 'http://127.0.0.1:4173',
+    url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
