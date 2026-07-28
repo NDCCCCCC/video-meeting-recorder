@@ -1,0 +1,7 @@
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Visual regression snapshots that may need regeneration
+# (kept under source control for deterministic review per D-06.4)
