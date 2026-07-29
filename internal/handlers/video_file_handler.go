@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -16,18 +19,21 @@ import (
 
 // VideoFileHandler 视频文件处理器
 type VideoFileHandler struct {
-	fileService *services.VideoFileService
-	logger      *zap.Logger
+	fileService  *services.VideoFileService
+	auditService *audit.AuditLogService
+	logger       *zap.Logger
 }
 
 // NewVideoFileHandler 创建视频文件处理器
 func NewVideoFileHandler(
 	fileService *services.VideoFileService,
+	auditService *audit.AuditLogService,
 	logger *zap.Logger,
 ) *VideoFileHandler {
 	return &VideoFileHandler{
-		fileService: fileService,
-		logger:      logger,
+		fileService:  fileService,
+		auditService: auditService,
+		logger:       logger,
 	}
 }
 
@@ -177,9 +183,23 @@ func (h *VideoFileHandler) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	if err := h.fileService.DeleteFile(id); err != nil {
+	oldFile, err := h.fileService.DeleteFile(id)
+	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	// 审计：OldData=oldFile (pre-delete), NewData=nil
+	resourceID := oldFile.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionDelete,
+		Module:     models.ModuleFile,
+		Resource:   fmt.Sprintf("video_file:%d", oldFile.ID),
+		ResourceID: &resourceID,
+		OldData:    oldFile,
+		NewData:    nil,
+	}); err != nil {
+		h.logger.Warn("Failed to record video file delete change", zap.Error(err), zap.Uint("file_id", id))
 	}
 
 	h.logger.Info("视频文件已删除", zap.Uint("file_id", id))
@@ -199,11 +219,33 @@ func (h *VideoFileHandler) BatchDeleteFiles(c *gin.Context) {
 		return
 	}
 
-	result, err := h.fileService.BatchDeleteFiles(req.IDs)
+	oldFiles, result, err := h.fileService.BatchDeleteFiles(req.IDs)
 	if err != nil {
 		h.logger.Error("批量删除文件失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "批量删除失败")
 		return
+	}
+
+	// 审计（option b）：单条 RecordChange，OldData=请求删除的所有旧文件（含 processing 跳过的），
+	// Resource="video_file:<comma-joined-ids>"，Action="batch_delete"
+	if len(oldFiles) > 0 {
+		idStrs := make([]string, len(oldFiles))
+		for i, f := range oldFiles {
+			idStrs[i] = strconv.FormatUint(uint64(f.ID), 10)
+		}
+		resource := "video_file:" + strings.Join(idStrs, ",")
+		resourceID := uint(0) // 批量操作没有单 ID
+
+		if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+			Action:     "batch_delete",
+			Module:     models.ModuleFile,
+			Resource:   resource,
+			ResourceID: &resourceID,
+			OldData:    oldFiles,
+			NewData:    nil,
+		}); err != nil {
+			h.logger.Warn("Failed to record batch video file delete change", zap.Error(err))
+		}
 	}
 
 	h.logger.Info("批量删除文件成功",

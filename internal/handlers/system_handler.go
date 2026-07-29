@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -12,17 +15,19 @@ import (
 
 // SystemHandler 系统设置处理器
 type SystemHandler struct {
-	db     *gorm.DB
-	logger *zap.Logger
-	config *config.Config
+	db           *gorm.DB
+	auditService *audit.AuditLogService
+	logger       *zap.Logger
+	config       *config.Config
 }
 
 // NewSystemHandler 创建系统设置处理器
-func NewSystemHandler(db *gorm.DB, logger *zap.Logger, cfg *config.Config) *SystemHandler {
+func NewSystemHandler(db *gorm.DB, auditService *audit.AuditLogService, logger *zap.Logger, cfg *config.Config) *SystemHandler {
 	return &SystemHandler{
-		db:     db,
-		logger: logger,
-		config: cfg,
+		db:           db,
+		auditService: auditService,
+		logger:       logger,
+		config:       cfg,
 	}
 }
 
@@ -79,20 +84,35 @@ func (h *SystemHandler) UpdateConfig(c *gin.Context) {
 	// 记录配置变更
 	changes := make([]string, 0)
 
+	// ★ 审计：仅 snapshot 实际 mutate h.config 的 4 个 sub-keys（LogLevel/LogFormat/LogOutput/MaxDiskUsage）
+	// restart-required 字段（路径类、FFmpeg）仅记录到 changes 字符串，不进 OldData（内存未变更）
+	oldMap := map[string]interface{}{}
+	newMap := map[string]interface{}{}
+	changedKeys := make([]string, 0)
+
 	// 更新内存中的配置（仅对日志级别等运行时可变配置生效）
 	if req.LogLevel != nil && *req.LogLevel != h.config.Logging.Level {
+		oldMap["logging.level"] = h.config.Logging.Level
+		newMap["logging.level"] = *req.LogLevel
+		changedKeys = append(changedKeys, "logging.level")
 		h.config.Logging.Level = *req.LogLevel
-		changes = append(changes, fmt.Sprintf("日志级别: %s -> %s", h.config.Logging.Level, *req.LogLevel))
+		changes = append(changes, fmt.Sprintf("日志级别: %s -> %s", oldMap["logging.level"], *req.LogLevel))
 		// 尝试动态更新日志级别
 		if err := h.updateLogLevel(*req.LogLevel); err == nil {
 			h.logger.Info("日志级别已动态更新", zap.String("level", *req.LogLevel))
 		}
 	}
-	if req.LogFormat != nil {
+	if req.LogFormat != nil && *req.LogFormat != h.config.Logging.Format {
+		oldMap["logging.format"] = h.config.Logging.Format
+		newMap["logging.format"] = *req.LogFormat
+		changedKeys = append(changedKeys, "logging.format")
 		h.config.Logging.Format = *req.LogFormat
 		changes = append(changes, fmt.Sprintf("日志格式: %s", *req.LogFormat))
 	}
-	if req.LogOutput != nil {
+	if req.LogOutput != nil && *req.LogOutput != h.config.Logging.Output {
+		oldMap["logging.output"] = h.config.Logging.Output
+		newMap["logging.output"] = *req.LogOutput
+		changedKeys = append(changedKeys, "logging.output")
 		h.config.Logging.Output = *req.LogOutput
 		changes = append(changes, fmt.Sprintf("日志输出: %s", *req.LogOutput))
 	}
@@ -107,7 +127,10 @@ func (h *SystemHandler) UpdateConfig(c *gin.Context) {
 	if req.TempPath != nil {
 		changes = append(changes, fmt.Sprintf("临时路径: %s (需重启)", *req.TempPath))
 	}
-	if req.MaxDiskUsage != nil {
+	if req.MaxDiskUsage != nil && *req.MaxDiskUsage != h.config.Storage.MaxDiskUsage {
+		oldMap["storage.max_disk_usage"] = h.config.Storage.MaxDiskUsage
+		newMap["storage.max_disk_usage"] = *req.MaxDiskUsage
+		changedKeys = append(changedKeys, "storage.max_disk_usage")
 		h.config.Storage.MaxDiskUsage = *req.MaxDiskUsage
 		changes = append(changes, fmt.Sprintf("磁盘使用限制: %d%%", *req.MaxDiskUsage))
 	}
@@ -124,6 +147,21 @@ func (h *SystemHandler) UpdateConfig(c *gin.Context) {
 			zap.Strings("changes", changes),
 			zap.String("user", c.GetString("user_id")),
 		)
+	}
+
+	// ★ 审计：仅在至少一个 sub-key 实际变更时记录（restart-required 路径类不 emit 审计行）
+	if len(changedKeys) > 0 {
+		resourceID := uint(0) // system config 没有单 ID
+		if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+			Action:     "update_config",
+			Module:     models.ModuleSystem,
+			Resource:   "system_config:" + strings.Join(changedKeys, ","),
+			ResourceID: &resourceID,
+			OldData:    oldMap,
+			NewData:    newMap,
+		}); err != nil {
+			h.logger.Warn("Failed to record system config update change", zap.Error(err))
+		}
 	}
 
 	response.GinSuccess(c, gin.H{

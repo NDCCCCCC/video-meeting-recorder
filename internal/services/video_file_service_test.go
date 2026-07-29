@@ -598,7 +598,7 @@ func TestDeleteFile(t *testing.T) {
 		assert.Equal(t, int64(1), countBefore)
 
 		// 删除文件
-		err = service.DeleteFile(file.ID)
+		_, err = service.DeleteFile(file.ID)
 		assert.NoError(t, err)
 
 		// 验证数据库记录已删除
@@ -611,7 +611,7 @@ func TestDeleteFile(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
 		// 尝试删除不存在的文件
-		err := service.DeleteFile(99999)
+		_, err := service.DeleteFile(99999)
 
 		// 验证
 		assert.Error(t, err)
@@ -634,7 +634,7 @@ func TestDeleteFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// 尝试删除processing状态的文件
-		err = service.DeleteFile(processingFile.ID)
+		_, err = service.DeleteFile(processingFile.ID)
 
 		// 验证
 		assert.Error(t, err)
@@ -661,7 +661,7 @@ func TestDeleteFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// 删除文件记录（物理文件不存在应该也能删除记录）
-		err = service.DeleteFile(file.ID)
+		_, err = service.DeleteFile(file.ID)
 
 		// 验证 - 应该成功删除数据库记录
 		assert.NoError(t, err)
