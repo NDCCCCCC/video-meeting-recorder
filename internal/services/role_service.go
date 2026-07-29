@@ -126,11 +126,12 @@ func (s *RoleService) CreateRole(req *CreateRoleRequest) (*models.Role, error) {
 }
 
 // UpdateRole 更新角色
-func (s *RoleService) UpdateRole(id uint, req *UpdateRoleRequest) (*models.Role, error) {
+func (s *RoleService) UpdateRole(id uint, req *UpdateRoleRequest) (*models.Role, *models.Role, error) {
 	var role models.Role
-	if err := s.db.First(&role, id).Error; err != nil {
-		return nil, errors.New("角色不存在")
+	if err := s.db.Preload("Permissions").First(&role, id).Error; err != nil {
+		return nil, nil, errors.New("角色不存在")
 	}
+	oldRole := role
 
 	// 更新描述
 	if req.Description != "" {
@@ -139,71 +140,81 @@ func (s *RoleService) UpdateRole(id uint, req *UpdateRoleRequest) (*models.Role,
 
 	// 更新 IP 限制（总是更新，包括清空）
 	if err := role.SetAllowedIPs(req.AllowedIPs); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := s.db.Save(&role).Error; err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	if err := s.db.Preload("Permissions").First(&role, role.ID).Error; err != nil {
+		return nil, nil, err
 	}
 
-	return &role, nil
+	return &oldRole, &role, nil
 }
 
 // DeleteRole 删除角色
-func (s *RoleService) DeleteRole(id uint) error {
+func (s *RoleService) DeleteRole(id uint) (*models.Role, *models.Role, error) {
 	// 不允许删除ID为1-4的默认角色
 	if id <= 4 {
-		return errors.New("不允许删除系统默认角色")
+		return nil, nil, errors.New("不允许删除系统默认角色")
 	}
+
+	var role models.Role
+	if err := s.db.Preload("Permissions").First(&role, id).Error; err != nil {
+		return nil, nil, errors.New("角色不存在")
+	}
+	oldRole := role
 
 	// 检查是否有用户使用该角色
 	var count int64
 	if err := s.db.Model(&models.User{}).Where("role_id = ?", id).Count(&count).Error; err != nil {
-		return err
+		return nil, nil, err
 	}
 	if count > 0 {
-		return errors.New("该角色正在被使用，无法删除")
+		return nil, nil, errors.New("该角色正在被使用，无法删除")
 	}
 
-	result := s.db.Delete(&models.Role{}, id)
+	result := s.db.Delete(&role)
 	if result.Error != nil {
-		return result.Error
+		return nil, nil, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("角色不存在")
+		return nil, nil, errors.New("角色不存在")
 	}
 
-	return nil
+	return &oldRole, nil, nil
 }
 
 // AssignPermissions 分配权限
-func (s *RoleService) AssignPermissions(roleID uint, req *AssignPermissionsRequest) error {
+func (s *RoleService) AssignPermissions(roleID uint, req *AssignPermissionsRequest) ([]models.Permission, []models.Permission, error) {
 	var role models.Role
-	if err := s.db.First(&role, roleID).Error; err != nil {
-		return errors.New("角色不存在")
+	if err := s.db.Preload("Permissions").First(&role, roleID).Error; err != nil {
+		return nil, nil, errors.New("角色不存在")
 	}
+	oldPermissions := append([]models.Permission(nil), role.Permissions...)
 
 	// 验证权限ID是否存在
 	var permissions []models.Permission
 	if err := s.db.Find(&permissions, req.PermissionIDs).Error; err != nil {
-		return err
+		return nil, nil, err
 	}
 	if len(permissions) != len(req.PermissionIDs) {
-		return errors.New("部分权限不存在")
+		return nil, nil, errors.New("部分权限不存在")
 	}
 
 	// 使用 Clear + Append 方式来避免 Replace 的潜在问题
 	// 先清除现有权限关联
 	if err := s.db.Model(&role).Association("Permissions").Clear(); err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// 再添加新的权限关联
 	if err := s.db.Model(&role).Association("Permissions").Append(permissions); err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	return nil
+	return oldPermissions, permissions, nil
 }
 
 // GetRolePermissions 获取角色权限列表
