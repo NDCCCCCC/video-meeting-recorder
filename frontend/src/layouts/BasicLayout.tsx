@@ -56,12 +56,18 @@ function BasicLayout() {
   )
 
   // 用户下拉菜单点击处理
+  // NOTE: 不能依赖 items 数组里单项的 onClick（antd Dropdown menu 上下文下不可靠触发），
+  // 统一在菜单级别 onClick 里按 key 分发。见 Phase 16 修复。
   const handleUserMenuClick = useCallback(
     ({ key }: { key: string }) => {
-      if (key === 'logout') return // handled by item onClick
+      if (key === 'logout') {
+        // 登出走菜单级别处理，而非 item onClick
+        void handleLogout()
+        return
+      }
       navigate(key)
     },
-    [navigate]
+    [handleLogout, navigate]
   )
 
   // 使用 useMemo 缓存菜单项计算
@@ -128,9 +134,9 @@ function BasicLayout() {
     () => [
       { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' },
       { type: 'divider' as const },
-      { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
+      { key: 'logout', icon: <LogoutOutlined />, label: '退出登录' },
     ],
-    [handleLogout]
+    []
   )
 
   // 用户名显示 - 使用 useMemo 缓存计算

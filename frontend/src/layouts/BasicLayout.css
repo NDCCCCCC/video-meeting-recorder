@@ -17,7 +17,7 @@
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1890ff;
+  color: var(--color-accent, #0f766e);
 }
 
 .basic-layout .ant-menu {
