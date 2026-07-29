@@ -1,8 +1,8 @@
 // 基础布局
 
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { useCallback, useMemo, memo } from 'react'
-import { Layout, Menu, Dropdown, Avatar } from 'antd'
+import { Suspense, useCallback, useMemo, memo } from 'react'
+import { Layout, Menu, Dropdown, Avatar, Spin } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   DashboardOutlined,
@@ -21,9 +21,21 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import type { User } from '../types/auth'
 import { MENU_PERMISSIONS } from '../utils/permissions'
+import { AnimatePresence, m } from 'framer-motion'
+import { routeFade } from '../motion/motionConfig'
 import './BasicLayout.css'
 
 const { Header, Sider, Content } = Layout
+
+// 页面级加载：只占内容区高度，保持 header/sidebar 不动。
+// 关键：lazy 子页面的 Suspense 必须在 BasicLayout 内部（Outlet 外层），
+// 否则会冒泡到 ProtectedLayout 里包整个 BasicLayout 的 Suspense，
+// fallback（全屏 Spin）会替换掉整个 layout —— 切页时整页变成一个圈圈。
+const PageLoading = (
+  <div className="page-loading">
+    <Spin size="large" />
+  </div>
+)
 
 // 检查菜单权限 - 提取为纯函数便于测试
 function canAccessPath(path: string | undefined, user: User | null): boolean {
@@ -183,7 +195,20 @@ function BasicLayout() {
           </div>
         </Header>
         <Content className="layout-content">
-          <Outlet />
+          {/* 页面切换淡入淡出：动画边界只包内容区，header/sidebar 不参与重挂 */}
+          <AnimatePresence mode="wait">
+            <m.div
+              key={location.pathname}
+              variants={routeFade}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <Suspense fallback={PageLoading}>
+                <Outlet />
+              </Suspense>
+            </m.div>
+          </AnimatePresence>
         </Content>
       </Layout>
     </Layout>
