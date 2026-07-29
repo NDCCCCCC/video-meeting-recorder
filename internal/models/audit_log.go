@@ -58,6 +58,8 @@ const (
 	// 认证操作
 	ActionLogin               = "login"
 	ActionLogout              = "logout"
+	ActionLogoutAll           = "logout_all"
+	ActionRefresh             = "refresh"
 	ActionPasswordChange      = "password_change"
 	ActionIPRestrictionFailed = "ip_restriction_failed"
 
@@ -86,6 +88,16 @@ const (
 	ModuleFile       = "file"
 	ModuleSystem     = "system"
 	ModuleConfig     = "config"
+
+	// 扩展模块常量（与 cmd/server/app.go 中 auditOp 调用对齐）
+	ModuleAPIKey        = "apikey"
+	ModuleInputConfig   = "input_config"
+	ModulePPT           = "ppt"
+	ModuleStorage       = "storage"
+	ModuleNotification = "notification"
+	ModuleVideo         = "video"
+	ModuleTranscription = "transcription"
+	ModuleAdmin         = "auth"
 )
 
 // 状态常量
