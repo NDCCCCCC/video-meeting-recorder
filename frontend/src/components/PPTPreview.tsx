@@ -90,7 +90,7 @@ export default function PPTPreview({
       ])
 
       message.success('已复制到剪贴板')
-    } catch (error) {
+    } catch {
       message.error('复制失败，请重试')
     }
   }, [currentSlide, slides])

@@ -2,19 +2,6 @@
  * Test stubs for VideoPlayerModal enhancements (Wave 0)
  * Tests frame navigation and keyboard shortcuts integration (PLAYER-01, PLAYER-02)
  */
-import { render, screen, fireEvent } from '@testing-library/react'
-import { VideoPlayerModal } from '../VideoPlayerModal'
-
-// Mock file data for testing
-const mockFile = {
-  id: 1,
-  file_name: 'test-video.mp4',
-  format: 'mp4',
-  file_size: 1024000,
-  duration: 60,
-  resolution: '1920x1080',
-  bitrate: 5000,
-}
 
 describe('VideoPlayerModal frame navigation', () => {
   it('should render frame navigation buttons when supported', () => {

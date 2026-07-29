@@ -77,7 +77,7 @@ const APIKeysPage: React.FC = () => {
       })
       setApiKeys(res.data?.items || [])
       setTotal(res.data?.total || 0)
-    } catch (error) {
+    } catch {
       message.error('加载API密钥列表失败')
     } finally {
       setLoading(false)

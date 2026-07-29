@@ -2,7 +2,6 @@
  * Test stubs for useKeyboardShortcuts hook (Wave 0)
  * Tests keyboard shortcut functionality for video player controls (PLAYER-02)
  */
-import { renderHook, act } from '@testing-library/react'
 
 describe('useKeyboardShortcuts', () => {
   it('should initialize without errors', () => {

@@ -2,7 +2,6 @@
  * Test stubs for useVideoFrameNavigation hook (Wave 0)
  * Tests frame-level navigation for video player (PLAYER-01)
  */
-import { renderHook } from '@testing-library/react'
 
 describe('useVideoFrameNavigation', () => {
   it('should initialize with frame navigation functions', () => {

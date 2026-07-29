@@ -222,7 +222,7 @@ export default function FileManagement() {
         }
         setActiveTranscriptions(activeMap)
       }
-    } catch (error) {
+    } catch {
       // 静默失败
     }
   }, [])

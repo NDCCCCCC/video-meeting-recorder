@@ -37,7 +37,7 @@ const AuthConfigPage: React.FC = () => {
         setConfig(response.data)
         form.setFieldsValue(response.data)
       }
-    } catch (error) {
+    } catch {
       message.error('获取配置失败')
     } finally {
       setLoading(false)
@@ -116,7 +116,7 @@ const AuthConfigPage: React.FC = () => {
       }
 
       await saveConfig(values)
-    } catch (error: any) {
+    } catch {
       message.error('保存配置失败')
     } finally {
       setLoading(false)
