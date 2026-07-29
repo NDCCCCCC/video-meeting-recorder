@@ -550,11 +550,11 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
-		return
 		// 更新任务组进度
 		if task.JobGroupID != nil {
 			s.updateJobGroupProgress(*task.JobGroupID)
 		}
+		return
 	}
 
 	// Create PPTFile record in database
