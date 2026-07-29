@@ -16,13 +16,17 @@ import (
 type AuditMiddleware struct {
 	auditService *audit.AuditLogService
 	logger       *zap.Logger
+	sanitizer    *audit.Sanitizer
 }
 
 // NewAuditMiddleware 创建审计日志中间件
-func NewAuditMiddleware(auditService *audit.AuditLogService, logger *zap.Logger) *AuditMiddleware {
+// sanitizer 用于在 NewData 落库前脱敏（密码/token/手机号/邮箱等敏感字段），
+// 为 nil 时退化为不过滤（仅用于测试场景）。
+func NewAuditMiddleware(auditService *audit.AuditLogService, logger *zap.Logger, sanitizer *audit.Sanitizer) *AuditMiddleware {
 	return &AuditMiddleware{
 		auditService: auditService,
 		logger:       logger,
+		sanitizer:    sanitizer,
 	}
 }
 
@@ -59,10 +63,22 @@ func (m *AuditMiddleware) AuditOperation(module, action string) gin.HandlerFunc 
 			TraceID:   c.GetString("trace_id"),
 			Method:    c.Request.Method,
 			Path:      c.Request.URL.Path,
-			NewData:   requestBody,
 			IPAddress: c.ClientIP(),
 			UserAgent: c.Request.UserAgent(),
 			Duration:  time.Since(start).Milliseconds(),
+		}
+
+		// 敏感字段脱敏（密码/token/手机号/邮箱/身份证等），避免凭据类写操作
+		// 把明文写进 audit_logs 表。Sanitizer 可能返回 map 或其它类型（取决于
+		// 请求体结构），仅当返回 map 时才填入 NewData。
+		if m.sanitizer != nil && requestBody != nil {
+			sanitized := m.sanitizer.Sanitize(requestBody)
+			if sanitizedMap, ok := sanitized.(map[string]interface{}); ok {
+				req.NewData = sanitizedMap
+			} else {
+				// 非 map 类型（如纯字符串、数组），NewData 留空，绝不写入原文
+				req.NewData = nil
+			}
 		}
 
 		// 从上下文获取用户信息
