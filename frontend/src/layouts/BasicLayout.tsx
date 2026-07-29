@@ -65,6 +65,7 @@ function BasicLayout() {
   // 统一在菜单级别 onClick 里按 key 分发。见 Phase 16 修复。
   const handleUserMenuClick = useCallback(
     ({ key }: { key: string }) => {
+      console.log('[AUTHDBG] menu onClick fired, key=', key)
       if (key === 'logout') {
         // 登出走菜单级别处理，而非 item onClick
         void handleLogout()
@@ -174,6 +175,7 @@ function BasicLayout() {
           <div className="header-right">
             <Dropdown
               menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
+              trigger={['click']}
               placement="bottomRight"
             >
               <Avatar icon={<UserOutlined />} style={{ cursor: 'pointer' }} />
