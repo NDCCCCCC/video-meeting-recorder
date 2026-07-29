@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
@@ -20,6 +22,16 @@ func NewAuthHandler(authService *auth.Service, logger *zap.Logger) *AuthHandler 
 		authService: authService,
 		logger:      logger,
 	}
+}
+
+// classifyAuthLoginError defines the handler-layer mapping used by Login.
+// The returned status documents the response.GinError runtime mapping and is
+// asserted in tests together with the response code to prevent wiring regressions.
+func classifyAuthLoginError(err error) (code int, httpStatus int) {
+	if auth.IsADUserNotRegistered(err) {
+		return response.CodeForbidden, http.StatusForbidden
+	}
+	return response.CodeInvalidCredential, http.StatusInternalServerError
 }
 
 // Login 用户登录
@@ -49,7 +61,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			zap.String("username", req.Username),
 			zap.Error(err),
 		)
-		response.GinError(c, response.CodeInvalidCredential, err.Error())
+		// Keep login error classification centralized and directly testable.
+		code, _ := classifyAuthLoginError(err)
+		response.GinError(c, code, err.Error())
 		return
 	}
 

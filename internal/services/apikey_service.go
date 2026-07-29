@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -46,22 +45,6 @@ func (s *APIKeyService) findAPIKeyForUser(id, userID uint, isAdmin bool) (*model
 		return nil, err
 	}
 	return &apiKey, nil
-}
-
-// logAudit 记录审计日志
-func (s *APIKeyService) logAudit(userID uint, resourceID uint, action, newData string) {
-	if s.auditService == nil {
-		return
-	}
-	s.auditService.LogOperation(nil, &audit.LogOperationRequest{
-		UserID:     userID,
-		Module:     "apikey",
-		Resource:   "apikey",
-		ResourceID: &resourceID,
-		Action:     action,
-		NewData:    newData,
-		Status:     "success",
-	})
 }
 
 // CreateAPIKeyRequest 创建API密钥请求
@@ -147,9 +130,6 @@ func (s *APIKeyService) CreateAPIKey(userID uint, req *CreateAPIKeyRequest) (*mo
 		return nil, "", errors.New("创建API密钥失败")
 	}
 
-	// 记录审计日志
-	s.logAudit(userID, apiKey.ID, "create", fmt.Sprintf("创建API密钥: %s", req.Name))
-
 	s.logger.Info("API密钥已创建",
 		zap.Uint("user_id", userID),
 		zap.Uint("key_id", apiKey.ID),
@@ -214,7 +194,6 @@ func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *Up
 	}
 
 	updates := make(map[string]interface{})
-	oldValues, _ := json.Marshal(apiKey)
 
 	if req.Name != nil {
 		updates["name"] = *req.Name
@@ -243,9 +222,6 @@ func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *Up
 			return nil, err
 		}
 
-		newValues, _ := json.Marshal(apiKey)
-		s.logAudit(userID, apiKey.ID, "update", string(oldValues)+" -> "+string(newValues))
-
 		s.logger.Info("API密钥已更新",
 			zap.Uint("user_id", userID),
 			zap.Uint("key_id", apiKey.ID),
@@ -271,8 +247,6 @@ func (s *APIKeyService) DeleteAPIKey(id uint, userID uint, isAdmin bool) error {
 		return err
 	}
 
-	s.logAudit(userID, apiKey.ID, "delete", fmt.Sprintf("删除API密钥: %s", apiKey.Name))
-
 	s.logger.Info("API密钥已删除",
 		zap.Uint("user_id", userID),
 		zap.Uint("key_id", apiKey.ID),
@@ -292,12 +266,6 @@ func (s *APIKeyService) ToggleAPIKeyStatus(id uint, userID uint, isAdmin bool) (
 	if err := s.db.Save(apiKey).Error; err != nil {
 		return nil, err
 	}
-
-	status := "禁用"
-	if apiKey.IsActive {
-		status = "启用"
-	}
-	s.logAudit(userID, apiKey.ID, "toggle", fmt.Sprintf("%sAPI密钥: %s", status, apiKey.Name))
 
 	s.logger.Info("API密钥状态已切换",
 		zap.Uint("user_id", userID),

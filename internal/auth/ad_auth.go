@@ -14,6 +14,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// ErrADUserNotRegistered is the sentinel error returned when an AD-authenticated
+// user is not present in the local user table and auto-create is disabled.
+// Callers can use errors.Is to map this to a 403 response (whitelist policy).
+var ErrADUserNotRegistered = errors.New("账号未在系统中注册，请联系管理员添加")
+
+// IsADUserNotRegistered reports whether err originates from the
+// "AD user not registered, auto-create disabled" branch.
+func IsADUserNotRegistered(err error) bool {
+	return errors.Is(err, ErrADUserNotRegistered)
+}
+
 // ADAuthenticator AD域控认证器
 type ADAuthenticator struct {
 	adConfig    *config.ADAuthConfig
@@ -129,6 +140,10 @@ func (a *ADAuthenticator) Login(req *LoginRequest, ipAddress, userAgent string) 
 	localUser, err := a.findOrCreateLocalUser(adUser)
 	if err != nil {
 		a.logger.Error("AD user mapping failed", zap.Error(err))
+		// Preserve sentinel error so handler can map to HTTP 403 instead of 500
+		if IsADUserNotRegistered(err) {
+			return nil, err
+		}
 		return nil, errors.New("用户映射失败")
 	}
 
@@ -233,7 +248,8 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 	if !allowAutoCreate {
 		a.logger.Warn("AD user not found in system and auto-create is disabled",
 			zap.String("username", adUser.Username))
-		return nil, errors.New("账号未在系统中注册，请联系管理员添加")
+		// Return sentinel so handler can map to HTTP 403 (whitelist policy)
+		return nil, ErrADUserNotRegistered
 	}
 
 	// Auto-create is allowed, proceed with user creation

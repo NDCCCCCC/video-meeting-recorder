@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"errors"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -315,12 +314,6 @@ func (s *UserService) UpdateRoles(userID uint, roleIDs []uint, currentUserID uin
 		return errors.New("用户不存在")
 	}
 
-	// 记录旧角色（用于审计）
-	oldRoles := make([]uint, len(user.Roles))
-	for i, role := range user.Roles {
-		oldRoles[i] = role.ID
-	}
-
 	// 调用 AssignRoles
 	req := &AssignRolesRequest{
 		RoleIDs:       roleIDs,
@@ -329,19 +322,6 @@ func (s *UserService) UpdateRoles(userID uint, roleIDs []uint, currentUserID uin
 
 	if err := s.AssignRoles(userID, req); err != nil {
 		return err
-	}
-
-	// D-15: 记录审计日志
-	if s.auditService != nil {
-		s.auditService.LogOperation(context.Background(), &audit.LogOperationRequest{
-			UserID:     currentUserID,
-			Module:     "user",
-			Action:     "update_roles",
-			ResourceID: &userID,
-			OldData:    oldRoles,
-			NewData:    roleIDs,
-			Status:     "success",
-		})
 	}
 
 	return nil
