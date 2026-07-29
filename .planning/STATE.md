@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-last_updated: "2026-07-29T08:16:42.000Z"
-last_activity: 2026-07-29 - Completed quick task 260729-m8l: OldData 捕获支持 update/delete 差异对比
+last_updated: "2026-07-29T08:45:00.000Z"
+last_activity: 2026-07-29 - Completed quick task 260729-mwt: 补 input-config / system / file OldData 捕获（6 个高危站点）
 progress:
   total_phases: 3
   completed_phases: 3
@@ -88,6 +88,7 @@ Run `/gsd-execute-phase 12-windows-ad` to start implementation
 | 260729-kbf | 检查审计日志是否对所有操作进行了审计（覆盖率≈14%，audit.go 中间件 dead code） | 2026-07-29 | - | [260729-kbf-audit-log-coverage](./quick/260729-kbf-audit-log-coverage/) |
 | 260729-lr4 | 补充写操作审计覆盖率到100%，处理凭据脱敏引入的新安全风险 | 2026-07-29 | d4c4fb7 | [260729-lr4-100](./quick/260729-lr4-100/) |
 | 260729-m8l | 补 OldData 捕获支持 update/delete 差异对比（6 个代表性站点 + 21 个待接入清单） | 2026-07-29 | 2cef9f0 | [260729-m8l-olddata-update-delete](./quick/260729-m8l-olddata-update-delete/) |
+| 260729-mwt | 补 input-config / system / file OldData 捕获（6 个高危站点） | 2026-07-29 | 20a7abe | [260729-mwt-input-config-system-file-olddata-6](./quick/260729-mwt-input-config-system-file-olddata-6/) |
 
 ---
 
