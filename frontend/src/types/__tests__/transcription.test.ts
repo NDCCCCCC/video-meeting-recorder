@@ -74,7 +74,17 @@ const triggerResp: TranscriptionTriggerResponseExtended = {
 }
 
 // Suppress unused warnings
-void localMode; void cloudMode; void uploading; void queued
-void processing; void downloading; void anyLocal; void anyCloud
-void segment; void textResponse; void statusResp
-void cloudRequest; void localRequest; void triggerResp
+void localMode
+void cloudMode
+void uploading
+void queued
+void processing
+void downloading
+void anyLocal
+void anyCloud
+void segment
+void textResponse
+void statusResp
+void cloudRequest
+void localRequest
+void triggerResp

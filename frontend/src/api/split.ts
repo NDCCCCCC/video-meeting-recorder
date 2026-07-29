@@ -40,8 +40,6 @@ export async function getSplitStatus(
 }
 
 // 获取分割段落列表
-export async function getSegments(
-  videoFileId: number
-): Promise<ApiResponse<VideoFile[]>> {
+export async function getSegments(videoFileId: number): Promise<ApiResponse<VideoFile[]>> {
   return apiRequest<VideoFile[]>(`/api/v1/videos/${videoFileId}/segments`)
 }

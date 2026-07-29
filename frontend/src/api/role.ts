@@ -57,7 +57,10 @@ export async function getRolePermissions(id: number): Promise<PermissionListApiR
 }
 
 // 分配权限
-export async function assignPermissions(id: number, req: AssignPermissionsRequest): Promise<ApiResponse<void>> {
+export async function assignPermissions(
+  id: number,
+  req: AssignPermissionsRequest
+): Promise<ApiResponse<void>> {
   return apiRequest(`/api/v1/roles/${id}/permissions`, {
     method: 'POST',
     body: JSON.stringify(req),

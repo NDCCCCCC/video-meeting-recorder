@@ -30,8 +30,9 @@ export function useVideoFrameNavigation(videoRef: React.RefObject<HTMLVideoEleme
     if (!video) return false
 
     // More defensive check with explicit property access
-    return 'requestVideoFrameCallback' in video &&
-           typeof video.requestVideoFrameCallback === 'function'
+    return (
+      'requestVideoFrameCallback' in video && typeof video.requestVideoFrameCallback === 'function'
+    )
   }, [videoRef])
 
   const nextFrame = useCallback(() => {

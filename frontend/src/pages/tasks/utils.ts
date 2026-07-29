@@ -28,7 +28,7 @@ export function hasActiveTasks<T extends { status: string }>(
   tasks: T[],
   activeStatuses: string[]
 ): boolean {
-  return tasks.some(task => activeStatuses.includes(task.status))
+  return tasks.some((task) => activeStatuses.includes(task.status))
 }
 
 /**
@@ -37,10 +37,7 @@ export function hasActiveTasks<T extends { status: string }>(
  * @param deletableStatuses 可删除的状态列表
  * @returns 是否可删除
  */
-export function isTaskDeletable(
-  status: string,
-  deletableStatuses: string[]
-): boolean {
+export function isTaskDeletable(status: string, deletableStatuses: string[]): boolean {
   return deletableStatuses.includes(status)
 }
 

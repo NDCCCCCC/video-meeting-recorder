@@ -19,13 +19,16 @@ export const SPEED_OPTIONS = [
 export function usePlaybackSpeed(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const [playbackRate, setPlaybackRate] = useState(1.0)
 
-  const changeSpeed = useCallback((rate: number) => {
-    const video = videoRef.current
-    if (video) {
-      video.playbackRate = rate
-      setPlaybackRate(rate)
-    }
-  }, [videoRef])
+  const changeSpeed = useCallback(
+    (rate: number) => {
+      const video = videoRef.current
+      if (video) {
+        video.playbackRate = rate
+        setPlaybackRate(rate)
+      }
+    },
+    [videoRef]
+  )
 
   // Re-apply speed after video events (seek, load, etc.)
   useEffect(() => {
@@ -55,7 +58,7 @@ interface PlaybackSpeedControlProps {
 export const PlaybackSpeedControl = memo(function PlaybackSpeedControl({
   currentSpeed,
   onSpeedChange,
-  style
+  style,
 }: PlaybackSpeedControlProps) {
   return (
     <Select

@@ -2,10 +2,7 @@
 // 支持拖拽重新排序幻灯片顺序
 
 import { Button, Space, Spin, Image } from 'antd'
-import {
-  CheckOutlined,
-  CloseOutlined,
-} from '@ant-design/icons'
+import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import type { SelectedSlide } from '../types/ppt'
 import {
   DndContext,
@@ -42,14 +39,9 @@ interface SortableSlideProps {
 }
 
 function SortableSlide({ slide, onRemove }: SortableSlideProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: slide.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: slide.id,
+  })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -58,13 +50,7 @@ function SortableSlide({ slide, onRemove }: SortableSlideProps) {
   }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className="sortable-slide"
-    >
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="sortable-slide">
       <div
         style={{
           position: 'relative',
@@ -187,9 +173,7 @@ export default function MergeSelectionBar({
         >
           已选择 {selectedSlides.length}/200 页
           {selectedSlides.length >= 200 && (
-            <span style={{ color: '#ff4d4f', marginLeft: 8 }}>
-              (已达上限)
-            </span>
+            <span style={{ color: '#ff4d4f', marginLeft: 8 }}>(已达上限)</span>
           )}
         </span>
         <Space>
@@ -208,11 +192,7 @@ export default function MergeSelectionBar({
       </div>
 
       {selectedSlides.length > 0 && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
             items={selectedSlides.map((s) => s.id)}
             strategy={horizontalListSortingStrategy}
@@ -226,11 +206,7 @@ export default function MergeSelectionBar({
               }}
             >
               {selectedSlides.map((slide) => (
-                <SortableSlide
-                  key={slide.id}
-                  slide={slide}
-                  onRemove={onRemove}
-                />
+                <SortableSlide key={slide.id} slide={slide} onRemove={onRemove} />
               ))}
             </div>
           </SortableContext>

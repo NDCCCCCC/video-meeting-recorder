@@ -24,4 +24,6 @@ type GetTextFn = (videoFileId: number) => Promise<unknown>
 const textCall: Parameters<GetTextFn> = [42]
 
 // Suppress unused warnings
-void cloudCall; void localCall; void textCall
+void cloudCall
+void localCall
+void textCall

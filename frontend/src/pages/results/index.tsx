@@ -1,16 +1,7 @@
 // PPT 结果详情页
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import {
-  Button,
-  Card,
-  Descriptions,
-  Space,
-  message,
-  Popconfirm,
-  Divider,
-  Dropdown,
-} from 'antd'
+import { Button, Card, Descriptions, Space, message, Popconfirm, Divider, Dropdown } from 'antd'
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
@@ -40,15 +31,8 @@ import {
   deleteSlides,
   mergeSlides,
 } from '../../api/ppt'
-import {
-  submitTranscriptionWithMode,
-} from '../../api/transcription'
-import type {
-  PPTResult,
-  SlideImage,
-  SelectedSlide,
-  MergeSlideItem,
-} from '../../types/ppt'
+import { submitTranscriptionWithMode } from '../../api/transcription'
+import type { PPTResult, SlideImage, SelectedSlide, MergeSlideItem } from '../../types/ppt'
 import type { TranscriptionMode } from '../../types/transcription'
 import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
 
@@ -66,7 +50,7 @@ const previewAreaStyle: React.CSSProperties = {
 const previewBoxStyle: React.CSSProperties = {
   position: 'relative',
   width: '100%',
-  aspectRatio: '16 / 9',  // Maintain 16:9 aspect ratio
+  aspectRatio: '16 / 9', // Maintain 16:9 aspect ratio
   backgroundColor: '#000',
   borderRadius: '8px',
   overflow: 'hidden',
@@ -124,7 +108,8 @@ export default function ResultDetailPage() {
       const response = await getPptsByVideo(videoFileIdNum)
       if (response.data && response.data.ppts) {
         const sortedPpts = response.data.ppts.sort(
-          (a: PPTResult, b: PPTResult) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          (a: PPTResult, b: PPTResult) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
         setPpts(sortedPpts)
         if (sortedPpts.length > 0) {
@@ -139,57 +124,54 @@ export default function ResultDetailPage() {
   }, [videoFileIdNum])
 
   // 加载幻灯片
-  const loadSlides = useCallback(
-    async (pptId: number) => {
-      setIsLoadingSlides(true)
-      try {
-        const response = await getSlides(pptId)
-        if (response.data) {
-          if (response.data.status === 'extracting') {
-            // 轮询等待提取完成 - 使用取消标志
-            let cancelled = false
-            let intervalId: NodeJS.Timeout | null = null
+  const loadSlides = useCallback(async (pptId: number) => {
+    setIsLoadingSlides(true)
+    try {
+      const response = await getSlides(pptId)
+      if (response.data) {
+        if (response.data.status === 'extracting') {
+          // 轮询等待提取完成 - 使用取消标志
+          let cancelled = false
+          let intervalId: NodeJS.Timeout | null = null
 
-            const poll = async () => {
+          const poll = async () => {
+            if (cancelled) return
+
+            try {
+              const pollResponse = await getSlides(pptId)
               if (cancelled) return
 
-              try {
-                const pollResponse = await getSlides(pptId)
-                if (cancelled) return
-
-                if (pollResponse.data && pollResponse.data.status === 'ready') {
-                  if (intervalId) clearInterval(intervalId)
-                  if (!cancelled) {
-                    setSlides(pollResponse.data.slides)
-                    setIsLoadingSlides(false)
-                  }
-                }
-              } catch (error) {
+              if (pollResponse.data && pollResponse.data.status === 'ready') {
+                if (intervalId) clearInterval(intervalId)
                 if (!cancelled) {
-                  console.error('Polling error:', error)
+                  setSlides(pollResponse.data.slides)
+                  setIsLoadingSlides(false)
                 }
               }
+            } catch (error) {
+              if (!cancelled) {
+                console.error('Polling error:', error)
+              }
             }
-
-            intervalId = setInterval(poll, 2000)
-
-            // 存储清理函数到 ref
-            return () => {
-              cancelled = true
-              if (intervalId) clearInterval(intervalId)
-            }
-          } else {
-            setSlides(response.data.slides)
-            setIsLoadingSlides(false)
           }
+
+          intervalId = setInterval(poll, 2000)
+
+          // 存储清理函数到 ref
+          return () => {
+            cancelled = true
+            if (intervalId) clearInterval(intervalId)
+          }
+        } else {
+          setSlides(response.data.slides)
+          setIsLoadingSlides(false)
         }
-      } catch (error) {
-        message.error(error instanceof Error ? error.message : '加载幻灯片失败')
-        setIsLoadingSlides(false)
       }
-    },
-    []
-  )
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '加载幻灯片失败')
+      setIsLoadingSlides(false)
+    }
+  }, [])
 
   // 加载视频名称（从 PPT 文件名推断或使用 ID）
   const loadVideoName = useCallback(async () => {
@@ -349,20 +331,23 @@ export default function ResultDetailPage() {
   }, [currentPptId])
 
   // 重新转录
-  const handleRetranscribeWithMode = useCallback(async (mode: TranscriptionMode) => {
-    setRetranscribeMode(mode)
-    try {
-      if (mode === 'cloud') {
-        // Per D-03: cloud mode starts immediately, no sampling_rate
-        await submitTranscriptionWithMode(videoFileIdNum, 'cloud')
-      } else {
-        await submitTranscriptionWithMode(videoFileIdNum, 'local', 0.5)
+  const handleRetranscribeWithMode = useCallback(
+    async (mode: TranscriptionMode) => {
+      setRetranscribeMode(mode)
+      try {
+        if (mode === 'cloud') {
+          // Per D-03: cloud mode starts immediately, no sampling_rate
+          await submitTranscriptionWithMode(videoFileIdNum, 'cloud')
+        } else {
+          await submitTranscriptionWithMode(videoFileIdNum, 'local', 0.5)
+        }
+        setRetranscribeModalOpen(true)
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : '提交转录任务失败')
       }
-      setRetranscribeModalOpen(true)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '提交转录任务失败')
-    }
-  }, [videoFileIdNum])
+    },
+    [videoFileIdNum]
+  )
 
   // 转录完成回调
   const handleTranscriptionCompleted = useCallback(
@@ -444,39 +429,48 @@ export default function ResultDetailPage() {
   }, [currentPptId, slides, currentSlide, handleSlidesDeleted])
 
   // 处理幻灯片插入后的回调
-  const handleSlideInserted = useCallback(async (newSlideNumber: number) => {
-    message.success(`幻灯片已插入到位置 ${newSlideNumber}`)
-    // 刷新 PPT 列表以获取更新的页数
-    await loadPpts()
-    // 重新加载当前 PPT 的幻灯片
-    if (currentPptId > 0) {
-      await loadSlides(currentPptId)
-    }
-    // 更新当前幻灯片到新插入的幻灯片
-    setCurrentSlide(newSlideNumber - 1) // Convert to 0-based index
-  }, [loadPpts, loadSlides, currentPptId])
+  const handleSlideInserted = useCallback(
+    async (newSlideNumber: number) => {
+      message.success(`幻灯片已插入到位置 ${newSlideNumber}`)
+      // 刷新 PPT 列表以获取更新的页数
+      await loadPpts()
+      // 重新加载当前 PPT 的幻灯片
+      if (currentPptId > 0) {
+        await loadSlides(currentPptId)
+      }
+      // 更新当前幻灯片到新插入的幻灯片
+      setCurrentSlide(newSlideNumber - 1) // Convert to 0-based index
+    },
+    [loadPpts, loadSlides, currentPptId]
+  )
 
   // Handle direct slide capture (no modal)
-  const handleDirectCapture = useCallback(async (newSlideNumber: number) => {
-    // Refresh PPT list to get updated page count
-    await loadPpts()
-    // Reload current PPT slides
-    if (currentPptId > 0) {
-      await loadSlides(currentPptId)
-    }
-    // Update current slide to newly inserted slide
-    setCurrentSlide(newSlideNumber - 1) // Convert to 0-based index
-  }, [loadPpts, loadSlides, currentPptId])
+  const handleDirectCapture = useCallback(
+    async (newSlideNumber: number) => {
+      // Refresh PPT list to get updated page count
+      await loadPpts()
+      // Reload current PPT slides
+      if (currentPptId > 0) {
+        await loadSlides(currentPptId)
+      }
+      // Update current slide to newly inserted slide
+      setCurrentSlide(newSlideNumber - 1) // Convert to 0-based index
+    },
+    [loadPpts, loadSlides, currentPptId]
+  )
 
   // 处理视频->幻灯片同步回调（反向同步）
-  const handleVideoSlideChange = useCallback((slideNumber: number) => {
-    // VideoPreviewPanel uses 1-based slide numbers
-    // Convert to 0-based index for PPTPreview
-    const index = slideNumber - 1
-    if (index >= 0 && index < slides.length) {
-      setCurrentSlide(index)
-    }
-  }, [slides.length])
+  const handleVideoSlideChange = useCallback(
+    (slideNumber: number) => {
+      // VideoPreviewPanel uses 1-based slide numbers
+      // Convert to 0-based index for PPTPreview
+      const index = slideNumber - 1
+      if (index >= 0 && index < slides.length) {
+        setCurrentSlide(index)
+      }
+    },
+    [slides.length]
+  )
 
   // 拖拽排序处理函数
   const handleDragStart = useCallback((slideNumber: number) => {
@@ -487,38 +481,41 @@ export default function ResultDetailPage() {
     e.preventDefault() // 允许放置
   }, [])
 
-  const handleDrop = useCallback(async (e: React.DragEvent, targetSlideNumber: number) => {
-    e.preventDefault()
-    if (draggedSlide === null || draggedSlide === targetSlideNumber) {
-      setDraggedSlide(null)
-      return
-    }
-
-    // 创建新的幻灯片顺序
-    const newSlideOrder = slides.map(s => s.slide_number)
-    const draggedIndex = newSlideOrder.indexOf(draggedSlide)
-    const targetIndex = newSlideOrder.indexOf(targetSlideNumber)
-
-    // 移除被拖拽的幻灯片
-    newSlideOrder.splice(draggedIndex, 1)
-    // 在目标位置插入
-    newSlideOrder.splice(targetIndex, 0, draggedSlide)
-
-    try {
-      const response = await reorderSlides(currentPptId, newSlideOrder)
-      if (response.data?.success) {
-        message.success('幻灯片顺序已更新')
-        // 重新加载幻灯片
-        await loadSlides(currentPptId)
-      } else {
-        message.error('更新幻灯片顺序失败')
+  const handleDrop = useCallback(
+    async (e: React.DragEvent, targetSlideNumber: number) => {
+      e.preventDefault()
+      if (draggedSlide === null || draggedSlide === targetSlideNumber) {
+        setDraggedSlide(null)
+        return
       }
-    } catch (error) {
-      message.error('更新幻灯片顺序失败: ' + (error as Error).message)
-    } finally {
-      setDraggedSlide(null)
-    }
-  }, [draggedSlide, slides, currentPptId, loadSlides])
+
+      // 创建新的幻灯片顺序
+      const newSlideOrder = slides.map((s) => s.slide_number)
+      const draggedIndex = newSlideOrder.indexOf(draggedSlide)
+      const targetIndex = newSlideOrder.indexOf(targetSlideNumber)
+
+      // 移除被拖拽的幻灯片
+      newSlideOrder.splice(draggedIndex, 1)
+      // 在目标位置插入
+      newSlideOrder.splice(targetIndex, 0, draggedSlide)
+
+      try {
+        const response = await reorderSlides(currentPptId, newSlideOrder)
+        if (response.data?.success) {
+          message.success('幻灯片顺序已更新')
+          // 重新加载幻灯片
+          await loadSlides(currentPptId)
+        } else {
+          message.error('更新幻灯片顺序失败')
+        }
+      } catch (error) {
+        message.error('更新幻灯片顺序失败: ' + (error as Error).message)
+      } finally {
+        setDraggedSlide(null)
+      }
+    },
+    [draggedSlide, slides, currentPptId, loadSlides]
+  )
 
   const handleDragEnd = useCallback(() => {
     setDraggedSlide(null)
@@ -530,11 +527,16 @@ export default function ResultDetailPage() {
       const container = thumbnailContainerRef.current
       const thumbnailList = container.children[0]
       // WR-01, WR-02: Add proper null checks and type validation
-      if (thumbnailList instanceof HTMLElement &&
-          currentSlide >= 0 &&
-          currentSlide < thumbnailList.children.length &&
-          thumbnailList.children[currentSlide] instanceof HTMLElement) {
-        thumbnailList.children[currentSlide].scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      if (
+        thumbnailList instanceof HTMLElement &&
+        currentSlide >= 0 &&
+        currentSlide < thumbnailList.children.length &&
+        thumbnailList.children[currentSlide] instanceof HTMLElement
+      ) {
+        thumbnailList.children[currentSlide].scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+        })
       }
     }
   }, [currentSlide])
@@ -579,10 +581,7 @@ export default function ResultDetailPage() {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Button
-              icon={<ArrowLeftOutlined />}
-              onClick={() => navigate('/files')}
-            >
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/files')}>
               返回
             </Button>
             <h2 style={{ margin: 0 }}>PPT结果 - {videoName}</h2>
@@ -695,7 +694,12 @@ export default function ResultDetailPage() {
 
       {/* Info & Operations Bar - Inline layout without tabs */}
       <Card size="small" style={{ marginBottom: 16 }}>
-        <Space direction="vertical" style={{ width: '100%' }} size="middle" className="info-section">
+        <Space
+          direction="vertical"
+          style={{ width: '100%' }}
+          size="middle"
+          className="info-section"
+        >
           {/* Basic Info - displayed inline without tabs */}
           <Descriptions column={2} size="small">
             <Descriptions.Item label="视频名称">{videoName}</Descriptions.Item>
@@ -703,7 +707,9 @@ export default function ResultDetailPage() {
               {currentPpt ? dayjs(currentPpt.created_at).format('YYYY-MM-DD HH:mm') : '—'}
             </Descriptions.Item>
             <Descriptions.Item label="页数">{currentPpt?.page_count || 0} 页</Descriptions.Item>
-            <Descriptions.Item label="文件大小">{formatFileSize(currentPpt?.file_size || 0)}</Descriptions.Item>
+            <Descriptions.Item label="文件大小">
+              {formatFileSize(currentPpt?.file_size || 0)}
+            </Descriptions.Item>
             <Descriptions.Item label="类型">
               {currentPpt?.source_type === 'merge' ? '合并' : '转录'}
             </Descriptions.Item>
@@ -713,10 +719,7 @@ export default function ResultDetailPage() {
 
           {/* Operation buttons - horizontal layout with wrapping */}
           <Space wrap className="operations-bar">
-            <Button
-              icon={<DownloadOutlined />}
-              onClick={handleDownloadPpt}
-            >
+            <Button icon={<DownloadOutlined />} onClick={handleDownloadPpt}>
               下载PPT
             </Button>
             <Dropdown
@@ -738,9 +741,7 @@ export default function ResultDetailPage() {
               }}
               trigger={['click']}
             >
-              <Button icon={<RedoOutlined />}>
-                重新转录
-              </Button>
+              <Button icon={<RedoOutlined />}>重新转录</Button>
             </Dropdown>
             <Button
               type="primary"
@@ -750,12 +751,7 @@ export default function ResultDetailPage() {
               {isMergeMode ? '取消合并' : '合并幻灯片'}
             </Button>
             {isMergeMode && selectedSlides.length > 0 && (
-              <Button
-                type="primary"
-                danger
-                loading={isMerging}
-                onClick={handleConfirmMerge}
-              >
+              <Button type="primary" danger loading={isMerging} onClick={handleConfirmMerge}>
                 完成合并 ({selectedSlides.length}页)
               </Button>
             )}
@@ -766,10 +762,7 @@ export default function ResultDetailPage() {
             >
               {isDragMode ? '完成排序' : '拖拽排序'}
             </Button>
-            <Button
-              icon={<ScanOutlined />}
-              onClick={() => setDuplicateDetectionOpen(true)}
-            >
+            <Button icon={<ScanOutlined />} onClick={() => setDuplicateDetectionOpen(true)}>
               检测重复幻灯片
             </Button>
 
@@ -783,10 +776,7 @@ export default function ResultDetailPage() {
             />
 
             {/* Advanced capture with preview modal */}
-            <Button
-              icon={<CameraOutlined />}
-              onClick={() => setIsCapturePanelOpen(true)}
-            >
+            <Button icon={<CameraOutlined />} onClick={() => setIsCapturePanelOpen(true)}>
               高级捕获（带预览）
             </Button>
             <Popconfirm

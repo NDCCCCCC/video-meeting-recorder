@@ -18,8 +18,8 @@ import EditableProgressBar from './EditableProgressBar'
 
 // ==================== 常量 ====================
 const SKIP_SECONDS = 10
-const TIME_UPDATE_DEBOUNCE_MS = 1000  // Debounce timeupdate events to avoid excessive updates
-const SYNC_THRESHOLD_SECONDS = 5  // Maximum time difference for video-slide sync
+const TIME_UPDATE_DEBOUNCE_MS = 1000 // Debounce timeupdate events to avoid excessive updates
+const SYNC_THRESHOLD_SECONDS = 5 // Maximum time difference for video-slide sync
 
 // ==================== 工具函数 ====================
 
@@ -42,12 +42,12 @@ function formatTime(seconds: number): string {
 
 interface VideoPreviewPanelProps {
   videoFileId: number
-  currentSlide?: number  // 1-based slide number
-  onSlideClick?: (slideNumber: number) => void  // Callback for video -> slide sync
+  currentSlide?: number // 1-based slide number
+  onSlideClick?: (slideNumber: number) => void // Callback for video -> slide sync
   style?: React.CSSProperties
-  autoPlay?: boolean  // Auto-play video when seeking to slide
-  showControls?: boolean  // Show custom playback controls
-  videoRef?: React.RefObject<HTMLVideoElement | null>  // Optional external videoRef
+  autoPlay?: boolean // Auto-play video when seeking to slide
+  showControls?: boolean // Show custom playback controls
+  videoRef?: React.RefObject<HTMLVideoElement | null> // Optional external videoRef
 }
 
 // ==================== 主组件 ====================
@@ -105,7 +105,12 @@ export function VideoPreviewPanel({
           const map = new Map<number, number>()
           response.data.slide_timestamps.forEach((ts: SlideTimestamp) => {
             // WR-05: Add validation for positive slide_number and valid timestamp
-            if (ts.slide_number && ts.slide_number > 0 && typeof ts.timestamp === 'number' && ts.timestamp >= 0) {
+            if (
+              ts.slide_number &&
+              ts.slide_number > 0 &&
+              typeof ts.timestamp === 'number' &&
+              ts.timestamp >= 0
+            ) {
               map.set(ts.slide_number, ts.timestamp)
             }
           })
@@ -179,7 +184,7 @@ export function VideoPreviewPanel({
     const handleTimeUpdate = () => {
       const now = Date.now()
       if (now - lastUpdateTime < TIME_UPDATE_DEBOUNCE_MS) {
-        return  // Debounce
+        return // Debounce
       }
       lastUpdateTime = now
 
@@ -226,18 +231,24 @@ export function VideoPreviewPanel({
     }
   }, [isPlaying])
 
-  const handleSkip = useCallback((seconds: number) => {
-    const video = videoRef.current
-    if (!video || !duration) return
-    video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
-  }, [duration])
+  const handleSkip = useCallback(
+    (seconds: number) => {
+      const video = videoRef.current
+      if (!video || !duration) return
+      video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
+    },
+    [duration]
+  )
 
-  const handleSeek = useCallback((value: number) => {
-    const video = videoRef.current
-    if (!video) return
-    video.currentTime = value
-    video.playbackRate = playbackRate  // Restore speed after seek
-  }, [playbackRate])
+  const handleSeek = useCallback(
+    (value: number) => {
+      const video = videoRef.current
+      if (!video) return
+      video.currentTime = value
+      video.playbackRate = playbackRate // Restore speed after seek
+    },
+    [playbackRate]
+  )
 
   // ==================== 全屏控制 ====================
   const handleFullscreen = useCallback(() => {
@@ -318,22 +329,10 @@ export function VideoPreviewPanel({
         )}
 
         {timestampError && (
-          <Alert
-            type="warning"
-            message={timestampError}
-            showIcon
-            style={{ marginBottom: 12 }}
-          />
+          <Alert type="warning" message={timestampError} showIcon style={{ marginBottom: 12 }} />
         )}
 
-        {error && (
-          <Alert
-            type="error"
-            message={error}
-            showIcon
-            style={{ marginBottom: 12 }}
-          />
-        )}
+        {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 12 }} />}
 
         <div
           style={{
@@ -388,7 +387,9 @@ export function VideoPreviewPanel({
               />
 
               {/* 控制按钮行 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
                 <Space>
                   <Button
                     type="text"

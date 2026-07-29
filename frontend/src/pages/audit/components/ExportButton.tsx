@@ -46,11 +46,7 @@ export function ExportButton({ params }: ExportButtonProps) {
   ]
 
   return (
-    <Dropdown.Button
-      menu={{ items: menuItems }}
-      loading={loading}
-      icon={<DownloadOutlined />}
-    >
+    <Dropdown.Button menu={{ items: menuItems }} loading={loading} icon={<DownloadOutlined />}>
       导出日志
     </Dropdown.Button>
   )

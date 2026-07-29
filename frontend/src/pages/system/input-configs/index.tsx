@@ -264,7 +264,9 @@ export default function InputConfigManagement() {
       if (response.data) {
         setDetectedCameras(response.data.cameras || [])
         setDetectedAudios(response.data.audios || [])
-        message.success(`检测到 ${(response.data.cameras?.length || 0)} 个摄像头，${(response.data.audios?.length || 0)} 个音频设备`)
+        message.success(
+          `检测到 ${response.data.cameras?.length || 0} 个摄像头，${response.data.audios?.length || 0} 个音频设备`
+        )
       }
     } catch (error) {
       message.error(error instanceof Error ? error.message : '扫描USB设备失败')
@@ -339,7 +341,11 @@ export default function InputConfigManagement() {
       dataIndex: 'config_type',
       width: 120,
       render: (type: ConfigType) => {
-        const { text, color, icon } = configTypeMap[type] || { text: type, color: 'default', icon: null }
+        const { text, color, icon } = configTypeMap[type] || {
+          text: type,
+          color: 'default',
+          icon: null,
+        }
         return (
           <Tag color={color} icon={icon}>
             {text}
@@ -360,7 +366,11 @@ export default function InputConfigManagement() {
       render: (active, record) => (
         <Space direction="vertical" size={0}>
           <Tag color={active ? 'green' : 'red'}>{active ? '激活' : '禁用'}</Tag>
-          {record.is_locked && <Tag color="orange" icon={<LockOutlined />}>已锁定</Tag>}
+          {record.is_locked && (
+            <Tag color="orange" icon={<LockOutlined />}>
+              已锁定
+            </Tag>
+          )}
         </Space>
       ),
     },
@@ -382,11 +392,7 @@ export default function InputConfigManagement() {
       fixed: 'right' as const,
       render: (_, record) => (
         <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            onClick={() => viewDetail(record)}
-          >
+          <Button type="link" size="small" onClick={() => viewDetail(record)}>
             详情
           </Button>
           <Button
@@ -420,7 +426,14 @@ export default function InputConfigManagement() {
 
   return (
     <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          marginBottom: '16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         <h2 style={{ margin: 0 }}>
           <SettingOutlined /> 输入配置管理
         </h2>
@@ -493,10 +506,7 @@ export default function InputConfigManagement() {
                     </Form.Item>
 
                     {/* 配置类型选择器 - 这是关键的新字段 */}
-                    <Form.Item
-                      label="配置类型"
-                      required
-                    >
+                    <Form.Item label="配置类型" required>
                       <Select
                         value={configType}
                         onChange={(value) => {
@@ -530,9 +540,7 @@ export default function InputConfigManagement() {
                     </Form.Item>
 
                     {/* 华为终端控制开关 - 所有配置类型都可以启用 */}
-                    <Form.Item
-                      label="启用华为终端控制"
-                    >
+                    <Form.Item label="启用华为终端控制">
                       <Space>
                         <Switch
                           checked={huaweiEnabled}
@@ -555,17 +563,15 @@ export default function InputConfigManagement() {
                           unCheckedChildren="禁用"
                         />
                         <span style={{ color: '#666', fontSize: '12px' }}>
-                          {huaweiEnabled ? '启用后将自动控制华为终端（可选功能）' : '不使用华为终端控制'}
+                          {huaweiEnabled
+                            ? '启用后将自动控制华为终端（可选功能）'
+                            : '不使用华为终端控制'}
                         </span>
                       </Space>
                     </Form.Item>
 
                     {/* 输出格式 - 所有类型通用 */}
-                    <Form.Item
-                      name="output_format"
-                      label="输出格式"
-                      initialValue="mp4"
-                    >
+                    <Form.Item name="output_format" label="输出格式" initialValue="mp4">
                       <Select
                         options={[
                           { label: 'MP4', value: 'mp4' },
@@ -614,10 +620,12 @@ export default function InputConfigManagement() {
 
                           <Form.Item
                             name="password"
-                            label={editingConfig ? "密码（留空不修改）" : "密码"}
+                            label={editingConfig ? '密码（留空不修改）' : '密码'}
                             rules={editingConfig ? [] : [{ required: true, message: '请输入密码' }]}
                           >
-                            <Input.Password placeholder={editingConfig ? "留空则不修改密码" : "请输入密码"} />
+                            <Input.Password
+                              placeholder={editingConfig ? '留空则不修改密码' : '请输入密码'}
+                            />
                           </Form.Item>
                         </Space>
 
@@ -669,10 +677,10 @@ export default function InputConfigManagement() {
                             <Select
                               placeholder="选择检测到的摄像头设备"
                               onChange={(value) => {
-                                const device = detectedCameras.find(d => d.device_id === value)
+                                const device = detectedCameras.find((d) => d.device_id === value)
                                 if (device) handleSelectCamera(device)
                               }}
-                              options={detectedCameras.map(device => ({
+                              options={detectedCameras.map((device) => ({
                                 label: (
                                   <Space>
                                     <VideoCameraOutlined />
@@ -691,25 +699,24 @@ export default function InputConfigManagement() {
                           </Form.Item>
                         )}
 
-                        <Form.Item
-                          name="usb_camera_name"
-                          label="摄像头名称"
-                        >
-                          <Input placeholder="请输入USB摄像头名称" addonBefore={<VideoCameraOutlined />} />
+                        <Form.Item name="usb_camera_name" label="摄像头名称">
+                          <Input
+                            placeholder="请输入USB摄像头名称"
+                            addonBefore={<VideoCameraOutlined />}
+                          />
                         </Form.Item>
 
                         <Form.Item
                           name="usb_camera_device"
                           label="摄像头设备"
-                          rules={[{ required: configType === 'usb', message: '请选择USB摄像头设备' }]}
+                          rules={[
+                            { required: configType === 'usb', message: '请选择USB摄像头设备' },
+                          ]}
                         >
                           <Input placeholder="例如: /dev/video0 或 video0" />
                         </Form.Item>
 
-                        <Form.Item
-                          name="camera_backend"
-                          label="摄像头后端"
-                        >
+                        <Form.Item name="camera_backend" label="摄像头后端">
                           <Select
                             placeholder="选择后端类型"
                             options={[
@@ -727,10 +734,10 @@ export default function InputConfigManagement() {
                             <Select
                               placeholder="选择检测到的音频设备"
                               onChange={(value) => {
-                                const device = detectedAudios.find(d => d.device_id === value)
+                                const device = detectedAudios.find((d) => d.device_id === value)
                                 if (device) handleSelectAudio(device)
                               }}
-                              options={detectedAudios.map(device => ({
+                              options={detectedAudios.map((device) => ({
                                 label: (
                                   <Space>
                                     <AudioOutlined />
@@ -749,24 +756,18 @@ export default function InputConfigManagement() {
                           </Form.Item>
                         )}
 
-                        <Form.Item
-                          name="usb_audio_name"
-                          label="音频设备名称"
-                        >
-                          <Input placeholder="请输入USB音频设备名称" addonBefore={<AudioOutlined />} />
+                        <Form.Item name="usb_audio_name" label="音频设备名称">
+                          <Input
+                            placeholder="请输入USB音频设备名称"
+                            addonBefore={<AudioOutlined />}
+                          />
                         </Form.Item>
 
-                        <Form.Item
-                          name="usb_audio_device"
-                          label="音频设备"
-                        >
+                        <Form.Item name="usb_audio_device" label="音频设备">
                           <Input placeholder="例如: hw:1,0 或 audio=0" />
                         </Form.Item>
 
-                        <Form.Item
-                          name="audio_backend"
-                          label="音频后端"
-                        >
+                        <Form.Item name="audio_backend" label="音频后端">
                           <Select
                             placeholder="选择后端类型"
                             options={[
@@ -798,13 +799,13 @@ export default function InputConfigManagement() {
                           label="启用流媒体录制"
                           valuePropName="checked"
                         >
-                          <Switch
-                            checkedChildren="启用"
-                            unCheckedChildren="禁用"
-                          />
+                          <Switch checkedChildren="启用" unCheckedChildren="禁用" />
                         </Form.Item>
 
-                        <Form.Item noStyle shouldUpdate={(prev, curr) => prev.stream_enabled !== curr.stream_enabled}>
+                        <Form.Item
+                          noStyle
+                          shouldUpdate={(prev, curr) => prev.stream_enabled !== curr.stream_enabled}
+                        >
                           {({ getFieldValue }) =>
                             getFieldValue('stream_enabled') !== false ? (
                               <>
@@ -864,7 +865,12 @@ export default function InputConfigManagement() {
 
       {/* 配置详情对话框 */}
       <Modal
-        title={<Space><SettingOutlined />配置详情 - {viewingConfig?.name}</Space>}
+        title={
+          <Space>
+            <SettingOutlined />
+            配置详情 - {viewingConfig?.name}
+          </Space>
+        }
         open={detailVisible}
         onCancel={() => setDetailVisible(false)}
         footer={[
@@ -879,7 +885,10 @@ export default function InputConfigManagement() {
             <Descriptions.Item label="配置ID">{viewingConfig.id}</Descriptions.Item>
             <Descriptions.Item label="配置名称">{viewingConfig.name}</Descriptions.Item>
             <Descriptions.Item label="配置类型" span={2}>
-              <Tag color={configTypeMap[viewingConfig.config_type]?.color} icon={configTypeMap[viewingConfig.config_type]?.icon}>
+              <Tag
+                color={configTypeMap[viewingConfig.config_type]?.color}
+                icon={configTypeMap[viewingConfig.config_type]?.icon}
+              >
                 {configTypeMap[viewingConfig.config_type]?.text || viewingConfig.config_type}
               </Tag>
             </Descriptions.Item>
@@ -913,8 +922,12 @@ export default function InputConfigManagement() {
               <>
                 <Descriptions.Item label="服务器">{viewingConfig.server || '-'}</Descriptions.Item>
                 <Descriptions.Item label="端口">{viewingConfig.port || '-'}</Descriptions.Item>
-                <Descriptions.Item label="用户名">{viewingConfig.username || '-'}</Descriptions.Item>
-                <Descriptions.Item label="终端号">{viewingConfig.terminal_number || '-'}</Descriptions.Item>
+                <Descriptions.Item label="用户名">
+                  {viewingConfig.username || '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label="终端号">
+                  {viewingConfig.terminal_number || '-'}
+                </Descriptions.Item>
                 <Descriptions.Item label="会议号" span={2}>
                   {viewingConfig.conference_number || '-'}
                 </Descriptions.Item>
@@ -951,7 +964,9 @@ export default function InputConfigManagement() {
                 <Descriptions.Item label="流媒体协议" span={2}>
                   {viewingConfig.stream_protocol ? (
                     <Tag color="blue">{viewingConfig.stream_protocol.toUpperCase()}</Tag>
-                  ) : '-'}
+                  ) : (
+                    '-'
+                  )}
                 </Descriptions.Item>
                 <Descriptions.Item label="流媒体URL" span={2}>
                   {viewingConfig.stream_url || '-'}

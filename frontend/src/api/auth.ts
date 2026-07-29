@@ -7,7 +7,7 @@ import {
   ChangePasswordRequest,
   ValidationResult,
   User,
-  ADUserLookupResult
+  ADUserLookupResult,
 } from '../types/auth'
 import { apiRequest, clearToken as apiClearToken, saveToken } from './apiClient'
 import { encryptPassword, getEncryptionKey } from '../utils/sm4'
@@ -32,7 +32,7 @@ export async function login(req: LoginRequest): Promise<ApiResponse<LoginRespons
   // 加密密码
   const encryptedPassword = encryptionKey
     ? encryptPassword(req.password, encryptionKey)
-    : req.password  // 如果没有密钥则使用明文（向后兼容）
+    : req.password // 如果没有密钥则使用明文（向后兼容）
 
   // 构建请求体（使用加密后的密码）
   const loginRequest = {
@@ -111,7 +111,7 @@ import type {
   AuthConfigResponse,
   UpdateAuthConfigRequest,
   ADValidationResult,
-  ADAuthConfig
+  ADAuthConfig,
 } from '../types/auth'
 
 /**
@@ -148,9 +148,7 @@ export async function testADConnection(
 /**
  * Lookup AD user by username
  */
-export async function lookupADUser(
-  username: string
-): Promise<ApiResponse<ADUserLookupResult>> {
+export async function lookupADUser(username: string): Promise<ApiResponse<ADUserLookupResult>> {
   return apiRequest<ADUserLookupResult>('/api/v1/admin/auth/lookup-ad-user', {
     method: 'POST',
     body: JSON.stringify({ username }),

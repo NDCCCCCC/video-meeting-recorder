@@ -11,11 +11,7 @@ interface PPTGalleryStripProps {
   onSelect: (pptId: number) => void
 }
 
-export default function PPTGalleryStrip({
-  ppts,
-  currentPptId,
-  onSelect,
-}: PPTGalleryStripProps) {
+export default function PPTGalleryStrip({ ppts, currentPptId, onSelect }: PPTGalleryStripProps) {
   if (ppts.length === 0) {
     return <div style={{ textAlign: 'center', color: '#8c8c8c' }}>暂无 PPT 结果</div>
   }
@@ -43,14 +39,10 @@ export default function PPTGalleryStrip({
               cursor: 'pointer',
               width: 100,
               height: 80,
-              border:
-                currentPptId === ppt.id
-                  ? '2px solid #1890ff'
-                  : '1px solid #f0f0f0',
+              border: currentPptId === ppt.id ? '2px solid #1890ff' : '1px solid #f0f0f0',
               borderRadius: 4,
               padding: 8,
-              background:
-                currentPptId === ppt.id ? '#e6f7ff' : '#ffffff',
+              background: currentPptId === ppt.id ? '#e6f7ff' : '#ffffff',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',

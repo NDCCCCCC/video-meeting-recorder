@@ -9,17 +9,20 @@ interface PPTResultsDropdownProps {
   onPptChange: (pptId: number) => void
 }
 
-export function PPTResultsDropdown({
-  ppts,
-  currentPptId,
-  onPptChange,
-}: PPTResultsDropdownProps) {
+export function PPTResultsDropdown({ ppts, currentPptId, onPptChange }: PPTResultsDropdownProps) {
   const currentPpt = ppts.find((p) => p.id === currentPptId)
 
   const menuItems: MenuProps['items'] = ppts.map((ppt) => ({
     key: ppt.id,
     label: (
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 200 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          minWidth: 200,
+        }}
+      >
         <Space>
           <span>{ppt.file_name}</span>
           {ppt.id === currentPptId && (

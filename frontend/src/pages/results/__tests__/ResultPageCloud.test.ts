@@ -24,7 +24,8 @@ function buildRetranscribeBody(mode: TranscriptionMode): Record<string, unknown>
 }
 
 const cloudBody = buildRetranscribeBody('cloud')
-if ('sampling_rate' in cloudBody) throw new Error('Cloud retranscribe must NOT have sampling_rate per D-03')
+if ('sampling_rate' in cloudBody)
+  throw new Error('Cloud retranscribe must NOT have sampling_rate per D-03')
 
 const localBody = buildRetranscribeBody('local')
 if (localBody.mode !== 'local') throw new Error('Local retranscribe mode mismatch')

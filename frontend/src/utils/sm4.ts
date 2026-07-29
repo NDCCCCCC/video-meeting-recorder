@@ -47,7 +47,7 @@ export function encryptPassword(password: string, key: string): string {
  * 十六进制字符串转 Base64
  */
 function hexToBase64(hexString: string): string {
-  const hexBytes = new Uint8Array(hexString.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
+  const hexBytes = new Uint8Array(hexString.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)))
   return btoa(String.fromCharCode(...hexBytes))
 }
 

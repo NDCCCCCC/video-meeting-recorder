@@ -17,9 +17,7 @@ export function listAPIKeys(params?: ListAPIKeysRequest) {
   if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString())
 
   const query = queryParams.toString()
-  return apiRequest<ListAPIKeysResponse>(
-    `/api/v1/apikeys${query ? `?${query}` : ''}`
-  )
+  return apiRequest<ListAPIKeysResponse>(`/api/v1/apikeys${query ? `?${query}` : ''}`)
 }
 
 // 获取API密钥详情

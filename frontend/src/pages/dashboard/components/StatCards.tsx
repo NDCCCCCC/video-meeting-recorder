@@ -25,9 +25,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
   // D-07.4: when all stat categories are zero, show honest empty-state copy
   // instead of 13 zero cards (which look like a failure, not "no data yet").
   const isAllZero =
-    taskStats.total === 0 &&
-    fileStats.total_videos === 0 &&
-    systemStats.error_count === 0
+    taskStats.total === 0 && fileStats.total_videos === 0 && systemStats.error_count === 0
   if (isAllZero && !loading) {
     return (
       <div
@@ -168,12 +166,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
         <Col xs={24} sm={12} md={8} lg={6}>
           <m.div variants={staggerItem} style={{ height: '100%' }}>
             <Card>
-              <Statistic
-                title="PPT 文件数"
-                value={fileStats.ppts}
-                suffix="个"
-                loading={loading}
-              />
+              <Statistic title="PPT 文件数" value={fileStats.ppts} suffix="个" loading={loading} />
             </Card>
           </m.div>
         </Col>
@@ -189,8 +182,12 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
                 loading={loading}
                 precision={1}
                 valueStyle={{
-                  color: systemStats.disk_usage_percent > 80 ? designTokens.colors.error :
-                         systemStats.disk_usage_percent > 60 ? designTokens.colors.warning : designTokens.colors.success
+                  color:
+                    systemStats.disk_usage_percent > 80
+                      ? designTokens.colors.error
+                      : systemStats.disk_usage_percent > 60
+                        ? designTokens.colors.warning
+                        : designTokens.colors.success,
                 }}
               />
             </Card>
@@ -216,7 +213,9 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
                 title="最近错误数"
                 value={systemStats.error_count}
                 loading={loading}
-                valueStyle={{ color: systemStats.error_count > 10 ? designTokens.colors.error : 'inherit' }}
+                valueStyle={{
+                  color: systemStats.error_count > 10 ? designTokens.colors.error : 'inherit',
+                }}
               />
             </Card>
           </m.div>
@@ -224,11 +223,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
         <Col xs={24} sm={12} md={8} lg={6}>
           <m.div variants={staggerItem} style={{ height: '100%' }}>
             <Card>
-              <Statistic
-                title="API 调用数"
-                value={systemStats.api_calls}
-                loading={loading}
-              />
+              <Statistic title="API 调用数" value={systemStats.api_calls} loading={loading} />
             </Card>
           </m.div>
         </Col>

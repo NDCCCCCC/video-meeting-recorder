@@ -12,7 +12,7 @@ import {
   message,
   Popconfirm,
   Switch,
-  Tag
+  Tag,
 } from 'antd'
 import {
   PlusOutlined,
@@ -21,11 +21,16 @@ import {
   DeleteOutlined,
   LockOutlined,
   ReloadOutlined,
-  UserOutlined
+  UserOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import * as userApi from '../../../api/user'
-import type { UserInfo, UserListParams, CreateUserRequest, UpdateUserRequest } from '../../../types/user'
+import type {
+  UserInfo,
+  UserListParams,
+  CreateUserRequest,
+  UpdateUserRequest,
+} from '../../../types/user'
 import { lookupADUser } from '../../../api/auth'
 
 // 解析 allowed_ips 字段（可能是 JSON 字符串或数组）
@@ -112,7 +117,7 @@ export default function UserManagement() {
         username: user.username,
         email: user.email,
         full_name: user.full_name,
-        role_ids: user.roles?.map(r => r.id) || [],
+        role_ids: user.roles?.map((r) => r.id) || [],
         allowed_ips_text: parseAllowedIPs(user.allowed_ips).join('\n'),
         is_active: user.is_active,
       })
@@ -153,7 +158,9 @@ export default function UserManagement() {
         if (!form.getFieldValue('email') && adUser.email) {
           form.setFieldsValue({ email: adUser.email })
         }
-        message.success(`已找到AD用户: ${adUser.full_name || adUser.username}${adUser.department ? ' (' + adUser.department + ')' : ''}`)
+        message.success(
+          `已找到AD用户: ${adUser.full_name || adUser.username}${adUser.department ? ' (' + adUser.department + ')' : ''}`
+        )
       } else {
         message.info(response.data?.message || '未在域控中找到该用户')
       }
@@ -173,8 +180,8 @@ export default function UserManagement() {
       const allowed_ips = values.allowed_ips_text
         ? String(values.allowed_ips_text)
             .split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
         : []
 
       if (editingUser) {
@@ -317,7 +324,7 @@ export default function UserManagement() {
       title: '最后登录',
       dataIndex: 'last_login_at',
       width: 180,
-      render: (time) => time ? new Date(time).toLocaleString('zh-CN') : '-',
+      render: (time) => (time ? new Date(time).toLocaleString('zh-CN') : '-'),
     },
     {
       title: '操作',
@@ -364,7 +371,14 @@ export default function UserManagement() {
 
   return (
     <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          marginBottom: '16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         <h2 style={{ margin: 0 }}>用户管理</h2>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
           新建用户
@@ -508,7 +522,11 @@ export default function UserManagement() {
                 const { label, value, ...restProps } = props
                 // Special badge for shared_viewer
                 if (value === 5) {
-                  return <Tag {...restProps} color="purple">{label}</Tag>
+                  return (
+                    <Tag {...restProps} color="purple">
+                      {label}
+                    </Tag>
+                  )
                 }
                 return <Tag {...restProps}>{label}</Tag>
               }}
@@ -526,12 +544,7 @@ export default function UserManagement() {
             />
           </Form.Item>
 
-          <Form.Item
-            name="is_active"
-            label="状态"
-            valuePropName="checked"
-            initialValue={true}
-          >
+          <Form.Item name="is_active" label="状态" valuePropName="checked" initialValue={true}>
             <Switch checkedChildren="启用" unCheckedChildren="禁用" />
           </Form.Item>
         </Form>

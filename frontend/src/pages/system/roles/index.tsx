@@ -12,7 +12,7 @@ import {
   Popconfirm,
   Transfer,
   Tag,
-  Descriptions
+  Descriptions,
 } from 'antd'
 import {
   PlusOutlined,
@@ -21,12 +21,18 @@ import {
   DeleteOutlined,
   KeyOutlined,
   ReloadOutlined,
-  SafetyOutlined
+  SafetyOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { TransferProps } from 'antd/es/transfer'
 import * as roleApi from '../../../api/role'
-import type { RoleInfo, RoleListParams, CreateRoleRequest, UpdateRoleRequest, Permission } from '../../../types/role'
+import type {
+  RoleInfo,
+  RoleListParams,
+  CreateRoleRequest,
+  UpdateRoleRequest,
+  Permission,
+} from '../../../types/role'
 
 // 解析 allowed_ips 字段（可能是 JSON 字符串或数组）
 const parseAllowedIPs = (ips: any): string[] => {
@@ -179,7 +185,7 @@ export default function RoleManagement() {
     try {
       const response = await roleApi.getRolePermissions(role.id)
       if (response.data) {
-        setSelectedPermissionIds(response.data.map(p => p.id))
+        setSelectedPermissionIds(response.data.map((p) => p.id))
       }
     } catch (error) {
       message.error(error instanceof Error ? error.message : '加载角色权限失败')
@@ -203,7 +209,7 @@ export default function RoleManagement() {
 
   // 权限穿梭框变化
   const handlePermissionChange: TransferProps['onChange'] = (newTargetKeys) => {
-    setSelectedPermissionIds(newTargetKeys.map(id => Number(id)))
+    setSelectedPermissionIds(newTargetKeys.map((id) => Number(id)))
   }
 
   // 保存权限分配
@@ -308,7 +314,7 @@ export default function RoleManagement() {
   ]
 
   // 权限穿梭框数据源
-  const transferDataSource = allPermissions.map(p => ({
+  const transferDataSource = allPermissions.map((p) => ({
     key: p.id.toString(),
     title: `${p.resource}:${p.action} - ${p.description}`,
     description: p.description,
@@ -316,7 +322,14 @@ export default function RoleManagement() {
 
   return (
     <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          marginBottom: '16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         <h2 style={{ margin: 0 }}>角色管理</h2>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
           新建角色
@@ -393,9 +406,10 @@ export default function RoleManagement() {
               rows={4}
               onChange={(e) => {
                 // Convert textarea lines to array
-                const lines = e.target.value.split('\n')
-                  .map(line => line.trim())
-                  .filter(line => line.length > 0)
+                const lines = e.target.value
+                  .split('\n')
+                  .map((line) => line.trim())
+                  .filter((line) => line.length > 0)
                 form.setFieldsValue({ allowed_ips: lines })
               }}
             />
@@ -403,10 +417,18 @@ export default function RoleManagement() {
 
           {editingRole && (
             <Form.Item label="当前权限">
-              <div style={{ maxHeight: '150px', overflow: 'auto', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
+              <div
+                style={{
+                  maxHeight: '150px',
+                  overflow: 'auto',
+                  padding: '8px',
+                  background: '#f5f5f5',
+                  borderRadius: '4px',
+                }}
+              >
                 {editingRole.permissions && editingRole.permissions.length > 0 ? (
                   <Space size={[4, 4]} wrap>
-                    {editingRole.permissions.map(p => (
+                    {editingRole.permissions.map((p) => (
                       <Tag key={p.id} color="geekblue">
                         {p.resource}:{p.action}
                       </Tag>
@@ -423,7 +445,12 @@ export default function RoleManagement() {
 
       {/* 权限管理对话框 */}
       <Modal
-        title={<Space><SafetyOutlined />分配权限 - {editingRole?.name}</Space>}
+        title={
+          <Space>
+            <SafetyOutlined />
+            分配权限 - {editingRole?.name}
+          </Space>
+        }
         open={permissionModalVisible}
         onOk={handleSavePermissions}
         onCancel={closePermissionModal}
@@ -434,21 +461,17 @@ export default function RoleManagement() {
           <Descriptions size="small" column={2}>
             <Descriptions.Item label="角色ID">{selectedRoleId}</Descriptions.Item>
             <Descriptions.Item label="角色名称">{editingRole?.name}</Descriptions.Item>
-            <Descriptions.Item label="当前权限数">
-              {selectedPermissionIds.length}
-            </Descriptions.Item>
-            <Descriptions.Item label="可用权限数">
-              {allPermissions.length}
-            </Descriptions.Item>
+            <Descriptions.Item label="当前权限数">{selectedPermissionIds.length}</Descriptions.Item>
+            <Descriptions.Item label="可用权限数">{allPermissions.length}</Descriptions.Item>
           </Descriptions>
         </div>
 
         <Transfer
           dataSource={transferDataSource}
           titles={['可用权限', '已分配权限']}
-          targetKeys={selectedPermissionIds.map(id => id.toString())}
+          targetKeys={selectedPermissionIds.map((id) => id.toString())}
           onChange={handlePermissionChange}
-          render={item => item.title}
+          render={(item) => item.title}
           listStyle={{
             width: 320,
             height: 400,

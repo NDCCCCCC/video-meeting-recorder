@@ -17,15 +17,12 @@ import { apiRequest } from './apiClient'
 // 提交转录任务
 export async function submitTranscription(
   videoFileId: number,
-  samplingRate: number = 0.5  // default 2s per D-02
+  samplingRate: number = 0.5 // default 2s per D-02
 ): Promise<ApiResponse<TranscriptionTriggerResponse>> {
-  return apiRequest<TranscriptionTriggerResponse>(
-    `/api/v1/videos/${videoFileId}/transcribe`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ sampling_rate: samplingRate }),
-    }
-  )
+  return apiRequest<TranscriptionTriggerResponse>(`/api/v1/videos/${videoFileId}/transcribe`, {
+    method: 'POST',
+    body: JSON.stringify({ sampling_rate: samplingRate }),
+  })
 }
 
 // 获取转录状态
@@ -65,47 +62,49 @@ export async function submitTranscriptionWithMode(
 export async function getTranscriptionText(
   videoFileId: number
 ): Promise<ApiResponse<TranscriptionTextResponse>> {
-  return apiRequest<TranscriptionTextResponse>(
-    `/api/v1/videos/${videoFileId}/transcription-text`
-  )
+  return apiRequest<TranscriptionTextResponse>(`/api/v1/videos/${videoFileId}/transcription-text`)
 }
 
 // Get active transcription tasks
-export async function getActiveTranscriptionTasks(): Promise<ApiResponse<{ tasks: Array<{
-  id: number
-  video_file_id: number
-  status: string
-  mode: string
-  sampling_rate: number
-  current_stage: string
-  percentage: number
-  error_message: string
-  created_at: string
-  video_file_name: string
-}>, total: number }>> {
-  return apiRequest<{ tasks: Array<{
-    id: number
-    video_file_id: number
-    status: string
-    mode: string
-    sampling_rate: number
-    current_stage: string
-    percentage: number
-    error_message: string
-    created_at: string
-    video_file_name: string
-  }>, total: number }>(
-    '/api/v1/transcriptions/active'
-  )
+export async function getActiveTranscriptionTasks(): Promise<
+  ApiResponse<{
+    tasks: Array<{
+      id: number
+      video_file_id: number
+      status: string
+      mode: string
+      sampling_rate: number
+      current_stage: string
+      percentage: number
+      error_message: string
+      created_at: string
+      video_file_name: string
+    }>
+    total: number
+  }>
+> {
+  return apiRequest<{
+    tasks: Array<{
+      id: number
+      video_file_id: number
+      status: string
+      mode: string
+      sampling_rate: number
+      current_stage: string
+      percentage: number
+      error_message: string
+      created_at: string
+      video_file_name: string
+    }>
+    total: number
+  }>('/api/v1/transcriptions/active')
 }
 
 // Get timestamp map for video preview synchronization (per 06-02)
 export async function getTimestampMap(
   videoFileId: number
 ): Promise<ApiResponse<TimestampMapResponse>> {
-  return apiRequest<TimestampMapResponse>(
-    `/api/v1/transcriptions/${videoFileId}/timestamps`
-  )
+  return apiRequest<TimestampMapResponse>(`/api/v1/transcriptions/${videoFileId}/timestamps`)
 }
 
 // === Batch transcription API (Phase 14) ===

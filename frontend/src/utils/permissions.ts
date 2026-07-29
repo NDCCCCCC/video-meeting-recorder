@@ -101,7 +101,7 @@ export function hasPermission(user: User | null, permission: string): boolean {
 export function hasAnyPermission(user: User | null, permissions: string[]): boolean {
   if (!user) return false
   if (user.is_admin) return true
-  return permissions.some(perm => user.permissions?.includes(perm) ?? false)
+  return permissions.some((perm) => user.permissions?.includes(perm) ?? false)
 }
 
 /**
@@ -113,7 +113,7 @@ export function hasAnyPermission(user: User | null, permissions: string[]): bool
 export function hasAllPermissions(user: User | null, permissions: string[]): boolean {
   if (!user) return false
   if (user.is_admin) return true
-  return permissions.every(perm => user.permissions?.includes(perm) ?? false)
+  return permissions.every((perm) => user.permissions?.includes(perm) ?? false)
 }
 
 /**
@@ -150,23 +150,25 @@ export function filterMenuByPermission<T extends { key?: string; children?: T[] 
   user: User | null,
   menuItems: T[]
 ): T[] {
-  return menuItems.filter((item) => {
-    if (!item || (!item.key && !item.children)) return false
-    // 处理带子菜单的项目
-    if (item.children && Array.isArray(item.children)) {
-      const filteredChildren = item.children.filter((child) => {
-        if (!child.key) return true
-        return canAccessMenu(user, String(child.key))
-      })
-      // 如果所有子菜单都被过滤掉了，也隐藏父菜单
-      if (filteredChildren.length === 0) return false
-      item.children = filteredChildren
-      return true
-    }
-    // 处理普通菜单项
-    if (!item.key) return true
-    return canAccessMenu(user, String(item.key))
-  }).filter(item => item !== null)
+  return menuItems
+    .filter((item) => {
+      if (!item || (!item.key && !item.children)) return false
+      // 处理带子菜单的项目
+      if (item.children && Array.isArray(item.children)) {
+        const filteredChildren = item.children.filter((child) => {
+          if (!child.key) return true
+          return canAccessMenu(user, String(child.key))
+        })
+        // 如果所有子菜单都被过滤掉了，也隐藏父菜单
+        if (filteredChildren.length === 0) return false
+        item.children = filteredChildren
+        return true
+      }
+      // 处理普通菜单项
+      if (!item.key) return true
+      return canAccessMenu(user, String(item.key))
+    })
+    .filter((item) => item !== null)
 }
 
 /**

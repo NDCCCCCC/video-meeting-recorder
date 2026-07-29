@@ -13,7 +13,12 @@ import {
   CloudDownloadOutlined,
   InfoCircleOutlined,
 } from '@ant-design/icons'
-import type { TranscriptionTaskStatus, TranscriptionStage, TranscriptionMode, CloudTranscriptionStage } from '../types/transcription'
+import type {
+  TranscriptionTaskStatus,
+  TranscriptionStage,
+  TranscriptionMode,
+  CloudTranscriptionStage,
+} from '../types/transcription'
 import { getTranscriptionStatus } from '../api/transcription'
 import { getToken } from '../api/apiClient'
 
@@ -22,8 +27,8 @@ interface TranscriptionProgressModalProps {
   onClose: () => void
   videoFileId: number
   fileName: string
-  samplingRate?: number       // Optional -- only used for local mode
-  mode?: TranscriptionMode    // NEW: 'local' | 'cloud', defaults to 'local'
+  samplingRate?: number // Optional -- only used for local mode
+  mode?: TranscriptionMode // NEW: 'local' | 'cloud', defaults to 'local'
   onCompleted: (pptFileId: number) => void
 }
 
@@ -35,7 +40,10 @@ const STAGE_CONFIG: Record<TranscriptionStage, { label: string; icon: React.Reac
 }
 
 // Cloud transcription stage config (per D-06)
-const CLOUD_STAGE_CONFIG: Record<CloudTranscriptionStage, { label: string; icon: React.ReactNode }> = {
+const CLOUD_STAGE_CONFIG: Record<
+  CloudTranscriptionStage,
+  { label: string; icon: React.ReactNode }
+> = {
   uploading: { label: '上传中', icon: <CloudUploadOutlined /> },
   queued: { label: '排队中', icon: <ClockCircleOutlined /> },
   cloud_processing: { label: '处理中', icon: <LoadingOutlined spin /> },
@@ -175,7 +183,12 @@ export default function TranscriptionProgressModal({
 
   // 渲染云端阶段列表 (per D-06)
   const renderCloudStages = useCallback(() => {
-    const stages: CloudTranscriptionStage[] = ['uploading', 'queued', 'cloud_processing', 'downloading']
+    const stages: CloudTranscriptionStage[] = [
+      'uploading',
+      'queued',
+      'cloud_processing',
+      'downloading',
+    ]
     const stageIndex = stages.indexOf(stage as CloudTranscriptionStage)
 
     return (
@@ -230,8 +243,8 @@ export default function TranscriptionProgressModal({
     const modalTitle = fallbackToLocal
       ? `本地转录进度（自动切换） - ${fileName}`
       : mode === 'cloud'
-      ? `云端转录进度 - ${fileName}`
-      : `本地转录进度 - ${fileName}`
+        ? `云端转录进度 - ${fileName}`
+        : `本地转录进度 - ${fileName}`
 
     return (
       <Modal
@@ -242,7 +255,12 @@ export default function TranscriptionProgressModal({
           <Button key="retry" icon={<ReloadOutlined />} onClick={handleRetry}>
             重新转录
           </Button>,
-          <Button key="download" type="primary" icon={<DownloadOutlined />} onClick={handleDownloadPpt}>
+          <Button
+            key="download"
+            type="primary"
+            icon={<DownloadOutlined />}
+            onClick={handleDownloadPpt}
+          >
             下载PPT
           </Button>,
           <Button key="close" onClick={onClose}>
@@ -270,8 +288,8 @@ export default function TranscriptionProgressModal({
     const modalTitle = fallbackToLocal
       ? `本地转录进度（自动切换） - ${fileName}`
       : mode === 'cloud'
-      ? `云端转录进度 - ${fileName}`
-      : `本地转录进度 - ${fileName}`
+        ? `云端转录进度 - ${fileName}`
+        : `本地转录进度 - ${fileName}`
 
     return (
       <Modal
@@ -303,8 +321,8 @@ export default function TranscriptionProgressModal({
   const modalTitle = fallbackToLocal
     ? `本地转录进度（自动切换） - ${fileName}`
     : mode === 'cloud'
-    ? `云端转录进度 - ${fileName}`
-    : `本地转录进度 - ${fileName}`
+      ? `云端转录进度 - ${fileName}`
+      : `本地转录进度 - ${fileName}`
 
   // 渲染进度状态 (per UI-SPEC)
   return (
@@ -336,8 +354,8 @@ export default function TranscriptionProgressModal({
         {stage && totalFrames > 0 && stage === 'detecting'
           ? ` 画面检测中 (${framesProcessed}/${totalFrames})`
           : stage
-          ? ` ${STAGE_CONFIG[stage as TranscriptionStage]?.label || CLOUD_STAGE_CONFIG[stage as CloudTranscriptionStage]?.label || stage}...`
-          : ' 排队中...'}
+            ? ` ${STAGE_CONFIG[stage as TranscriptionStage]?.label || CLOUD_STAGE_CONFIG[stage as CloudTranscriptionStage]?.label || stage}...`
+            : ' 排队中...'}
       </div>
 
       {/* 进度条 */}
@@ -358,9 +376,7 @@ export default function TranscriptionProgressModal({
             : '转录预计需要 2-3 分钟，期间您可以关闭此窗口继续使用系统。完成后将显示通知。'}
         </div>
         {samplingRate && (
-          <div style={{ fontSize: 13, color: '#8c8c8c' }}>
-            提示: 采样间隔 {samplingRate}s/帧
-          </div>
+          <div style={{ fontSize: 13, color: '#8c8c8c' }}>提示: 采样间隔 {samplingRate}s/帧</div>
         )}
       </div>
     </Modal>

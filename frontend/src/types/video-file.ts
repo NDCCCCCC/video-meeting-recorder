@@ -18,14 +18,14 @@ export interface VideoFile {
   resolution: string
   bitrate: number
   codec: string
-  task_id?: number | null      // 关联任务ID
+  task_id?: number | null // 关联任务ID
   task?: {
     id: number
     name: string
   } | null
-  parent_id?: number | null    // 父视频ID（用于分割段、快照）
-  source_type: string          // recording, snapshot, split
-  snapshot_offset: number      // 增量快照偏移量 (D-15), default 0
+  parent_id?: number | null // 父视频ID（用于分割段、快照）
+  source_type: string // recording, snapshot, split
+  snapshot_offset: number // 增量快照偏移量 (D-15), default 0
   parent?: {
     id: number
     file_name: string
@@ -33,7 +33,7 @@ export interface VideoFile {
   status: VideoFileStatus
   thumbnail_path: string | null
   recorded_at: string | null
-  has_ppt?: boolean              // 是否有PPT结果（后端动态填充）
+  has_ppt?: boolean // 是否有PPT结果（后端动态填充）
   created_at: string
   updated_at: string
 }
@@ -42,10 +42,10 @@ export interface VideoFileListParams {
   page?: number
   page_size?: number
   keyword?: string
-  task_id?: number       // 按任务ID筛选
+  task_id?: number // 按任务ID筛选
   status?: VideoFileStatus
   format?: string
-  source_type?: string   // 按来源类型筛选 (recording, snapshot, split)
+  source_type?: string // 按来源类型筛选 (recording, snapshot, split)
   start_date?: string
   end_date?: string
 }

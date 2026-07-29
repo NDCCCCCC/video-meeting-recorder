@@ -174,9 +174,7 @@ export async function deleteSlides(
 }
 
 // 回滚 PPT 到备份版本
-export async function rollbackPPT(
-  pptFileId: number
-): Promise<ApiResponse<RollbackResponse>> {
+export async function rollbackPPT(pptFileId: number): Promise<ApiResponse<RollbackResponse>> {
   return apiRequest<RollbackResponse>(`/api/v1/ppts/${pptFileId}/rollback`, {
     method: 'POST',
   })

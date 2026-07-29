@@ -19,13 +19,13 @@ export interface TaskListData {
 
 // 视频录制任务状态
 export type VideoRecordingTaskStatus =
-  | 'pending'     // 待执行
-  | 'connecting'  // 连接会议中
-  | 'recording'   // 录制中
-  | 'converting'  // 转换中（MKV转MP4）
-  | 'completed'   // 已完成
-  | 'failed'      // 执行失败
-  | 'cancelled'   // 已取消
+  | 'pending' // 待执行
+  | 'connecting' // 连接会议中
+  | 'recording' // 录制中
+  | 'converting' // 转换中（MKV转MP4）
+  | 'completed' // 已完成
+  | 'failed' // 执行失败
+  | 'cancelled' // 已取消
 
 // 视频录制任务
 export interface VideoRecordingTask {
@@ -70,11 +70,11 @@ export interface CreateTaskRequest {
   name: string
   description?: string
   start_time: string // RFC3339
-  end_time: string   // RFC3339
+  end_time: string // RFC3339
   pre_join_minutes?: number
   record_delay_minutes?: number
   conference_number: string
-  input_config_ids?: number[]  // 输入配置ID列表
+  input_config_ids?: number[] // 输入配置ID列表
 }
 
 // 更新任务请求
@@ -82,7 +82,7 @@ export interface UpdateTaskRequest {
   name?: string
   description?: string
   start_time?: string // RFC3339
-  end_time?: string   // RFC3339
+  end_time?: string // RFC3339
   pre_join_minutes?: number
   record_delay_minutes?: number
 }
@@ -92,7 +92,10 @@ export type TaskListApiResponse = ApiResponse<TaskListData>
 export type TaskApiResponse = ApiResponse<VideoRecordingTask>
 
 // 任务状态配置
-export const TaskStatusConfig: Record<VideoRecordingTaskStatus, { label: string; color: string; icon?: string }> = {
+export const TaskStatusConfig: Record<
+  VideoRecordingTaskStatus,
+  { label: string; color: string; icon?: string }
+> = {
   pending: { label: '待执行', color: 'default' },
   connecting: { label: '连接中', color: 'processing' },
   recording: { label: '录制中', color: 'blue' },

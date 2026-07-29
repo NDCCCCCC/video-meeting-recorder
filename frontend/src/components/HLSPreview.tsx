@@ -46,11 +46,11 @@ function HLSPlayer({ src, onError }: { src: string; onError: () => void }) {
             enableWorker: true,
             lowLatencyMode: true,
             backBufferLength: 30, // 减少后缓冲，降低内存占用
-            maxBufferLength: 30,   // 最大缓冲30秒
+            maxBufferLength: 30, // 最大缓冲30秒
             maxMaxBufferLength: 60,
-            liveSyncDuration: 3,   // 直播同步延迟，尽量接近直播边缘
+            liveSyncDuration: 3, // 直播同步延迟，尽量接近直播边缘
             liveMaxLatencyDuration: 10, // 最大延迟10秒
-            liveDurationInfinity: true,  // 直播流模式
+            liveDurationInfinity: true, // 直播流模式
           })
 
           hlsRef.current = hls
@@ -59,7 +59,7 @@ function HLSPlayer({ src, onError }: { src: string; onError: () => void }) {
           hls.attachMedia(video)
 
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            video.play().catch(err => {
+            video.play().catch((err) => {
               console.warn('Auto-play prevented:', err)
             })
           })
@@ -86,7 +86,7 @@ function HLSPlayer({ src, onError }: { src: string; onError: () => void }) {
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           // Safari 原生支持
           video.src = src
-          video.play().catch(err => {
+          video.play().catch((err) => {
             console.warn('Auto-play prevented:', err)
           })
         } else {
@@ -107,9 +107,9 @@ function HLSPlayer({ src, onError }: { src: string; onError: () => void }) {
     <video
       ref={videoRef}
       // 直播模式不显示控制条（进度条、时间等）
-      muted    // 静音以提高自动播放成功率
+      muted // 静音以提高自动播放成功率
       playsInline // 移动端防止全屏
-      autoPlay  // 自动播放
+      autoPlay // 自动播放
       style={{ width: '100%', maxHeight: '450px', backgroundColor: '#000' }}
     />
   )
@@ -125,7 +125,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
   const [retryCount, setRetryCount] = useState(0)
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const MAX_RETRY_COUNT = 10  // 最大重试次数
+  const MAX_RETRY_COUNT = 10 // 最大重试次数
 
   // 清理定时器
   useEffect(() => {
@@ -147,7 +147,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
     setError(undefined)
     setHlsUrl(undefined)
     setIsPreparing(false)
-    setRetryCount(0)  // 重置重试计数
+    setRetryCount(0) // 重置重试计数
 
     // 清理之前的定时器
     if (retryTimerRef.current) {
@@ -165,7 +165,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
           // 自动重试：3秒后自动刷新（最多10次）
           if (retryCount < MAX_RETRY_COUNT) {
             retryTimerRef.current = setTimeout(() => {
-              setRetryCount(prev => prev + 1)
+              setRetryCount((prev) => prev + 1)
               handleRefresh()
             }, 3000)
           } else {
@@ -178,7 +178,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
           setCurrentStatus(response.data.status)
           setIsPreparing(false)
           setError(undefined)
-          setRetryCount(0)  // 成功后重置计数
+          setRetryCount(0) // 成功后重置计数
         }
       }
     } catch (err) {
@@ -235,7 +235,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
 
         {error && (
           <Alert
-            type={isPreparing ? "warning" : "error"}
+            type={isPreparing ? 'warning' : 'error'}
             message={error}
             action={
               <Button size="small" onClick={handleRefresh}>
@@ -260,11 +260,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
         )}
 
         {!loading && !error && !hlsUrl && (
-          <Alert
-            type="warning"
-            message="暂无预览可用"
-            description="该任务暂无可用的 HLS 预览流"
-          />
+          <Alert type="warning" message="暂无预览可用" description="该任务暂无可用的 HLS 预览流" />
         )}
       </Modal>
     </>

@@ -30,7 +30,11 @@ function parseTimeToSeconds(timeStr: string): number {
   return parts[0] || 0
 }
 
-export default function EditableProgressBar({ currentTime, duration, onSeek }: EditableProgressBarProps) {
+export default function EditableProgressBar({
+  currentTime,
+  duration,
+  onSeek,
+}: EditableProgressBarProps) {
   const [inputValue, setInputValue] = useState(formatTime(currentTime))
 
   // Update input when currentTime changes (from video playback)
@@ -79,7 +83,15 @@ export default function EditableProgressBar({ currentTime, duration, onSeek }: E
       />
 
       {/* Duration display - always show HH:MM:SS */}
-      <span style={{ color: '#fff', fontSize: '13px', minWidth: 80, textAlign: 'right', fontFamily: 'monospace' }}>
+      <span
+        style={{
+          color: '#fff',
+          fontSize: '13px',
+          minWidth: 80,
+          textAlign: 'right',
+          fontFamily: 'monospace',
+        }}
+      >
         {formatTime(duration)}
       </span>
     </Space.Compact>

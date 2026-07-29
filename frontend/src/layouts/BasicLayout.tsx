@@ -48,15 +48,21 @@ function BasicLayout() {
   }, [logout, navigate])
 
   // 使用 useCallback 缓存菜单点击处理
-  const handleMenuClick = useCallback(({ key }: { key: string }) => {
-    navigate(key)
-  }, [navigate])
+  const handleMenuClick = useCallback(
+    ({ key }: { key: string }) => {
+      navigate(key)
+    },
+    [navigate]
+  )
 
   // 用户下拉菜单点击处理
-  const handleUserMenuClick = useCallback(({ key }: { key: string }) => {
-    if (key === 'logout') return // handled by item onClick
-    navigate(key)
-  }, [navigate])
+  const handleUserMenuClick = useCallback(
+    ({ key }: { key: string }) => {
+      if (key === 'logout') return // handled by item onClick
+      navigate(key)
+    },
+    [navigate]
+  )
 
   // 使用 useMemo 缓存菜单项计算
   const menuItems: MenuProps['items'] = useMemo(() => {
@@ -69,34 +75,63 @@ function BasicLayout() {
       canAccessPath('/system/settings', user)
 
     const items: MenuProps['items'] = [
-      canAccessPath('/dashboard', user) ? { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' } : null,
-      canAccessPath('/tasks', user) ? { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' } : null,
-      canAccessPath('/files', user) ? { key: '/files', icon: <FolderOutlined />, label: '文件管理' } : null,
-      canAccessPath('/audit', user) ? { key: '/audit', icon: <AuditOutlined />, label: '审计日志' } : null,
-      hasSystemAccess ? {
-        key: 'system',
-        icon: <SettingOutlined />,
-        label: '系统管理',
-        children: [
-          canAccessPath('/system/users', user) ? { key: '/system/users', icon: <TeamOutlined />, label: '用户管理' } : null,
-          canAccessPath('/system/roles', user) ? { key: '/system/roles', icon: <SafetyOutlined />, label: '角色管理' } : null,
-          canAccessPath('/system/apikeys', user) ? { key: '/system/apikeys', icon: <KeyOutlined />, label: 'API密钥' } : null,
-          canAccessPath('/system/input-configs', user) ? { key: '/system/input-configs', icon: <CloudServerOutlined />, label: '输入配置' } : null,
-          canAccessPath('/system/auth-config', user) ? { key: '/system/auth-config', icon: <SafetyCertificateOutlined />, label: '认证管理' } : null,
-          canAccessPath('/system/settings', user) ? { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' } : null,
-        ].filter((item): item is NonNullable<typeof item> => item !== null),
-      } : null,
+      canAccessPath('/dashboard', user)
+        ? { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' }
+        : null,
+      canAccessPath('/tasks', user)
+        ? { key: '/tasks', icon: <VideoCameraOutlined />, label: '录制任务' }
+        : null,
+      canAccessPath('/files', user)
+        ? { key: '/files', icon: <FolderOutlined />, label: '文件管理' }
+        : null,
+      canAccessPath('/audit', user)
+        ? { key: '/audit', icon: <AuditOutlined />, label: '审计日志' }
+        : null,
+      hasSystemAccess
+        ? {
+            key: 'system',
+            icon: <SettingOutlined />,
+            label: '系统管理',
+            children: [
+              canAccessPath('/system/users', user)
+                ? { key: '/system/users', icon: <TeamOutlined />, label: '用户管理' }
+                : null,
+              canAccessPath('/system/roles', user)
+                ? { key: '/system/roles', icon: <SafetyOutlined />, label: '角色管理' }
+                : null,
+              canAccessPath('/system/apikeys', user)
+                ? { key: '/system/apikeys', icon: <KeyOutlined />, label: 'API密钥' }
+                : null,
+              canAccessPath('/system/input-configs', user)
+                ? { key: '/system/input-configs', icon: <CloudServerOutlined />, label: '输入配置' }
+                : null,
+              canAccessPath('/system/auth-config', user)
+                ? {
+                    key: '/system/auth-config',
+                    icon: <SafetyCertificateOutlined />,
+                    label: '认证管理',
+                  }
+                : null,
+              canAccessPath('/system/settings', user)
+                ? { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' }
+                : null,
+            ].filter((item): item is NonNullable<typeof item> => item !== null),
+          }
+        : null,
     ].filter((item): item is NonNullable<typeof item> => item !== null)
 
     return items
   }, [user])
 
   // 用户菜单项 - 使用 useMemo 避免每次渲染重新创建
-  const userMenuItems: MenuProps['items'] = useMemo(() => ([
-    { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' },
-    { type: 'divider' as const },
-    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
-  ]), [handleLogout])
+  const userMenuItems: MenuProps['items'] = useMemo(
+    () => [
+      { key: '/system/settings', icon: <SettingOutlined />, label: '系统设置' },
+      { type: 'divider' as const },
+      { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
+    ],
+    [handleLogout]
+  )
 
   // 用户名显示 - 使用 useMemo 缓存计算
   const displayName = useMemo(() => {
@@ -126,7 +161,10 @@ function BasicLayout() {
       <Layout>
         <Header className="layout-header">
           <div className="header-right">
-            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
+            <Dropdown
+              menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
+              placement="bottomRight"
+            >
               <Avatar icon={<UserOutlined />} style={{ cursor: 'pointer' }} />
             </Dropdown>
             <span className="user-name">{displayName}</span>

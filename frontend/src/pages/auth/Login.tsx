@@ -37,26 +37,16 @@ export default function Login() {
           onFinish={onFinish}
           autoComplete="off"
           size="large"
-          initialValues={import.meta.env.DEV ? { username: 'admin', password: 'admin123' } : undefined}
+          initialValues={
+            import.meta.env.DEV ? { username: 'admin', password: 'admin123' } : undefined
+          }
         >
-          <Form.Item
-            name="username"
-            rules={[{ required: true, message: '请输入用户名' }]}
-          >
-            <Input
-              prefix={<UserOutlined />}
-              placeholder="用户名"
-            />
+          <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
+            <Input prefix={<UserOutlined />} placeholder="用户名" />
           </Form.Item>
 
-          <Form.Item
-            name="password"
-            rules={[{ required: true, message: '请输入密码' }]}
-          >
-            <Input.Password
-              prefix={<LockOutlined />}
-              placeholder="密码"
-            />
+          <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
+            <Input.Password prefix={<LockOutlined />} placeholder="密码" />
           </Form.Item>
 
           <Form.Item>

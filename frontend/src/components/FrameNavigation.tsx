@@ -22,7 +22,10 @@ interface FrameNavigationProps {
  * @param disabled - Whether the controls are disabled
  */
 // 使用 memo 包裹组件避免不必要的重渲染 (rerender-memo)
-export const FrameNavigation = memo(function FrameNavigation({ videoRef, disabled = false }: FrameNavigationProps) {
+export const FrameNavigation = memo(function FrameNavigation({
+  videoRef,
+  disabled = false,
+}: FrameNavigationProps) {
   const { nextFrame, prevFrame, supportsFrameCallback } = useVideoFrameNavigation(videoRef)
 
   // Don't render if browser doesn't support frame-level navigation

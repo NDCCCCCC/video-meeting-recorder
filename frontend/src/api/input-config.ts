@@ -27,9 +27,7 @@ export async function getInputConfigList(
 }
 
 // 获取单个输入配置
-export async function getInputConfig(
-  id: number
-): Promise<ApiResponse<InputConfig>> {
+export async function getInputConfig(id: number): Promise<ApiResponse<InputConfig>> {
   return apiRequest(`/api/v1/input-configs/${id}`)
 }
 
@@ -55,9 +53,7 @@ export async function updateInputConfig(
 }
 
 // 删除输入配置
-export async function deleteInputConfig(
-  id: number
-): Promise<ApiResponse<void>> {
+export async function deleteInputConfig(id: number): Promise<ApiResponse<void>> {
   return apiRequest(`/api/v1/input-configs/${id}`, {
     method: 'DELETE',
   })

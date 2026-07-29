@@ -1,5 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import { Modal, Card, Checkbox, Button, Space, Image, Alert, message, Progress, Tag, Typography } from 'antd'
+import {
+  Modal,
+  Card,
+  Checkbox,
+  Button,
+  Space,
+  Image,
+  Alert,
+  message,
+  Progress,
+  Tag,
+  Typography,
+} from 'antd'
 import { DeleteOutlined, ScanOutlined, RollbackOutlined } from '@ant-design/icons'
 import type { CheckboxChangeEvent } from 'antd/es/checkbox'
 import { detectDuplicates, deleteSlides, rollbackPPT, type DuplicateGroup } from '../api/ppt'
@@ -174,11 +186,7 @@ const DuplicateDetectionPanel: React.FC<DuplicateDetectionPanelProps> = ({
           <Button icon={<ScanOutlined />} onClick={handleDetectDuplicates} loading={isScanning}>
             重新扫描
           </Button>
-          <Button
-            icon={<RollbackOutlined />}
-            onClick={handleRollback}
-            loading={isRollingBack}
-          >
+          <Button icon={<RollbackOutlined />} onClick={handleRollback} loading={isRollingBack}>
             回滚
           </Button>
           <Button
@@ -263,7 +271,9 @@ const DuplicateDetectionPanel: React.FC<DuplicateDetectionPanelProps> = ({
                   >
                     <Checkbox
                       checked={selectedForDeletion.has(slideNum)}
-                      onChange={(e: CheckboxChangeEvent) => handleSlideSelect(slideNum, e.target.checked)}
+                      onChange={(e: CheckboxChangeEvent) =>
+                        handleSlideSelect(slideNum, e.target.checked)
+                      }
                     />
                     <Image
                       width={120}

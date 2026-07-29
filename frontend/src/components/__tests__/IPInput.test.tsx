@@ -25,37 +25,37 @@
 function convertTextareaToArray(textarea: string): string[] {
   return textarea
     .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
 }
 
 // Test: Single IP format per D-06
-const singleIP = "192.168.1.100"
+const singleIP = '192.168.1.100'
 const singleIPResult = convertTextareaToArray(singleIP)
 if (singleIPResult.length !== 1) {
   throw new Error('Single IP should produce array of length 1')
 }
-if (singleIPResult[0] !== "192.168.1.100") {
+if (singleIPResult[0] !== '192.168.1.100') {
   throw new Error('Single IP should be preserved exactly')
 }
 
 // Test: CIDR format per D-07
-const cidrFormat = "192.168.1.0/24"
+const cidrFormat = '192.168.1.0/24'
 const cidrResult = convertTextareaToArray(cidrFormat)
 if (cidrResult.length !== 1) {
   throw new Error('CIDR format should produce array of length 1')
 }
-if (cidrResult[0] !== "192.168.1.0/24") {
+if (cidrResult[0] !== '192.168.1.0/24') {
   throw new Error('CIDR format should be preserved exactly')
 }
 
 // Test: IP range format per D-08
-const rangeFormat = "192.168.1.100-192.168.1.200"
+const rangeFormat = '192.168.1.100-192.168.1.200'
 const rangeResult = convertTextareaToArray(rangeFormat)
 if (rangeResult.length !== 1) {
   throw new Error('IP range format should produce array of length 1')
 }
-if (rangeResult[0] !== "192.168.1.100-192.168.1.200") {
+if (rangeResult[0] !== '192.168.1.100-192.168.1.200') {
   throw new Error('IP range format should be preserved exactly')
 }
 
@@ -67,13 +67,13 @@ const multiResult = convertTextareaToArray(multiLine)
 if (multiResult.length !== 3) {
   throw new Error('Multi-line input should produce array of length 3')
 }
-if (multiResult[0] !== "192.168.1.100") {
+if (multiResult[0] !== '192.168.1.100') {
   throw new Error('First line should be single IP')
 }
-if (multiResult[1] !== "192.168.1.0/24") {
+if (multiResult[1] !== '192.168.1.0/24') {
   throw new Error('Second line should be CIDR')
 }
-if (multiResult[2] !== "10.0.0.1-10.0.0.254") {
+if (multiResult[2] !== '10.0.0.1-10.0.0.254') {
   throw new Error('Third line should be IP range')
 }
 
@@ -85,13 +85,13 @@ const whitespaceResult = convertTextareaToArray(whitespaceInput)
 if (whitespaceResult.length !== 3) {
   throw new Error('Whitespace should be trimmed, entries should not be lost')
 }
-if (whitespaceResult[0] !== "192.168.1.100") {
+if (whitespaceResult[0] !== '192.168.1.100') {
   throw new Error('Leading whitespace should be trimmed')
 }
-if (whitespaceResult[1] !== "192.168.1.0/24") {
+if (whitespaceResult[1] !== '192.168.1.0/24') {
   throw new Error('Trailing whitespace should be trimmed')
 }
-if (whitespaceResult[2] !== "10.0.0.1-10.0.0.254") {
+if (whitespaceResult[2] !== '10.0.0.1-10.0.0.254') {
   throw new Error('Both leading and trailing whitespace should be trimmed')
 }
 
@@ -106,13 +106,13 @@ const emptyLinesResult = convertTextareaToArray(emptyLinesInput)
 if (emptyLinesResult.length !== 3) {
   throw new Error('Empty lines should be filtered out')
 }
-if (emptyLinesResult[0] !== "192.168.1.100") {
+if (emptyLinesResult[0] !== '192.168.1.100') {
   throw new Error('First entry should be preserved')
 }
-if (emptyLinesResult[1] !== "192.168.1.0/24") {
+if (emptyLinesResult[1] !== '192.168.1.0/24') {
   throw new Error('Second entry should be preserved')
 }
-if (emptyLinesResult[2] !== "10.0.0.1-10.0.0.254") {
+if (emptyLinesResult[2] !== '10.0.0.1-10.0.0.254') {
   throw new Error('Third entry should be preserved')
 }
 
@@ -125,35 +125,35 @@ const whitespaceOnlyResult = convertTextareaToArray(whitespaceOnlyInput)
 if (whitespaceOnlyResult.length !== 2) {
   throw new Error('Whitespace-only lines should be filtered')
 }
-if (whitespaceOnlyResult[0] !== "192.168.1.100") {
+if (whitespaceOnlyResult[0] !== '192.168.1.100') {
   throw new Error('First entry should be preserved')
 }
-if (whitespaceOnlyResult[1] !== "192.168.1.0/24") {
+if (whitespaceOnlyResult[1] !== '192.168.1.0/24') {
   throw new Error('Second entry should be preserved')
 }
 
 // Test: Empty input returns empty array
-const emptyInput = ""
+const emptyInput = ''
 const emptyResult = convertTextareaToArray(emptyInput)
 if (emptyResult.length !== 0) {
   throw new Error('Empty input should return empty array')
 }
 
 // Test: Placeholder text with examples
-const placeholderText = "支持格式：192.168.1.100 或 192.168.1.0/24 或 192.168.1.100-192.168.1.200"
-if (!placeholderText.includes("192.168.1.100")) {
+const placeholderText = '支持格式：192.168.1.100 或 192.168.1.0/24 或 192.168.1.100-192.168.1.200'
+if (!placeholderText.includes('192.168.1.100')) {
   throw new Error('Placeholder should include single IP example')
 }
-if (!placeholderText.includes("192.168.1.0/24")) {
+if (!placeholderText.includes('192.168.1.0/24')) {
   throw new Error('Placeholder should include CIDR example')
 }
-if (!placeholderText.includes("192.168.1.100-192.168.1.200")) {
+if (!placeholderText.includes('192.168.1.100-192.168.1.200')) {
   throw new Error('Placeholder should include IP range example')
 }
 
 // Test: Form field name convention
-const formFieldName = "allowed_ips"
-if (formFieldName !== "allowed_ips") {
+const formFieldName = 'allowed_ips'
+if (formFieldName !== 'allowed_ips') {
   throw new Error('Form field name should be allowed_ips for consistency with backend')
 }
 
@@ -166,7 +166,7 @@ interface TextAreaProps {
 }
 
 const textAreaProps: TextAreaProps = {
-  placeholder: "支持格式：192.168.1.100 或 192.168.1.0/24 或 192.168.1.100-192.168.1.200",
+  placeholder: '支持格式：192.168.1.100 或 192.168.1.0/24 或 192.168.1.100-192.168.1.200',
   rows: 4,
 }
 void textAreaProps

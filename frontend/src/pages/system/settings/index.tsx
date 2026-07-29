@@ -117,10 +117,7 @@ export default function Settings() {
       ) : (
         <Form form={form} layout="vertical">
           {/* 存储配置 */}
-          <Card
-            title="存储配置"
-            style={{ marginBottom: '16px' }}
-          >
+          <Card title="存储配置" style={{ marginBottom: '16px' }}>
             <Form.Item
               label="录制文件路径"
               name="recordings_path"
@@ -155,10 +152,7 @@ export default function Settings() {
           </Card>
 
           {/* FFmpeg 配置 */}
-          <Card
-            title="FFmpeg 配置"
-            style={{ marginBottom: '16px' }}
-          >
+          <Card title="FFmpeg 配置" style={{ marginBottom: '16px' }}>
             <Form.Item
               label="FFmpeg 路径"
               name="ffmpeg_path"
@@ -184,10 +178,7 @@ export default function Settings() {
           </Card>
 
           {/* 日志配置 */}
-          <Card
-            title="日志配置"
-            style={{ marginBottom: '16px' }}
-          >
+          <Card title="日志配置" style={{ marginBottom: '16px' }}>
             <Form.Item
               label="日志级别"
               name="log_level"
@@ -214,10 +205,7 @@ export default function Settings() {
           </Card>
 
           {/* 危险操作 */}
-          <Card
-            title="危险操作"
-            style={{ marginBottom: '24px' }}
-          >
+          <Card title="危险操作" style={{ marginBottom: '24px' }}>
             <Alert
               message="清空文件数据库将删除所有文件记录，此操作不可恢复！"
               type="warning"
@@ -232,11 +220,7 @@ export default function Settings() {
               okType="danger"
               icon={<ExclamationCircleOutlined style={{ color: 'red' }} />}
             >
-              <Button
-                type="primary"
-                danger
-                icon={<DeleteOutlined />}
-              >
+              <Button type="primary" danger icon={<DeleteOutlined />}>
                 清空所有文件记录
               </Button>
             </Popconfirm>
@@ -245,18 +229,10 @@ export default function Settings() {
           {/* 操作按钮 */}
           <Divider />
           <Space>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              onClick={handleSave}
-              loading={saving}
-            >
+            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>
               保存配置
             </Button>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={handleReset}
-            >
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>
               重置
             </Button>
           </Space>

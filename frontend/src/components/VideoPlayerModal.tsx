@@ -168,11 +168,14 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     }
   }, [isPlaying])
 
-  const handleSkip = useCallback((seconds: number) => {
-    const video = videoRef.current
-    if (!video || !duration) return
-    video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
-  }, [duration])
+  const handleSkip = useCallback(
+    (seconds: number) => {
+      const video = videoRef.current
+      if (!video || !duration) return
+      video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
+    },
+    [duration]
+  )
 
   const handleSeek = useCallback((value: number) => {
     const video = videoRef.current
@@ -193,20 +196,23 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     }
   }, [playbackRate])
 
-  const handleVolumeChange = useCallback((value: number) => {
-    const video = videoRef.current
-    if (!video) return
+  const handleVolumeChange = useCallback(
+    (value: number) => {
+      const video = videoRef.current
+      if (!video) return
 
-    // Batch state updates together (React 18 automatic batching)
-    const newMutedState = value > 0 ? false : muted
-    setVolume(value)
-    setActualVolume(value)
-    if (newMutedState !== muted) {
-      setMuted(newMutedState)
-    }
+      // Batch state updates together (React 18 automatic batching)
+      const newMutedState = value > 0 ? false : muted
+      setVolume(value)
+      setActualVolume(value)
+      if (newMutedState !== muted) {
+        setMuted(newMutedState)
+      }
 
-    video.volume = value
-  }, [muted])
+      video.volume = value
+    },
+    [muted]
+  )
 
   const handleMuteToggle = useCallback(() => {
     const video = videoRef.current
@@ -228,18 +234,21 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     }
   }, [muted, volume])
 
-  const handleSeekWithInfinity = useCallback((seconds: number) => {
-    const video = videoRef.current
-    if (!video || !duration || !Number.isFinite(video.duration)) return
+  const handleSeekWithInfinity = useCallback(
+    (seconds: number) => {
+      const video = videoRef.current
+      if (!video || !duration || !Number.isFinite(video.duration)) return
 
-    if (seconds === Infinity) {
-      video.currentTime = video.duration
-    } else if (seconds === -Infinity) {
-      video.currentTime = 0
-    } else {
-      video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
-    }
-  }, [duration])
+      if (seconds === Infinity) {
+        video.currentTime = video.duration
+      } else if (seconds === -Infinity) {
+        video.currentTime = 0
+      } else {
+        video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
+      }
+    },
+    [duration]
+  )
 
   // ==================== 全屏控制 ====================
   const handleFullscreen = useCallback(() => {
@@ -305,7 +314,8 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
 
     // 检查视频是否已经加载（处理浏览器缓存）
     const checkVideoLoaded = () => {
-      if (video.readyState >= 1) { // HAVE_METADATA
+      if (video.readyState >= 1) {
+        // HAVE_METADATA
         setDuration(video.duration)
         setLoading(false)
       }
@@ -340,13 +350,17 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
 
   // ==================== 不支持格式的内容 ====================
   const unsupportedContent = (
-    <div style={{ padding: '60px 20px', textAlign: 'center', backgroundColor: '#000', color: '#fff' }}>
+    <div
+      style={{ padding: '60px 20px', textAlign: 'center', backgroundColor: '#000', color: '#fff' }}
+    >
       <Alert
         type="warning"
         message="浏览器不支持直接播放此格式"
         description={
           <div>
-            <p><strong>{file.format?.toUpperCase()}</strong> 格式在浏览器中无法直接播放</p>
+            <p>
+              <strong>{file.format?.toUpperCase()}</strong> 格式在浏览器中无法直接播放
+            </p>
             <p style={{ marginTop: 16 }}>请下载后使用本地播放器（如 VLC、PotPlayer）观看</p>
           </div>
         }
@@ -370,7 +384,9 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
       centered
     >
       <div ref={containerRef} style={STYLES.container}>
-        {!isNativelySupported ? unsupportedContent : (
+        {!isNativelySupported ? (
+          unsupportedContent
+        ) : (
           <>
             {loading && (
               <div style={STYLES.loadingOverlay}>
@@ -431,7 +447,9 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
               />
 
               {/* 控制按钮行 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
                 <Space>
                   <ControlButton
                     icon={isPlaying ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
@@ -500,11 +518,21 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
       {/* 文件信息 */}
       <div style={STYLES.fileInfo}>
         <Space size="large">
-          <span><strong>格式:</strong> {file.format?.toUpperCase()}</span>
-          <span><strong>大小:</strong> {(file.file_size / 1024 / 1024).toFixed(2)} MB</span>
-          <span><strong>时长:</strong> {formatTime(file.duration)}</span>
-          <span><strong>分辨率:</strong> {file.resolution || '-'}</span>
-          <span><strong>码率:</strong> {file.bitrate ? `${file.bitrate} kbps` : '-'}</span>
+          <span>
+            <strong>格式:</strong> {file.format?.toUpperCase()}
+          </span>
+          <span>
+            <strong>大小:</strong> {(file.file_size / 1024 / 1024).toFixed(2)} MB
+          </span>
+          <span>
+            <strong>时长:</strong> {formatTime(file.duration)}
+          </span>
+          <span>
+            <strong>分辨率:</strong> {file.resolution || '-'}
+          </span>
+          <span>
+            <strong>码率:</strong> {file.bitrate ? `${file.bitrate} kbps` : '-'}
+          </span>
         </Space>
       </div>
     </Modal>

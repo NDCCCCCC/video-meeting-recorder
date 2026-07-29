@@ -44,7 +44,11 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import * as videoFileApi from '../../api/video-file'
-import { submitTranscriptionWithMode, getActiveTranscriptionTasks, submitBatchTranscription } from '../../api/transcription'
+import {
+  submitTranscriptionWithMode,
+  getActiveTranscriptionTasks,
+  submitBatchTranscription,
+} from '../../api/transcription'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
 import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
@@ -59,7 +63,11 @@ import type {
   VideoFileStats,
   VideoFileStatus,
 } from '../../types/video-file'
-import type { SamplingRateOption, TranscriptionMode, BatchTranscriptionRequest } from '../../types/transcription'
+import type {
+  SamplingRateOption,
+  TranscriptionMode,
+  BatchTranscriptionRequest,
+} from '../../types/transcription'
 
 // 状态配置
 const STATUS_CONFIG: Record<VideoFileStatus, { label: string; color: string }> = {
@@ -81,8 +89,18 @@ const DEFAULT_FORMAT = 'mp4'
 
 // 采样率选项 (per D-02, 增加更高精度选项)
 const samplingRateOptions: SamplingRateOption[] = [
-  { label: '0.05秒/帧', value: 0.05, secondsPerFrame: 0.05, description: '极高精度 (20fps), 文件很大' },
-  { label: '0.1秒/帧', value: 0.1, secondsPerFrame: 0.1, description: '很高精度 (10fps), 文件较大' },
+  {
+    label: '0.05秒/帧',
+    value: 0.05,
+    secondsPerFrame: 0.05,
+    description: '极高精度 (20fps), 文件很大',
+  },
+  {
+    label: '0.1秒/帧',
+    value: 0.1,
+    secondsPerFrame: 0.1,
+    description: '很高精度 (10fps), 文件较大',
+  },
   { label: '0.2秒/帧', value: 0.2, secondsPerFrame: 0.2, description: '高精度 (5fps)' },
   { label: '0.5秒/帧', value: 0.5, secondsPerFrame: 0.5, description: '推荐 (2fps)' },
   { label: '1秒/帧', value: 1.0, secondsPerFrame: 1, description: '标准 (1fps), 文件较小' },
@@ -128,7 +146,9 @@ export default function FileManagement() {
   const [cloudTranscriptionMode, setCloudTranscriptionMode] = useState<TranscriptionMode>('local')
 
   // Active transcription tasks cache - track which videos have active tasks
-  const [activeTranscriptions, setActiveTranscriptions] = useState<Map<number, { mode: string; samplingRate: number }>>(new Map())
+  const [activeTranscriptions, setActiveTranscriptions] = useState<
+    Map<number, { mode: string; samplingRate: number }>
+  >(new Map())
 
   // Rename modal state
   const [renameModalVisible, setRenameModalVisible] = useState(false)
@@ -149,25 +169,28 @@ export default function FileManagement() {
   })
 
   // 加载文件列表
-  const loadFiles = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true)
-    try {
-      const response = await videoFileApi.getVideoFileList(params)
-      if (response.data) {
-        setFiles(response.data.items)
-        setTotal(response.data.total)
+  const loadFiles = useCallback(
+    async (showLoading = true) => {
+      if (showLoading) setLoading(true)
+      try {
+        const response = await videoFileApi.getVideoFileList(params)
+        if (response.data) {
+          setFiles(response.data.items)
+          setTotal(response.data.total)
+        }
+        setLoadError(null)
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : '网络连接中断'
+        setLoadError(reason)
+        if (showLoading) {
+          message.error(`加载失败：${reason}`)
+        }
+      } finally {
+        if (showLoading) setLoading(false)
       }
-      setLoadError(null)
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : '网络连接中断'
-      setLoadError(reason)
-      if (showLoading) {
-        message.error(`加载失败：${reason}`)
-      }
-    } finally {
-      if (showLoading) setLoading(false)
-    }
-  }, [params])
+    },
+    [params]
+  )
 
   // 加载统计信息
   const loadStats = useCallback(async () => {
@@ -219,7 +242,7 @@ export default function FileManagement() {
 
   // 搜索处理
   const handleSearch = useCallback((value: string) => {
-    setParams(prev => ({ ...prev, keyword: value, page: 1 }))
+    setParams((prev) => ({ ...prev, keyword: value, page: 1 }))
   }, [])
 
   // D-05.1 — 清空筛选条件，回到完整列表
@@ -230,12 +253,12 @@ export default function FileManagement() {
 
   // 状态筛选
   const handleStatusFilter = useCallback((status: VideoFileStatus | undefined) => {
-    setParams(prev => ({ ...prev, status, page: 1 }))
+    setParams((prev) => ({ ...prev, status, page: 1 }))
   }, [])
 
   // 分页变化
   const handleTableChange = useCallback((pagination: { current?: number; pageSize?: number }) => {
-    setParams(prev => ({
+    setParams((prev) => ({
       ...prev,
       page: pagination.current ?? 1,
       page_size: pagination.pageSize ?? 20,
@@ -253,16 +276,19 @@ export default function FileManagement() {
   }, [])
 
   // 删除文件
-  const handleDelete = useCallback(async (id: number) => {
-    try {
-      await videoFileApi.deleteVideoFile(id)
-      message.success('删除成功')
-      loadFiles()
-      loadStats()
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '删除失败')
-    }
-  }, [loadFiles, loadStats])
+  const handleDelete = useCallback(
+    async (id: number) => {
+      try {
+        await videoFileApi.deleteVideoFile(id)
+        message.success('删除成功')
+        loadFiles()
+        loadStats()
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '删除失败')
+      }
+    },
+    [loadFiles, loadStats]
+  )
 
   // 批量删除文件
   const handleBatchDelete = useCallback(async () => {
@@ -278,9 +304,10 @@ export default function FileManagement() {
         const { success, failed, errors } = response.data
         if (failed > 0) {
           // 合并错误消息，避免弹出多个 message
-          const errorSummary = errors.length > 0
-            ? `。错误详情：${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`
-            : ''
+          const errorSummary =
+            errors.length > 0
+              ? `。错误详情：${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`
+              : ''
           message.warning(`删除完成：成功 ${success} 个，失败 ${failed} 个${errorSummary}`)
         } else {
           message.success(`成功删除 ${success} 个文件`)
@@ -304,7 +331,7 @@ export default function FileManagement() {
     }
 
     // 计算文件总大小
-    const selectedFiles = files.filter(f => selectedRowKeys.includes(f.id))
+    const selectedFiles = files.filter((f) => selectedRowKeys.includes(f.id))
     const totalSize = selectedFiles.reduce((sum, f) => sum + f.file_size, 0)
     const totalSizeGB = totalSize / (1024 * 1024 * 1024)
 
@@ -344,8 +371,8 @@ export default function FileManagement() {
     }
 
     // 检查是否都是视频文件
-    const selectedFiles = files.filter(f => selectedRowKeys.includes(f.id))
-    const nonVideoFiles = selectedFiles.filter(f => f.format !== 'mp4' && f.format !== 'mkv')
+    const selectedFiles = files.filter((f) => selectedRowKeys.includes(f.id))
+    const nonVideoFiles = selectedFiles.filter((f) => f.format !== 'mp4' && f.format !== 'mkv')
 
     if (nonVideoFiles.length > 0) {
       message.warning(`只能转录视频文件，已忽略 ${nonVideoFiles.length} 个非视频文件`)
@@ -376,10 +403,13 @@ export default function FileManagement() {
         const { submitted_count, failed_count, errors } = response.data
 
         if (failed_count > 0) {
-          const errorMsg = errors.length > 0
-            ? `。错误详情：${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`
-            : ''
-          message.warning(`转录任务创建完成：成功 ${submitted_count} 个，失败 ${failed_count} 个${errorMsg}`)
+          const errorMsg =
+            errors.length > 0
+              ? `。错误详情：${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`
+              : ''
+          message.warning(
+            `转录任务创建完成：成功 ${submitted_count} 个，失败 ${failed_count} 个${errorMsg}`
+          )
         } else {
           message.success(`成功创建 ${submitted_count} 个转录任务`)
         }
@@ -408,9 +438,8 @@ export default function FileManagement() {
     setRenamingFile(file)
     // Find the last dot and split from there
     const lastDotIndex = file.file_name.lastIndexOf('.')
-    const nameWithoutExt = lastDotIndex > 0
-      ? file.file_name.substring(0, lastDotIndex)
-      : file.file_name
+    const nameWithoutExt =
+      lastDotIndex > 0 ? file.file_name.substring(0, lastDotIndex) : file.file_name
     setNewFileName(nameWithoutExt)
     setRenameModalVisible(true)
   }, [])
@@ -423,9 +452,8 @@ export default function FileManagement() {
 
     // Check if name hasn't changed
     const lastDotIndex = renamingFile.file_name.lastIndexOf('.')
-    const nameWithoutExt = lastDotIndex > 0
-      ? renamingFile.file_name.substring(0, lastDotIndex)
-      : renamingFile.file_name
+    const nameWithoutExt =
+      lastDotIndex > 0 ? renamingFile.file_name.substring(0, lastDotIndex) : renamingFile.file_name
     if (newFileName.trim() === nameWithoutExt) {
       message.info('文件名未改变')
       setRenameModalVisible(false)
@@ -445,7 +473,6 @@ export default function FileManagement() {
     }
   }, [renamingFile, newFileName, loadFiles])
 
-
   // 扫描导入
   const handleScan = useCallback(async () => {
     setScanning(true)
@@ -454,7 +481,9 @@ export default function FileManagement() {
       if (response.data) {
         const { scanned, created, skipped } = response.data
         if (created > 0) {
-          message.success(`扫描完成！发现 ${scanned} 个文件，新增 ${created} 条记录，跳过 ${skipped} 个`)
+          message.success(
+            `扫描完成！发现 ${scanned} 个文件，新增 ${created} 条记录，跳过 ${skipped} 个`
+          )
         } else {
           message.info(`扫描完成！发现 ${scanned} 个文件，但都是已存在的记录`)
         }
@@ -628,21 +657,11 @@ export default function FileManagement() {
     return (
       <Space size="small">
         <RenderVideoPreview {...record} />
-        <Button
-          type="link"
-          size="small"
-          icon={<EyeOutlined />}
-          onClick={() => viewDetail(record)}
-        >
+        <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => viewDetail(record)}>
           详情
         </Button>
-        <Dropdown
-          menu={{ items: moreMenuItems }}
-          trigger={['click']}
-        >
-          <Button size="small">
-            更多
-          </Button>
+        <Dropdown menu={{ items: moreMenuItems }} trigger={['click']}>
+          <Button size="small">更多</Button>
         </Dropdown>
       </Space>
     )
@@ -761,7 +780,14 @@ export default function FileManagement() {
         </div>
       }
     >
-      <Button type="primary" icon={<ReloadOutlined />} onClick={() => { loadFiles(); loadStats() }}>
+      <Button
+        type="primary"
+        icon={<ReloadOutlined />}
+        onClick={() => {
+          loadFiles()
+          loadStats()
+        }}
+      >
         重试
       </Button>
     </Empty>
@@ -782,7 +808,9 @@ export default function FileManagement() {
         </div>
       }
     >
-      <Button type="primary" onClick={handleClearFilters}>清空筛选</Button>
+      <Button type="primary" onClick={handleClearFilters}>
+        清空筛选
+      </Button>
     </Empty>
   ) : (
     <Empty
@@ -798,7 +826,9 @@ export default function FileManagement() {
         </div>
       }
     >
-      <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadModalVisible(true)}>上传视频</Button>
+      <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadModalVisible(true)}>
+        上传视频
+      </Button>
     </Empty>
   )
 
@@ -819,11 +849,7 @@ export default function FileManagement() {
             </Col>
             <Col span={6}>
               <Card>
-                <Statistic
-                  title="总大小"
-                  value={stats.total_size_gb.toFixed(2)}
-                  suffix="GB"
-                />
+                <Statistic title="总大小" value={stats.total_size_gb.toFixed(2)} suffix="GB" />
               </Card>
             </Col>
             <Col span={6}>
@@ -863,7 +889,13 @@ export default function FileManagement() {
             onChange={handleStatusFilter}
             options={STATUS_OPTIONS}
           />
-          <Button icon={<ReloadOutlined />} onClick={() => { loadFiles(); loadStats() }}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              loadFiles()
+              loadStats()
+            }}
+          >
             刷新
           </Button>
           {selectedRowKeys.length > 0 && (
@@ -909,12 +941,7 @@ export default function FileManagement() {
             </Button>
           )}
           <PermissionGuard permission={PERMISSIONS.FILE_SCAN}>
-            <Button
-              type="primary"
-              icon={<ScanOutlined />}
-              onClick={handleScan}
-              loading={scanning}
-            >
+            <Button type="primary" icon={<ScanOutlined />} onClick={handleScan} loading={scanning}>
               扫描导入
             </Button>
           </PermissionGuard>
@@ -928,7 +955,11 @@ export default function FileManagement() {
         </Space>
       </div>
 
-      {showErrorState ? errorState : showEmptyState ? emptyState : (
+      {showErrorState ? (
+        errorState
+      ) : showEmptyState ? (
+        emptyState
+      ) : (
         <Table
           columns={columns}
           dataSource={files}
@@ -955,7 +986,12 @@ export default function FileManagement() {
 
       {/* 文件详情对话框 */}
       <Modal
-        title={<Space><FileOutlined />文件详情 - {viewingFile?.file_name}</Space>}
+        title={
+          <Space>
+            <FileOutlined />
+            文件详情 - {viewingFile?.file_name}
+          </Space>
+        }
         open={detailVisible}
         onCancel={() => setDetailVisible(false)}
         footer={[
@@ -990,31 +1026,51 @@ export default function FileManagement() {
 
             <Card size="small" title="基本信息">
               <Row gutter={[16, 8]}>
-                <Col span={8}><strong>文件ID:</strong></Col>
+                <Col span={8}>
+                  <strong>文件ID:</strong>
+                </Col>
                 <Col span={16}>{viewingFile.id}</Col>
 
-                <Col span={8}><strong>文件名:</strong></Col>
+                <Col span={8}>
+                  <strong>文件名:</strong>
+                </Col>
                 <Col span={16}>{viewingFile.file_name}</Col>
 
-                <Col span={8}><strong>文件路径:</strong></Col>
-                <Col span={16} style={{ wordBreak: 'break-all' }}>{viewingFile.file_path}</Col>
+                <Col span={8}>
+                  <strong>文件路径:</strong>
+                </Col>
+                <Col span={16} style={{ wordBreak: 'break-all' }}>
+                  {viewingFile.file_path}
+                </Col>
 
-                <Col span={8}><strong>格式:</strong></Col>
+                <Col span={8}>
+                  <strong>格式:</strong>
+                </Col>
                 <Col span={16}>{viewingFile.format}</Col>
 
-                <Col span={8}><strong>分辨率:</strong></Col>
+                <Col span={8}>
+                  <strong>分辨率:</strong>
+                </Col>
                 <Col span={16}>{viewingFile.resolution}</Col>
 
-                <Col span={8}><strong>码率:</strong></Col>
+                <Col span={8}>
+                  <strong>码率:</strong>
+                </Col>
                 <Col span={16}>{viewingFile.bitrate} kbps</Col>
 
-                <Col span={8}><strong>编码:</strong></Col>
+                <Col span={8}>
+                  <strong>编码:</strong>
+                </Col>
                 <Col span={16}>{viewingFile.codec}</Col>
 
-                <Col span={8}><strong>状态:</strong></Col>
+                <Col span={8}>
+                  <strong>状态:</strong>
+                </Col>
                 <Col span={16}>{renderStatus(viewingFile.status)}</Col>
 
-                <Col span={8}><strong>创建时间:</strong></Col>
+                <Col span={8}>
+                  <strong>创建时间:</strong>
+                </Col>
                 <Col span={16}>{dayjs(viewingFile.created_at).format('YYYY-MM-DD HH:mm:ss')}</Col>
               </Row>
             </Card>
@@ -1022,10 +1078,14 @@ export default function FileManagement() {
             {viewingFile.task && (
               <Card size="small" title="关联任务" style={{ marginTop: 16 }}>
                 <Row gutter={[16, 8]}>
-                  <Col span={8}><strong>任务ID:</strong></Col>
+                  <Col span={8}>
+                    <strong>任务ID:</strong>
+                  </Col>
                   <Col span={16}>{viewingFile.task.id}</Col>
 
-                  <Col span={8}><strong>任务名称:</strong></Col>
+                  <Col span={8}>
+                    <strong>任务名称:</strong>
+                  </Col>
                   <Col span={16}>{viewingFile.task.name}</Col>
                 </Row>
               </Card>
@@ -1050,8 +1110,12 @@ export default function FileManagement() {
             value={selectedSamplingRate}
             onChange={(e) => setSelectedSamplingRate(e.target.value)}
           >
-            {samplingRateOptions.map(opt => (
-              <Radio key={opt.value} value={opt.value} style={{ display: 'block', marginBottom: 8 }}>
+            {samplingRateOptions.map((opt) => (
+              <Radio
+                key={opt.value}
+                value={opt.value}
+                style={{ display: 'block', marginBottom: 8 }}
+              >
                 {opt.label} ({opt.description})
               </Radio>
             ))}
@@ -1082,7 +1146,11 @@ export default function FileManagement() {
         onOk={confirmRename}
         onCancel={() => setRenameModalVisible(false)}
         confirmLoading={renameLoading}
-        okButtonProps={{ disabled: !newFileName.trim() || newFileName.trim() === renamingFile?.file_name.replace(/\.[^/.]+$/, '') }}
+        okButtonProps={{
+          disabled:
+            !newFileName.trim() ||
+            newFileName.trim() === renamingFile?.file_name.replace(/\.[^/.]+$/, ''),
+        }}
       >
         <Space direction="vertical" style={{ width: '100%' }}>
           <Input
@@ -1149,8 +1217,12 @@ export default function FileManagement() {
               onChange={(e) => setBatchSamplingRate(e.target.value)}
               disabled={batchTranscribing}
             >
-              {samplingRateOptions.map(opt => (
-                <Radio key={opt.value} value={opt.value} style={{ display: 'block', marginBottom: 8 }}>
+              {samplingRateOptions.map((opt) => (
+                <Radio
+                  key={opt.value}
+                  value={opt.value}
+                  style={{ display: 'block', marginBottom: 8 }}
+                >
                   {opt.label} ({opt.description})
                 </Radio>
               ))}

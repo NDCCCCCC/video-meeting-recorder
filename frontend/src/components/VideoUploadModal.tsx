@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef } from 'react'
 import { Modal, Upload, Progress, message, List, Tag } from 'antd'
-import { InboxOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined } from '@ant-design/icons'
+import {
+  InboxOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  LoadingOutlined,
+} from '@ant-design/icons'
 import type { UploadProps } from 'antd'
 import { uploadVideoFile, scanVideoFiles, type FileUploadResult } from '../api/video-file'
 import * as authApi from '../api/auth'
@@ -69,7 +74,7 @@ export default function VideoUploadModal({
 
   // 处理文件选择
   const handleFileSelect = useCallback((files: File[]) => {
-    const tasks: UploadTask[] = files.map(file => ({
+    const tasks: UploadTask[] = files.map((file) => ({
       file,
       status: 'pending',
       progress: 0,
@@ -95,37 +100,45 @@ export default function VideoUploadModal({
       const task = uploadTasks[i]
       const validationError = validateFile(task.file)
       if (validationError) {
-        setUploadTasks(prev => prev.map((t, idx) =>
-          idx === i ? { ...t, status: 'error', error: validationError } : t
-        ))
+        setUploadTasks((prev) =>
+          prev.map((t, idx) => (idx === i ? { ...t, status: 'error', error: validationError } : t))
+        )
         failCount++
         continue
       }
 
       // 更新状态为上传中
-      setUploadTasks(prev => prev.map((t, idx) =>
-        idx === i ? { ...t, status: 'uploading' } : t
-      ))
+      setUploadTasks((prev) =>
+        prev.map((t, idx) => (idx === i ? { ...t, status: 'uploading' } : t))
+      )
 
       try {
         const result = await uploadVideoFile(task.file, (percent) => {
-          setUploadTasks(prev => prev.map((t, idx) =>
-            idx === i ? { ...t, progress: percent } : t
-          ))
+          setUploadTasks((prev) =>
+            prev.map((t, idx) => (idx === i ? { ...t, progress: percent } : t))
+          )
         })
 
         if (result.data && validateUploadResult(result.data)) {
-          setUploadTasks(prev => prev.map((t, idx) =>
-            idx === i ? { ...t, status: 'success', progress: 100 } : t
-          ))
+          setUploadTasks((prev) =>
+            prev.map((t, idx) => (idx === i ? { ...t, status: 'success', progress: 100 } : t))
+          )
           successCount++
         } else {
           throw new Error('服务器返回的数据格式无效')
         }
       } catch (error) {
-        setUploadTasks(prev => prev.map((t, idx) =>
-          idx === i ? { ...t, status: 'error', error: error instanceof Error ? error.message : '上传失败' } : t
-        ))
+        setUploadTasks((prev) =>
+          prev.map((t, idx) =>
+            idx === i
+              ? {
+                  ...t,
+                  status: 'error',
+                  error: error instanceof Error ? error.message : '上传失败',
+                }
+              : t
+          )
+        )
         failCount++
       }
     }
@@ -149,7 +162,9 @@ export default function VideoUploadModal({
         if (scanResult.data) {
           const { created, skipped } = scanResult.data
           if (created > 0) {
-            message.success(`上传完成！已导入 ${created} 个新文件${skipped > 0 ? `，跳过 ${skipped} 个已存在文件` : ''}`)
+            message.success(
+              `上传完成！已导入 ${created} 个新文件${skipped > 0 ? `，跳过 ${skipped} 个已存在文件` : ''}`
+            )
           } else if (skipped > 0) {
             message.info(`上传完成！文件已存在，跳过 ${skipped} 个`)
           } else {
@@ -198,18 +213,21 @@ export default function VideoUploadModal({
   }
 
   // 计算总体进度
-  const totalProgress = uploadTasks.length > 0
-    ? uploadTasks.reduce((sum, task) => sum + task.progress, 0) / uploadTasks.length
-    : 0
+  const totalProgress =
+    uploadTasks.length > 0
+      ? uploadTasks.reduce((sum, task) => sum + task.progress, 0) / uploadTasks.length
+      : 0
 
-  const completedCount = uploadTasks.filter(t => t.status === 'success' || t.status === 'error').length
+  const completedCount = uploadTasks.filter(
+    (t) => t.status === 'success' || t.status === 'error'
+  ).length
 
   return (
     <Modal
       title="批量上传视频"
       open={visible}
       onCancel={handleCancel}
-      okText={uploadTasks.length > 0 ? "开始上传" : "关闭"}
+      okText={uploadTasks.length > 0 ? '开始上传' : '关闭'}
       onOk={uploadTasks.length > 0 && !isUploading ? startUpload : undefined}
       cancelButtonProps={{ disabled: isUploading }}
       okButtonProps={{ disabled: isUploading }}
@@ -270,8 +288,21 @@ export default function VideoUploadModal({
                     <List.Item.Meta
                       avatar={statusIcon}
                       title={
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span
+                            style={{
+                              flex: 1,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
                             {task.file.name}
                           </span>
                           <Tag color={statusColor}>{statusText}</Tag>

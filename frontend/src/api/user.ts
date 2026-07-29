@@ -54,7 +54,10 @@ export async function deleteUser(id: number): Promise<ApiResponse<void>> {
 }
 
 // 重置用户密码
-export async function resetUserPassword(id: number, req: ResetPasswordRequest): Promise<ApiResponse<void>> {
+export async function resetUserPassword(
+  id: number,
+  req: ResetPasswordRequest
+): Promise<ApiResponse<void>> {
   return apiRequest(`/api/v1/users/${id}/reset-password`, {
     method: 'POST',
     body: JSON.stringify(req),

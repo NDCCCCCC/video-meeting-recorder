@@ -21,25 +21,21 @@ export function DiffModal({ log, open, onClose }: DiffModalProps) {
   const changes = diffJson(oldText, newText)
 
   return (
-    <Modal
-      title="变更详情"
-      open={open}
-      onCancel={onClose}
-      width={1000}
-      footer={null}
-    >
+    <Modal title="变更详情" open={open} onCancel={onClose} width={1000} footer={null}>
       <div style={{ display: 'flex', gap: '16px' }}>
         {/* Old Data */}
         <div style={{ flex: 1 }}>
           <h4>变更前</h4>
-          <pre style={{
-            background: '#f5f5f5',
-            padding: '12px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            maxHeight: 400,
-            overflow: 'auto',
-          }}>
+          <pre
+            style={{
+              background: '#f5f5f5',
+              padding: '12px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              maxHeight: 400,
+              overflow: 'auto',
+            }}
+          >
             {changes.map((part, index) => (
               <span
                 key={index}
@@ -57,14 +53,16 @@ export function DiffModal({ log, open, onClose }: DiffModalProps) {
         {/* New Data */}
         <div style={{ flex: 1 }}>
           <h4>变更后</h4>
-          <pre style={{
-            background: '#f5f5f5',
-            padding: '12px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            maxHeight: 400,
-            overflow: 'auto',
-          }}>
+          <pre
+            style={{
+              background: '#f5f5f5',
+              padding: '12px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              maxHeight: 400,
+              overflow: 'auto',
+            }}
+          >
             {changes.map((part, index) => (
               <span
                 key={index}

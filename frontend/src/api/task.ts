@@ -92,7 +92,17 @@ export async function retryTask(id: number): Promise<TaskApiResponse> {
 }
 
 // 获取HLS预览信息
-export async function getTaskPreview(id: number): Promise<ApiResponse<{ task_id: number; playback_url: string; status: string; ready?: boolean; message?: string }>> {
+export async function getTaskPreview(
+  id: number
+): Promise<
+  ApiResponse<{
+    task_id: number
+    playback_url: string
+    status: string
+    ready?: boolean
+    message?: string
+  }>
+> {
   return apiRequest(`/api/v1/recordings/${id}/preview`)
 }
 
@@ -110,7 +120,9 @@ export interface ClearStuckTasksResult {
 }
 
 // 清理卡住的任务
-export async function clearStuckTasks(timeoutMinutes: number = 30): Promise<ApiResponse<ClearStuckTasksResult>> {
+export async function clearStuckTasks(
+  timeoutMinutes: number = 30
+): Promise<ApiResponse<ClearStuckTasksResult>> {
   return apiRequest(`/api/v1/tasks/clear-stuck?timeout_minutes=${timeoutMinutes}`, {
     method: 'POST',
   })

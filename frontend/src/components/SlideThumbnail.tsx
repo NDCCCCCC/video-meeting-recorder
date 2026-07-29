@@ -106,7 +106,8 @@ export default memo(function SlideThumbnail({
           onError={(e) => {
             // Fallback to placeholder on error
             const img = e.currentTarget as HTMLImageElement
-            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiNmMGYwZjAiLz48dGV4dCB4PSI4MCIgeT0iNDUiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM4YzhjOGMiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFByZXZpZXc8L3RleHQ+PC9zdmc+'
+            img.src =
+              'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiNmMGYwZjAiLz48dGV4dCB4PSI4MCIgeT0iNDUiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM4YzhjOGMiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFByZXZpZXc8L3RleHQ+PC9zdmc+'
           }}
           style={{
             objectFit: 'contain',
@@ -115,10 +116,7 @@ export default memo(function SlideThumbnail({
           }}
         />
       ) : (
-        <Skeleton.Image
-          active
-          style={{ width: 160, height: 90 }}
-        />
+        <Skeleton.Image active style={{ width: 160, height: 90 }} />
       )}
 
       {/* 选中标记（合并模式） */}

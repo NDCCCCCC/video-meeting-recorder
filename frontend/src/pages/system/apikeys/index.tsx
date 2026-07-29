@@ -1,5 +1,20 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Button, Table, Space, Modal, Form, Input, Select, Tag, message, Switch, Popconfirm, Tooltip, Card, DatePicker } from 'antd'
+import {
+  Button,
+  Table,
+  Space,
+  Modal,
+  Form,
+  Input,
+  Select,
+  Tag,
+  message,
+  Switch,
+  Popconfirm,
+  Tooltip,
+  Card,
+  DatePicker,
+} from 'antd'
 import { PlusOutlined, ReloadOutlined, CopyOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
@@ -24,8 +39,8 @@ const processIPWhitelist = (value: string): string[] => {
   if (!value || typeof value !== 'string') return []
   return value
     .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
 }
 
 const ipWhitelistArrayToString = (arr: string[]): string => {
@@ -105,7 +120,7 @@ const APIKeysPage: React.FC = () => {
     try {
       const processedValues = {
         ...values,
-        ip_whitelist: processIPWhitelist(values.ip_whitelist as any)
+        ip_whitelist: processIPWhitelist(values.ip_whitelist as any),
       }
       await apikeyAPI.updateAPIKey(currentKey.id, processedValues)
       message.success('API密钥更新成功')
@@ -119,179 +134,219 @@ const APIKeysPage: React.FC = () => {
   }
 
   // 删除API密钥
-  const handleDelete = useCallback(async (id: number) => {
-    try {
-      await apikeyAPI.deleteAPIKey(id)
-      message.success('API密钥删除成功')
-      loadAPIKeys()
-    } catch (error: any) {
-      message.error(error.message || '删除失败')
-    }
-  }, [loadAPIKeys])
+  const handleDelete = useCallback(
+    async (id: number) => {
+      try {
+        await apikeyAPI.deleteAPIKey(id)
+        message.success('API密钥删除成功')
+        loadAPIKeys()
+      } catch (error: any) {
+        message.error(error.message || '删除失败')
+      }
+    },
+    [loadAPIKeys]
+  )
 
   // 切换状态
-  const handleToggle = useCallback(async (id: number) => {
-    try {
-      await apikeyAPI.toggleAPIKeyStatus(id)
-      message.success('状态切换成功')
-      loadAPIKeys()
-    } catch (error: any) {
-      message.error(error.message || '操作失败')
-    }
-  }, [loadAPIKeys])
+  const handleToggle = useCallback(
+    async (id: number) => {
+      try {
+        await apikeyAPI.toggleAPIKeyStatus(id)
+        message.success('状态切换成功')
+        loadAPIKeys()
+      } catch (error: any) {
+        message.error(error.message || '操作失败')
+      }
+    },
+    [loadAPIKeys]
+  )
 
   // 打开编辑模态框
-  const openEditModal = useCallback((record: APIKey) => {
-    setCurrentKey(record)
-    form.setFieldsValue({
-      name: record.name,
-      is_active: record.is_active,
-      scopes: record.scopes,
-      ip_whitelist: ipWhitelistArrayToString(record.ip_whitelist),
-      description: record.description,
-    })
-    setEditModalVisible(true)
-  }, [form])
+  const openEditModal = useCallback(
+    (record: APIKey) => {
+      setCurrentKey(record)
+      form.setFieldsValue({
+        name: record.name,
+        is_active: record.is_active,
+        scopes: record.scopes,
+        ip_whitelist: ipWhitelistArrayToString(record.ip_whitelist),
+        description: record.description,
+      })
+      setEditModalVisible(true)
+    },
+    [form]
+  )
 
   // 复制密钥
   const copyKey = useCallback((key: string) => {
-    navigator.clipboard.writeText(key).then(() => {
-      message.success('密钥已复制到剪贴板')
-    }).catch(() => {
-      const textarea = document.createElement('textarea')
-      textarea.value = key
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      try {
-        document.execCommand('copy')
+    navigator.clipboard
+      .writeText(key)
+      .then(() => {
         message.success('密钥已复制到剪贴板')
-      } catch {
-        message.error('复制失败，请手动复制')
-      }
-      document.body.removeChild(textarea)
-    })
+      })
+      .catch(() => {
+        const textarea = document.createElement('textarea')
+        textarea.value = key
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        try {
+          document.execCommand('copy')
+          message.success('密钥已复制到剪贴板')
+        } catch {
+          message.error('复制失败，请手动复制')
+        }
+        document.body.removeChild(textarea)
+      })
   }, [])
 
-  const columns: ColumnsType<APIKey> = useMemo(() => [
-    {
-      title: 'ID',
-      dataIndex: 'id',
-      width: 60,
-    },
-    {
-      title: '名称',
-      dataIndex: 'name',
-      width: 150,
-      render: (text, record) => (
-        <div>
-          <div>{text}</div>
-          {record.description && (
-            <div style={{ fontSize: '12px', color: '#9ca3af' }}>{record.description}</div>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: '密钥',
-      dataIndex: 'key',
-      width: 200,
-      render: (text) => (
-        <Space>
-          <code style={{ fontSize: '12px', backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: '4px' }}>{maskKey(text)}</code>
-          {text && (
-            <Tooltip title="复制完整密钥">
-              <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => copyKey(text)} />
+  const columns: ColumnsType<APIKey> = useMemo(
+    () => [
+      {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60,
+      },
+      {
+        title: '名称',
+        dataIndex: 'name',
+        width: 150,
+        render: (text, record) => (
+          <div>
+            <div>{text}</div>
+            {record.description && (
+              <div style={{ fontSize: '12px', color: '#9ca3af' }}>{record.description}</div>
+            )}
+          </div>
+        ),
+      },
+      {
+        title: '密钥',
+        dataIndex: 'key',
+        width: 200,
+        render: (text) => (
+          <Space>
+            <code
+              style={{
+                fontSize: '12px',
+                backgroundColor: '#f3f4f6',
+                padding: '4px 8px',
+                borderRadius: '4px',
+              }}
+            >
+              {maskKey(text)}
+            </code>
+            {text && (
+              <Tooltip title="复制完整密钥">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={() => copyKey(text)}
+                />
+              </Tooltip>
+            )}
+          </Space>
+        ),
+      },
+      {
+        title: '作用域',
+        dataIndex: 'scopes',
+        width: 120,
+        render: (scopes: string[]) => (
+          <>
+            {scopes?.map((scope) => (
+              <Tag
+                key={scope}
+                color={scope === 'admin' ? 'red' : scope === 'write' ? 'blue' : 'green'}
+              >
+                {scope}
+              </Tag>
+            ))}
+          </>
+        ),
+      },
+      {
+        title: 'IP白名单',
+        dataIndex: 'ip_whitelist',
+        width: 150,
+        render: (whitelist: string[]) => {
+          if (!whitelist || whitelist.length === 0)
+            return <span style={{ color: '#9ca3af' }}>未设置</span>
+          return (
+            <Tooltip title={whitelist.join('\n')}>
+              <span>{whitelist.length} 条规则</span>
             </Tooltip>
-          )}
-        </Space>
-      ),
-    },
-    {
-      title: '作用域',
-      dataIndex: 'scopes',
-      width: 120,
-      render: (scopes: string[]) => (
-        <>
-          {scopes?.map((scope) => (
-            <Tag key={scope} color={scope === 'admin' ? 'red' : scope === 'write' ? 'blue' : 'green'}>
-              {scope}
-            </Tag>
-          ))}
-        </>
-      ),
-    },
-    {
-      title: 'IP白名单',
-      dataIndex: 'ip_whitelist',
-      width: 150,
-      render: (whitelist: string[]) => {
-        if (!whitelist || whitelist.length === 0) return <span style={{ color: '#9ca3af' }}>未设置</span>
-        return (
-          <Tooltip title={whitelist.join('\n')}>
-            <span>{whitelist.length} 条规则</span>
-          </Tooltip>
-        )
+          )
+        },
       },
-    },
-    {
-      title: '有效期',
-      dataIndex: 'expires_at',
-      width: 120,
-      render: formatTime,
-    },
-    {
-      title: '最后使用',
-      dataIndex: 'last_used_at',
-      width: 120,
-      render: (timeStr: string | null) => {
-        if (!timeStr) return <span style={{ color: '#9ca3af' }}>未使用</span>
-        return formatTime(timeStr)
+      {
+        title: '有效期',
+        dataIndex: 'expires_at',
+        width: 120,
+        render: formatTime,
       },
-    },
-    {
-      title: '状态',
-      dataIndex: 'is_active',
-      width: 80,
-      render: (active: boolean, record) => (
-        <Switch
-          checked={active}
-          onChange={() => handleToggle(record.id)}
-          checkedChildren="启用"
-          unCheckedChildren="禁用"
-        />
-      ),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 120,
-      fixed: 'right' as const,
-      render: (_, record) => (
-        <Space>
-          <Button type="link" size="small" onClick={() => openEditModal(record)}>
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定要删除这个API密钥吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" size="small" danger>
-              删除
+      {
+        title: '最后使用',
+        dataIndex: 'last_used_at',
+        width: 120,
+        render: (timeStr: string | null) => {
+          if (!timeStr) return <span style={{ color: '#9ca3af' }}>未使用</span>
+          return formatTime(timeStr)
+        },
+      },
+      {
+        title: '状态',
+        dataIndex: 'is_active',
+        width: 80,
+        render: (active: boolean, record) => (
+          <Switch
+            checked={active}
+            onChange={() => handleToggle(record.id)}
+            checkedChildren="启用"
+            unCheckedChildren="禁用"
+          />
+        ),
+      },
+      {
+        title: '操作',
+        key: 'action',
+        width: 120,
+        fixed: 'right' as const,
+        render: (_, record) => (
+          <Space>
+            <Button type="link" size="small" onClick={() => openEditModal(record)}>
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ], [handleDelete, handleToggle, openEditModal, copyKey])
+            <Popconfirm
+              title="确定要删除这个API密钥吗？"
+              onConfirm={() => handleDelete(record.id)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button type="link" size="small" danger>
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        ),
+      },
+    ],
+    [handleDelete, handleToggle, openEditModal, copyKey]
+  )
 
   return (
     <div style={{ padding: '20px' }}>
       <Card>
-        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          style={{
+            marginBottom: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
           <Space>
             <Input.Search
               placeholder="搜索名称"
@@ -306,7 +361,11 @@ const APIKeysPage: React.FC = () => {
               刷新
             </Button>
           </Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateModalVisible(true)}
+          >
             新建密钥
           </Button>
         </div>
@@ -353,18 +412,11 @@ const APIKeysPage: React.FC = () => {
             ip_whitelist: [],
           }}
         >
-          <Form.Item
-            label="名称"
-            name="name"
-            rules={[{ required: true, message: '请输入名称' }]}
-          >
+          <Form.Item label="名称" name="name" rules={[{ required: true, message: '请输入名称' }]}>
             <Input placeholder="例如：生产环境只读密钥" />
           </Form.Item>
 
-          <Form.Item
-            label="描述"
-            name="description"
-          >
+          <Form.Item label="描述" name="description">
             <Input.TextArea placeholder="可选描述信息" rows={2} />
           </Form.Item>
 
@@ -406,7 +458,9 @@ const APIKeysPage: React.FC = () => {
           </Form.Item>
 
           <div style={{ color: '#9ca3af', fontSize: '14px' }}>
-            <p><strong>注意：</strong></p>
+            <p>
+              <strong>注意：</strong>
+            </p>
             <ul style={{ listStyleType: 'disc', listStylePosition: 'inside' }}>
               <li>密钥创建后将显示完整的密钥值，请妥善保存</li>
               <li>出于安全考虑，完整密钥只会显示一次</li>
@@ -429,23 +483,12 @@ const APIKeysPage: React.FC = () => {
         width={600}
         destroyOnClose
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleUpdate}
-        >
-          <Form.Item
-            label="名称"
-            name="name"
-            rules={[{ required: true, message: '请输入名称' }]}
-          >
+        <Form form={form} layout="vertical" onFinish={handleUpdate}>
+          <Form.Item label="名称" name="name" rules={[{ required: true, message: '请输入名称' }]}>
             <Input />
           </Form.Item>
 
-          <Form.Item
-            label="描述"
-            name="description"
-          >
+          <Form.Item label="描述" name="description">
             <Input.TextArea rows={2} />
           </Form.Item>
 
@@ -457,10 +500,7 @@ const APIKeysPage: React.FC = () => {
             <Select mode="multiple" options={API_KEY_SCOPES} />
           </Form.Item>
 
-          <Form.Item
-            label="IP白名单"
-            name="ip_whitelist"
-          >
+          <Form.Item label="IP白名单" name="ip_whitelist">
             <Input.TextArea rows={4} />
           </Form.Item>
         </Form>
@@ -485,7 +525,14 @@ const APIKeysPage: React.FC = () => {
         ]}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ backgroundColor: '#fefce8', border: '1px solid #fde047', borderRadius: '4px', padding: '16px' }}>
+          <div
+            style={{
+              backgroundColor: '#fefce8',
+              border: '1px solid #fde047',
+              borderRadius: '4px',
+              padding: '16px',
+            }}
+          >
             <p style={{ color: '#92400e', fontWeight: 500 }}>⚠️ 重要提示</p>
             <p style={{ color: '#a16207', fontSize: '14px', marginTop: '8px' }}>
               出于安全考虑，完整密钥只会显示这一次。请立即复制并妥善保存。
@@ -493,7 +540,11 @@ const APIKeysPage: React.FC = () => {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>您的API密钥：</label>
+            <label
+              style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}
+            >
+              您的API密钥：
+            </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <code
                 style={{
@@ -517,7 +568,14 @@ const APIKeysPage: React.FC = () => {
 
           <div style={{ fontSize: '14px', color: '#4b5563' }}>
             <p style={{ fontWeight: 500, marginBottom: '8px' }}>使用方式：</p>
-            <code style={{ display: 'block', backgroundColor: '#f3f4f6', padding: '8px', borderRadius: '4px' }}>
+            <code
+              style={{
+                display: 'block',
+                backgroundColor: '#f3f4f6',
+                padding: '8px',
+                borderRadius: '4px',
+              }}
+            >
               X-API-Key: {fullKeyValue}
             </code>
           </div>

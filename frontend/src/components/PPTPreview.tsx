@@ -22,9 +22,9 @@ interface PPTPreviewProps {
   onToggleSelect: (slide: SlideImage, index: number) => void
   isLoading: boolean
   currentPptId?: number
-  containerStyle?: React.CSSProperties  // Allow custom container style
-  hideThumbnailSidebar?: boolean  // Hide built-in thumbnail sidebar for side-by-side layout
-  onDeleteCurrentSlide?: () => void  // Callback for deleting current slide
+  containerStyle?: React.CSSProperties // Allow custom container style
+  hideThumbnailSidebar?: boolean // Hide built-in thumbnail sidebar for side-by-side layout
+  onDeleteCurrentSlide?: () => void // Callback for deleting current slide
 }
 
 export default function PPTPreview({
@@ -100,7 +100,7 @@ export default function PPTPreview({
       {/* 侧边栏缩略图 */}
       <div
         style={{
-          width: 160,  // Changed from 200 to 160 per UI-SPEC
+          width: 160, // Changed from 200 to 160 per UI-SPEC
           overflowY: 'auto',
           borderRight: '1px solid #f0f0f0',
           padding: 8,
@@ -121,9 +121,7 @@ export default function PPTPreview({
                 selectedSlides.some((s) => s.id === `${currentPptId}_${slide.slide_number}`)
               }
               isSelectable={isMergeMode}
-              onClick={() =>
-                isMergeMode ? onToggleSelect(slide, idx) : onSlideChange(idx)
-              }
+              onClick={() => (isMergeMode ? onToggleSelect(slide, idx) : onSlideChange(idx))}
             />
           ))}
         </div>

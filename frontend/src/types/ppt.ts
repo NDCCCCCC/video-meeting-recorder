@@ -56,11 +56,11 @@ export interface MergeResponse {
 
 // 已选择的幻灯片（用于合并模式）
 export interface SelectedSlide {
-  id: string           // Format: "{pptFileId}_{slideNumber}"
+  id: string // Format: "{pptFileId}_{slideNumber}"
   ppt_file_id: number
   slide_number: number
   thumbnail_url: string
-  source_name: string   // Display name for source PPT
+  source_name: string // Display name for source PPT
 }
 
 // SlideCapturePanel props

@@ -10,7 +10,10 @@ const cloudProp: TranscriptionMode = 'cloud'
 
 // Test: All cloud stages are valid CloudTranscriptionStage values
 const cloudStages: CloudTranscriptionStage[] = [
-  'uploading', 'queued', 'cloud_processing', 'downloading'
+  'uploading',
+  'queued',
+  'cloud_processing',
+  'downloading',
 ]
 if (cloudStages.length !== 4) {
   throw new Error('Expected 4 cloud stages')
@@ -32,4 +35,5 @@ if (fallbackMessage !== '云端转录失败，已自动切换到本地转录') {
 }
 
 // Suppress unused
-void localProp; void cloudProp
+void localProp
+void cloudProp

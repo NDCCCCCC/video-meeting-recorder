@@ -18,7 +18,12 @@ export const DEFAULT_PAGE_SIZE = 20
 export const DEFAULT_PRE_JOIN_MINUTES = 30
 export const DEFAULT_RECORD_DELAY_MINUTES = 0
 export const POLL_INTERVAL = 5000 // 5秒轮询间隔
-export const DELETABLE_STATUSES: VideoRecordingTaskStatus[] = ['pending', 'completed', 'failed', 'cancelled']
+export const DELETABLE_STATUSES: VideoRecordingTaskStatus[] = [
+  'pending',
+  'completed',
+  'failed',
+  'cancelled',
+]
 
 // 状态选项（用于筛选器）
 export const STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([value, { label }]) => ({
@@ -27,7 +32,12 @@ export const STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([value, { label
 }))
 
 // 进行中的状态（用于触发轮询）- 包含转换中状态
-export const ACTIVE_STATUSES: VideoRecordingTaskStatus[] = ['pending', 'connecting', 'recording', 'converting']
+export const ACTIVE_STATUSES: VideoRecordingTaskStatus[] = [
+  'pending',
+  'connecting',
+  'recording',
+  'converting',
+]
 
 // 可编辑的状态（待执行状态可编辑全部字段，录制中状态可编辑结束时间）
 export const EDITABLE_STATUSES: VideoRecordingTaskStatus[] = ['pending', 'recording']
@@ -72,4 +82,3 @@ export function canEditAllFields(status: VideoRecordingTaskStatus): boolean {
 export function canEditEndTime(status: VideoRecordingTaskStatus): boolean {
   return status === 'pending' || status === 'recording'
 }
-

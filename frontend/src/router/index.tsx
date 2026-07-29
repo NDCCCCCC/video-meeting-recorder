@@ -51,7 +51,7 @@ export default [
           { path: 'input-configs', Component: lazy(() => import('../pages/system/input-configs')) },
           {
             path: 'huawei-configs',
-            element: <Navigate to="/system/input-configs" replace />
+            element: <Navigate to="/system/input-configs" replace />,
           },
           { path: 'auth-config', Component: lazy(() => import('../pages/system/auth-config')) },
           { path: 'settings', Component: lazy(() => import('../pages/system/settings')) },

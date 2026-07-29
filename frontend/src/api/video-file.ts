@@ -26,9 +26,7 @@ export async function getVideoFileList(
   if (params.end_date) queryParams.append('end_date', params.end_date)
 
   const query = queryParams.toString()
-  return apiRequest<VideoFileListResponse>(
-    `/api/v1/files${query ? `?${query}` : ''}`
-  )
+  return apiRequest<VideoFileListResponse>(`/api/v1/files${query ? `?${query}` : ''}`)
 }
 
 // 获取文件详情
@@ -43,18 +41,18 @@ export function downloadVideoFile(id: number, fileName?: string): void {
 
   fetch(url, {
     headers: {
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    }
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   })
-  .then(response => response.blob())
-  .then(blob => {
-    const blobUrl = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = blobUrl
-    link.download = fileName || `video_${id}.mp4`
-    link.click()
-    URL.revokeObjectURL(blobUrl)
-  })
+    .then((response) => response.blob())
+    .then((blob) => {
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = fileName || `video_${id}.mp4`
+      link.click()
+      URL.revokeObjectURL(blobUrl)
+    })
 }
 
 // 删除文件
@@ -65,7 +63,9 @@ export async function deleteVideoFile(id: number): Promise<ApiResponse<void>> {
 }
 
 // 获取文件统计（可指定格式，默认只统计 mp4）
-export async function getVideoFileStats(format: string = 'mp4'): Promise<ApiResponse<VideoFileStats>> {
+export async function getVideoFileStats(
+  format: string = 'mp4'
+): Promise<ApiResponse<VideoFileStats>> {
   const params = format ? `?format=${format}` : ''
   return apiRequest<VideoFileStats>(`/api/v1/files/stats${params}`)
 }
@@ -181,7 +181,9 @@ export function uploadVideoFile(
             return
           }
           if (response.data.file_id === undefined || response.data.file_id === null) {
-            reject(new Error(`服务器返回的响应缺少 file_id 字段. data: ${JSON.stringify(response.data)}`))
+            reject(
+              new Error(`服务器返回的响应缺少 file_id 字段. data: ${JSON.stringify(response.data)}`)
+            )
             return
           }
           resolve(response)
@@ -245,17 +247,17 @@ export function batchDownloadFiles(ids: number[]): void {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ ids }),
   })
-    .then(response => {
+    .then((response) => {
       if (!response.ok) {
         throw new Error(`下载失败: ${response.status}`)
       }
       return response.blob()
     })
-    .then(blob => {
+    .then((blob) => {
       // 从响应头获取文件名
       const filename = `files_batch_${dayjs().format('YYYYMMDD_HHmmss')}.zip`
 
@@ -269,7 +271,7 @@ export function batchDownloadFiles(ids: number[]): void {
 
       message.success(`成功下载 ${ids.length} 个文件`)
     })
-    .catch(error => {
+    .catch((error) => {
       console.error('批量下载失败:', error)
       message.error(error instanceof Error ? error.message : '批量下载失败')
     })

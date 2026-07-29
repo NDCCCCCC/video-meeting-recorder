@@ -2,7 +2,7 @@
 
 // 转录触发请求
 export interface TranscriptionTriggerRequest {
-  sampling_rate: number  // 1.0 (1s), 0.5 (2s), 0.2 (5s), 0.1 (10s), 0.05 (20s)
+  sampling_rate: number // 1.0 (1s), 0.5 (2s), 0.2 (5s), 0.1 (10s), 0.05 (20s)
 }
 
 // 转录触发响应
@@ -31,8 +31,8 @@ export interface TranscriptionStatusResponse {
 // 采样率选项
 export interface SamplingRateOption {
   label: string
-  value: number  // fps value: 1.0, 0.5, 0.2, 0.1, 0.05
-  secondsPerFrame: number  // display: 1, 0.5, 0.2, 0.1, 0.05
+  value: number // fps value: 1.0, 0.5, 0.2, 0.1, 0.05
+  secondsPerFrame: number // display: 1, 0.5, 0.2, 0.1, 0.05
   description: string
 }
 
@@ -48,7 +48,10 @@ export type CloudTranscriptionStage = 'uploading' | 'queued' | 'cloud_processing
 export type AnyTranscriptionStage = TranscriptionStage | CloudTranscriptionStage
 
 // Extended status response that includes cloud fields
-export interface TranscriptionStatusResponseExtended extends Omit<TranscriptionStatusResponse, 'current_stage'> {
+export interface TranscriptionStatusResponseExtended extends Omit<
+  TranscriptionStatusResponse,
+  'current_stage'
+> {
   mode?: TranscriptionMode
   current_stage: AnyTranscriptionStage | ''
   error_message: string
@@ -58,8 +61,8 @@ export interface TranscriptionStatusResponseExtended extends Omit<TranscriptionS
 // Text segment with timestamps (per D-10, TRAN-05)
 export interface TextSegment {
   text: string
-  begin_time: number  // milliseconds
-  end_time: number    // milliseconds
+  begin_time: number // milliseconds
+  end_time: number // milliseconds
   segment_index: number
 }
 
@@ -71,8 +74,8 @@ export interface TranscriptionTextResponse {
 
 // Extended trigger request with mode parameter (per D-01, D-03)
 export interface TranscriptionTriggerRequestExtended {
-  sampling_rate?: number  // Only for local mode -- NOT sent for cloud per D-03
-  mode?: TranscriptionMode  // 'local' or 'cloud'
+  sampling_rate?: number // Only for local mode -- NOT sent for cloud per D-03
+  mode?: TranscriptionMode // 'local' or 'cloud'
 }
 
 // Extended trigger response with mode
@@ -105,7 +108,7 @@ export interface ActiveTranscriptionTasksResponse {
 // Slide timestamp for video preview synchronization (per 06-02)
 export interface SlideTimestamp {
   slide_number: number
-  timestamp: number  // Video timestamp in seconds
+  timestamp: number // Video timestamp in seconds
 }
 
 // Timestamp map response
@@ -119,8 +122,8 @@ export interface TimestampMapResponse {
 // 批量转录请求
 export interface BatchTranscriptionRequest {
   video_file_ids: number[]
-  sampling_rate?: number  // 仅用于 local 模式
-  mode?: TranscriptionMode  // local 或 cloud，默认 local
+  sampling_rate?: number // 仅用于 local 模式
+  mode?: TranscriptionMode // local 或 cloud，默认 local
 }
 
 // 批量转录结果
@@ -143,7 +146,7 @@ export interface TranscriptionJobGroup {
   tasks?: TranscriptionTaskInGroup[]
   created_at: string
   updated_at: string
-  percentage?: number  // 计算属性
+  percentage?: number // 计算属性
 }
 
 // 任务组中的转录任务

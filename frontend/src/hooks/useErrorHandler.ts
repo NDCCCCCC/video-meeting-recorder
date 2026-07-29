@@ -70,7 +70,10 @@ export function useErrorHandler() {
     }
 
     // 网络层错误没有 response，浏览器给的 message 很难懂，换成人话
-    if (error instanceof Error && (error.name === 'TypeError' || error.message === 'Network Error')) {
+    if (
+      error instanceof Error &&
+      (error.name === 'TypeError' || error.message === 'Network Error')
+    ) {
       errorMessage = '网络连接中断'
     }
 

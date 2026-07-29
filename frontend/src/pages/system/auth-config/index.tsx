@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 import {
   Form,
   Input,
@@ -11,83 +11,75 @@ import {
   Space,
   Select,
   Tooltip,
-} from 'antd';
-import {
-  WarningOutlined,
-  CheckCircleOutlined,
-  LoadingOutlined,
-} from '@ant-design/icons';
-import {
-  getAuthConfig,
-  updateAuthConfig,
-  testADConnection,
-} from '@/api/auth';
-import type { AuthConfigResponse, ADValidationResult } from '@/types/auth';
+} from 'antd'
+import { WarningOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons'
+import { getAuthConfig, updateAuthConfig, testADConnection } from '@/api/auth'
+import type { AuthConfigResponse, ADValidationResult } from '@/types/auth'
 
-const { Option } = Select;
+const { Option } = Select
 
 const AuthConfigPage: React.FC = () => {
-  const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [config, setConfig] = useState<AuthConfigResponse | null>(null);
-  const [validationResult, setValidationResult] = useState<ADValidationResult | null>(null);
+  const [form] = Form.useForm()
+  const [loading, setLoading] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [config, setConfig] = useState<AuthConfigResponse | null>(null)
+  const [validationResult, setValidationResult] = useState<ADValidationResult | null>(null)
 
   useEffect(() => {
-    fetchConfig();
-  }, []);
+    fetchConfig()
+  }, [])
 
   const fetchConfig = async () => {
-    setLoading(true);
+    setLoading(true)
     try {
-      const response = await getAuthConfig();
+      const response = await getAuthConfig()
       if (response.data) {
-        setConfig(response.data);
-        form.setFieldsValue(response.data);
+        setConfig(response.data)
+        form.setFieldsValue(response.data)
       }
     } catch (error) {
-      message.error('获取配置失败');
+      message.error('获取配置失败')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleTestConnection = async () => {
-    setTesting(true);
-    setValidationResult(null);
+    setTesting(true)
+    setValidationResult(null)
     try {
-      const values = await form.validateFields(['ad']);
-      const response = await testADConnection(values.ad);
+      const values = await form.validateFields(['ad'])
+      const response = await testADConnection(values.ad)
 
       if (response.data) {
-        setValidationResult(response.data);
+        setValidationResult(response.data)
 
         if (response.data.valid) {
-          message.success('AD连接测试成功');
+          message.success('AD连接测试成功')
         } else {
-          message.error('AD连接测试失败: ' + response.data.errors?.join(', '));
+          message.error('AD连接测试失败: ' + response.data.errors?.join(', '))
         }
       }
     } catch (error: any) {
-      message.error('连接测试失败: ' + (error.response?.data?.message || error.message));
+      message.error('连接测试失败: ' + (error.response?.data?.message || error.message))
     } finally {
-      setTesting(false);
+      setTesting(false)
     }
-  };
+  }
 
   const handleSave = async () => {
-    setLoading(true);
+    setLoading(true)
     try {
-      const values = await form.validateFields();
+      const values = await form.validateFields()
 
       // If switching from local to AD mode, require AD connection test to pass
       if (values.mode === 'ad' && config?.mode === 'local' && !validationResult?.valid) {
         Modal.warning({
           title: '请先测试AD连接',
           content: '切换到AD模式前，请先配置AD服务器信息并点击"测试连接"按钮验证配置是否正确。',
-        });
-        setLoading(false);
-        return;
+        })
+        setLoading(false)
+        return
       }
 
       // Show warning if using port 389 (per D-12, D-14)
@@ -95,16 +87,17 @@ const AuthConfigPage: React.FC = () => {
         Modal.confirm({
           title: '安全警告',
           icon: <WarningOutlined style={{ color: '#ff4d4f' }} />,
-          content: '⚠️ 使用LDAP 389端口时密码将以明文传输，存在安全风险。建议在生产环境使用LDAPS 636端口。是否继续？',
+          content:
+            '⚠️ 使用LDAP 389端口时密码将以明文传输，存在安全风险。建议在生产环境使用LDAPS 636端口。是否继续？',
           okText: '继续保存',
           cancelText: '取消',
           okButtonProps: { danger: true },
           onOk: async () => {
-            await saveConfig(values);
+            await saveConfig(values)
           },
-        });
-        setLoading(false);
-        return;
+        })
+        setLoading(false)
+        return
       }
 
       // Show confirmation when switching to AD mode
@@ -115,30 +108,30 @@ const AuthConfigPage: React.FC = () => {
           okText: '确认切换',
           cancelText: '取消',
           onOk: async () => {
-            await saveConfig(values);
+            await saveConfig(values)
           },
-        });
-        setLoading(false);
-        return;
+        })
+        setLoading(false)
+        return
       }
 
-      await saveConfig(values);
+      await saveConfig(values)
     } catch (error: any) {
-      message.error('保存配置失败');
+      message.error('保存配置失败')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const saveConfig = async (values: any) => {
     try {
-      await updateAuthConfig(values);
-      message.success('配置已更新');
-      fetchConfig();
+      await updateAuthConfig(values)
+      message.success('配置已更新')
+      fetchConfig()
     } catch (error: any) {
-      message.error(error.response?.data?.message || '保存失败');
+      message.error(error.response?.data?.message || '保存失败')
     }
-  };
+  }
 
   const handleModeSwitch = (newMode: 'local' | 'ad') => {
     // Allow switching to AD mode to show the configuration form
@@ -148,13 +141,14 @@ const AuthConfigPage: React.FC = () => {
       if (config?.mode === 'local') {
         Modal.info({
           title: '切换到AD域控认证',
-          content: '选择AD模式后，请配置AD服务器信息并测试连接。配置验证通过后，点击"保存配置"即可切换认证模式。',
+          content:
+            '选择AD模式后，请配置AD服务器信息并测试连接。配置验证通过后，点击"保存配置"即可切换认证模式。',
           okText: '我知道了',
-        });
+        })
       }
       // Directly switch the form value to show AD configuration fields
-      form.setFieldValue('mode', newMode);
-      return false;
+      form.setFieldValue('mode', newMode)
+      return false
     }
 
     // When switching back to local mode, show confirmation
@@ -163,20 +157,18 @@ const AuthConfigPage: React.FC = () => {
         title: '确认切换回本地认证',
         content: '切换回本地模式后，所有用户将使用本地账号登录。',
         onOk: () => {
-          form.setFieldValue('mode', newMode);
+          form.setFieldValue('mode', newMode)
         },
-      });
-      return false;
+      })
+      return false
     }
 
-    return true;
-  };
+    return true
+  }
 
   return (
     <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
-      <h1 style={{ fontSize: '28px', fontWeight: 600, marginBottom: '24px' }}>
-        认证配置
-      </h1>
+      <h1 style={{ fontSize: '28px', fontWeight: 600, marginBottom: '24px' }}>认证配置</h1>
 
       <Form
         form={form}
@@ -188,10 +180,7 @@ const AuthConfigPage: React.FC = () => {
           name="mode"
           rules={[{ required: true, message: '请选择认证模式' }]}
         >
-          <Select
-            style={{ width: '100%' }}
-            onChange={(value) => handleModeSwitch(value)}
-          >
+          <Select style={{ width: '100%' }} onChange={(value) => handleModeSwitch(value)}>
             <Option value="local">本地认证</Option>
             <Option value="ad">AD域控认证</Option>
           </Select>
@@ -201,7 +190,8 @@ const AuthConfigPage: React.FC = () => {
           <Alert
             message={
               <Space>
-                当前模式: <Tag color={config.mode === 'local' ? 'blue' : 'green'}>
+                当前模式:{' '}
+                <Tag color={config.mode === 'local' ? 'blue' : 'green'}>
                   {config.mode === 'local' ? '本地认证' : 'AD域控认证'}
                 </Tag>
               </Space>
@@ -371,14 +361,13 @@ const AuthConfigPage: React.FC = () => {
                           />
                         )}
 
-                        {validationResult.warnings &&
-                          validationResult.warnings.length > 0 && (
-                            <Alert
-                              message="警告"
-                              description={validationResult.warnings.join('\n')}
-                              type="warning"
-                            />
-                          )}
+                        {validationResult.warnings && validationResult.warnings.length > 0 && (
+                          <Alert
+                            message="警告"
+                            description={validationResult.warnings.join('\n')}
+                            type="warning"
+                          />
+                        )}
                       </Space>
                     )}
                   </Space>
@@ -395,7 +384,7 @@ const AuthConfigPage: React.FC = () => {
         </Form.Item>
       </Form>
     </div>
-  );
-};
+  )
+}
 
-export default AuthConfigPage;
+export default AuthConfigPage

@@ -32,7 +32,11 @@ export default function NotFound() {
           <Result
             status="404"
             title={<span style={{ color: designTokens.colors.text.primary }}>页面去开会了</span>}
-            subTitle={<span style={{ color: designTokens.colors.text.secondary }}>这条路径没找到，回到首页继续</span>}
+            subTitle={
+              <span style={{ color: designTokens.colors.text.secondary }}>
+                这条路径没找到，回到首页继续
+              </span>
+            }
             extra={
               <Button type="primary" size="large" onClick={() => navigate('/dashboard')}>
                 返回首页

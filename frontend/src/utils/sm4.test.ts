@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { deriveSM4Key, encryptPassword, decryptPassword, isEncryptedPassword, ENCRYPTION_PREFIX } from './sm4'
+import {
+  deriveSM4Key,
+  encryptPassword,
+  decryptPassword,
+  isEncryptedPassword,
+  ENCRYPTION_PREFIX,
+} from './sm4'
 
 describe('SM4 Utils', () => {
   const testSecret = 'EDC6UNKa5JQUrBnBsmgRww=='

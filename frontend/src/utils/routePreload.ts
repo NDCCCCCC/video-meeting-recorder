@@ -30,7 +30,7 @@ export function preloadRoute(path: string): void {
   }
 
   // 检查前缀匹配（用于 /system/* 路由）
-  const matchedKey = Object.keys(routeImports).find(key => path.startsWith(key))
+  const matchedKey = Object.keys(routeImports).find((key) => path.startsWith(key))
   if (matchedKey && !preloadCache.has(matchedKey)) {
     preloadCache.add(matchedKey)
     routeImports[matchedKey]()

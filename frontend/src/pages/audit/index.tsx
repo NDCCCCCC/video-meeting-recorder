@@ -58,29 +58,31 @@ export default function AuditLogsPage() {
       <PageHeader title="审计日志" />
       <div style={{ marginBottom: 16 }}>
         <Space size="middle">
-          <FilterBar
-            onFilter={handleFilter}
-            onReset={handleReset}
-            loading={loading}
+          <FilterBar onFilter={handleFilter} onReset={handleReset} loading={loading} />
+          <ExportButton
+            params={{
+              format: 'csv',
+              username: params.username,
+              action: params.action,
+              module: params.module,
+              start_time: params.start_time,
+              end_time: params.end_time,
+            }}
           />
-          <ExportButton params={{
-            format: 'csv',
-            username: params.username,
-            action: params.action,
-            module: params.module,
-            start_time: params.start_time,
-            end_time: params.end_time,
-          }} />
         </Space>
       </div>
       {showErrorState ? (
         <Empty
           style={{ padding: '48px 24px' }}
-          image={<ErrorNetwork style={{ width: 180, height: 126, color: designTokens.colors.error }} />}
+          image={
+            <ErrorNetwork style={{ width: 180, height: 126, color: designTokens.colors.error }} />
+          }
           imageStyle={{ height: 126 }}
           description={
             <div>
-              <div style={{ color: designTokens.colors.text.primary }}>加载失败：{error?.message}</div>
+              <div style={{ color: designTokens.colors.text.primary }}>
+                加载失败：{error?.message}
+              </div>
               <div style={{ color: designTokens.colors.muted, fontSize: 13, marginTop: 4 }}>
                 检查网络或稍后再试
               </div>
@@ -94,7 +96,9 @@ export default function AuditLogsPage() {
       ) : showEmptyState ? (
         <Empty
           style={{ padding: '48px 24px' }}
-          image={<EmptyAudit style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
+          image={
+            <EmptyAudit style={{ width: 180, height: 126, color: designTokens.colors.muted }} />
+          }
           imageStyle={{ height: 126 }}
           description={
             <div>
@@ -114,11 +118,7 @@ export default function AuditLogsPage() {
           onViewDetail={handleViewDetail}
         />
       )}
-      <DiffModal
-        log={selectedLog}
-        open={diffModalOpen}
-        onClose={handleDiffModalClose}
-      />
+      <DiffModal log={selectedLog} open={diffModalOpen} onClose={handleDiffModalClose} />
     </div>
   )
 }

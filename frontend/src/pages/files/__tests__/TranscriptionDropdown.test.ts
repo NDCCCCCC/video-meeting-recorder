@@ -12,7 +12,10 @@ const dropdownItems = [
 if (dropdownItems.length !== 2) throw new Error('Expected 2 dropdown items')
 
 // Test: Cloud mode call omits sampling_rate per D-03
-function buildCloudRequestBody(mode: TranscriptionMode, samplingRate?: number): Record<string, unknown> {
+function buildCloudRequestBody(
+  mode: TranscriptionMode,
+  samplingRate?: number
+): Record<string, unknown> {
   const body: Record<string, unknown> = { mode }
   if (mode === 'local' && samplingRate) {
     body.sampling_rate = samplingRate
@@ -21,7 +24,8 @@ function buildCloudRequestBody(mode: TranscriptionMode, samplingRate?: number): 
 }
 
 const cloudBody = buildCloudRequestBody('cloud')
-if ('sampling_rate' in cloudBody) throw new Error('Cloud body must NOT contain sampling_rate per D-03')
+if ('sampling_rate' in cloudBody)
+  throw new Error('Cloud body must NOT contain sampling_rate per D-03')
 
 const localBody = buildCloudRequestBody('local', 0.5)
 if (!('sampling_rate' in localBody)) throw new Error('Local body must contain sampling_rate')

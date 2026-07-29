@@ -2,17 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import {
-  Card,
-  Button,
-  Space,
-  Table,
-  Modal,
-  message,
-  Alert,
-  Spin,
-  Tag,
-} from 'antd'
+import { Card, Button, Space, Table, Modal, message, Alert, Spin, Tag } from 'antd'
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -162,11 +152,14 @@ export default function SplitPage() {
     setIsPlaying(!isPlaying)
   }, [isPlaying])
 
-  const handleSkip = useCallback((seconds: number) => {
-    const video = videoRef.current
-    if (!video || !duration) return
-    video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
-  }, [duration])
+  const handleSkip = useCallback(
+    (seconds: number) => {
+      const video = videoRef.current
+      if (!video || !duration) return
+      video.currentTime = Math.max(0, Math.min(duration, video.currentTime + seconds))
+    },
+    [duration]
+  )
 
   const handleSeek = useCallback((time: number) => {
     const video = videoRef.current
@@ -178,14 +171,14 @@ export default function SplitPage() {
   // ==================== 标记管理 ====================
 
   const handleMarkerAdd = useCallback((time: number) => {
-    setMarkers(prev => {
+    setMarkers((prev) => {
       const newMarkers = [...prev, time].sort((a, b) => a - b)
       return newMarkers
     })
   }, [])
 
   const handleMarkerRemove = useCallback((time: number) => {
-    setMarkers(prev => prev.filter(m => m !== time))
+    setMarkers((prev) => prev.filter((m) => m !== time))
   }, [])
 
   // ==================== 分割执行 ====================
@@ -211,30 +204,31 @@ export default function SplitPage() {
     // Show confirmation modal
     Modal.confirm({
       title: existingSplits.length > 0 ? '重新分割视频' : '确认分割',
-      content: existingSplits.length > 0 ? (
-        <div>
-          <Alert
-            message="检测到现有分割"
-            description={`此视频已有 ${existingSplits.length} 个分割段，重新分割将自动删除这些文件。`}
-            type="warning"
-            showIcon
-            style={{ marginBottom: 16 }}
-          />
-          <p>将被删除的文件：</p>
-          <ul style={{ maxHeight: 200, overflow: 'auto', paddingLeft: 20 }}>
-            {existingSplits.map(split => (
-              <li key={split.id}>
-                {split.file_name} ({(split.file_size / 1024 / 1024).toFixed(2)} MB)
-              </li>
-            ))}
-          </ul>
-          <p style={{ color: '#ff4d4f', fontWeight: 'bold' }}>
-            ⚠️ 此操作不可撤销，确认要继续吗？
-          </p>
-        </div>
-      ) : (
-        `确认将视频分割为 ${markers.length + 1} 个段落？`
-      ),
+      content:
+        existingSplits.length > 0 ? (
+          <div>
+            <Alert
+              message="检测到现有分割"
+              description={`此视频已有 ${existingSplits.length} 个分割段，重新分割将自动删除这些文件。`}
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+            <p>将被删除的文件：</p>
+            <ul style={{ maxHeight: 200, overflow: 'auto', paddingLeft: 20 }}>
+              {existingSplits.map((split) => (
+                <li key={split.id}>
+                  {split.file_name} ({(split.file_size / 1024 / 1024).toFixed(2)} MB)
+                </li>
+              ))}
+            </ul>
+            <p style={{ color: '#ff4d4f', fontWeight: 'bold' }}>
+              ⚠️ 此操作不可撤销，确认要继续吗？
+            </p>
+          </div>
+        ) : (
+          `确认将视频分割为 ${markers.length + 1} 个段落？`
+        ),
       okText: '确认分割',
       cancelText: '取消',
       onOk: async () => {
@@ -349,10 +343,7 @@ export default function SplitPage() {
       {/* 页面标题 */}
       <div className={styles.headerSection}>
         <Space>
-          <Button
-            icon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/files')}
-          >
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/files')}>
             返回
           </Button>
           <h2 style={{ margin: 0 }}>视频分割 - {videoFile.file_name}</h2>
@@ -472,9 +463,7 @@ export default function SplitPage() {
             title={
               <Space>
                 <span>段落预览</span>
-                {markers.length > 0 && (
-                  <Tag color="blue">将生成 {markers.length + 1} 个段落</Tag>
-                )}
+                {markers.length > 0 && <Tag color="blue">将生成 {markers.length + 1} 个段落</Tag>}
               </Space>
             }
             className={styles.segmentCard}
@@ -492,7 +481,9 @@ export default function SplitPage() {
               <Alert
                 type="info"
                 message="暂无分割标记"
-                description={'点击视频时间线添加分割点，或输入时间精确定位。添加标记后点击"确认分割"开始处理。'}
+                description={
+                  '点击视频时间线添加分割点，或输入时间精确定位。添加标记后点击"确认分割"开始处理。'
+                }
                 showIcon
               />
             )}
@@ -500,9 +491,7 @@ export default function SplitPage() {
 
           {/* 操作按钮 */}
           <div className={styles.actionButtons}>
-            <Button onClick={() => navigate('/files')}>
-              取消
-            </Button>
+            <Button onClick={() => navigate('/files')}>取消</Button>
             <Button
               type="primary"
               onClick={handleSplit}

@@ -46,9 +46,7 @@ export default function TextContentTab({ videoFileId, onTimestampClick }: TextCo
   }
 
   const handleCopyAll = async () => {
-    const fullText = segments
-      .map((s) => `${formatTimestamp(s.begin_time)} ${s.text}`)
-      .join('\n')
+    const fullText = segments.map((s) => `${formatTimestamp(s.begin_time)} ${s.text}`).join('\n')
     try {
       await navigator.clipboard.writeText(fullText)
       setCopiedAll(true)
@@ -86,12 +84,7 @@ export default function TextContentTab({ videoFileId, onTimestampClick }: TextCo
   }
 
   if (segments.length === 0) {
-    return (
-      <Empty
-        description="暂无文字内容"
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-      />
-    )
+    return <Empty description="暂无文字内容" image={Empty.PRESENTED_IMAGE_SIMPLE} />
   }
 
   return (

@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Modal, Button, Space, InputNumber, Image, message, Slider, Select } from 'antd'
-import { CameraOutlined, PlayCircleOutlined, PauseCircleOutlined, CheckOutlined } from '@ant-design/icons'
+import {
+  CameraOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  CheckOutlined,
+} from '@ant-design/icons'
 import type { SlideCapturePanelProps } from '../types/ppt'
 import { captureFrame, insertSlide } from '../api/ppt'
 
@@ -298,9 +303,7 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
               />
             )}
             {insertPositionOption !== 'custom' && (
-              <div style={{ color: '#666', fontSize: 12 }}>
-                将插入到位置: {insertPosition}
-              </div>
+              <div style={{ color: '#666', fontSize: 12 }}>将插入到位置: {insertPosition}</div>
             )}
           </Space>
         </div>
