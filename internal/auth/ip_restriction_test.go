@@ -109,7 +109,7 @@ func TestCheckIPRestriction_UserOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := service.CheckIPRestriction(user, tt.clientIP)
+			err := service.CheckIPRestriction(ctx, user, tt.clientIP)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
@@ -159,7 +159,7 @@ func TestCheckIPRestriction_RoleOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := service.CheckIPRestriction(user, tt.clientIP)
+			err := service.CheckIPRestriction(ctx, user, tt.clientIP)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
@@ -214,7 +214,7 @@ func TestCheckIPRestriction_UserAndRole_OR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := service.CheckIPRestriction(user, tt.clientIP)
+			err := service.CheckIPRestriction(ctx, user, tt.clientIP)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
@@ -266,7 +266,7 @@ func TestCheckIPRestriction_NoRestrictions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := service.CheckIPRestriction(user, tt.clientIP)
+			err := service.CheckIPRestriction(ctx, user, tt.clientIP)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -314,7 +314,7 @@ func TestCheckIPRestriction_IPNotInList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := service.CheckIPRestriction(user, tt.clientIP)
+			err := service.CheckIPRestriction(ctx, user, tt.clientIP)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
@@ -380,7 +380,7 @@ func TestCheckIPRestriction_MultiRoleMerge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := service.CheckIPRestriction(user, tt.clientIP)
+			err := service.CheckIPRestriction(ctx, user, tt.clientIP)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
@@ -429,7 +429,7 @@ func TestCheckIPRestriction_InvalidClientIP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := service.CheckIPRestriction(user, tt.clientIP)
+			err := service.CheckIPRestriction(ctx, user, tt.clientIP)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
@@ -452,7 +452,7 @@ func TestCheckIPRestriction_AuditLogOnFailure(t *testing.T) {
 
 	// This test will need audit logger setup
 	// For now, just verify the error is returned correctly
-	err := service.CheckIPRestriction(user, "192.168.1.101")
+	err := service.CheckIPRestriction(ctx, user, "192.168.1.101")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "不在允许列表中")
 

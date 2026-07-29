@@ -116,7 +116,7 @@ func (s *Service) GetADAuthenticator() *ADAuthenticator {
 }
 
 // Login 用户登录
-func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
+func (s *Service) Login(ctx context.Context, req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	// Select authenticator based on config mode (per D-01, D-03)
 	// Uses strategy pattern from Spike 003
 	var authenticator Authenticator
@@ -132,11 +132,11 @@ func (s *Service) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginR
 	}
 
 	// Route to selected authenticator (no fallback per D-04)
-	return authenticator.Login(req, ipAddress, userAgent)
+	return authenticator.Login(ctx, req, ipAddress, userAgent)
 }
 
 // CheckIPRestriction 检查用户IP限制
-func (s *Service) CheckIPRestriction(user *models.User, clientIP string) error {
+func (s *Service) CheckIPRestriction(ctx context.Context, user *models.User, clientIP string) error {
 	validator := &IPValidator{}
 
 	// Collect all allowed IPs from user and all roles

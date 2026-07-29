@@ -45,13 +45,14 @@ func (a *LocalAuthenticator) SetAuditService(auditLogger *audit.AuditLogService)
 }
 
 // Login authenticates a user using local authentication
-func (a *LocalAuthenticator) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
+func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	// 1. 查找用户（预加载角色和权限）
 	var user models.User
 	err := a.db.Preload("Roles.Permissions").Where("username = ?", req.Username).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			a.logger.Warn("Login failed: user not found", zap.String("username", req.Username))
+			a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "用户不存在")
 			return nil, errors.New("用户名或密码错误")
 		}
 		a.logger.Error("Login failed: database error", zap.Error(err))
@@ -63,6 +64,7 @@ func (a *LocalAuthenticator) Login(req *LoginRequest, ipAddress, userAgent strin
 		a.logger.Warn("Decrypt failure rate limit exceeded",
 			zap.String("ip", ipAddress),
 		)
+		a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "登录频率超限")
 		return nil, errors.New("登录尝试过于频繁，请稍后再试")
 	}
 
@@ -87,6 +89,7 @@ func (a *LocalAuthenticator) Login(req *LoginRequest, ipAddress, userAgent strin
 			}
 
 			a.logger.Warn("Failed to decrypt password")
+			a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "密码解密失败")
 			return nil, errors.New("用户名或密码错误")
 		}
 		passwordToCheck = decrypted
@@ -100,6 +103,7 @@ func (a *LocalAuthenticator) Login(req *LoginRequest, ipAddress, userAgent strin
 			a.rateLimiter.RecordFailure(req.Username)
 		}
 		a.logger.Warn("Login failed: invalid password", zap.String("username", req.Username))
+		a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "密码错误")
 		return nil, errors.New("用户名或密码错误")
 	}
 
@@ -111,11 +115,12 @@ func (a *LocalAuthenticator) Login(req *LoginRequest, ipAddress, userAgent strin
 	// 6. 检查用户状态
 	if !user.IsActive {
 		a.logger.Warn("Login failed: user inactive", zap.String("username", req.Username))
+		a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "用户已被禁用")
 		return nil, errors.New("用户已被禁用")
 	}
 
 	// 7. 检查IP限制
-	if err := a.checkIPRestrictions(&user, ipAddress); err != nil {
+	if err := a.checkIPRestrictions(ctx, &user, ipAddress); err != nil {
 		a.logger.Warn("Login failed: IP restriction", zap.String("username", req.Username), zap.String("ip", ipAddress))
 		return nil, err
 	}
@@ -141,10 +146,10 @@ func (a *LocalAuthenticator) Login(req *LoginRequest, ipAddress, userAgent strin
 
 	// 11. Audit log
 	if a.auditLogger != nil {
-		a.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
+		a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
 			UserID:    user.ID,
 			Username:  user.Username,
-			Action:    "login",
+			Action:    models.ActionLogin,
 			Module:    models.ModuleUser,
 			IPAddress: ipAddress,
 			Status:    models.StatusSuccess,
@@ -191,7 +196,7 @@ func (a *LocalAuthenticator) ValidateToken(token string) (*UserDTO, error) {
 }
 
 // checkIPRestrictions checks IP restrictions for the user
-func (a *LocalAuthenticator) checkIPRestrictions(user *models.User, clientIP string) error {
+func (a *LocalAuthenticator) checkIPRestrictions(ctx context.Context, user *models.User, clientIP string) error {
 	validator := &IPValidator{}
 
 	// Collect all allowed IPs from user and all roles
@@ -226,7 +231,7 @@ func (a *LocalAuthenticator) checkIPRestrictions(user *models.User, clientIP str
 		}
 		// Log validation failure to audit trail
 		if a.auditLogger != nil {
-			a.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
+			a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
 				UserID:    user.ID,
 				Username:  user.Username,
 				Action:    models.ActionIPRestrictionFailed,
@@ -242,7 +247,7 @@ func (a *LocalAuthenticator) checkIPRestrictions(user *models.User, clientIP str
 	if !allowed {
 		// Log IP restriction failure to audit trail
 		if a.auditLogger != nil {
-			a.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
+			a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
 				UserID:    user.ID,
 				Username:  user.Username,
 				Action:    models.ActionIPRestrictionFailed,
@@ -256,6 +261,24 @@ func (a *LocalAuthenticator) checkIPRestrictions(user *models.User, clientIP str
 	}
 
 	return nil
+}
+
+// logLoginFailure 记录登录失败审计（统一封装，避免重复样板代码）。
+// 所有失败分支（用户不存在/密码错/用户禁用/速率限制/解密失败）共享此路径，
+// 这样安全分析时不必逐个搜调用点。
+func (a *LocalAuthenticator) logLoginFailure(ctx context.Context, username, ipAddress, userAgent, errMsg string) {
+	if a.auditLogger == nil {
+		return
+	}
+	a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
+		Username:  username,
+		Action:    models.ActionLogin,
+		Module:    models.ModuleUser,
+		IPAddress: ipAddress,
+		UserAgent: userAgent,
+		Status:    models.StatusFailure,
+		ErrorMsg:  errMsg,
+	})
 }
 
 // toUserDTO converts a User model to UserDTO

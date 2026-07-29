@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -57,7 +58,7 @@ func (a *ADAuthenticator) Name() string {
 }
 
 // Login authenticates a user using AD authentication
-func (a *ADAuthenticator) Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
+func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	// Step 1: Connect to AD server
 	conn, err := a.connectAD()
 	if err != nil {

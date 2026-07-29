@@ -55,7 +55,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 
 	// 调用登录服务
-	result, err := h.authService.Login(&req, ipAddress, userAgent)
+	result, err := h.authService.Login(c.Request.Context(), &req, ipAddress, userAgent)
 	if err != nil {
 		h.logger.Warn("Login failed",
 			zap.String("username", req.Username),

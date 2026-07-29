@@ -1,5 +1,7 @@
 package auth
 
+import "context"
+
 // ADUser represents an Active Directory user
 type ADUser struct {
 	Username            string
@@ -66,8 +68,10 @@ type ADUserLookupResult struct {
 
 // Authenticator defines the authentication interface (strategy pattern per Spike 003)
 type Authenticator interface {
-	// Login authenticates a user and returns a login response
-	Login(req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error)
+	// Login authenticates a user and returns a login response.
+	// ctx 用于把请求上下文（RequestID/TraceID）传递到审计日志，保证审计与
+	// 请求链路可串联；为 nil 时调用方需自行降级处理。
+	Login(ctx context.Context, req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error)
 
 	// Logout logs out a user by revoking their token
 	Logout(token string) error

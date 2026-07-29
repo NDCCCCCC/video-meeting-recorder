@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/go-ldap/ldap/v3"
@@ -200,4 +202,24 @@ func TestADUser_IsDisabled(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "IsDisabled() should return %v for UAC 0x%X", tt.expected, tt.uac)
 		})
 	}
+}
+
+// TestErrADUserNotRegistered_Sentinel verifies the sentinel error is detected
+// by IsADUserNotRegistered so the HTTP handler can map it to 403 (whitelist policy).
+func TestErrADUserNotRegistered_Sentinel(t *testing.T) {
+	t.Run("direct sentinel matches", func(t *testing.T) {
+		err := ErrADUserNotRegistered
+		assert.True(t, IsADUserNotRegistered(err), "IsADUserNotRegistered must recognize sentinel")
+		assert.True(t, errors.Is(err, ErrADUserNotRegistered))
+	})
+
+	t.Run("wrapped sentinel matches", func(t *testing.T) {
+		err := fmt.Errorf("wrap: %w", ErrADUserNotRegistered)
+		assert.True(t, IsADUserNotRegistered(err), "IsADUserNotRegistered must recognize wrapped sentinel")
+	})
+
+	t.Run("unrelated error does not match", func(t *testing.T) {
+		err := errors.New("some other error")
+		assert.False(t, IsADUserNotRegistered(err), "IsADUserNotRegistered must not match unrelated errors")
+	})
 }
