@@ -133,7 +133,7 @@
   z-index: -1;
   pointer-events: none;
   will-change: transform;
-  transition: transform 200ms ease-out;
+  transition: transform 120ms ease-out;
 }
 
 /* 内容层：登录卡 */

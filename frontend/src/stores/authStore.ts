@@ -39,25 +39,34 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       // 登出
+      // try/finally 兜底：无论后端登出接口是否成功（401/500/网络错误），
+      // 都必须清掉本地认证状态，否则会出现"点了没反应"——localStorage 清了
+      // 但内存里的 isAuthenticated 仍为 true，页面不跳转。
       logout: async () => {
-        await authApi.logout()
-        set({
-          user: null,
-          token: null,
-          refreshToken: null,
-          isAuthenticated: false,
-        })
+        try {
+          await authApi.logout()
+        } finally {
+          set({
+            user: null,
+            token: null,
+            refreshToken: null,
+            isAuthenticated: false,
+          })
+        }
       },
 
       // 登出所有设备
       logoutAll: async () => {
-        await authApi.logoutAll()
-        set({
-          user: null,
-          token: null,
-          refreshToken: null,
-          isAuthenticated: false,
-        })
+        try {
+          await authApi.logoutAll()
+        } finally {
+          set({
+            user: null,
+            token: null,
+            refreshToken: null,
+            isAuthenticated: false,
+          })
+        }
       },
 
       // 刷新用户信息

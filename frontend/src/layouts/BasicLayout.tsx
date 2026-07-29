@@ -42,9 +42,14 @@ function BasicLayout() {
   const user = useAuthStore((state) => state.user)
 
   // 使用 useCallback 缓存事件处理函数
+  // try/finally 兜底：无论 logout() 是否抛错（后端登出接口失败等），
+  // 都必须跳转到登录页，避免"点了没反应"。
   const handleLogout = useCallback(async () => {
-    await logout()
-    navigate('/auth/login')
+    try {
+      await logout()
+    } finally {
+      navigate('/auth/login')
+    }
   }, [logout, navigate])
 
   // 使用 useCallback 缓存菜单点击处理
