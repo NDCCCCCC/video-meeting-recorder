@@ -8,7 +8,7 @@ import {
 } from './sm4'
 
 describe('SM4 Utils', () => {
-  const testSecret = 'EDC6UNKa5JQUrBnBsmgRww=='
+  const testSecret = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6' // 32-char hex (matches post-refactor 85c37c6 backend config)
   const testPassword = 'admin123'
 
   describe('ENCRYPTION_PREFIX', () => {

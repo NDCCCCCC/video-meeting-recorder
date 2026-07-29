@@ -17,9 +17,14 @@ export async function deriveSM4Key(secret: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
 
-  // 取前 16 字节并转换为十六进制字符串（sm-crypto expects 32-char hex key）
-  const keyBytes = hashArray.slice(0, SM4_KEY_SIZE)
-  return keyBytes.map((b) => b.toString(16).padStart(2, '0')).join('')
+  // 直接返回 32 字符 hex secret。
+// sm-crypto sm4.encrypt/decrypt 内部把 string key hex-decode 成 16 字节
+// (node_modules/sm-crypto/src/sm4/index.js: `if (typeof key === 'string')
+// key = hexToArray(key)`)，这与后端 internal/utils/sm4_password.go
+// DeriveSM4Key 中的 `hex.DecodeString(secret)` 输出**字节完全一致**
+// (hex chars 都是 ASCII，UTF-8 编码 = 1 字节/字符 = raw bytes)。
+// 不要在此 hash — 后端是直接 hex decode，不 hash。
+  return secret
 }
 
 /**
@@ -36,8 +41,12 @@ export function encryptPassword(password: string, key: string): string {
     // sm-crypto 的 sm4.encrypt 返回十六进制字符串
     const hexEncrypted = sm4.encrypt(password, key)
 
-    // 将十六进制转换为 Base64（与后端兼容）
-    const encrypted = hexToBase64(hexEncrypted)
+    // 把 hex 中间去掉，让存储的密文是 Base64(raw ECB bytes)。
+    // 这样与后端 internal/utils/sm4_password.go DecryptPasswordECB 的格式
+    // 完全一致：它做 `base64.StdEncoding.DecodeString(ciphertext) → raw bytes
+    // → sm4 ECB decrypt`，前端也按 raw bytes Base64 喂回去。
+    const rawBytes = hexToBytes(hexEncrypted)
+    const encrypted = btoa(String.fromCharCode(...rawBytes))
 
     // 添加前缀标记，确保解密检测不会被绕过
     return `${ENCRYPTION_PREFIX}${encrypted}`
@@ -47,11 +56,18 @@ export function encryptPassword(password: string, key: string): string {
 }
 
 /**
- * 十六进制字符串转 Base64
+ * 十六进制字符串转 Base64（后端是 raw bytes Base64 格式，已不需要，保留供向后兼容）
  */
 function hexToBase64(hexString: string): string {
   const hexBytes = new Uint8Array(hexString.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)))
   return btoa(String.fromCharCode(...hexBytes))
+}
+
+/**
+ * 十六进制字符串转字节数组
+ */
+function hexToBytes(hexString: string): Uint8Array {
+  return new Uint8Array(hexString.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)))
 }
 
 /**

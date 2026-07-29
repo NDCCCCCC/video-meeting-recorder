@@ -40,7 +40,16 @@ export default defineConfig({
       '**/dist/**',
       '**/.{idea,git,cache,output,temp}/**',
       'e2e/**', // Playwright specs use `test`/`expect` from @playwright/test — not vitest
-      // 'src/utils/sm4.test.ts', // FIX 2026-07-29: deriveSM4Key now returns hex (matches sm-crypto contract)
+      // 'src/utils/sm4.test.ts', // UN-EXCLUDED 2026-07-29: deriveSM4Key returns the 32-char
+//                                       hex secret directly (sm-crypto auto
+//                                       hex-decodes string keys to 16 bytes
+//                                       — see node_modules/sm-crypto/src/sm4/
+//                                       index.js: `if (typeof key === 'string')
+//                                       key = hexToArray(key)`). Ciphertext
+//                                       format now matches backend
+//                                       DecryptPasswordECB (raw bytes
+//                                       Base64, no hex middle). Verified
+//                                       end-to-end by scripts/verify_sm4_e2e.
       'src/types/__tests__/transcription.test.ts',
       'src/pages/files/__tests__/TranscriptionDropdown.test.ts',
       'src/pages/results/__tests__/ResultPageCloud.test.ts',
