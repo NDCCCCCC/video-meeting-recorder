@@ -2,9 +2,14 @@ package services
 
 import (
 	"context"
+	"math"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/mem"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -194,10 +199,28 @@ func (s *DashboardService) getSystemStats(ctx context.Context) (*SystemStats, er
 		return nil, err
 	}
 
-	// 磁盘和内存使用率（设置为占位符，实际需要从系统获取）
-	// TODO: 实现真实的磁盘和内存使用率获取
-	stats.DiskUsagePercent = 0.0
-	stats.MemoryUsagePercent = 0.0
+	// 磁盘使用率（Windows 用 SystemDrive，其他平台用根 /）
+	diskPath := "/"
+	if runtime.GOOS == "windows" {
+		diskPath = os.Getenv("SystemDrive") + string(os.PathSeparator)
+	}
+	if usage, err := disk.Usage(diskPath); err != nil {
+		s.logger.Warn("获取磁盘使用率失败", zap.String("path", diskPath), zap.Error(err))
+	} else if usage.Total > 0 {
+		stats.DiskUsagePercent = roundPercent(usage.UsedPercent)
+	}
+
+	// 内存使用率
+	if vm, err := mem.VirtualMemory(); err != nil {
+		s.logger.Warn("获取内存使用率失败", zap.Error(err))
+	} else {
+		stats.MemoryUsagePercent = roundPercent(vm.UsedPercent)
+	}
 
 	return &stats, nil
+}
+
+// roundPercent 把百分比保留 1 位小数，避免前端展示过长。
+func roundPercent(p float64) float64 {
+	return math.Round(p*10) / 10
 }
