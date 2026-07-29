@@ -225,11 +225,16 @@ func (s *InputConfigService) CreateConfig(req *CreateInputConfigRequest) (*model
 }
 
 // UpdateConfig 更新输入配置
-func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest) (*models.InputConfig, error) {
+// 返回 (oldConfig, newConfig, error): oldConfig 是 mutate 前的快照，newConfig 是 mutate 后的记录
+// 调用方（handler）负责把这两个对象交给 audit.RecordChange 写审计表
+func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest) (*models.InputConfig, *models.InputConfig, error) {
 	var config models.InputConfig
 	if err := s.db.First(&config, id).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	// ★ Snapshot OldData BEFORE mutation（用于审计 OldData 捕获）
+	oldConfig := config
 
 	// 更新非空字段
 	if req.Name != nil {
@@ -301,11 +306,11 @@ func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest
 
 	// 验证配置
 	if err := s.ValidateConfig(&config); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := s.db.Save(&config).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	s.logger.Info("输入配置已更新",
@@ -313,24 +318,33 @@ func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest
 		zap.String("config_type", config.ConfigType),
 	)
 
-	return &config, nil
+	return &oldConfig, &config, nil
 }
 
 // DeleteConfig 删除输入配置
-func (s *InputConfigService) DeleteConfig(id uint) error {
+// 返回 (oldConfig, error): oldConfig 是删除前的快照，handler 负责把 OldData 交给 audit.RecordChange
+func (s *InputConfigService) DeleteConfig(id uint) (*models.InputConfig, error) {
+	var config models.InputConfig
+	if err := s.db.First(&config, id).Error; err != nil {
+		return nil, err
+	}
+
+	// ★ Snapshot OldData BEFORE delete（用于审计 OldData 捕获）
+	oldConfig := config
+
 	// 检查是否有任务正在使用
 	var count int64
 	s.db.Table("task_input_configs").Where("input_config_id = ?", id).Count(&count)
 	if count > 0 {
-		return errors.New("配置正在被任务使用，无法删除")
+		return nil, errors.New("配置正在被任务使用，无法删除")
 	}
 
 	if err := s.db.Delete(&models.InputConfig{}, id).Error; err != nil {
-		return err
+		return nil, err
 	}
 
 	s.logger.Info("输入配置已删除", zap.Uint("config_id", id))
-	return nil
+	return &oldConfig, nil
 }
 
 // ValidateConfig 验证输入配置

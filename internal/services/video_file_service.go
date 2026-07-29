@@ -263,21 +263,28 @@ func (s *VideoFileService) GetFileByID(id uint) (*models.VideoFile, error) {
 }
 
 // DeleteFile 删除文件（支持录制文件和孤立文件）
-func (s *VideoFileService) DeleteFile(id uint) error {
+// 返回 (oldFile, error): oldFile 是删除前的快照，handler 负责把 OldData 交给 audit.RecordChange
+func (s *VideoFileService) DeleteFile(id uint) (*models.VideoFile, error) {
 	var file models.VideoFile
 	if err := s.db.First(&file, id).Error; err != nil {
-		return errors.New("文件不存在")
+		return nil, errors.New("文件不存在")
 	}
 
+	// ★ Snapshot OldData BEFORE delete（用于审计 OldData 捕获）
+	oldFile := file
+
 	if file.Status == models.FileStatusProcessing {
-		return errors.New("文件正在处理中，无法删除")
+		return nil, errors.New("文件正在处理中，无法删除")
 	}
 
 	// 获取任务ID
 	taskID := file.TaskID
 	if taskID == nil {
 		// 孤立文件（用户上传文件等），使用孤立文件删除逻辑
-		return s.deleteOrphanFile(&file)
+		if err := s.deleteOrphanFile(&file); err != nil {
+			return nil, err
+		}
+		return &oldFile, nil
 	}
 
 	// 使用事务删除数据库记录
@@ -295,7 +302,7 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 
 	if err != nil {
 		s.logger.Error("删除数据库记录失败", zap.Uint("file_id", id), zap.Error(err))
-		return err
+		return nil, err
 	}
 
 	// 数据库删除成功后，删除物理目录
@@ -326,7 +333,7 @@ func (s *VideoFileService) DeleteFile(id uint) error {
 		zap.Uint("task_id", *taskID),
 	)
 
-	return nil
+	return &oldFile, nil
 }
 
 // BatchDeleteFilesRequest 批量删除文件请求
@@ -343,18 +350,23 @@ type BatchDeleteFilesResult struct {
 
 // BatchDeleteFiles 批量删除文件（按任务分组删除，避免重复删除）
 // 返回的 success/failed 计数是删除的文件数，而非任务数
-func (s *VideoFileService) BatchDeleteFiles(ids []uint) (*BatchDeleteFilesResult, error) {
+// 返回 (oldFiles, result, error): oldFiles 是请求删除的所有 ID 对应的旧记录（含 processing 跳过的），
+// handler 负责把 OldData=oldFiles 交给 audit.RecordChange 写一条 batch_delete 审计行
+func (s *VideoFileService) BatchDeleteFiles(ids []uint) ([]models.VideoFile, *BatchDeleteFilesResult, error) {
 	result := &BatchDeleteFilesResult{}
 
 	if len(ids) == 0 {
-		return result, nil
+		return nil, result, nil
 	}
 
-	// 查询所有要删除的文件
-	var files []models.VideoFile
-	if err := s.db.Where("id IN ?", ids).Find(&files).Error; err != nil {
-		return result, err
+	// ★ Snapshot OldData BEFORE any delete（含 processing 跳过的也记录——forensic 完整性）
+	var oldFiles []models.VideoFile
+	if err := s.db.Where("id IN ?", ids).Find(&oldFiles).Error; err != nil {
+		return nil, result, err
 	}
+
+	// 局部 files 切片用于按状态/任务分类（mutate 不影响 oldFiles）
+	files := oldFiles
 
 	// 按文件状态和任务关联分类
 	var filesWithTask []models.VideoFile // 有关联任务的文件
@@ -420,7 +432,7 @@ func (s *VideoFileService) BatchDeleteFiles(ids []uint) (*BatchDeleteFilesResult
 		zap.Int("orphan_deleted", len(orphanFiles)),
 	)
 
-	return result, nil
+	return oldFiles, result, nil
 }
 
 // deleteOrphanFile 删除孤立文件（没有关联任务的文件）
