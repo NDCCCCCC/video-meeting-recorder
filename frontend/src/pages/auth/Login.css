@@ -1,62 +1,104 @@
-/* 登录页面样式 */
+/* 登录页面样式 — Phase 16 D-02 重做
+   移除 antd 默认紫色渐变，改为透明让 LoginBackground 透出
+   登录卡：磨砂玻璃 + 品牌色边框 + 悬浮上浮 */
 
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
+/* .login-container 的紫色渐变已移除，由 LoginBackground 提供背景 */
 
 .login-card {
-  width: 100%;
-  max-width: 400px;
+  position: relative;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid #0f766e;
+  border-radius: 16px;
   padding: 40px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border-radius: 12px;
+  box-shadow:
+    0 24px 48px -12px rgba(15, 23, 42, 0.4),
+    0 0 0 1px rgba(94, 234, 212, 0.15);
+  transition:
+    transform 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+
+.login-card:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 32px 64px -12px rgba(15, 23, 42, 0.5),
+    0 0 0 1px rgba(94, 234, 212, 0.25);
+}
+
+.login-logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.login-logo svg {
+  width: 56px;
+  height: 56px;
+  filter: drop-shadow(0 4px 12px rgba(15, 118, 110, 0.4));
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
 .login-header h1 {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 8px 0;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  letter-spacing: 0.5px;
 }
 
 .login-header p {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: 13px;
+  color: #64748b;
   margin: 0;
 }
 
 .login-footer {
   text-align: center;
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 .login-footer p {
   font-size: 12px;
-  color: #9ca3af;
+  color: #94a3b8;
   margin: 0;
 }
 
-/* 表单样式调整 */
 .login-card .ant-form-item {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .login-card .ant-btn-primary {
   height: 44px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
+  letter-spacing: 2px;
+  background: #0f766e;
+  border-color: #0f766e;
+}
+
+.login-card .ant-btn-primary:hover {
+  background: #0d9488;
+  border-color: #0d9488;
 }
 
 .login-card .ant-input-affix-wrapper,
 .login-card .ant-input {
   border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+/* 尊重用户系统设置 */
+@media (prefers-reduced-motion: reduce) {
+  .login-card {
+    transition: none;
+  }
+  .login-card:hover {
+    transform: none;
+  }
 }

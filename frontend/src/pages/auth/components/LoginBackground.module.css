@@ -1,0 +1,159 @@
+/* 登录页动效背景样式 — Phase 16 D-02 */
+
+.container {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  isolation: isolate;
+}
+
+/* D-02.1 深青多层径向渐变背景 */
+.bgGradient {
+  position: fixed;
+  inset: 0;
+  z-index: -4;
+  background:
+    radial-gradient(circle at 20% 30%, #134e4a 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, #0f766e 0%, transparent 45%),
+    radial-gradient(circle at 50% 100%, #042f2e 0%, #0f172a 100%);
+}
+
+/* D-02.2 三个模糊光晕 */
+.halo1,
+.halo2,
+.halo3 {
+  position: fixed;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  filter: blur(140px);
+  opacity: 0.45;
+  z-index: -3;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.halo1 {
+  background: #0f766e;
+  top: -10%;
+  left: 10%;
+  animation: float-1 22s ease-in-out infinite;
+}
+
+.halo2 {
+  background: #134e4a;
+  top: 50%;
+  left: 60%;
+  animation: float-2 18s ease-in-out infinite;
+  animation-delay: -7s;
+}
+
+.halo3 {
+  background: #5eead4;
+  top: 30%;
+  left: 40%;
+  animation: float-3 25s ease-in-out infinite;
+  animation-delay: -14s;
+  opacity: 0.25;
+}
+
+@keyframes float-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(60px, -40px) scale(1.1);
+  }
+  66% {
+    transform: translate(-40px, 60px) scale(0.95);
+  }
+}
+
+@keyframes float-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-80px, 50px) scale(1.05);
+  }
+}
+
+@keyframes float-3 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(50px, 30px) scale(1.08);
+  }
+  75% {
+    transform: translate(-30px, -50px) scale(0.92);
+  }
+}
+
+/* D-02.3 SVG 点阵网格 */
+.dotGrid {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+  color: #5eead4;
+  opacity: 0.12;
+  pointer-events: none;
+  animation: dot-breathe 10s ease-in-out infinite;
+}
+
+@keyframes dot-breathe {
+  0%,
+  100% {
+    opacity: 0.08;
+  }
+  50% {
+    opacity: 0.18;
+  }
+}
+
+/* D-02.4 鼠标光晕跟随 */
+.mouseHalo {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 350px;
+  height: 350px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(94, 234, 212, 0.25) 0%, transparent 70%);
+  filter: blur(60px);
+  z-index: -1;
+  pointer-events: none;
+  will-change: transform;
+  transition: transform 200ms ease-out;
+}
+
+/* 内容层：登录卡 */
+.content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+}
+
+/* D-02.7 尊重 prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .halo1,
+  .halo2,
+  .halo3,
+  .dotGrid,
+  .mouseHalo {
+    animation: none !important;
+    transform: none !important;
+    opacity: 0.3 !important;
+  }
+}

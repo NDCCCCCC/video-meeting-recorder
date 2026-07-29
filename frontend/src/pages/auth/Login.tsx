@@ -1,13 +1,14 @@
-// 登录页面
-
-import { Form, Input, Button, Card, message } from 'antd'
+// 登录页面 — Phase 16 D-02 重做
+import { App, Form, Input, Button } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import type { LoginRequest } from '../../types/auth'
+import LoginBackground from './components/LoginBackground'
 import './Login.css'
 
 export default function Login() {
+  const { message } = App.useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const login = useAuthStore((state) => state.login)
@@ -26,10 +27,25 @@ export default function Login() {
   }
 
   return (
-    <div className="login-container">
-      <Card className="login-card" bordered={false}>
+    <LoginBackground>
+      <div className="login-card">
+        {/* 品牌色 logo — SVG 而非图标 */}
+        <div className="login-logo">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="8" y="8" width="48" height="48" rx="10" fill="#0F766E" />
+            <path
+              d="M22 24 L22 40 M22 32 L34 32 M34 24 L34 40"
+              stroke="white"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+            <circle cx="44" cy="24" r="4" fill="#5EEAD4" />
+          </svg>
+        </div>
+
         <div className="login-header">
           <h1>录播服务系统</h1>
+          <p>视频会议录制管理平台</p>
         </div>
 
         <Form
@@ -61,7 +77,7 @@ export default function Login() {
             <p>默认账号: admin / admin123</p>
           </div>
         )}
-      </Card>
-    </div>
+      </div>
+    </LoginBackground>
   )
 }
