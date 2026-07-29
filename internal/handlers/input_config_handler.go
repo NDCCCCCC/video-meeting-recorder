@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -12,6 +15,7 @@ import (
 // InputConfigHandler 输入配置处理器
 type InputConfigHandler struct {
 	configService *services.InputConfigService
+	auditService  *audit.AuditLogService
 	logger        *zap.Logger
 	usbScanner    *services.USBDeviceScanner
 }
@@ -19,11 +23,13 @@ type InputConfigHandler struct {
 // NewInputConfigHandler 创建输入配置处理器
 func NewInputConfigHandler(
 	configService *services.InputConfigService,
+	auditService *audit.AuditLogService,
 	logger *zap.Logger,
 	usbScanner *services.USBDeviceScanner,
 ) *InputConfigHandler {
 	return &InputConfigHandler{
 		configService: configService,
+		auditService:  auditService,
 		logger:        logger,
 		usbScanner:    usbScanner,
 	}
@@ -112,6 +118,19 @@ func (h *InputConfigHandler) CreateConfig(c *gin.Context) {
 		return
 	}
 
+	// 审计：OldData=nil (insert), NewData=新 config
+	resourceID := config.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionCreate,
+		Module:     models.ModuleInputConfig,
+		Resource:   fmt.Sprintf("input_config:%d", config.ID),
+		ResourceID: &resourceID,
+		OldData:    nil,
+		NewData:    config,
+	}); err != nil {
+		h.logger.Warn("Failed to record input config create change", zap.Error(err), zap.Uint("config_id", config.ID))
+	}
+
 	h.logger.Info("Input config created",
 		zap.Uint("config_id", config.ID),
 		zap.String("config_type", config.ConfigType),
@@ -143,10 +162,23 @@ func (h *InputConfigHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
-	config, err := h.configService.UpdateConfig(uint(id), &req)
+	oldConfig, config, err := h.configService.UpdateConfig(uint(id), &req)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	// 审计：OldData=oldConfig (pre-mutation), NewData=config (post-mutation)
+	resourceID := config.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionUpdate,
+		Module:     models.ModuleInputConfig,
+		Resource:   fmt.Sprintf("input_config:%d", config.ID),
+		ResourceID: &resourceID,
+		OldData:    oldConfig,
+		NewData:    config,
+	}); err != nil {
+		h.logger.Warn("Failed to record input config update change", zap.Error(err), zap.Uint("config_id", config.ID))
 	}
 
 	response.GinSuccess(c, config)
@@ -168,9 +200,23 @@ func (h *InputConfigHandler) DeleteConfig(c *gin.Context) {
 		return
 	}
 
-	if err := h.configService.DeleteConfig(uint(id)); err != nil {
+	oldConfig, err := h.configService.DeleteConfig(uint(id))
+	if err != nil {
 		response.GinError(c, response.CodeInternalError, err.Error())
 		return
+	}
+
+	// 审计：OldData=oldConfig (pre-delete), NewData=nil
+	resourceID := oldConfig.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionDelete,
+		Module:     models.ModuleInputConfig,
+		Resource:   fmt.Sprintf("input_config:%d", oldConfig.ID),
+		ResourceID: &resourceID,
+		OldData:    oldConfig,
+		NewData:    nil,
+	}); err != nil {
+		h.logger.Warn("Failed to record input config delete change", zap.Error(err), zap.Uint("config_id", uint(id)))
 	}
 
 	response.GinSuccess(c, gin.H{"message": "配置已删除"})

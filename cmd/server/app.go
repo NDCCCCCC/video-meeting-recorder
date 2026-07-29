@@ -666,7 +666,7 @@ func (a *MinimalApp) initHandlers() error {
 		Role:          handlers.NewRoleHandler(roleService, auditService, a.logger),
 		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
-		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, a.logger, usbScanner),
+		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, auditService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, a.logger),
 		File:          fileHandler,
 		Audit:         auditHandler,
