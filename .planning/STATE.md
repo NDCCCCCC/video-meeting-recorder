@@ -1,0 +1,336 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: completed
+last_updated: "2026-07-29T07:47:53.671Z"
+last_activity: 2026-07-29
+progress:
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 8
+  completed_plans: 8
+  percent: 100
+---
+
+# STATE.md - Project Memory
+
+**Project:** Record V2
+**Milestone:** v1.1 - 文件管理与编辑增强
+**Last Updated:** 2026-04-28
+**Last Activity:** 2026-07-28
+
+---
+
+## Project Reference
+
+### Core Value
+
+会议视频从录制到PPT的一站式处理，让会议内容可检索、可回顾、可分享。
+
+### What This Is
+
+视频会议录制管理系统 V2.0，专为华为会议终端设计的自动化录制、管理、转录和PPT生成平台。支持自动录制华为会议、USB设备录制、RTSP流录制，提供视频多点分割、阿里通义听悟AI转录、PPT自动提取等能力。
+
+### Current Focus
+
+Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and auto scan (all local, no external dependencies).
+
+---
+
+## Current Position
+
+Phase: 15 (前端去 AI 味) — EXECUTING
+Plan: Not started
+**Phase:** 15
+**Status:** Milestone complete
+**Progress:** [██████████] 96%
+
+### Phase Summary
+
+集成Windows Active Directory域控认证，支持LDAP(389)和LDAPS(636)双端口，实现local/ad两种认证模式切换。
+
+### To Execute
+
+Run `/gsd-execute-phase 12-windows-ad` to start implementation
+
+### Dependencies
+
+- Requires: Phase 11 (IP登录限制) - *PAUSED at manual testing*
+- Spike验证: 5个spike全部通过 (go-ldap-ad-auth, ldaps-security, auth-switch-architecture, ad-user-mapping, ad-config-validation)
+
+---
+
+## Phase 11 Status (Previous)
+
+**Phase:** 11 - IP地址登录限制
+**Status:** PAUSED at manual testing checkpoint
+**Progress:** [███████░░░] 83%
+
+- 8 test cases covering user/role IP restrictions
+- 5 security verification tests (IP spoofing, IPv6 rejection)
+- Test documentation created at `.planning/phases/11-ip-ip/11-TESTING.md`
+
+**To Resume Phase 11:** Run `/gsd-execute-phase 11-ip-ip`
+
+---
+
+## Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260428-pvs | 新建及编辑用户模态框添加检查按钮，可以通过用户名查找域控中的相关信息并自动填充，比如姓名和邮箱 | 2026-04-28 | 5d569fb | [260428-pvs-ad-user-lookup](./quick/260428-pvs-ad-user-lookup/) |
+| 260428-ad | AD用户白名单 - 只允许已存在的AD用户登录 | 2026-04-28 | - | [260428-ad-whitelist](./quick/260428-ad-whitelist/) |
+| 260428-n0k | AD配置持久化到数据库，服务器重启后恢复 | 2026-04-28 | - | [260428-n0k-ad](./quick/260428-n0k-ad/) |
+| 260428-mlh | 前端域控账号登录使用SM4加密密码，后端解密后传给域控服务器 | 2026-04-28 | 1500094 | [260428-mlh-sm4](./quick/260428-mlh-sm4/) |
+| 260428-m9t | 登录后右上角去掉个人信息按钮，为系统设置添加路由，创建认证管理菜单 | 2026-04-28 | 0d872a8 | [260428-m9t-sidebar](./quick/260428-m9t-sidebar/) |
+| 260423-f7v | 文件管理页面添加视频上传功能 | 2026-04-23 | d4f78f7 | [260423-f7v-add-video-upload-feature](./quick/260423-f7v-add-video-upload-feature/) |
+| 260729-kbf | 检查审计日志是否对所有操作进行了审计（覆盖率≈14%，audit.go 中间件 dead code） | 2026-07-29 | - | [260729-kbf-audit-log-coverage](./quick/260729-kbf-audit-log-coverage/) |
+| 260729-lr4 | 补充写操作审计覆盖率到100%，处理凭据脱敏引入的新安全风险 | 2026-07-29 | d4c4fb7 | [260729-lr4-100](./quick/260729-lr4-100/) |
+
+---
+
+## Performance Metrics
+
+### Requirements Coverage
+
+- Total v1 requirements: 30
+- Mapped to phases: 30 (100%)
+- Unmapped: 0
+
+### Phase Breakdown
+
+| Phase | Requirements | Status |
+|-------|--------------|--------|
+| Phase 1 - Video Splitting | 10 | Pending |
+| Phase 2 - Local Transcription | 7 | Pending |
+| Phase 3 - PPT Management | 7 | Pending |
+| Phase 4 - Cloud Services | 6 | Pending |
+
+---
+| Phase 05-file-rename P02 | 18 | 4 tasks | 5 files |
+| Phase 07 P04 | 3min | 3 tasks | 1 files |
+| Phase 08 P03 | 64 | 2 tasks | 2 files |
+| Phase 08 P04 | 4min | 3 tasks | 1 files |
+| Phase 11 P01 | 9min | 4 tasks | 9 files |
+| Phase 12 P04 | 71 | 2 tasks | 3 files |
+| Phase 15 P01 | 7min | 2 tasks | 4 files |
+| Phase 15 P02 | 540 | 2 tasks | 7 files |
+| Phase 15-ai P04 | 6m | 2 tasks | 3 files |
+| Phase 15 P5 | 6min | 2 tasks | 6 files |
+| Phase 15-ai P06 | 12min | 2 tasks | 9 files |
+
+## Roadmap Evolution
+
+- Phase 7 added: Preview Page UI Improvements (2026-04-20)
+- Phase 8 added: Video Snapshot & Player Enhancement (2026-04-20)
+- Phase 9 added: Multi-Role Permissions & Shared Viewer (2026-04-21)
+- Phase 10 added: Admin Dashboard, Audit Logs, and UI Enhancements (2026-04-24)
+- Phase 11 added: IP地址登录限制 - 为用户和角色添加IP地址组 (2026-04-27)
+- Phase 12 added: Windows AD域控认证 - 集成Windows Active Directory域控认证，支持LDAP/LDAPS双端口 (2026-04-28)
+- Phase 13 added: 重构华为配置，支持USB设备和流媒体录制模式 (2026-04-29)
+- Phase 14 added: 文件管理页面添加批量下载和批量转录功能 (2026-04-30)
+- Phase 1 added: 新功能 - 在视频播放中添加外挂字幕支持（预览视频、切割视频、预览PPT页面） (2026-05-12)
+- Phase 15 added: 前端去 AI 味 (2026-07-28)
+
+## Accumulated Context
+
+### Key Architectural Decisions
+
+1. **All Go Implementation** (No Python microservice)
+   - Rationale: Consistency with existing codebase, single-process deployment, simpler operations
+   - Status: Pending validation
+
+2. **Aliyun OSS for File Relay**
+   - Rationale: Server has no public IP; Tingwu API requires publicly accessible URLs
+   - Status: Pending validation
+
+3. **Tingwu REST API with Manual HMAC-SHA256 Signing**
+   - Rationale: No official Go SDK exists for Tingwu API
+   - Status: Pending validation
+
+4. **FFmpeg for Splitting and Frame Extraction**
+   - Rationale: FFmpeg already integrated for recording/conversion
+   - Status: Pending validation
+
+5. **Local PPT Generation with Go-pptx Library**
+   - Rationale: No need to generate PPT for cloud paths (download directly)
+   - Status: Pending validation
+
+6. **Manual Transcription Trigger Only**
+   - Rationale: Cost control, user choice, simplified error handling
+   - Status: Pending validation
+
+7. **Atomic File Rename with Transaction Rollback** (Phase 05)
+   - Rationale: Ensure data consistency when updating both DB records and physical files
+   - Pattern: Start DB transaction → os.Range physical file → update DB → commit on success, rollback on failure
+   - Status: Implemented and tested (12 test cases passing)
+
+8. **Original Recording Immutability** (Phase 05)
+   - Rationale: Original recordings are source of truth; splits/snapshots are derived copies
+   - Pattern: Check source_type='recording' && parent_id=NULL to reject rename operations
+   - Status: Enforced at service layer
+
+9. **File Extension Preservation at Service Layer** (Phase 05)
+   - Rationale: Prevent malicious extension changes; maintain file type consistency
+   - Pattern: Extract extension from current file path, append to user-provided name
+   - Status: Implemented for both VideoFile (.mp4) and PPTFile (.pptx)
+
+### Tech Stack Context
+
+**Backend:**
+
+- Go 1.24 (Gin framework)
+- SQLite database with GORM
+- SM4-GCM encryption for Token authentication
+- FFmpeg for video processing (already integrated)
+
+**Frontend:**
+
+- React 19
+- Ant Design 6
+- Zustand for state management
+- TanStack Query for API caching
+
+**External Dependencies (New):**
+
+- Aliyun OSS Go SDK v2 (alibabacloud-oss-go-sdk-v2)
+- Aliyun Tingwu API (manual REST with HMAC-SHA256)
+- Muprprpr/Go-pptx for PPTX generation
+
+### Dependency Analysis
+
+**Phase 1 (Video Splitting):**
+
+- SPLIT-01 to SPLIT-05: Video multi-point splitting with FFmpeg
+- SNAP-01, SNAP-02: Recording snapshot without interrupting
+- SCAN-01, SCAN-02: Auto file scanning
+- UI-01: Split page layout
+- Depends on: Nothing (first phase, all local)
+
+**Phase 2 (Local Transcription):**
+
+- LCL-01 to LCL-04: Frame extraction + SSIM/pHash/edge detection + PPTX generation
+- TRAN-01 (local), TRAN-04, TRAN-06: Local transcription trigger, status, segment
+- Depends on: Phase 1 (split segments need transcription)
+
+**Phase 3 (PPT Management):**
+
+- PPT-01 to PPT-06: PPT preview, download, multi-result, merge
+- UI-03: PPT result page layout
+- Depends on: Phase 2 (transcription produces PPT results)
+
+**Phase 4 (Cloud Services):**
+
+- OSS-01, OSS-02: Aliyun OSS file relay
+- TRAN-01 (cloud), TRAN-02, TRAN-03, TRAN-05: Cloud transcription + fallback
+- UI-02: Transcription task page layout
+- Depends on: Phase 2 (local fallback), Phase 3 (PPT management)
+
+### Critical Pitfalls from Research
+
+1. **OSS File Orphaning** - Temporary files never deleted, causing indefinite storage costs
+   - Mitigation: Lifecycle rules, cleanup handlers, periodic cleanup job
+
+2. **Tingwu Status Polling Thundering Herd** - Rate limiting from simultaneous status requests
+   - Mitigation: Jittered exponential backoff, staggered polls, global rate limiter
+
+3. **FFmpeg Keyframe Misalignment** - ±2s precision limitation with -c copy mode
+   - Mitigation: Document limitation, offer re-encode option, smart split to nearest keyframe
+
+4. **PPT Image URL Download Timeouts** - Sequential downloads take 5-20 minutes
+   - Mitigation: Parallel downloads with worker pool, progress tracking, retry with backoff
+
+5. **Database Transaction Mismatch with OSS** - DB rollback leaves orphaned OSS files
+   - Mitigation: Two-phase commit pattern, idempotent operations, state machine
+
+---
+
+## Decisions Log
+
+### 2026-07-28 - Dashboard mock data removed entirely (Phase 15 Plan 04)
+
+**Decision:** Delete the hardcoded `taskTrendData` mock array and the `任务趋势` Line chart card from the dashboard rather than rebuilding them with real data; ChartsSection now renders only the two real-stats charts (任务状态 Column + 文件类型 Pie).
+**Rationale:** Research §4 confirmed the backend has no time-series endpoint for task counts; the only honest path is to remove the fabricated trend surface. Aggregate all-zero check (`taskStats.total + fileStats.total_videos + systemStats.error_count`) drives an empty-state block in StatCards, replacing 13 zero cards that would otherwise look like a failure. Per-card zero checks were rejected because `disk_usage_percent` and `memory_usage_percent` are hardcoded `0.0` with a backend TODO (`dashboard_service.go:199-200`) — per-card zero would always false-positive.
+**Outcome:** Dashboard now renders only truthful fields from `/api/v1/dashboard/stats`; D-07.1, D-07.2, D-07.4 satisfied. D-07.3 (StatCards fields) was already verified in Plan 15-01.
+
+### 2026-07-28 - framer-motion 12 /m subpath API correction (Phase 15 Plan 02)
+
+**Decision:** Import `m` and `AnimatePresence` from the main `framer-motion` package, NOT from `framer-motion/m` as research §2 and PLAN 15-02 originally specified.
+**Rationale:** framer-motion 12.34.0's `/m` subpath exports only element-named components (`div`, `span`, etc. — 165 exports total) for the strictest per-element tree-shaking. It does NOT export the `m` namespace, `AnimatePresence`, `LazyMotion`, or `MotionConfig`. TypeScript error TS2305 confirmed at runtime + in `node_modules/framer-motion/dist/m.d.ts`. The D-04.4 perf budget (≤6KB gz/position, tree-shake) is still met because: (1) `framer-motion` has `sideEffects: false`, (2) Vite `manualChunks.motion: ['framer-motion']` isolates it into its own chunk, (3) `<LazyMotion strict>` forces `m.*` usage and ensures only the `domAnimation` feature subset loads.
+**Outcome:** Plan 15-02 executed with the corrected import path; downstream plans (03 illustrations, 05 NotFound) should use the same main-package import.
+
+### 2026-07-28 - Phase 15 Learnings extracted (extract-learnings workflow)
+
+**Decision:** Run `/gsd-extract-learnings 15-ai` to consolidate Phase 15's 13 commits / 28 files of changes into a structured `15-LEARNINGS.md` after user reported "感觉没有什么很大的变化". Extraction surfaced 8 decisions, 6 lessons, 5 patterns, 4 surprises. Key finding: 60% of changes are foundational (design tokens, motion infrastructure, Playwright config) or conditional (empty/error states, 404 page) — "去 AI 味" 通过删除 mock 数据 + 补空/错/加载态 + 单一品牌色 + 微交互实现，不是"换皮肤"式大改。
+**Rationale:** User's "no big change" perception is accurate but misframed — visible deltas are: (1) product name unification across 4 surfaces (录制管理系统 → 录播服务系统), (2) brand color #1890ff → #0F766E teal, (3) deleted dashboard mock trend chart, (4) ~120ms route fade, (5) self-made SVG illustrations on empty/error states, (6) honest 404 page with NotFoundMascot.
+**Outcome:** `15-LEARNINGS.md` written to `.planning/phases/15-ai/15-LEARNINGS.md`. Available for future phases to consult.
+
+### 2026-07-28 - framer-motion Easing type does not accept CSS cubic-bezier strings (Phase 15 Plan 02)
+
+**Decision:** Mirror `designTokens.motion.easing.*` CSS strings as `BezierDefinition` 4-tuples inside `motionConfig.ts`.
+**Rationale:** framer-motion's `Easing` type (from `motion-utils`) is `EasingDefinition | EasingFunction` where `EasingDefinition = BezierDefinition | 'linear' | 'easeIn' | ...`. `BezierDefinition` is a `[number, number, number, number]` tuple, NOT a CSS `cubic-bezier(...)` string. theme.ts continues to store CSS strings for CSS consumers; motionConfig.ts has a local `easing` object with the corresponding tuples, documented as needing to stay in sync.
+**Outcome:** TSC passes cleanly; durations still read from designTokens (single source of truth for ms values).
+
+### 2026-04-20 - VideoPlayerModal Integration
+
+**Decision:** Volume state split into volume (stored) and actualVolume (applied) for mute toggle
+**Rationale:** Mute toggle needs to preserve pre-mute volume level for restoration when unmuting; split state allows independent control of UI slider and video element
+**Outcome:** Mute toggle with volume preservation integrated into VideoPlayerModal
+
+### 2026-04-20 - Frame-Level Navigation Implementation
+
+**Decision:** Frame time calculated as 1/30 second for standard 30fps videos
+**Rationale:** HTML5 video API doesn't provide frame-level seeking; using 1/30s increments provides sufficient precision for slide capture workflows
+**Outcome:** Frame navigation hook and component created with browser compatibility detection
+
+### 2026-04-17 - Roadmap Creation
+
+**Decision:** 4-phase structure with external services last
+**Rationale:** Build local features first (splitting, local transcription, PPT management) that work without external dependencies, then add cloud services as enhancement
+**Outcome:** ROADMAP.md created with 30/30 requirements mapped (100% coverage)
+
+---
+
+## Todos
+
+### Immediate
+
+- [ ] Execute `/gsd-plan-phase 1` to create Phase 1 implementation plan
+- [ ] Set up OSS integration development environment
+- [ ] Review existing recording infrastructure for snapshot implementation
+
+### Short-term
+
+- [ ] Validate OSS SDK v2 integration patterns
+- [ ] Test FFmpeg snapshot extraction without interrupting recording
+- [ ] Design file scan trigger mechanism
+
+---
+
+## Session Continuity
+
+### Last Session
+
+- Initial milestone v1.0 setup completed
+- Requirements defined (30 total)
+- Research completed (MEDIUM confidence)
+- Roadmap created with 5 phases
+
+### Next Steps
+
+1. Plan Phase 1 implementation
+2. Set up OSS development environment
+3. Implement OSS upload/download service
+4. Implement recording snapshot feature
+5. Implement auto file scanning
+
+---
+
+*STATE.md initialized: 2026-04-17*
+
+**Last Session:** 2026-07-29T07:47:53.655Z
+
+**Planned Phase:** 01 (ppt) — 3 plans — 2026-05-12T06:58:49.592Z
+
+**Session Handoff:** Phase 01 context updated with Sherpa-ONNX + Paraformer local ASR solution. Resume file: `.planning/phases/01-ppt/01-CONTEXT.md`
