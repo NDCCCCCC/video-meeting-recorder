@@ -53,6 +53,29 @@ type LogOperationRequest struct {
 	Duration  int64
 }
 
+// RecordChangeOpts 服务层变更审计参数。
+type RecordChangeOpts struct {
+	Action     string
+	Module     string
+	Resource   string
+	ResourceID *uint
+	OldData    interface{}
+	NewData    interface{}
+}
+
+// RecordChange 服务层记录变更，自动复用 LogOperation 的脱敏和差异管道。
+func (s *AuditLogService) RecordChange(ctx context.Context, opts RecordChangeOpts) error {
+	return s.LogOperation(ctx, &LogOperationRequest{
+		Action:     opts.Action,
+		Module:     opts.Module,
+		Resource:   opts.Resource,
+		ResourceID: opts.ResourceID,
+		OldData:    opts.OldData,
+		NewData:    opts.NewData,
+		Status:     models.StatusSuccess,
+	})
+}
+
 // QueryRequest 查询请求
 type QueryRequest struct {
 	// 基础筛选

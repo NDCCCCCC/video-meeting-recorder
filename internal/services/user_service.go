@@ -181,17 +181,18 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 }
 
 // UpdateUser 更新用户
-func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID uint) (*models.User, error) {
+func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID uint) (*models.User, *models.User, error) {
 	var user models.User
-	if err := s.db.First(&user, id).Error; err != nil {
-		return nil, errors.New("用户不存在")
+	if err := s.db.Preload("Roles").First(&user, id).Error; err != nil {
+		return nil, nil, errors.New("用户不存在")
 	}
+	oldUser := user
 
 	// 检查邮箱是否被其他用户使用
 	if req.Email != "" && req.Email != user.Email {
 		var existing models.User
 		if err := s.db.Where("email = ? AND id != ?", req.Email, id).First(&existing).Error; err == nil {
-			return nil, errors.New("邮箱已被其他用户使用")
+			return nil, nil, errors.New("邮箱已被其他用户使用")
 		}
 		user.Email = req.Email
 	}
@@ -199,7 +200,7 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID 
 	// 更新角色
 	if len(req.RoleIDs) > 0 {
 		if err := s.UpdateRoles(id, req.RoleIDs, currentUserID); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -214,49 +215,73 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID 
 
 	// 更新 IP 限制（总是更新，包括清空）
 	if err := user.SetAllowedIPs(req.AllowedIPs); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := s.db.Save(&user).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 重新加载用户信息
-	s.db.Preload("Roles").First(&user, user.ID)
+	if err := s.db.Preload("Roles").First(&user, user.ID).Error; err != nil {
+		return nil, nil, err
+	}
 
-	return &user, nil
+	return &oldUser, &user, nil
 }
 
 // DeleteUser 删除用户
-func (s *UserService) DeleteUser(id uint) error {
+func (s *UserService) DeleteUser(id uint) (*models.User, *models.User, error) {
 	// 不允许删除ID为1的管理员
 	if id == 1 {
-		return errors.New("不允许删除系统管理员")
+		return nil, nil, errors.New("不允许删除系统管理员")
 	}
 
-	result := s.db.Delete(&models.User{}, id)
+	var user models.User
+	if err := s.db.Preload("Roles").First(&user, id).Error; err != nil {
+		return nil, nil, errors.New("用户不存在")
+	}
+	oldUser := user
+
+	result := s.db.Delete(&user)
 	if result.Error != nil {
-		return result.Error
+		return nil, nil, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("用户不存在")
+		return nil, nil, errors.New("用户不存在")
 	}
 
-	return nil
+	return &oldUser, nil, nil
 }
 
 // ResetPassword 重置用户密码
-func (s *UserService) ResetPassword(id uint, newPassword string) error {
+func (s *UserService) ResetPassword(id uint, newPassword string) (map[string]interface{}, map[string]interface{}, error) {
 	var user models.User
 	if err := s.db.First(&user, id).Error; err != nil {
-		return errors.New("用户不存在")
+		return nil, nil, errors.New("用户不存在")
+	}
+
+	// 密码重置快照明确排除 PasswordHash；审计只记录目标用户身份和动作结果。
+	oldSnapshot := map[string]interface{}{
+		"id":       user.ID,
+		"username": user.Username,
+		"email":    user.Email,
 	}
 
 	if err := user.SetPassword(newPassword); err != nil {
-		return err
+		return nil, nil, err
+	}
+	if err := s.db.Save(&user).Error; err != nil {
+		return nil, nil, err
 	}
 
-	return s.db.Save(&user).Error
+	newSnapshot := map[string]interface{}{
+		"id":             user.ID,
+		"username":       user.Username,
+		"email":          user.Email,
+		"password_reset": true,
+	}
+	return oldSnapshot, newSnapshot, nil
 }
 
 // ToggleUserStatus 切换用户状态

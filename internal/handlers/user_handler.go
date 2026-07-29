@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -10,15 +14,17 @@ import (
 
 // UserHandler 用户处理器
 type UserHandler struct {
-	userService *services.UserService
-	logger      *zap.Logger
+	userService  *services.UserService
+	auditService *audit.AuditLogService
+	logger       *zap.Logger
 }
 
 // NewUserHandler 创建用户处理器
-func NewUserHandler(userService *services.UserService, logger *zap.Logger) *UserHandler {
+func NewUserHandler(userService *services.UserService, auditService *audit.AuditLogService, logger *zap.Logger) *UserHandler {
 	return &UserHandler{
-		userService: userService,
-		logger:      logger,
+		userService:  userService,
+		auditService: auditService,
+		logger:       logger,
 	}
 }
 
@@ -137,10 +143,22 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	// 获取当前用户ID用于审计日志
 	currentUserID := middleware.GetUserID(c)
 
-	user, err := h.userService.UpdateUser(id, &req, currentUserID)
+	oldUser, user, err := h.userService.UpdateUser(id, &req, currentUserID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	resourceID := user.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionUpdate,
+		Module:     models.ModuleUser,
+		Resource:   fmt.Sprintf("user:%d", user.ID),
+		ResourceID: &resourceID,
+		OldData:    oldUser,
+		NewData:    user,
+	}); err != nil {
+		h.logger.Warn("Failed to record user update change", zap.Error(err), zap.Uint("user_id", id))
 	}
 
 	h.logger.Info("User updated", zap.Uint("user_id", id))
@@ -162,9 +180,22 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.DeleteUser(id); err != nil {
+	oldUser, _, err := h.userService.DeleteUser(id)
+	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	resourceID := oldUser.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionDelete,
+		Module:     models.ModuleUser,
+		Resource:   fmt.Sprintf("user:%d", oldUser.ID),
+		ResourceID: &resourceID,
+		OldData:    oldUser,
+		NewData:    nil,
+	}); err != nil {
+		h.logger.Warn("Failed to record user delete change", zap.Error(err), zap.Uint("user_id", id))
 	}
 
 	h.logger.Info("User deleted", zap.Uint("user_id", id))
@@ -196,9 +227,22 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.ResetPassword(id, req.Password); err != nil {
+	oldSnapshot, newSnapshot, err := h.userService.ResetPassword(id, req.Password)
+	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	resourceID := id
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     "reset_password",
+		Module:     models.ModuleUser,
+		Resource:   fmt.Sprintf("user:%d", id),
+		ResourceID: &resourceID,
+		OldData:    oldSnapshot,
+		NewData:    newSnapshot,
+	}); err != nil {
+		h.logger.Warn("Failed to record password reset change", zap.Error(err), zap.Uint("user_id", id))
 	}
 
 	h.logger.Info("User password reset", zap.Uint("user_id", id))
@@ -262,7 +306,7 @@ func (h *UserHandler) UpdateCurrentProfile(c *gin.Context) {
 		FullName: req.FullName,
 	}
 
-	user, err := h.userService.UpdateUser(userID, updateReq, userID)
+	_, user, err := h.userService.UpdateUser(userID, updateReq, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return

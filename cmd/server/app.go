@@ -662,8 +662,8 @@ func (a *MinimalApp) initHandlers() error {
 	// 创建handlers
 	a.handlers = &Handlers{
 		Auth:          handlers.NewAuthHandler(authService, a.logger),
-		User:          handlers.NewUserHandler(userService, a.logger),
-		Role:          handlers.NewRoleHandler(roleService, a.logger),
+		User:          handlers.NewUserHandler(userService, auditService, a.logger),
+		Role:          handlers.NewRoleHandler(roleService, auditService, a.logger),
 		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
 		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, a.logger, usbScanner),
