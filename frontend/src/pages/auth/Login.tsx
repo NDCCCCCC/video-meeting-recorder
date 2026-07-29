@@ -20,7 +20,11 @@ export default function Login() {
     try {
       await login(values)
       message.success('登录成功')
-      navigate(from, { replace: true })
+      // 登录后跳转目标：绝不能跳回 /auth/login 自身。
+      // from 来自 ProtectedRoute 弹回时写入的 location.state，在路由过渡期间
+      // 可能被误设为 '/auth/login'，导致 navigate(from) 又跳回登录页（表现为"点了不跳转"）。
+      const target = from && from !== '/auth/login' ? from : '/'
+      navigate(target, { replace: true })
     } catch (error) {
       message.error(error instanceof Error ? error.message : '登录失败')
     }
