@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-last_updated: "2026-07-29T07:47:53.671Z"
-last_activity: 2026-07-29
+last_updated: "2026-07-29T08:16:42.000Z"
+last_activity: 2026-07-29 - Completed quick task 260729-m8l: OldData 捕获支持 update/delete 差异对比
 progress:
   total_phases: 3
   completed_phases: 3
@@ -87,6 +87,7 @@ Run `/gsd-execute-phase 12-windows-ad` to start implementation
 | 260423-f7v | 文件管理页面添加视频上传功能 | 2026-04-23 | d4f78f7 | [260423-f7v-add-video-upload-feature](./quick/260423-f7v-add-video-upload-feature/) |
 | 260729-kbf | 检查审计日志是否对所有操作进行了审计（覆盖率≈14%，audit.go 中间件 dead code） | 2026-07-29 | - | [260729-kbf-audit-log-coverage](./quick/260729-kbf-audit-log-coverage/) |
 | 260729-lr4 | 补充写操作审计覆盖率到100%，处理凭据脱敏引入的新安全风险 | 2026-07-29 | d4c4fb7 | [260729-lr4-100](./quick/260729-lr4-100/) |
+| 260729-m8l | 补 OldData 捕获支持 update/delete 差异对比（6 个代表性站点 + 21 个待接入清单） | 2026-07-29 | 2cef9f0 | [260729-m8l-olddata-update-delete](./quick/260729-m8l-olddata-update-delete/) |
 
 ---
 
@@ -312,25 +313,33 @@ Run `/gsd-execute-phase 12-windows-ad` to start implementation
 
 ### Last Session
 
-- Initial milestone v1.0 setup completed
-- Requirements defined (30 total)
-- Research completed (MEDIUM confidence)
-- Roadmap created with 5 phases
+- 2026-07-29T07:47Z — Quick task 260729-lr4 (审计 100% + Sanitizer) 6 commits landed
+- Session paused via /gsd-pause-work at ~79% context
+- Resumed via /gsd-resume-work 2026-07-29T07:50Z
+
+### Stopped At
+
+Quick task 260729-lr4 完成，等待人工生产验证（非阻塞）。
+HANDOFF.json 待删除（一次性的）。
+
+### Resume File
+
+`.planning/.continue-here.md` + `.planning/HANDOFF.json`（待消费）
 
 ### Next Steps
 
-1. Plan Phase 1 implementation
-2. Set up OSS development environment
-3. Implement OSS upload/download service
-4. Implement recording snapshot feature
-5. Implement auto file scanning
+1. 人工生产验证（参考 `.planning/quick/260729-lr4-100/260729-lr4-SUMMARY.md`）
+2. 可选：补 OldData 捕获（service 层 hook）— `/gsd-quick 补 OldData 捕获支持 update/delete 差异对比`
+3. 可选：前端 23 个未提交文件整理（与审计无关，独立任务）
 
 ---
 
 *STATE.md initialized: 2026-04-17*
 
-**Last Session:** 2026-07-29T07:47:53.655Z
+**Last Session:** 2026-07-29T07:47:53.655Z — quick task 260729-lr4 完成 (审计 100% + 脱敏)
+**Last Resume:** 2026-07-29T07:50:11.179Z — /gsd-resume-work consumed HANDOFF.json
+**Active context:** Quick task 260729-lr4 — 全部 6 commits on main，handoff 待删除，待人工生产验证
 
 **Planned Phase:** 01 (ppt) — 3 plans — 2026-05-12T06:58:49.592Z
 
-**Session Handoff:** Phase 01 context updated with Sherpa-ONNX + Paraformer local ASR solution. Resume file: `.planning/phases/01-ppt/01-CONTEXT.md`
+**Session Handoff:** Quick task 260729-lr4 (审计覆盖率 100% + Sanitizer) — 完成。Resume file: `.planning/quick/260729-lr4-100/`
