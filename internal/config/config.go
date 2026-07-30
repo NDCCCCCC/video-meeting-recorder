@@ -235,11 +235,9 @@ type TranscriptionConfig struct {
 
 // expandEnvWithDefault 展开环境变量，支持 ${VAR:default} 格式
 func expandEnvWithDefault(s string) string {
-	// 匹配 ${VAR:default} 或 ${VAR} 格式
-	re := regexp.MustCompile(`\$\{([^:}]+)(?::([^}]*))?\}`)
-
-	return re.ReplaceAllStringFunc(s, func(match string) string {
-		parts := re.FindStringSubmatch(match)
+	// 使用包级正则 expandEnvRegex（PERF-008），避免每次调用重新编译
+	return expandEnvRegex.ReplaceAllStringFunc(s, func(match string) string {
+		parts := expandEnvRegex.FindStringSubmatch(match)
 		if len(parts) < 2 {
 			return match
 		}
@@ -259,6 +257,9 @@ func expandEnvWithDefault(s string) string {
 		return defaultValue
 	})
 }
+
+// expandEnvRegex 匹配 \${VAR} 或 \${VAR:default} 格式（PERF-008 提到包级）
+var expandEnvRegex = regexp.MustCompile(`\$\{([^:}]+)(?::([^}]*))?\}`)
 
 // expandConfig 递归展开配置中的所有字符串值
 func expandConfig(cfg interface{}) interface{} {

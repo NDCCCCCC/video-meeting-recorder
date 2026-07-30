@@ -6,6 +6,14 @@ import (
 	"unicode"
 )
 
+// 包级正则（PERF-008）：避免每次 Validate 调用时重新编译。
+var (
+	specialCharRe = regexp.MustCompile(`[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]`)
+	lowerCaseRe   = regexp.MustCompile(`[a-z]`)
+	upperCaseRe   = regexp.MustCompile(`[A-Z]`)
+	digitRe       = regexp.MustCompile(`[0-9]`)
+)
+
 // PasswordValidator 密码验证器
 type PasswordValidator struct {
 	minLength      int
@@ -94,8 +102,7 @@ func (v *PasswordValidator) Validate(password string) *ValidationResult {
 	// 检查特殊字符
 	if v.requireSpecial {
 		hasSpecial := false
-		specialChars := regexp.MustCompile(`[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]`)
-		if specialChars.MatchString(password) {
+		if specialCharRe.MatchString(password) {
 			hasSpecial = true
 		}
 		if !hasSpecial {
@@ -122,11 +129,11 @@ func CheckPasswordStrength(password string) (strength string, score int) {
 		score += 1
 	}
 
-	// 复杂度评分
-	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
-	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
-	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(password)
-	hasSpecial := regexp.MustCompile(`[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]`).MatchString(password)
+	// 复杂度评分（包级正则复用，PERF-008）
+	hasLower := lowerCaseRe.MatchString(password)
+	hasUpper := upperCaseRe.MatchString(password)
+	hasNumber := digitRe.MatchString(password)
+	hasSpecial := specialCharRe.MatchString(password)
 
 	types := 0
 	if hasLower {
