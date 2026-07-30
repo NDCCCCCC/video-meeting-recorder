@@ -25,6 +25,39 @@ const (
 	defaultQuota = 10 * 1024 * 1024 * 1024
 )
 
+// StorageDriver 存储驱动接口（STYLE-003：原 driver.go 已删除；接口迁移至
+// 本消费方包 file_service.go）。保留命名以兼容所有现有引用
+// （file_service.go / local_driver.go）。
+// 符合 Go 惯例：consumer defines interface（"accept interfaces, return structs"）。
+type StorageDriver interface {
+	// 上传文件
+	Upload(ctx context.Context, file *multipart.FileHeader, path string) (*UploadResult, error)
+
+	// 下载文件
+	Download(ctx context.Context, path string) (io.ReadCloser, error)
+
+	// 删除文件
+	Delete(ctx context.Context, path string) error
+
+	// 检查文件是否存在
+	Exists(ctx context.Context, path string) (bool, error)
+
+	// 获取访问URL
+	GetURL(ctx context.Context, path string, expires time.Duration) (string, error)
+
+	// 获取文件信息
+	GetInfo(ctx context.Context, path string) (*FileInfo, error)
+
+	// 复制文件
+	Copy(ctx context.Context, srcPath, destPath string) error
+
+	// 移动文件
+	Move(ctx context.Context, srcPath, destPath string) error
+
+	// 列出文件
+	List(ctx context.Context, prefix string, limit int) ([]*FileInfo, error)
+}
+
 // FileService 文件服务
 type FileService struct {
 	db            *gorm.DB

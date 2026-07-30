@@ -1,6 +1,8 @@
 package auth
 
-import "context"
+// (原 Authenticator 接口已迁移到 service.go)
+// 本文件保留 ADUser / ADAuthConfig / ADConfigValidationResult /
+// ADUserLookupResult 数据类型（这些是配置 + 数据，非接口）。
 
 // ADUser represents an Active Directory user
 type ADUser struct {
@@ -66,20 +68,6 @@ type ADUserLookupResult struct {
 	Message    string `json:"message,omitempty"`
 }
 
-// Authenticator defines the authentication interface (strategy pattern per Spike 003)
-type Authenticator interface {
-	// Login authenticates a user and returns a login response.
-	// ctx 用于把请求上下文（RequestID/TraceID）传递到审计日志，保证审计与
-	// 请求链路可串联；为 nil 时调用方需自行降级处理。
-	Login(ctx context.Context, req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error)
-
-	// Logout logs out a user by revoking their token
-	Logout(token string) error
-
-	// ValidateToken validates a token and returns the associated user
-	ValidateToken(token string) (*UserDTO, error)
-
-	// Name returns the authenticator name
-	Name() string
-}
+// Authenticator 接口定义已迁移到 service.go（STYLE-003：消费方包定义接口）。
+// 该结构体类型 ADUser 保留在本文件（AD 配置 + 用户数据）。
 

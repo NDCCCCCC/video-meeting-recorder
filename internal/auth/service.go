@@ -11,6 +11,25 @@ import (
 	"gorm.io/gorm"
 )
 
+// Authenticator 定义认证策略接口（STYLE-003：从 ad_config.go 迁移到本消费方包）。
+// 保留命名以兼容所有现有调用方（service.go 字段类型 / ad_auth.go / local_auth.go / admin_handler.go）。
+// 接口定义放在消费方包符合 Go 惯例（"accept interfaces, return structs"）。
+type Authenticator interface {
+	// Login authenticates a user and returns a login response.
+	// ctx 用于把请求上下文（RequestID/TraceID）传递到审计日志，保证审计与
+	// 请求链路可串联；为 nil 时调用方需自行降级处理。
+	Login(ctx context.Context, req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error)
+
+	// Logout logs out a user by revoking their token
+	Logout(token string) error
+
+	// ValidateToken validates a token and returns the associated user
+	ValidateToken(token string) (*UserDTO, error)
+
+	// Name returns the authenticator name
+	Name() string
+}
+
 // Service 认证服务
 type Service struct {
 	db                *gorm.DB

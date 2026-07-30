@@ -13,6 +13,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
@@ -23,7 +24,7 @@ import (
 // VideoRecordingTaskHandler 视频录制任务处理器
 type VideoRecordingTaskHandler struct {
 	taskService       *services.VideoRecordingTaskService
-	conversionService services.ConversionService
+	conversionService scheduler.ConversionService
 	auditService      *audit.AuditLogService
 	logger            *zap.Logger
 	config            *config.Config
@@ -42,7 +43,7 @@ func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskServic
 }
 
 // SetConversionService 设置转换服务
-func (h *VideoRecordingTaskHandler) SetConversionService(conversionService services.ConversionService) {
+func (h *VideoRecordingTaskHandler) SetConversionService(conversionService scheduler.ConversionService) {
 	h.conversionService = conversionService
 }
 

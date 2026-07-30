@@ -15,6 +15,32 @@ import (
 	"gorm.io/gorm"
 )
 
+// ConversionService 定义转换服务接口（STYLE-003：原 services/conversion_service.go
+// 中的 ConversionService 接口已删除；接口迁移至本消费方包）。
+// 保留原命名以兼容所有现有调用方（handler / app / scheduler）。
+// 符合 Go 惯例：consumer defines interface。
+//
+// impl: services.FFmpegConversionService（在 services 包实现此接口）。
+type ConversionService interface {
+	// SubmitConversion 提交转换任务
+	SubmitConversion(taskID uint) error
+
+	// GetConversionStatus 获取转换状态
+	GetConversionStatus(taskID uint) (models.ConversionStatus, error)
+
+	// RetryConversion 重试失败任务
+	RetryConversion(taskID uint) error
+
+	// Start 启动服务
+	Start() error
+
+	// Stop 停止服务
+	Stop()
+}
+
+// 编译期断言：services.FFmpegConversionService 实现本接口（STYLE-003 W9 验证）。
+// 由测试文件 video_scheduler_test.go 内的 var _ scheduler.ConversionService = (*services.FFmpegConversionService)(nil) 覆盖。
+
 // 调度器常量
 const (
 	// TriggerTimeTolerance 触发时间容错窗口（任务在触发时间之前1分钟内仍可执行）
@@ -41,7 +67,7 @@ type VideoSimpleScheduler struct {
 	taskService       TaskServiceInterface
 	coordinator       RecorderCoordinatorInterface
 	connector         *video_recording.HuaweiConferenceConnector
-	conversionService ConversionServiceInterface // 转换服务
+	conversionService ConversionService            // 转换服务
 	videoFileService  VideoFileServiceInterface  // 视频文件服务
 	taskEntries       map[uint]cron.EntryID
 	entryTasks        map[cron.EntryID]uint
@@ -53,11 +79,6 @@ type VideoSimpleScheduler struct {
 	config            *config.Config
 	mu                sync.RWMutex
 	startTime         time.Time
-}
-
-// ConversionServiceInterface 转换服务接口
-type ConversionServiceInterface interface {
-	SubmitConversion(taskID uint) error
 }
 
 // VideoFileServiceInterface 视频文件服务接口
@@ -88,7 +109,7 @@ func NewVideoSimpleScheduler(
 	taskService TaskServiceInterface,
 	coordinator RecorderCoordinatorInterface,
 	connector *video_recording.HuaweiConferenceConnector,
-	conversionService ConversionServiceInterface,
+	conversionService ConversionService,
 	videoFileService VideoFileServiceInterface,
 	logger *zap.Logger,
 	cfg *config.Config,
@@ -825,7 +846,7 @@ func (s *VideoSimpleScheduler) Stop() {
 }
 
 // SetConversionService 设置转换服务
-func (s *VideoSimpleScheduler) SetConversionService(conversionService ConversionServiceInterface) {
+func (s *VideoSimpleScheduler) SetConversionService(conversionService ConversionService) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.conversionService = conversionService

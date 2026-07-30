@@ -55,7 +55,7 @@ type MinimalApp struct {
 	huaweiConnector      *video_recording.HuaweiConferenceConnector
 	videoTaskService     *services.VideoRecordingTaskService
 	videoFileService     *services.VideoFileService
-	conversionService    services.ConversionService
+	conversionService    scheduler.ConversionService
 	splittingService     *services.SplittingService
 	snapshotService      *services.SnapshotService
 	transcriptionService *services.TranscriptionService

@@ -23,23 +23,9 @@ var conversionCmdBufPool = sync.Pool{
 	},
 }
 
-// ConversionService 转换服务接口
-type ConversionService interface {
-	// SubmitConversion 提交转换任务
-	SubmitConversion(taskID uint) error
-
-	// GetConversionStatus 获取转换状态
-	GetConversionStatus(taskID uint) (models.ConversionStatus, error)
-
-	// RetryConversion 重试失败任务
-	RetryConversion(taskID uint) error
-
-	// Start 启动服务
-	Start() error
-
-	// Stop 停止服务
-	Stop()
-}
+// ConversionService 接口定义已迁移到 scheduler/video_scheduler.go（STYLE-003：消费方包定义接口）。
+// 本文件保留实现 FFmpegConversionService（隐式满足 scheduler.ConversionService）。
+// 编译期断言由 video_scheduler_test.go 中的 var _ scheduler.ConversionService = (*FFmpegConversionService)(nil) 覆盖。
 
 // ConversionTask 转换任务
 type ConversionTask struct {
@@ -65,7 +51,7 @@ type FFmpegConversionService struct {
 }
 
 // NewFFmpegConversionService 创建转换服务
-func NewFFmpegConversionService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, videoFileService *VideoFileService) ConversionService {
+func NewFFmpegConversionService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, videoFileService *VideoFileService) *FFmpegConversionService {
 	return &FFmpegConversionService{
 		db:               db,
 		logger:           logger,
