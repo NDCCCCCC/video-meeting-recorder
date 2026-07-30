@@ -136,7 +136,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 17-02-PLAN.md — P1a 错误处理 + 安全加固（12 项：BUG-003..006 + SEC-005..010 + STYLE-004/005）
+- [x] 17-02-PLAN.md — P1a 错误处理 + 安全加固（12 项：BUG-003..006 + SEC-005..010 + STYLE-004/005） — 12 atomic commits on main (d27903f..e040d2d, +b53cc8c regression), build+tests -race verified
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
