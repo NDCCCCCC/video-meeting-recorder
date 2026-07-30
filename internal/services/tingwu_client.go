@@ -47,14 +47,14 @@ type TingwuSubmitResponse struct {
 
 // TingwuClient handles Aliyun Tingwu API operations
 type TingwuClient struct {
-	appKey                string
-	appSecret             string
-	baseURL               string
-	client                *http.Client
-	logger                *zap.Logger
-	enabled               bool
-	outboundURLAllowlist   []string
-	environment           string
+	appKey               string
+	appSecret            string
+	baseURL              string
+	client               *http.Client
+	logger               *zap.Logger
+	enabled              bool
+	outboundURLAllowlist []string
+	environment          string
 }
 
 // NewTingwuClient creates a new Tingwu API client

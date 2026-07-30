@@ -212,9 +212,9 @@ type MailboxState struct {
 
 // HTTPClient HTTP客户端封装
 type HTTPClient struct {
-	client              *http.Client
-	logger              *zap.Logger
-	baseURL             *url.URL
+	client               *http.Client
+	logger               *zap.Logger
+	baseURL              *url.URL
 	outboundURLAllowlist []string
 	environment          string
 }

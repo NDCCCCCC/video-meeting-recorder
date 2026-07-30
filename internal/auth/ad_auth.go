@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-ldap/ldap/v3"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
+	"github.com/go-ldap/ldap/v3"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -28,12 +28,12 @@ func IsADUserNotRegistered(err error) bool {
 
 // ADAuthenticator AD域控认证器
 type ADAuthenticator struct {
-	adConfig    *config.ADAuthConfig
-	db          *gorm.DB
+	adConfig     *config.ADAuthConfig
+	db           *gorm.DB
 	tokenService *SM4TokenService
-	sm4Secret   string
-	logger      *zap.Logger
-	liveConfig  *config.AuthConfig // Live config reference for dynamic settings
+	sm4Secret    string
+	logger       *zap.Logger
+	liveConfig   *config.AuthConfig // Live config reference for dynamic settings
 }
 
 // NewADAuthenticator creates a new AD authenticator
@@ -211,13 +211,13 @@ func (a *ADAuthenticator) parseLDAPEntry(entry *ldap.Entry) *ADUser {
 	}
 
 	return &ADUser{
-		Username:          entry.GetAttributeValue("sAMAccountName"),
-		DN:                entry.DN,
-		ObjectGUID:        entry.GetAttributeValue("objectGUID"),
-		Email:             entry.GetAttributeValue("mail"),
-		DisplayName:       entry.GetAttributeValue("displayName"),
-		Department:        entry.GetAttributeValue("department"),
-		UserPrincipalName: entry.GetAttributeValue("userPrincipalName"),
+		Username:           entry.GetAttributeValue("sAMAccountName"),
+		DN:                 entry.DN,
+		ObjectGUID:         entry.GetAttributeValue("objectGUID"),
+		Email:              entry.GetAttributeValue("mail"),
+		DisplayName:        entry.GetAttributeValue("displayName"),
+		Department:         entry.GetAttributeValue("department"),
+		UserPrincipalName:  entry.GetAttributeValue("userPrincipalName"),
 		UserAccountControl: userAccountControl,
 	}
 }
@@ -352,12 +352,12 @@ func (a *ADAuthenticator) toUserDTO(user *models.User) *UserDTO {
 	}
 
 	dto := &UserDTO{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		FullName:  user.FullName,
-		RoleIDs:   roleIDs,
-		IsActive:  user.IsActive,
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		FullName: user.FullName,
+		RoleIDs:  roleIDs,
+		IsActive: user.IsActive,
 	}
 
 	// Check if user has any roles
