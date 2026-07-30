@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"gorm.io/gorm"
 )
 
@@ -15,26 +16,22 @@ func (m *AddADFieldsMigration) Name() string {
 }
 
 func (m *AddADFieldsMigration) Up(db *gorm.DB) error {
-	// Add AD fields (nullable for local users)
+	// SEC-005: SQL 注入防护 — column/field 全部走硬编码白名单与 GORM Migrator。
 	fields := []struct {
-		column string
-		typ    string
+		column    string
+		fieldName string
 	}{
-		{"ad_username", "VARCHAR(100)"},
-		{"ad_dn", "VARCHAR(255)"},
-		{"ad_guid", "CHAR(36)"},
-		{"ad_department", "VARCHAR(100)"},
-		{"ad_upn", "VARCHAR(200)"},
-		{"last_ad_login", "DATETIME"},
+		{"ad_username", "ADUsername"},
+		{"ad_dn", "ADDN"},
+		{"ad_guid", "ADGUID"},
+		{"ad_department", "ADDepartment"},
+		{"ad_upn", "ADUPN"},
+		{"last_ad_login", "LastADLogin"},
 	}
 
 	for _, field := range fields {
-		exists, err := columnExists(db, "users", field.column)
-		if err != nil {
-			return fmt.Errorf("failed to check %s column in users: %w", field.column, err)
-		}
-		if !exists {
-			if err := db.Exec("ALTER TABLE users ADD COLUMN " + field.column + " " + field.typ).Error; err != nil {
+		if !db.Migrator().HasColumn(&models.User{}, field.column) {
+			if err := db.Migrator().AddColumn(&models.User{}, field.fieldName); err != nil {
 				return fmt.Errorf("failed to add %s column to users: %w", field.column, err)
 			}
 			log.Println("INFO: Added column " + field.column + " to users table")

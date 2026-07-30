@@ -24,12 +24,12 @@ type User struct {
 	APIKeys      []APIKey   `gorm:"foreignKey:UserID" json:"api_keys,omitempty"`
 
 	// AD fields (nullable for local users, per D-21, D-22, D-23)
-	ADUsername   string     `gorm:"type:varchar(100)" json:"ad_username"`
-	ADDN         string     `gorm:"type:varchar(255)" json:"ad_dn"`
-	ADGUID       string     `gorm:"type:char(36);index" json:"ad_guid"`
-	ADDepartment string     `gorm:"type:varchar(100)" json:"ad_department"`
-	ADUPN        string     `gorm:"type:varchar(200)" json:"ad_upn"`
-	LastADLogin  *time.Time `json:"last_ad_login"`
+	ADUsername   string     `gorm:"column:ad_username;type:varchar(100)" json:"ad_username"`
+	ADDN         string     `gorm:"column:ad_dn;type:varchar(255)" json:"ad_dn"`
+	ADGUID       string     `gorm:"column:ad_guid;type:char(36);index" json:"ad_guid"`
+	ADDepartment string     `gorm:"column:ad_department;type:varchar(100)" json:"ad_department"`
+	ADUPN        string     `gorm:"column:ad_upn;type:varchar(200)" json:"ad_upn"`
+	LastADLogin  *time.Time `gorm:"column:last_ad_login" json:"last_ad_login"`
 }
 
 // SetPassword 设置密码
