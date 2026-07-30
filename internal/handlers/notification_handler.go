@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/notification"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -13,13 +15,15 @@ import (
 // NotificationHandler 通知处理器
 type NotificationHandler struct {
 	notificationService *notification.NotificationService
+	auditService        *audit.AuditLogService
 	logger              *zap.Logger
 }
 
 // NewNotificationHandler 创建通知处理器
-func NewNotificationHandler(notificationService *notification.NotificationService) *NotificationHandler {
+func NewNotificationHandler(notificationService *notification.NotificationService, auditService *audit.AuditLogService) *NotificationHandler {
 	return &NotificationHandler{
 		notificationService: notificationService,
+		auditService:        auditService,
 	}
 }
 
@@ -173,11 +177,23 @@ func (h *NotificationHandler) UpdateUserSetting(c *gin.Context) {
 	}
 
 	userID := h.getUserID(c)
-	err := h.notificationService.UpdateUserSetting(c.Request.Context(), userID, &req)
+	oldSetting, newSetting, err := h.notificationService.UpdateUserSetting(c.Request.Context(), userID, &req)
 	if err != nil {
 		h.logger.Warn("更新通知配置失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "更新失败")
 		return
+	}
+
+	resourceID := userID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionUpdate,
+		Module:     models.ModuleNotification,
+		Resource:   fmt.Sprintf("notification_setting:%d", userID),
+		ResourceID: &resourceID,
+		OldData:    oldSetting,
+		NewData:    newSetting,
+	}); err != nil {
+		h.logger.Warn("Failed to record notification setting update change", zap.Error(err), zap.Uint("user_id", userID))
 	}
 
 	response.GinSuccess(c, gin.H{"message": "更新成功"})

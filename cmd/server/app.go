@@ -590,7 +590,7 @@ func (a *MinimalApp) initHandlers() error {
 
 	// 通知服务
 	notificationService := notification.NewNotificationService(a.db, a.logger, a.config)
-	notificationHandler := handlers.NewNotificationHandler(notificationService)
+	notificationHandler := handlers.NewNotificationHandler(notificationService, auditService)
 	notificationHandler.SetLogger(a.logger)
 
 	// API密钥服务
@@ -677,7 +677,7 @@ func (a *MinimalApp) initHandlers() error {
 		APIKey:        apikeyHandler,
 		Split:         handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
 		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, timestampMapper, a.logger),
-		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.frameCaptureService, a.logger),
+		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.frameCaptureService, auditService, a.logger),
 		Dashboard:     handlers.NewDashboardHandler(dashboardService, a.logger),
 	}
 

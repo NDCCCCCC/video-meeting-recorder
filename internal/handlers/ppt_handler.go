@@ -14,6 +14,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ type PPThandler struct {
 	videoFileService    *services.VideoFileService
 	pptEditorService    *services.PPTEditorService
 	frameCaptureService *services.FrameCaptureService
+	auditService        *audit.AuditLogService
 	logger              *zap.Logger
 }
 
@@ -39,6 +41,7 @@ func NewPPThandler(
 	videoFileService *services.VideoFileService,
 	pptEditorService *services.PPTEditorService,
 	frameCaptureService *services.FrameCaptureService,
+	auditService *audit.AuditLogService,
 	logger *zap.Logger,
 ) *PPThandler {
 	return &PPThandler{
@@ -48,6 +51,7 @@ func NewPPThandler(
 		videoFileService:    videoFileService,
 		pptEditorService:    pptEditorService,
 		frameCaptureService: frameCaptureService,
+		auditService:        auditService,
 		logger:              logger,
 	}
 }
@@ -411,12 +415,25 @@ func (h *PPThandler) DeletePPT(c *gin.Context) {
 	}
 
 	// Delete PPT file
-	if err := h.pptFileService.DeletePPTFile(uint(id)); err != nil {
+	oldPPT, err := h.pptFileService.DeletePPTFile(uint(id))
+	if err != nil {
 		h.logger.Error("Failed to delete PPT file",
 			zap.String("ppt_id", idStr),
 			zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "删除PPT文件失败: "+err.Error())
 		return
+	}
+
+	resourceID := oldPPT.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionDelete,
+		Module:     models.ModulePPT,
+		Resource:   fmt.Sprintf("ppt:%d", oldPPT.ID),
+		ResourceID: &resourceID,
+		OldData:    oldPPT,
+		NewData:    nil,
+	}); err != nil {
+		h.logger.Warn("Failed to record PPT delete change", zap.Error(err), zap.Uint("ppt_id", uint(id)))
 	}
 
 	response.GinSuccess(c, gin.H{
@@ -617,7 +634,8 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 	}
 
 	// Call service to delete slides
-	if err := h.pptEditorService.DeleteSlides(uint(id), req.Slides); err != nil {
+	oldPPT, _, err := h.pptEditorService.DeleteSlides(uint(id), req.Slides)
+	if err != nil {
 		h.logger.Error("Failed to delete slides",
 			zap.String("ppt_id", idStr),
 			zap.Ints("slide_numbers", req.Slides),
@@ -636,7 +654,7 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 		return
 	}
 
-	// Get updated PPT file info
+	// Get updated PPT file info (service returned new state too, but reload to capture latest committed state)
 	updatedPPT, err := h.pptFileService.GetPPTFileByID(uint(id))
 	if err != nil {
 		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
@@ -645,6 +663,18 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 			"deleted_slides": req.Slides,
 		})
 		return
+	}
+
+	resourceID := updatedPPT.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     "delete_slides",
+		Module:     models.ModulePPT,
+		Resource:   fmt.Sprintf("ppt:%d", updatedPPT.ID),
+		ResourceID: &resourceID,
+		OldData:    oldPPT,
+		NewData:    updatedPPT,
+	}); err != nil {
+		h.logger.Warn("Failed to record PPT delete slides change", zap.Error(err), zap.Uint("ppt_id", updatedPPT.ID))
 	}
 
 	// Parse deleted slides for response
@@ -687,7 +717,8 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 	}
 
 	// Call service to rollback
-	if err := h.pptEditorService.Rollback(uint(id)); err != nil {
+	oldPPT, _, err := h.pptEditorService.Rollback(uint(id))
+	if err != nil {
 		h.logger.Error("Failed to rollback PPT",
 			zap.String("ppt_id", idStr),
 			zap.Error(err))
@@ -704,6 +735,18 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 			"restored": true,
 		})
 		return
+	}
+
+	resourceID := updatedPPT.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     "rollback",
+		Module:     models.ModulePPT,
+		Resource:   fmt.Sprintf("ppt:%d", updatedPPT.ID),
+		ResourceID: &resourceID,
+		OldData:    oldPPT,
+		NewData:    updatedPPT,
+	}); err != nil {
+		h.logger.Warn("Failed to record PPT rollback change", zap.Error(err), zap.Uint("ppt_id", updatedPPT.ID))
 	}
 
 	response.GinSuccess(c, gin.H{
@@ -1000,13 +1043,25 @@ func (h *PPThandler) ReorderSlidesHandler(c *gin.Context) {
 	}
 
 	// Reorder slides
-	newOrder, err := h.pptEditorService.ReorderSlides(uint(id), req.SlideOrder)
+	newOrder, oldPPT, newPPT, err := h.pptEditorService.ReorderSlides(uint(id), req.SlideOrder)
 	if err != nil {
 		h.logger.Error("Failed to reorder slides",
 			zap.String("ppt_id", idStr),
 			zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "重排序幻灯片失败: "+err.Error())
 		return
+	}
+
+	resourceID := uint(id)
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     "reorder_slides",
+		Module:     models.ModulePPT,
+		Resource:   fmt.Sprintf("ppt:%d", uint(id)),
+		ResourceID: &resourceID,
+		OldData:    oldPPT,
+		NewData:    newPPT,
+	}); err != nil {
+		h.logger.Warn("Failed to record PPT reorder slides change", zap.Error(err), zap.Uint("ppt_id", uint(id)))
 	}
 
 	// NOTE: Don't invalidate cache after reordering!

@@ -54,12 +54,15 @@ func (s *PPTFileService) GetPptsByVideoFile(videoFileID uint) ([]models.PPTFile,
 }
 
 // DeletePPTFile deletes a PPT file record and physical file
-func (s *PPTFileService) DeletePPTFile(id uint) error {
+func (s *PPTFileService) DeletePPTFile(id uint) (*models.PPTFile, error) {
 	// Load PPT file first
 	pptFile, err := s.GetPPTFileByID(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	// Snapshot before deletion for audit OldData capture
+	oldPPT := *pptFile
 
 	// Delete physical file
 	if pptFile.FilePath != "" {
@@ -84,14 +87,14 @@ func (s *PPTFileService) DeletePPTFile(id uint) error {
 
 	// Delete database record
 	if err := s.db.Delete(&models.PPTFile{}, id).Error; err != nil {
-		return fmt.Errorf("failed to delete PPT file record: %w", err)
+		return nil, fmt.Errorf("failed to delete PPT file record: %w", err)
 	}
 
 	s.logger.Info("PPT file deleted",
 		zap.Uint("ppt_file_id", id),
 		zap.String("file_name", pptFile.FileName))
 
-	return nil
+	return &oldPPT, nil
 }
 
 // CreatePPTFile creates a new PPT file record

@@ -281,26 +281,29 @@ func (s *PPTEditorService) CreateBackup(pptFileID uint) error {
 }
 
 // DeleteSlides deletes specified slides and regenerates PPT
-func (s *PPTEditorService) DeleteSlides(pptFileID uint, slideNumbers []int) error {
+func (s *PPTEditorService) DeleteSlides(pptFileID uint, slideNumbers []int) (*models.PPTFile, *models.PPTFile, error) {
 	s.logger.Info("Deleting slides",
 		zap.Uint("ppt_file_id", pptFileID),
 		zap.Ints("slide_numbers", slideNumbers))
 
 	// Validate input
 	if len(slideNumbers) == 0 {
-		return fmt.Errorf("no slides specified for deletion")
+		return nil, nil, fmt.Errorf("no slides specified for deletion")
 	}
 
 	// Load PPT file
 	var pptFile models.PPTFile
 	if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
-		return fmt.Errorf("PPT file not found: %w", err)
+		return nil, nil, fmt.Errorf("PPT file not found: %w", err)
 	}
+
+	// Snapshot before any mutation (backup, file replacement, cache invalidation, DB writes) for audit OldData capture
+	oldPPT := pptFile
 
 	// Create backup if not exists
 	if !pptFile.HasBackup() {
 		if err := s.CreateBackup(pptFileID); err != nil {
-			return fmt.Errorf("failed to create backup: %w", err)
+			return nil, nil, fmt.Errorf("failed to create backup: %w", err)
 		}
 		// Reload to get backup path
 		s.db.First(&pptFile, pptFileID)
@@ -309,19 +312,19 @@ func (s *PPTEditorService) DeleteSlides(pptFileID uint, slideNumbers []int) erro
 	// Validate slide numbers are within range
 	for _, slideNum := range slideNumbers {
 		if slideNum < 1 || slideNum > pptFile.PageCount {
-			return fmt.Errorf("invalid slide number: %d (valid range: 1-%d)", slideNum, pptFile.PageCount)
+			return nil, nil, fmt.Errorf("invalid slide number: %d (valid range: 1-%d)", slideNum, pptFile.PageCount)
 		}
 	}
 
 	// Check if trying to delete all slides
 	if len(slideNumbers) >= pptFile.PageCount {
-		return fmt.Errorf("cannot delete all slides")
+		return nil, nil, fmt.Errorf("cannot delete all slides")
 	}
 
 	// Get all slides
 	allSlides, err := s.slideCache.GetOrExtractSlides(pptFileID)
 	if err != nil {
-		return fmt.Errorf("failed to get slides: %w", err)
+		return nil, nil, fmt.Errorf("failed to get slides: %w", err)
 	}
 
 	// Filter out deleted slides
@@ -338,7 +341,7 @@ func (s *PPTEditorService) DeleteSlides(pptFileID uint, slideNumbers []int) erro
 			filename := fmt.Sprintf("slide_%03d.jpg", slide.SlideNumber)
 			path, err := s.slideCache.GetSlideImagePath(pptFileID, resolution, filename)
 			if err != nil {
-				return fmt.Errorf("failed to get slide %d path: %w", slide.SlideNumber, err)
+				return nil, nil, fmt.Errorf("failed to get slide %d path: %w", slide.SlideNumber, err)
 			}
 			remainingSlides = append(remainingSlides, path)
 		}
@@ -348,16 +351,16 @@ func (s *PPTEditorService) DeleteSlides(pptFileID uint, slideNumbers []int) erro
 	outputPath := fmt.Sprintf("%s.new.pptx", pptFile.FilePath)
 	slideCount, err := s.pptxGenerator.GeneratePPTX(context.Background(), remainingSlides, outputPath)
 	if err != nil {
-		return fmt.Errorf("failed to generate new PPTX: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate new PPTX: %w", err)
 	}
 
 	// Replace old PPTX with new one
 	if err := os.Remove(pptFile.FilePath); err != nil {
-		return fmt.Errorf("failed to remove old PPTX: %w", err)
+		return nil, nil, fmt.Errorf("failed to remove old PPTX: %w", err)
 	}
 
 	if err := os.Rename(outputPath, pptFile.FilePath); err != nil {
-		return fmt.Errorf("failed to rename new PPTX: %w", err)
+		return nil, nil, fmt.Errorf("failed to rename new PPTX: %w", err)
 	}
 
 	// Invalidate slide cache
@@ -368,41 +371,47 @@ func (s *PPTEditorService) DeleteSlides(pptFileID uint, slideNumbers []int) erro
 	// Update database record
 	tx := s.db.Begin()
 	if err := tx.Error; err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 
 	// Update page count
 	if err := tx.Model(&pptFile).Update("page_count", slideCount).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to update page count: %w", err)
+		return nil, nil, fmt.Errorf("failed to update page count: %w", err)
 	}
 
 	// Reload to record deletion and edit history
 	if err := tx.First(&pptFile, pptFileID).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to reload PPT file: %w", err)
+		return nil, nil, fmt.Errorf("failed to reload PPT file: %w", err)
 	}
 
 	// Record deletion
 	if err := pptFile.RecordDeletion(slideNumbers); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to record deletion: %w", err)
+		return nil, nil, fmt.Errorf("failed to record deletion: %w", err)
 	}
 
 	// Record edit operation
 	if err := pptFile.AddEditOperation("delete", slideNumbers); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to record edit operation: %w", err)
+		return nil, nil, fmt.Errorf("failed to record edit operation: %w", err)
 	}
 
 	// Save changes
 	if err := tx.Save(&pptFile).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to save PPT file: %w", err)
+		return nil, nil, fmt.Errorf("failed to save PPT file: %w", err)
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Reload committed state for NewData
+	var newPPT models.PPTFile
+	if err := s.db.First(&newPPT, pptFileID).Error; err != nil {
+		return nil, nil, fmt.Errorf("failed to reload committed PPT file: %w", err)
 	}
 
 	s.logger.Info("Slides deleted successfully",
@@ -410,23 +419,26 @@ func (s *PPTEditorService) DeleteSlides(pptFileID uint, slideNumbers []int) erro
 		zap.Int("deleted_count", len(slideNumbers)),
 		zap.Int("new_page_count", slideCount))
 
-	return nil
+	return &oldPPT, &newPPT, nil
 }
 
 // Rollback restores PPT from backup
-func (s *PPTEditorService) Rollback(pptFileID uint) error {
+func (s *PPTEditorService) Rollback(pptFileID uint) (*models.PPTFile, *models.PPTFile, error) {
 	var pptFile models.PPTFile
 	if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
-		return fmt.Errorf("PPT file not found: %w", err)
+		return nil, nil, fmt.Errorf("PPT file not found: %w", err)
 	}
 
 	if !pptFile.HasBackup() {
-		return fmt.Errorf("no backup exists for rollback")
+		return nil, nil, fmt.Errorf("no backup exists for rollback")
 	}
+
+	// Snapshot before backup copy / cache invalidation / DB writes for audit OldData capture
+	oldPPT := pptFile
 
 	// Restore from backup
 	if err := s.copyFile(pptFile.BackupPath, pptFile.FilePath); err != nil {
-		return fmt.Errorf("failed to restore from backup: %w", err)
+		return nil, nil, fmt.Errorf("failed to restore from backup: %w", err)
 	}
 
 	// Invalidate cache
@@ -444,7 +456,7 @@ func (s *PPTEditorService) Rollback(pptFileID uint) error {
 	// Update database
 	tx := s.db.Begin()
 	if err := tx.Error; err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 
 	updates := map[string]interface{}{
@@ -455,34 +467,40 @@ func (s *PPTEditorService) Rollback(pptFileID uint) error {
 
 	if err := tx.Model(&pptFile).Updates(updates).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to update PPT file: %w", err)
+		return nil, nil, fmt.Errorf("failed to update PPT file: %w", err)
 	}
 
 	// Record rollback operation
 	if err := tx.First(&pptFile, pptFileID).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to reload PPT file: %w", err)
+		return nil, nil, fmt.Errorf("failed to reload PPT file: %w", err)
 	}
 
 	if err := pptFile.AddEditOperation("rollback", []int{}); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to record rollback: %w", err)
+		return nil, nil, fmt.Errorf("failed to record rollback: %w", err)
 	}
 
 	if err := tx.Save(&pptFile).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to save PPT file: %w", err)
+		return nil, nil, fmt.Errorf("failed to save PPT file: %w", err)
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Reload committed state for NewData
+	var newPPT models.PPTFile
+	if err := s.db.First(&newPPT, pptFileID).Error; err != nil {
+		return nil, nil, fmt.Errorf("failed to reload committed PPT file: %w", err)
 	}
 
 	s.logger.Info("Rollback completed",
 		zap.Uint("ppt_file_id", pptFileID),
 		zap.Int("restored_page_count", originalCount))
 
-	return nil
+	return &oldPPT, &newPPT, nil
 }
 
 // Helper functions
@@ -786,7 +804,7 @@ func (s *PPTEditorService) generateThumbnail(inputPath, outputPath string) error
 
 // ReorderSlides reorders slides in a PPT file according to the new slide order
 // Returns the new slide order after successful reordering
-func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int, error) {
+func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int, *models.PPTFile, *models.PPTFile, error) {
 	s.logger.Info("Reordering slides",
 		zap.Uint("ppt_file_id", pptFileID),
 		zap.Ints("new_order", newOrder))
@@ -794,13 +812,13 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 	// Get PPT file
 	var pptFile models.PPTFile
 	if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
-		return nil, fmt.Errorf("PPT file not found: %w", err)
+		return nil, nil, nil, fmt.Errorf("PPT file not found: %w", err)
 	}
 
 	// Get current slides to verify all slide numbers exist
 	slides, err := s.slideCache.GetOrExtractSlides(pptFileID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get slides: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get slides: %w", err)
 	}
 
 	// Create a map of current slide numbers for quick lookup
@@ -812,7 +830,7 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 	// Validate all slide numbers in new order exist
 	for _, slideNum := range newOrder {
 		if !currentSlideMap[slideNum] {
-			return nil, fmt.Errorf("slide number %d does not exist in PPT", slideNum)
+			return nil, nil, nil, fmt.Errorf("slide number %d does not exist in PPT", slideNum)
 		}
 	}
 
@@ -826,9 +844,12 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 		}
 	}
 
+	// Snapshot before any mutation for audit OldData capture
+	oldPPT := pptFile
+
 	if !orderChanged {
 		s.logger.Info("Slide order unchanged, skipping reordering")
-		return newOrder, nil
+		return newOrder, &oldPPT, &pptFile, nil
 	}
 
 	// Get slide image directory - use slide cache directory structure
@@ -839,13 +860,13 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 
 	// Verify the slide cache directory exists
 	if _, err := os.Stat(fullsizeDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("slide cache directory does not exist: %s", fullsizeDir)
+		return nil, nil, nil, fmt.Errorf("slide cache directory does not exist: %s", fullsizeDir)
 	}
 
 	// Backup current slides before reordering
 	backupDir := filepath.Join(slideDir, fmt.Sprintf("backup_before_reorder_%s", time.Now().Format("20060102_150405")))
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create backup directory: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
 	// Copy current slides to backup
@@ -866,7 +887,7 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 	// Create temp directory for reordered slides
 	tempDir := filepath.Join(slideDir, "temp_reorder")
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -880,10 +901,10 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 		dstThumbnail := filepath.Join(tempDir, fmt.Sprintf("thumb_%03d.jpg", newPosition))
 
 		if err := copyFile(srcFullsize, dstFullsize); err != nil {
-			return nil, fmt.Errorf("failed to copy slide %d: %w", oldSlideNum, err)
+			return nil, nil, nil, fmt.Errorf("failed to copy slide %d: %w", oldSlideNum, err)
 		}
 		if err := copyFile(srcThumbnail, dstThumbnail); err != nil {
-			return nil, fmt.Errorf("failed to copy thumbnail: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to copy thumbnail: %w", err)
 		}
 	}
 
@@ -896,10 +917,10 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 		dstThumbnail := filepath.Join(thumbnailDir, fmt.Sprintf("slide_%03d.jpg", newPosition))
 
 		if err := os.Rename(srcFullsize, dstFullsize); err != nil {
-			return nil, fmt.Errorf("failed to move fullsize slide: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to move fullsize slide: %w", err)
 		}
 		if err := os.Rename(srcThumbnail, dstThumbnail); err != nil {
-			return nil, fmt.Errorf("failed to move thumbnail: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to move thumbnail: %w", err)
 		}
 	}
 
@@ -910,16 +931,22 @@ func (s *PPTEditorService) ReorderSlides(pptFileID uint, newOrder []int) ([]int,
 		// Rollback backup path change
 		pptFile.BackupPath = oldBackupPath
 		s.db.Save(&pptFile)
-		return nil, fmt.Errorf("failed to update backup path: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to update backup path: %w", err)
 	}
 
 	// NOTE: Don't invalidate cache after reordering!
 	// The reordered JPEG images in the cache directory are now the source of truth.
 	// Invalidating would cause re-extraction from the PPTX file which still has the original order.
 
+	// Reload committed state for NewData
+	var newPPT models.PPTFile
+	if err := s.db.First(&newPPT, pptFileID).Error; err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to reload PPT file: %w", err)
+	}
+
 	s.logger.Info("Successfully reordered slides",
 		zap.Uint("ppt_file_id", pptFileID),
 		zap.String("backup_dir", backupDir))
 
-	return newOrder, nil
+	return newOrder, &oldPPT, &newPPT, nil
 }

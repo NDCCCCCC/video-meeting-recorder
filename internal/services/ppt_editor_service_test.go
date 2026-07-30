@@ -180,22 +180,26 @@ func TestPPTEditorService_DeleteSlides_Success(t *testing.T) {
 	require.NoError(t, db.Create(pptFile).Error)
 
 	// Delete slides 2 and 4
-	err := service.DeleteSlides(pptFile.ID, []int{2, 4})
+	oldPPT, newPPT, err := service.DeleteSlides(pptFile.ID, []int{2, 4})
 	assert.NoError(t, err)
+
+	// Verify pre-mutation snapshot retains original state
+	assert.NotNil(t, oldPPT)
+	assert.Equal(t, 5, oldPPT.PageCount)
+	assert.Empty(t, oldPPT.BackupPath)
+
+	// Verify post-mutation snapshot reflects committed state
+	assert.NotNil(t, newPPT)
+	assert.Equal(t, 3, newPPT.PageCount)
+	assert.NotEmpty(t, newPPT.BackupPath)
 
 	var updated models.PPTFile
 	db.First(&updated, pptFile.ID)
-
-	// Verify backup was created
-	assert.NotEmpty(t, updated.BackupPath)
 
 	// Verify deleted slides are recorded
 	deletedSlides, err := updated.GetDeletedSlides()
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, []int{2, 4}, deletedSlides)
-
-	// Verify page count was updated
-	assert.Equal(t, 3, updated.PageCount)
 }
 
 func TestPPTEditorService_DeleteSlides_EmptySlideArray(t *testing.T) {
@@ -213,7 +217,7 @@ func TestPPTEditorService_DeleteSlides_EmptySlideArray(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.DeleteSlides(pptFile.ID, []int{})
+	_, _, err := service.DeleteSlides(pptFile.ID, []int{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no slides specified")
 }
@@ -233,7 +237,7 @@ func TestPPTEditorService_DeleteSlides_AllSlides(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.DeleteSlides(pptFile.ID, []int{1, 2, 3})
+	_, _, err := service.DeleteSlides(pptFile.ID, []int{1, 2, 3})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot delete all slides")
 }
@@ -253,7 +257,7 @@ func TestPPTEditorService_DeleteSlides_InvalidSlideNumber(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.DeleteSlides(pptFile.ID, []int{1, 10}) // 10 is out of range
+	_, _, err := service.DeleteSlides(pptFile.ID, []int{1, 10}) // 10 is out of range
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid slide number")
 }
@@ -280,7 +284,7 @@ func TestPPTEditorService_Rollback_Success(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.Rollback(pptFile.ID)
+	_, _, err := service.Rollback(pptFile.ID)
 	assert.NoError(t, err)
 
 	var updated models.PPTFile
@@ -310,7 +314,7 @@ func TestPPTEditorService_Rollback_NoBackup(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.Rollback(pptFile.ID)
+	_, _, err := service.Rollback(pptFile.ID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no backup exists")
 }
@@ -318,7 +322,7 @@ func TestPPTEditorService_Rollback_NoBackup(t *testing.T) {
 func TestPPTEditorService_Rollback_PPTNotFound(t *testing.T) {
 	service, _, _ := setupPPTEditorServiceTest(t)
 
-	err := service.Rollback(999)
+	_, _, err := service.Rollback(999)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
