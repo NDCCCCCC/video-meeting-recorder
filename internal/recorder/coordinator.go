@@ -244,7 +244,7 @@ func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cm
 
 		// 尝试自动重连（仅对启用了重连的流媒体录制）
 		if process != nil && process.ShouldReconnect && process.Task != nil && process.HuaweiConfig != nil {
-			c.attemptReconnect(processKey, process)
+			c.attemptReconnect(ctx, processKey, process)
 		}
 	} else {
 		c.logger.Info("录制进程正常结束", zap.String("process_key", processKey))
@@ -252,7 +252,7 @@ func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cm
 }
 
 // attemptReconnect 尝试重新连接流媒体
-func (c *SimpleRecordingCoordinator) attemptReconnect(processKey string, process *RecordingProcess) {
+func (c *SimpleRecordingCoordinator) attemptReconnect(ctx context.Context, processKey string, process *RecordingProcess) {
 	// 检查是否超过最大重连次数
 	if process.ReconnectCount >= process.MaxReconnects {
 		c.logger.Error("已达到最大重连次数，停止重连",
@@ -268,7 +268,13 @@ func (c *SimpleRecordingCoordinator) attemptReconnect(processKey string, process
 		zap.Duration("delay", process.ReconnectDelay),
 		zap.Int("attempt", process.ReconnectCount+1),
 	)
-	time.Sleep(process.ReconnectDelay)
+	timer := time.NewTimer(process.ReconnectDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+	}
 
 	// 增加重连计数
 	process.ReconnectCount++
@@ -287,7 +293,7 @@ func (c *SimpleRecordingCoordinator) attemptReconnect(processKey string, process
 		)
 		// 递归尝试下一次重连
 		if process.ReconnectCount < process.MaxReconnects {
-			go c.attemptReconnect(processKey, process)
+			go c.attemptReconnect(ctx, processKey, process)
 		}
 	} else {
 		c.logger.Info("重连成功，录制已恢复",

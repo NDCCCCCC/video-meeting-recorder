@@ -253,7 +253,13 @@ func (m *Manager) SafeCallConference(ctx context.Context, configID uint, req *Ca
 		if err := client.HangupCall(ctx); err != nil {
 			m.logger.Warn("挂断残留连接失败，继续尝试呼叫", zap.Error(err))
 		}
-		time.Sleep(1 * time.Second)
+		timer := time.NewTimer(time.Second)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 
 	// 4. 呼叫会议

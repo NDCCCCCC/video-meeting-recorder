@@ -352,7 +352,14 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 			zap.Uint("task_id", taskID),
 			zap.Int("delay_minutes", task.RecordDelayMinutes),
 		)
-		time.Sleep(time.Duration(task.RecordDelayMinutes) * time.Minute)
+		timer := time.NewTimer(time.Duration(task.RecordDelayMinutes) * time.Minute)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			s.logger.Info("录制延迟被取消", zap.Uint("task_id", taskID))
+			return
+		case <-timer.C:
+		}
 	}
 
 	// 重新加载任务关联的所有输入配置（可能已更新）

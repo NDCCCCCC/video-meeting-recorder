@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
@@ -269,6 +270,11 @@ func (s *SM4TokenService) validateClaims(claims *Claims, expectedType string) er
 // 实现宽限期机制：5秒内重复刷新请求返回相同的 token 对（幂等性）。
 // 关键：在宽限期内不撤销旧 token，只有在超过宽限期后才撤销。
 func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, error) {
+	return s.RefreshAccessTokenWithContext(context.Background(), refreshToken)
+}
+
+// RefreshAccessTokenWithContext 刷新令牌并允许调用方取消宽限期撤销任务。
+func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, refreshToken string) (*TokenPair, error) {
 	claims, err := s.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		return nil, err
@@ -400,7 +406,13 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 					zap.Any("recover", r), zap.Stack("stack"))
 			}
 		}()
-		time.Sleep(GracePeriod)
+		timer := time.NewTimer(GracePeriod)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
 		s.db.Model(&models.Session{}).
 			Where("token = ? AND is_active = ?", refreshToken, true).
 			Update("is_active", false)
