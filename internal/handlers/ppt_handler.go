@@ -73,7 +73,15 @@ func (h *PPThandler) verifyPPTOwnership(c *gin.Context, pptFile *models.PPTFile)
 		return err
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return fmt.Errorf("user not in context")
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 	roleIDs := middleware.GetRoleIDs(c)
 
@@ -163,7 +171,11 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 	}
 
 	// Verify user owns the video file
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 	roleIDs := middleware.GetRoleIDs(c)
 
@@ -216,7 +228,15 @@ func (h *PPThandler) BatchGetPptsByVideos(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	// 批量查询 PPT 结果
@@ -319,7 +339,11 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 	}
 
 	// Get user context
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	// Load video file to check ownership
 	videoFile, err := h.videoFileService.GetFileByID(req.VideoFileID)
@@ -475,7 +499,11 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 	}
 
 	// Get user context
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	// Load PPT file to check ownership (via SourceVideoFile)
 	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))

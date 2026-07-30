@@ -83,7 +83,15 @@ func (h *AdminHandler) UpdateAuthConfig(c *gin.Context) {
 		return
 	}
 
-	currentUserID := middleware.GetUserID(c)
+	currentUserID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 
 	// If switching to AD mode, validate AD config first (per D-17)
 	if req.Mode == "ad" {
@@ -148,7 +156,11 @@ func (h *AdminHandler) UpdateAuthConfig(c *gin.Context) {
 // @Success 200 {object} response.Response{data=map[string]interface{}}
 // @Router /api/v1/admin/auth/me [get]
 func (h *AdminHandler) GetCurrentUser(c *gin.Context) {
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	username := middleware.GetUsername(c)
 
 	response.GinSuccess(c, gin.H{

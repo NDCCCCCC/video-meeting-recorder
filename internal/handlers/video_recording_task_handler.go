@@ -76,7 +76,12 @@ func (h *VideoRecordingTaskHandler) ListTasks(c *gin.Context) {
 	}
 
 	// 设置数据范围过滤参数
-	req.UserID = middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
+	req.UserID = userID
 	req.IsAdmin = middleware.GetIsAdmin(c)
 	req.ApplyDataScope = true
 	req.RoleIDs = middleware.GetRoleIDs(c)
@@ -114,7 +119,11 @@ func (h *VideoRecordingTaskHandler) GetTask(c *gin.Context) {
 
 	// 检查用户是否有权限访问此任务
 	if !middleware.CanAccessAllData(c) {
-		userID := middleware.GetUserID(c)
+		userID, ok := middleware.GetUserID(c)
+		if !ok {
+			c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+			return
+		}
 		// 非管理员和共享查看者只能访问自己创建的任务
 		if task.CreatedBy != userID {
 			h.logger.Warn("用户尝试访问无权限的录制任务",
@@ -146,7 +155,15 @@ func (h *VideoRecordingTaskHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	task, err := h.taskService.CreateTask(&req, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
@@ -174,7 +191,15 @@ func (h *VideoRecordingTaskHandler) CreateTaskAuto(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	task, err := h.taskService.CreateTaskAuto(&req, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
@@ -209,7 +234,15 @@ func (h *VideoRecordingTaskHandler) UpdateTask(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	oldTask, task, err := h.taskService.UpdateTask(id, &req, userID, hasSharedViewer)
 	if err != nil {
@@ -248,7 +281,15 @@ func (h *VideoRecordingTaskHandler) DeleteTask(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 	oldTask, err := h.taskService.DeleteTask(id, userID, isAdmin)
 	if err != nil {
@@ -289,7 +330,15 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 	oldTasks, result, err := h.taskService.BatchDeleteTasks(req.IDs, userID, isAdmin)
 	if err != nil {
@@ -357,7 +406,15 @@ func (h *VideoRecordingTaskHandler) StartTask(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	oldTask, task, err := h.taskService.StartTask(id, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
@@ -395,7 +452,15 @@ func (h *VideoRecordingTaskHandler) StopTask(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	oldTask, task, err := h.taskService.StopTask(id, userID, hasSharedViewer)
 	if err != nil {
@@ -434,7 +499,15 @@ func (h *VideoRecordingTaskHandler) CancelTask(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	if err := h.taskService.CancelTask(id, userID, hasSharedViewer); err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
@@ -460,7 +533,15 @@ func (h *VideoRecordingTaskHandler) RetryTask(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	task, err := h.taskService.RetryTask(id, userID, hasSharedViewer)
 	if err != nil {
@@ -566,7 +647,11 @@ func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
 	m3u8Exists := m3u8Err == nil
 
 	// 验证权限：任务创建者、管理员或 shared_viewer 可以访问
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 	roleIDs := middleware.GetRoleIDs(c)
 

@@ -10,41 +10,51 @@ import (
 )
 
 // GetUserID 从context获取用户ID
-func GetUserID(c *gin.Context) uint {
-	if userID, exists := c.Get("user_id"); exists {
-		return userID.(uint)
+func GetUserID(c *gin.Context) (uint, bool) {
+	value, exists := c.Get("user_id")
+	if !exists {
+		return 0, false
 	}
-	return 0
+	userID, ok := value.(uint)
+	return userID, ok
 }
 
 // GetUsername 从context获取用户名
 func GetUsername(c *gin.Context) string {
-	if username, exists := c.Get("username"); exists {
-		return username.(string)
+	if value, exists := c.Get("username"); exists {
+		if typed, ok := value.(string); ok {
+			return typed
+		}
 	}
 	return ""
 }
 
 // GetRoleID 从context获取角色ID
 func GetRoleID(c *gin.Context) uint {
-	if roleID, exists := c.Get("role_id"); exists {
-		return roleID.(uint)
+	if value, exists := c.Get("role_id"); exists {
+		if typed, ok := value.(uint); ok {
+			return typed
+		}
 	}
 	return 0
 }
 
 // GetRoleIDs 从context获取角色ID列表
 func GetRoleIDs(c *gin.Context) []uint {
-	if roleIDs, exists := c.Get("role_ids"); exists {
-		return roleIDs.([]uint)
+	if value, exists := c.Get("role_ids"); exists {
+		if typed, ok := value.([]uint); ok {
+			return typed
+		}
 	}
 	return nil
 }
 
 // GetIsAdmin 从context获取是否管理员
 func GetIsAdmin(c *gin.Context) bool {
-	if isAdmin, exists := c.Get("is_admin"); exists {
-		return isAdmin.(bool)
+	if value, exists := c.Get("is_admin"); exists {
+		if typed, ok := value.(bool); ok {
+			return typed
+		}
 	}
 	return false
 }
@@ -123,7 +133,7 @@ func OptionalSM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 // 支持通过URL查询参数传递token（用于文件下载）
 func isVideoDownloadEndpoint(path string) bool {
 	return strings.Contains(path, "/download") &&
-		   (strings.Contains(path, "/files/") || strings.Contains(path, "/ppts/"))
+		(strings.Contains(path, "/files/") || strings.Contains(path, "/ppts/"))
 }
 
 // extractToken 从多个来源提取token

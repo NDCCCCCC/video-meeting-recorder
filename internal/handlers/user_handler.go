@@ -141,7 +141,11 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	}
 
 	// 获取当前用户ID用于审计日志
-	currentUserID := middleware.GetUserID(c)
+	currentUserID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	oldUser, user, err := h.userService.UpdateUser(id, &req, currentUserID)
 	if err != nil {
@@ -276,7 +280,11 @@ func (h *UserHandler) ToggleUserStatus(c *gin.Context) {
 
 // GetCurrentProfile 获取当前用户资料
 func (h *UserHandler) GetCurrentProfile(c *gin.Context) {
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	user, err := h.userService.GetUserByID(userID)
 	if err != nil {
@@ -289,7 +297,11 @@ func (h *UserHandler) GetCurrentProfile(c *gin.Context) {
 
 // UpdateCurrentProfile 更新当前用户资料
 func (h *UserHandler) UpdateCurrentProfile(c *gin.Context) {
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	var req struct {
 		Email    string `json:"email" binding:"omitempty,email"`

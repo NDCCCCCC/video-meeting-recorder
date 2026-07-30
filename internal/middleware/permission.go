@@ -12,7 +12,11 @@ import (
 // RequirePermission 需要特定权限
 func RequirePermission(db *gorm.DB, resource, action string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := GetUserID(c)
+		userID, ok := GetUserID(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not in context"})
+			return
+		}
 		if userID == 0 {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "未授权"})
 			c.Abort()
@@ -41,7 +45,11 @@ func RequirePermission(db *gorm.DB, resource, action string) gin.HandlerFunc {
 // RequireRole 需要特定角色
 func RequireRole(db *gorm.DB, roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := GetUserID(c)
+		userID, ok := GetUserID(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not in context"})
+			return
+		}
 		if userID == 0 {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "未授权"})
 			c.Abort()
@@ -77,7 +85,11 @@ func RequireRole(db *gorm.DB, roles ...string) gin.HandlerFunc {
 // RequireOwnershipOrRole 要求资源所有者或特定角色
 func RequireOwnershipOrRole(db *gorm.DB, ownerIDField string, roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := GetUserID(c)
+		userID, ok := GetUserID(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not in context"})
+			return
+		}
 		if userID == 0 {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": response.CodeUnauthorized, "message": "未授权"})
 			c.Abort()
@@ -125,7 +137,11 @@ func RequireOwnershipOrRole(db *gorm.DB, ownerIDField string, roles ...string) g
 // 管理员可以访问所有数据，非管理员只能访问自己创建的数据
 func RequireDataScope(ownerIDField string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := GetUserID(c)
+		userID, ok := GetUserID(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not in context"})
+			return
+		}
 		isAdmin := c.GetBool("is_admin")
 
 		// 管理员可以访问所有数据

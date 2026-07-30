@@ -136,7 +136,11 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // @Success 200 {object} response.Response
 // @Router /api/v1/auth/logout-all [post]
 func (h *AuthHandler) LogoutAll(c *gin.Context) {
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	if err := h.authService.LogoutAll(userID); err != nil {
 		h.logger.Error("Logout all failed",
@@ -169,7 +173,15 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 
 	if err := h.authService.ChangePassword(userID, &req); err != nil {
 		response.GinError(c, response.CodeInvalidPassword, err.Error())
@@ -192,7 +204,11 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 // @Success 200 {object} response.Response{data=auth.UserDTO}
 // @Router /api/v1/auth/me [get]
 func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	user, err := h.authService.GetUserByID(userID)
 	if err != nil {

@@ -82,7 +82,11 @@ func (h *TranscriptionHandler) SubmitTranscription(c *gin.Context) {
 	}
 
 	// Verify user owns the video file
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	file, err := h.videoFileService.GetFileByID(uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "视频文件不存在")
@@ -116,7 +120,11 @@ func (h *TranscriptionHandler) GetTranscriptionStatus(c *gin.Context) {
 	}
 
 	// Verify user owns the video file
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	file, err := h.videoFileService.GetFileByID(uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
@@ -155,7 +163,11 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 	}
 
 	// Verify user owns the video file (per T-04-08 file ownership check)
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	file, err := h.videoFileService.GetFileByID(uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
@@ -209,7 +221,11 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 // ListActiveTasks handles GET /api/v1/transcriptions/active
 // Returns all active transcription tasks (pending or processing)
 func (h *TranscriptionHandler) ListActiveTasks(c *gin.Context) {
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	tasks, err := h.transcriptionService.GetActiveTasks()
 	if err != nil {
@@ -288,7 +304,11 @@ func (h *TranscriptionHandler) GetTimestampMapHandler(c *gin.Context) {
 	videoFileID := uint(id)
 
 	// Verify user owns the video file
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	file, err := h.videoFileService.GetFileByID(videoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
@@ -345,7 +365,11 @@ func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
 	}
 
 	// 获取用户信息
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	isAdmin := middleware.CanAccessAllData(c)
 
 	// PERF-005/D-03.8: 所有权校验改为 bounded concurrency，缩短大批量请求的延迟。
@@ -438,7 +462,15 @@ func (h *TranscriptionHandler) GetBatchTranscriptionStatus(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.CanAccessAllData(c)
 
 	jobGroup, err := h.transcriptionService.GetJobGroupStatus(uint(id), userID, isAdmin)

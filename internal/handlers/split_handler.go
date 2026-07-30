@@ -61,7 +61,11 @@ func (h *SplitHandler) SubmitSplit(c *gin.Context) {
 	}
 
 	// Verify user owns the video file
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	file, err := h.videoFileService.GetFileByID(uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "视频文件不存在")
@@ -93,7 +97,15 @@ func (h *SplitHandler) GenerateSnapshot(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 
 	snapshotFile, err := h.snapshotService.GenerateSnapshot(uint(id), userID, hasSharedViewer)

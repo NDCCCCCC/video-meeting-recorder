@@ -54,7 +54,12 @@ func (h *VideoFileHandler) ListFiles(c *gin.Context) {
 	}
 
 	// 设置数据范围过滤参数
-	req.UserID = middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
+	req.UserID = userID
 	req.IsAdmin = middleware.GetIsAdmin(c)
 	req.ApplyDataScope = true
 	req.RoleIDs = middleware.GetRoleIDs(c)
@@ -104,7 +109,11 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 
 	// 检查数据访问权限
 	// shared_viewer 和 admin 可以访问所有文件，普通用户只能访问自己创建的文件
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
 		h.logger.Warn("用户无权访问文件",
 			zap.Uint("user_id", userID),
@@ -317,7 +326,11 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 	}
 
 	// Get user context
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 
 	// Load file to check ownership
 	file, err := h.fileService.GetFileByID(id)
@@ -387,7 +400,11 @@ func (h *VideoFileHandler) BatchDownloadFiles(c *gin.Context) {
 	}
 
 	// 获取用户信息
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	// 调用服务层

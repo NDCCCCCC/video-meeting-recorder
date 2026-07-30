@@ -88,7 +88,15 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 
 	apiKey, fullKey, err := h.apiKeyService.CreateAPIKey(userID, &req)
 	if err != nil {
@@ -129,7 +137,15 @@ func (h *APIKeyHandler) ListAPIKeys(c *gin.Context) {
 	c.ShouldBindQuery(&req)
 	req.Page, req.PageSize = normalizePagination(req.Page, req.PageSize)
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	result, err := h.apiKeyService.ListAPIKeys(userID, isAdmin, &req)
@@ -170,7 +186,15 @@ func (h *APIKeyHandler) GetAPIKey(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	apiKey, err := h.apiKeyService.GetAPIKey(id, userID, isAdmin)
@@ -206,7 +230,15 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	oldAPIKey, apiKey, err := h.apiKeyService.UpdateAPIKey(id, userID, isAdmin, &req)
@@ -256,7 +288,15 @@ func (h *APIKeyHandler) DeleteAPIKey(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	oldAPIKey, err := h.apiKeyService.DeleteAPIKey(id, userID, isAdmin)
@@ -308,7 +348,15 @@ func (h *APIKeyHandler) ToggleAPIKeyStatus(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	oldAPIKey, apiKey, err := h.apiKeyService.ToggleAPIKeyStatus(id, userID, isAdmin)
@@ -369,7 +417,15 @@ func (h *APIKeyHandler) ListUsageLogs(c *gin.Context) {
 	c.ShouldBindQuery(&req)
 	req.Page, req.PageSize = normalizePagination(req.Page, req.PageSize)
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	logs, total, err := h.apiKeyService.ListUsageLogs(userID, isAdmin, id, &req)
@@ -405,7 +461,15 @@ func (h *APIKeyHandler) GetUsageLogSummary(c *gin.Context) {
 		return
 	}
 
-	userID := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+
+	if !ok {
+
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+
+		return
+
+	}
 	isAdmin := middleware.GetIsAdmin(c)
 
 	summary, err := h.apiKeyService.GetUsageLogSummary(userID, isAdmin, id)
