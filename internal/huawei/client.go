@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -349,7 +350,7 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 		c.logger.Debug("收到响应",
 			zap.String("action_id", actionID),
 			zap.Int("status", resp.StatusCode),
-			zap.String("response", string(respBody)),
+			zap.ByteString("response", huaweiSanitizeResponseBody(respBody)),
 		)
 	}
 
@@ -871,4 +872,36 @@ type CallConferenceResponse struct {
 type HangupConferenceRequest struct {
 	CallID         string
 	TerminalNumber string
+}
+
+// huaweiSanitizeResponseBody masks credentials and certificate payloads before logging.
+func huaweiSanitizeResponseBody(body []byte) []byte {
+	var value interface{}
+	if err := json.Unmarshal(body, &value); err != nil {
+		return []byte("[unparseable response omitted]")
+	}
+	var sanitize func(interface{})
+	sanitize = func(current interface{}) {
+		switch typed := current.(type) {
+		case map[string]interface{}:
+			for key, child := range typed {
+				lower := strings.ToLower(key)
+				if lower == "username" || lower == "password" || lower == "certbase64string" || strings.Contains(lower, "certificate") {
+					typed[key] = "***"
+				} else {
+					sanitize(child)
+				}
+			}
+		case []interface{}:
+			for _, child := range typed {
+				sanitize(child)
+			}
+		}
+	}
+	sanitize(value)
+	masked, err := json.Marshal(value)
+	if err != nil {
+		return []byte("[response omitted]")
+	}
+	return masked
 }

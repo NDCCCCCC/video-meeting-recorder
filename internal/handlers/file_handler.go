@@ -124,7 +124,7 @@ func (h *FileHandler) Download(c *gin.Context) {
 	if err != nil {
 		h.logger.Warn("文件下载失败",
 			zap.Uint("user_id", userID),
-			zap.String("token", accessToken),
+			zap.String("token", maskAccessToken(accessToken)),
 			zap.Error(err),
 		)
 		response.GinError(c, response.CodeNotFound, err.Error())
@@ -313,4 +313,11 @@ func (h *FileHandler) GetQuota(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, quota)
+}
+
+func maskAccessToken(token string) string {
+	if len(token) > 4 {
+		return "***" + token[len(token)-4:]
+	}
+	return "***"
 }
