@@ -41,3 +41,15 @@ func TestContextHelpersRejectWrongTypes(t *testing.T) {
 		t.Fatal("context helpers must return safe defaults for wrong types")
 	}
 }
+
+func TestAllowedTokenURLUsesExactPrefixes(t *testing.T) {
+	prefixes := []string{"/api/v1/files/download/"}
+	if !isAllowedTokenURL("/api/v1/files/download/abc", prefixes) {
+		t.Fatal("configured download prefix should match")
+	}
+	for _, path := range []string{"/api/v1/users/list/download/x", "/evil/api/v1/files/download/abc", "/api/v1/files/downloadish/abc"} {
+		if isAllowedTokenURL(path, prefixes) {
+			t.Fatalf("unexpected token URL match: %s", path)
+		}
+	}
+}

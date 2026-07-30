@@ -35,13 +35,14 @@ const (
 // Token格式: base64url(nonce[12] + SM4-GCM(claims_json) + authTag[16])
 // SM4-GCM同时提供加密（payload不可读）和认证（防篡改）。
 type SM4TokenService struct {
-	gcm           cipher.AEAD // 预初始化的SM4-GCM实例，避免每次加解密重复创建
-	issuer        string
-	expireHours   int
-	refreshExpire int
-	maxSession    int
-	db            *gorm.DB
-	logger        *zap.Logger
+	gcm                     cipher.AEAD // 预初始化的SM4-GCM实例，避免每次加解密重复创建
+	issuer                  string
+	expireHours             int
+	refreshExpire           int
+	maxSession              int
+	db                      *gorm.DB
+	logger                  *zap.Logger
+	allowedTokenURLPrefixes []string
 	// token 缓存：支持宽限期机制
 	tokenCache      map[string]*TokenCacheEntry // key: refresh token, value: 缓存的 token 对
 	tokenCacheMutex sync.RWMutex
@@ -84,14 +85,15 @@ func NewSM4TokenService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *SM
 	}
 
 	return &SM4TokenService{
-		gcm:           gcm,
-		issuer:        "record_v2",
-		expireHours:   int(cfg.Auth.AccessTokenDuration.Hours()),
-		refreshExpire: int(cfg.Auth.RefreshTokenDuration.Hours()),
-		maxSession:    int(cfg.Auth.MaxSessionDuration.Hours()),
-		db:            db,
-		logger:        logger,
-		tokenCache:    make(map[string]*TokenCacheEntry),
+		gcm:                     gcm,
+		issuer:                  "record_v2",
+		expireHours:             int(cfg.Auth.AccessTokenDuration.Hours()),
+		refreshExpire:           int(cfg.Auth.RefreshTokenDuration.Hours()),
+		maxSession:              int(cfg.Auth.MaxSessionDuration.Hours()),
+		db:                      db,
+		logger:                  logger,
+		allowedTokenURLPrefixes: append([]string(nil), cfg.Security.AllowedTokenURLPrefixes...),
+		tokenCache:              make(map[string]*TokenCacheEntry),
 	}
 }
 
@@ -462,4 +464,9 @@ func GenerateRandomSecret() (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(key), nil
+}
+
+// AllowedTokenURLPrefixes returns a defensive copy of configured query-token routes.
+func (s *SM4TokenService) AllowedTokenURLPrefixes() []string {
+	return append([]string(nil), s.allowedTokenURLPrefixes...)
 }

@@ -403,6 +403,10 @@ func setDefaults(cfg *Config) {
 		cfg.Database.MaxIdleConns = 1
 	}
 
+	if cfg.Security.AllowedTokenURLPrefixes == nil {
+		cfg.Security.AllowedTokenURLPrefixes = []string{"/api/v1/files/download/", "/api/v1/recordings/", "/api/v1/ppts/"}
+	}
+
 	// SEC-001/D-03.4: 不再保留硬编码 fallback 默认密钥；
 	// 缺失时保持空字符串，由 ValidateProductionSecrets 在启动时决定是否 Fatal。
 	if cfg.Auth.AccessTokenDuration == 0 {

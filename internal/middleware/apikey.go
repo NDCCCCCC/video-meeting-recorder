@@ -110,7 +110,7 @@ func MultiAuth(db *gorm.DB, tokenService *auth.SM4TokenService, logger *zap.Logg
 
 		// 再尝试SM4 Token认证（extractToken 统一处理 Authorization 头和下载端点的 ?token= 查询参数）
 		// SM4Auth 内部会再次调用 extractToken 获取同样的 token
-		if extractToken(c) != "" {
+		if extractToken(c, tokenService.AllowedTokenURLPrefixes()) != "" {
 			sm4Handler(c)
 			return
 		}

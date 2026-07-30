@@ -81,7 +81,7 @@ func CanAccessAllData(c *gin.Context) bool {
 // 支持 Authorization 头和 token 查询参数（用于视频播放等场景）
 func SM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenString := extractToken(c)
+		tokenString := extractToken(c, tokenService.AllowedTokenURLPrefixes())
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    response.CodeUnauthorized,
@@ -131,20 +131,24 @@ func OptionalSM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 
 // isVideoDownloadEndpoint 检查是否是文件/PPT下载端点
 // 支持通过URL查询参数传递token（用于文件下载）
-func isVideoDownloadEndpoint(path string) bool {
-	return strings.Contains(path, "/download") &&
-		(strings.Contains(path, "/files/") || strings.Contains(path, "/ppts/"))
+func isAllowedTokenURL(path string, allowedPrefixes []string) bool {
+	for _, prefix := range allowedPrefixes {
+		if prefix != "" && strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // extractToken 从多个来源提取token
 // 注意：token 查询参数仅允许用于视频下载端点（用于 <video> 标签播放）
-func extractToken(c *gin.Context) string {
+func extractToken(c *gin.Context, allowedPrefixes []string) string {
 	// 优先从 Authorization 头获取
 	tokenString := extractTokenFromHeader(c)
 
 	// 如果 Header 没有，且是视频下载端点，才允许从查询参数获取
 	// 警告：通过 URL 传递 token 会被记录在服务器日志和浏览器历史中
-	if tokenString == "" && isVideoDownloadEndpoint(c.Request.URL.Path) {
+	if tokenString == "" && isAllowedTokenURL(c.Request.URL.Path, allowedPrefixes) {
 		c.Set("token_via_query", true) // 标记使用了查询参数传递 token
 		tokenString = c.Query("token")
 	}
