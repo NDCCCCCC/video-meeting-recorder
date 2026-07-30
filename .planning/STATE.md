@@ -41,39 +41,39 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 ## Current Position
 
 Phase: 17 (后端代码审查 56 个发现修复 - P0/P1/P2 全量) — EXECUTING
-Plan: 17-03 (P1b) — IN PROGRESS
+Plan: 17-04 (P2) — IN PROGRESS
 **Phase:** 17
-**Status:** Executing (2/4 plans done; Waves 1+2 verified)
-**Progress:** [█████░░░░░] 50%
+**Status:** Executing (3/4 plans done; Waves 1+2+3 verified)
+**Progress:** [███████░░░] 75%
 
 ### Phase Summary
 
-按 P0→P1a→P1b→P2 顺序修复 `docs/audits/2026-07-30-backend-code-review.md` 中 56 个发现（13 HIGH + 18 MEDIUM + 25 LOW）。每个 wave 间有验证关卡（`go build ./...` + tier 测试包 with `-race`）。Wave 1 (P0) 与 Wave 2 (P1a) 已完成。
+按 P0→P1a→P1b→P2 顺序修复 `docs/audits/2026-07-30-backend-code-review.md` 中 56 个发现。每个 wave 间有验证关卡（`go build ./...` + tier 测试包 with `-race`）。Wave 1 (P0) + Wave 2 (P1a) + Wave 3 (P1b) 已完成。
 
 ### Wave Status
 
 | Wave | Plan | Finding | Status |
 |------|------|---------|--------|
-| 1 | 17-01 (P0) | SEC-001/002/003a/004 + BUG-001/002 + PERF-001/002/004/005 + 文档 | ✅ Verified (4 commits, build+tests green) |
-| 2 | 17-02 (P1a) | BUG-003..006 + SEC-005..010 + STYLE-004/005 | ✅ Verified (12 atomic commits, build+tests -race green) |
-| 3 | 17-03 (P1b) | PERF-006..011 + STYLE-003 | 🔄 In progress |
-| 4 | 17-04 (P2) | BUG-011/015/016 + SEC-011..015 + PERF-012..016 + STYLE-001/006/007/008/010 | ⏳ Pending |
+| 1 | 17-01 (P0) | SEC-001/002/003a/004 + BUG-001/002 + PERF-001/002/004/005 + 文档 | ✅ Verified (4 commits) |
+| 2 | 17-02 (P1a) | BUG-003..006 + SEC-005..010 + STYLE-004/005 | ✅ Verified (12 commits, -race green) |
+| 3 | 17-03 (P1b) | PERF-006..011 + STYLE-003 | ✅ Verified (7 commits, -race green; recovered from transient API error mid-SUMMARY) |
+| 4 | 17-04 (P2) | BUG-011/015/016 + SEC-011..015 + PERF-012..016 + STYLE-001/006/007/008/010 | 🔄 In progress |
 
 ### Base HEAD for Phase 17
 
-- Wave 1 start: `cf2d248` (planning)
-- Wave 1 end: `4fc1d3c` (P0 cluster)
-- Wave 2 end: `b53cc8c` (P1a cluster + regression test)
-- Doc checkpoint: `7852303` (Wave 1→2 state updates)
+- Wave 1 end: `4fc1d3c` (P0) → Wave 2 end: `b53cc8c` (P1a) → Wave 3 end: `0190f83` (P1b)
+- Doc checkpoints: `7852303` (W1), `5007815` (W2)
 
 ### To Resume
 
-Wave 3 (17-03 P1b) is now executing; gate before Wave 4 = `go build ./...` + tier tests green.
+Wave 4 (17-04 P2) is now executing — final wave. Gate = `go build ./...` + go vet + gofmt + tests green, then phase verification + STATE/ROADMAP completion.
 
-### Notes — Wave 2 Deviations
+### Notes — Wave 3 Deviations
 
-- BUG-005 范围收缩至 `audit_log_service.go`（其他 4 个文件无 GORM 调用或方法签名为 ctx-less，不伪造 `context.Background()`）
-- STYLE-004 实际覆盖 8 个调用 `middleware.GetUserID(c)` 的 handler（其余 handler 走 `c.Query` 或本地 helper）
+- PERF-009 部分（5/6）：middleware/audit.go 的请求体快照承载动态 schema，保留 `map[string]interface{}`；其余静态 schema 全部类型化
+- STYLE-003 接口归位：3 接口迁移（Authenticator/StorageDriver/ConversionService）；ConversionService 跨包到 scheduler，call site 全部更新；编译期断言用 stub pattern（避免 import cycle）
+- common/interfaces.go 的 `Service` 接口因 consumer >5 未动（保守，留待独立 plan）
+- Wave 3 执行器在写 SUMMARY.md 时遇上游 API 错误（模型瞬时不可用）崩溃；但全部 7 个代码+测试 commit 已落地 main，build/tests 绿——仅 SUMMARY 叙述中断，由 orchestrator 确认恢复
 
 ---
 

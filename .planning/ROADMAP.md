@@ -140,7 +140,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 17-03-PLAN.md — P1b 性能 + 接口归位（7 项：PERF-006..011 + STYLE-003）
+- [x] 17-03-PLAN.md — P1b 性能 + 接口归位（7 项：PERF-006..011 + STYLE-003） — 7 atomic commits on main (9150e95→0190f83), build+tests -race verified; STYLE-003 接口迁移到消费方包 + compile-level 断言
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
