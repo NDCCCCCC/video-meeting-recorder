@@ -44,7 +44,10 @@ func (m *AuditMiddleware) AuditOperation(module, action string) gin.HandlerFunc 
 			if err == nil && len(body) > 0 {
 				// 重新设置请求体，以便后续处理器可以读取
 				c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
-				json.Unmarshal(body, &requestBody)
+				if err := json.Unmarshal(body, &requestBody); err != nil {
+					m.logger.Warn("请求体 JSON 解析失败", zap.Error(err))
+					requestBody = nil
+				}
 			}
 		}
 

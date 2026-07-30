@@ -3,6 +3,8 @@ package models
 import (
 	"encoding/json"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // NotificationMessage 通知消息
@@ -82,7 +84,10 @@ func (n *NotificationMessage) GetChannelStatusMap() map[string]ChannelStatus {
 		return make(map[string]ChannelStatus)
 	}
 	var statusMap map[string]ChannelStatus
-	json.Unmarshal([]byte(n.ChannelStatus), &statusMap)
+	if err := json.Unmarshal([]byte(n.ChannelStatus), &statusMap); err != nil {
+		zap.L().Warn("通知渠道状态解析失败", zap.Error(err))
+		return make(map[string]ChannelStatus)
+	}
 	return statusMap
 }
 
@@ -104,7 +109,10 @@ func (n *NotificationMessage) GetData() *NotificationData {
 		return &NotificationData{}
 	}
 	var data NotificationData
-	json.Unmarshal([]byte(n.Data), &data)
+	if err := json.Unmarshal([]byte(n.Data), &data); err != nil {
+		zap.L().Warn("通知数据解析失败", zap.Error(err))
+		return &NotificationData{}
+	}
 	return &data
 }
 

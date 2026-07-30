@@ -3,6 +3,8 @@ package models
 import (
 	"encoding/json"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // AuditLog 审计日志
@@ -96,7 +98,7 @@ const (
 	ModuleInputConfig   = "input_config"
 	ModulePPT           = "ppt"
 	ModuleStorage       = "storage"
-	ModuleNotification = "notification"
+	ModuleNotification  = "notification"
 	ModuleVideo         = "video"
 	ModuleTranscription = "transcription"
 	ModuleAdmin         = "auth"
@@ -133,7 +135,10 @@ func (a *AuditLogData) MarshalJSON() ([]byte, error) {
 func (a *AuditLog) GetOldData() map[string]interface{} {
 	var data map[string]interface{}
 	if a.OldData != "" {
-		json.Unmarshal([]byte(a.OldData), &data)
+		if err := json.Unmarshal([]byte(a.OldData), &data); err != nil {
+			zap.L().Warn("审计日志字段解析失败", zap.String("field", "OldData"), zap.Error(err))
+			return nil
+		}
 	}
 	return data
 }
@@ -142,7 +147,10 @@ func (a *AuditLog) GetOldData() map[string]interface{} {
 func (a *AuditLog) GetNewData() map[string]interface{} {
 	var data map[string]interface{}
 	if a.NewData != "" {
-		json.Unmarshal([]byte(a.NewData), &data)
+		if err := json.Unmarshal([]byte(a.NewData), &data); err != nil {
+			zap.L().Warn("审计日志字段解析失败", zap.String("field", "NewData"), zap.Error(err))
+			return nil
+		}
 	}
 	return data
 }
@@ -151,7 +159,10 @@ func (a *AuditLog) GetNewData() map[string]interface{} {
 func (a *AuditLog) GetDiffData() map[string]interface{} {
 	var data map[string]interface{}
 	if a.DiffData != "" {
-		json.Unmarshal([]byte(a.DiffData), &data)
+		if err := json.Unmarshal([]byte(a.DiffData), &data); err != nil {
+			zap.L().Warn("审计日志字段解析失败", zap.String("field", "DiffData"), zap.Error(err))
+			return nil
+		}
 	}
 	return data
 }
