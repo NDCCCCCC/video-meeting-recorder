@@ -183,7 +183,8 @@ func (a *MinimalApp) initDatabase() error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// 设置连接池参数（SQLite单连接限制）
+	// 设置连接池参数（SQLite单连接限制；PERF-015 显式 SetMaxOpenConns /
+	// SetMaxIdleConns / SetConnMaxLifetime，避免 driver 默认值与生产环境不匹配）
 	sqlDB.SetMaxOpenConns(a.config.Database.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(a.config.Database.MaxIdleConns)
 	sqlDB.SetConnMaxLifetime(time.Duration(a.config.Database.ConnMaxLifetime) * time.Second)

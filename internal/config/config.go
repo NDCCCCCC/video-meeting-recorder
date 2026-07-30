@@ -411,10 +411,16 @@ func setDefaults(cfg *Config) {
 		cfg.Database.BusyTimeout = 5000
 	}
 	if cfg.Database.MaxOpenConns == 0 {
+		// PERF-015: SQLite 单 writer 限制下默认 1；MySQL/PostgreSQL 部署时
+		// 应通过 env DB_MAX_OPEN_CONNS 覆盖为 25。
 		cfg.Database.MaxOpenConns = 1
 	}
 	if cfg.Database.MaxIdleConns == 0 {
 		cfg.Database.MaxIdleConns = 1
+	}
+	if cfg.Database.ConnMaxLifetime == 0 {
+		// PERF-015: 默认 30 分钟连接生命周期，避免长连接被服务端回收后报错。
+		cfg.Database.ConnMaxLifetime = 1800 // 30 minutes in seconds
 	}
 
 	if cfg.Security.AllowedTokenURLPrefixes == nil {
