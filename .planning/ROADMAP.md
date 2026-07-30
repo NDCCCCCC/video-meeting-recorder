@@ -49,6 +49,7 @@
 | 12. Windows AD 域控 | v1.0 | 6/6 | Complete | 2026-04-30 |
 | 13. 重构华为配置，支持USB和流媒体 | v1.0 | 6/6 | Complete | 2026-04-29 |
 | 14. 批量操作 | v1.0 | 4/4 | Complete | 2026-04-30 |
+| 17. 后端代码审查 56 发现修复 P0/P1/P2 | v1.1 | 1/4 | Executing (Wave 1 done) | 2026-07-30 |
 
 ## Backlog
 
@@ -131,7 +132,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 17-01-PLAN.md — P0 HIGH 发现修复（11 项 + 部署文档同步；SEC-003b deferred）
+- [x] 17-01-PLAN.md — P0 HIGH 发现修复（11 项 + 部署文档同步；SEC-003b deferred） — 4 atomic commits (4d3de0b/2bcee29/47ef805/4fc1d3c) on main, build+tests verified
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

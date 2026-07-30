@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: 视频切割与会议转录PPT
+milestone: v1.1
+milestone_name: 文件管理与编辑增强
 status: executing
-last_updated: "2026-07-30T05:04:03.536Z"
+last_updated: "2026-07-30T13:55:00.000Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 20
   completed_phases: 16
   total_plans: 82
-  completed_plans: 75
+  completed_plans: 76
   percent: 80
 ---
 
@@ -40,38 +40,35 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 
 ## Current Position
 
-Phase: 15 (前端去 AI 味) — EXECUTING
-Plan: Not started
-**Phase:** 15
-**Status:** Ready to execute
-**Progress:** [██████████] 96%
+Phase: 17 (后端代码审查 56 个发现修复 - P0/P1/P2 全量) — EXECUTING
+Plan: 17-02 (P1a) — IN PROGRESS
+**Phase:** 17
+**Status:** Executing (1/4 plans done; Wave 1 P0 verified)
+**Progress:** [██░░░░░░░░] 25%
 
 ### Phase Summary
 
-集成Windows Active Directory域控认证，支持LDAP(389)和LDAPS(636)双端口，实现local/ad两种认证模式切换。
+按 P0→P1a→P1b→P2 顺序修复 `docs/audits/2026-07-30-backend-code-review.md` 中 56 个发现（13 HIGH + 18 MEDIUM + 25 LOW）。每个 wave 间有验证关卡（`go build ./...` + tier 测试包）。P0 (plan 01) 已在 main 上以 4 个原子提交完成：SEC-001/002/003a/004 + BUG-001/002 + PERF-001/002/004/005（PERF-003 因 service 方法无 ctx 参数、403 处级联超出 P0 范围而 deferred；SEC-003b DB 加密 deferred）。
 
-### To Execute
+### Wave Status
 
-Run `/gsd-execute-phase 12-windows-ad` to start implementation
+| Wave | Plan | Finding | Status |
+|------|------|---------|--------|
+| 1 | 17-01 (P0) | SEC/002/003a/004 + BUG/002 + PERF-001/002/004/005 + 文档 | ✅ Verified (4 commits, build+tests green) |
+| 2 | 17-02 (P1a) | BUG-003..006 + SEC-005..010 + STYLE-004/005 | 🔄 In progress |
+| 3 | 17-03 (P1b) | PERF-006..011 + STYLE-003 | ⏳ Pending |
+| 4 | 17-04 (P2) | BUG-011/015/016 + SEC-011..015 + PERF-012..016 + STYLE-001/006/007/008/010 | ⏳ Pending |
 
-### Dependencies
+### Base HEAD for Phase 17
 
-- Requires: Phase 11 (IP登录限制) - *PAUSED at manual testing*
-- Spike验证: 5个spike全部通过 (go-ldap-ad-auth, ldaps-security, auth-switch-architecture, ad-user-mapping, ad-config-validation)
+- Wave 1 start: `cf2d248` (planning)
+- Wave 1 end: `4fc1d3c` (P0 mega-commit cluster)
+
+### To Resume
+
+Wave 2 (17-02 P1a) is now executing; gate before Wave 3 = `go build ./...` + tier tests green.
 
 ---
-
-## Phase 11 Status (Previous)
-
-**Phase:** 11 - IP地址登录限制
-**Status:** PAUSED at manual testing checkpoint
-**Progress:** [███████░░░] 83%
-
-- 8 test cases covering user/role IP restrictions
-- 5 security verification tests (IP spoofing, IPv6 rejection)
-- Test documentation created at `.planning/phases/11-ip-ip/11-TESTING.md`
-
-**To Resume Phase 11:** Run `/gsd-execute-phase 11-ip-ip`
 
 ---
 
