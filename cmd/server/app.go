@@ -552,6 +552,41 @@ func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	}
 }
 
+// publicRouteDecorator / SEC-014: 公开路由装饰器。挂到不需要认证但 token 泄露风险高的
+// 路由（文件下载、HLS 流、PPT 幻灯片），用于：
+//  1. 在请求开始时记录来源 IP + path + user-agent（info level）
+//  2. 请求结束时记录响应状态码
+//  3. 未来的 Prometheus 集成点（public_route_hits_total{path=...}）
+//
+// 此装饰器**不**替代 handler 内的 token 校验与权限校验（仍是最后防线）；
+// 仅作为可观测性增强，便于在 SIEM / 异常访问告警中追溯公开下载行为。
+func publicRouteDecorator(c *gin.Context) {
+	start := time.Now()
+	path := c.Request.URL.Path
+	ip := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+
+	if a := zap.L(); a != nil {
+		a.Info("public route hit",
+			zap.String("path", path),
+			zap.String("ip", ip),
+			zap.String("user_agent", userAgent),
+		)
+	}
+
+	c.Next()
+
+	// 响应后：记录状态码与耗时
+	if a := zap.L(); a != nil {
+		a.Info("public route completed",
+			zap.String("path", path),
+			zap.String("ip", ip),
+			zap.Int("status", c.Writer.Status()),
+			zap.Duration("duration", time.Since(start)),
+		)
+	}
+}
+
 // initHandlers 初始化处理器
 func (a *MinimalApp) initHandlers() error {
 	a.tokenService = auth.NewSM4TokenService(a.config, a.db, a.logger)
@@ -624,6 +659,8 @@ func (a *MinimalApp) initHandlers() error {
 		a.logger.Warn("OSS服务初始化失败，云端转录不可用", zap.Error(err))
 	}
 	tingwuClient := services.NewTingwuClient(&a.config.Tingwu, a.logger)
+	// SEC-013: 注入出站 URL 白名单与开发环境标识
+	tingwuClient.SetOutboundURLAllowlist(a.config.Security.OutboundURLAllowlist, a.config.Server.Environment)
 
 	a.transcriptionService = services.NewTranscriptionService(
 		a.db, a.logger, a.config,
@@ -658,6 +695,11 @@ func (a *MinimalApp) initHandlers() error {
 		a.config.Huawei.InsecureSkipVerify,
 		huaweiapi.ParseMinTLSVersion(a.config.Huawei.MinTLSVersion),
 		a.config.Server.Environment == "production",
+	)
+	// SEC-013: 注入出站 URL 白名单
+	a.huaweiManager.SetOutboundURLAllowlist(
+		a.config.Security.OutboundURLAllowlist,
+		a.config.Server.Environment,
 	)
 	a.huaweiConnector = video_recording.NewHuaweiConferenceConnector(a.db, a.huaweiManager, a.logger)
 
@@ -846,9 +888,9 @@ func (a *MinimalApp) registerRoutes() error {
 		files.POST("/scan", auditOp(models.ModuleFile, "scan"), a.handlers.VideoFile.ScanFiles)                                 // 扫描并导入文件
 	}
 
-	// 公开文件访问（无需认证）
-	a.router.GET("/api/v1/files/download/:token", auditOp(models.ModuleFile, models.ActionExport), a.handlers.File.Download)
-	a.router.GET("/api/v1/files/share/:token", auditOp(models.ModuleFile, models.ActionExport), a.handlers.File.ShareDownload)
+	// 公开文件访问（无需认证；SEC-014 加公开路由装饰器）
+	a.router.GET("/api/v1/files/download/:token", publicRouteDecorator, auditOp(models.ModuleFile, models.ActionExport), a.handlers.File.Download)
+	a.router.GET("/api/v1/files/share/:token", publicRouteDecorator, auditOp(models.ModuleFile, models.ActionExport), a.handlers.File.ShareDownload)
 
 	// 视频分割和快照
 	videos := api.Group("/videos")
@@ -890,11 +932,11 @@ func (a *MinimalApp) registerRoutes() error {
 		ppts.POST("/batch-check", a.handlers.PPT.BatchGetPptsByVideos)                                                    // 批量检查视频PPT结果（只读不审计）
 	}
 
-	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
-	a.router.GET("/api/v1/recordings/:id/preview/stream/:file", auditOp(models.ModuleTask, models.ActionExport), a.handlers.VideoTask.ServeHLSStream)
+	// HLS 预览流文件访问（无需认证，但需要任务权限验证；SEC-014 加公开路由装饰器）
+	a.router.GET("/api/v1/recordings/:id/preview/stream/:file", publicRouteDecorator, auditOp(models.ModuleTask, models.ActionExport), a.handlers.VideoTask.ServeHLSStream)
 
-	// PPT幻灯片图片访问（无需认证，handler内部验证权限，用于<img>标签显示）
-	a.router.GET("/api/v1/ppts/:id/slides/:resolution/:filename", auditOp(models.ModulePPT, models.ActionExport), a.handlers.PPT.ServeSlideImage)
+	// PPT幻灯片图片访问（无需认证，handler内部验证权限，用于<img>标签显示；SEC-014 加公开路由装饰器）
+	a.router.GET("/api/v1/ppts/:id/slides/:resolution/:filename", publicRouteDecorator, auditOp(models.ModulePPT, models.ActionExport), a.handlers.PPT.ServeSlideImage)
 
 	// 审计日志管理
 	auditLog := api.Group("/audit")

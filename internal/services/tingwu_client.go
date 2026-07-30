@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -46,12 +47,14 @@ type TingwuSubmitResponse struct {
 
 // TingwuClient handles Aliyun Tingwu API operations
 type TingwuClient struct {
-	appKey    string
-	appSecret string
-	baseURL   string
-	client    *http.Client
-	logger    *zap.Logger
-	enabled   bool
+	appKey                string
+	appSecret             string
+	baseURL               string
+	client                *http.Client
+	logger                *zap.Logger
+	enabled               bool
+	outboundURLAllowlist   []string
+	environment           string
 }
 
 // NewTingwuClient creates a new Tingwu API client
@@ -77,6 +80,39 @@ func NewTingwuClient(cfg *config.TingwuConfig, logger *zap.Logger) *TingwuClient
 		logger:    logger,
 		enabled:   true,
 	}
+}
+
+// SetOutboundURLAllowlist 注入 SEC-013 出站 URL 白名单与运行环境。
+// allowlist 元素为 host 后缀匹配（如 "aliyun.com"）；env=="development" 时
+// allowlist 为空也允许所有出站（开发期绕过）；其他环境按白名单严格校验。
+func (c *TingwuClient) SetOutboundURLAllowlist(allowlist []string, environment string) {
+	c.outboundURLAllowlist = allowlist
+	c.environment = environment
+}
+
+// guardOutboundURL 校验 baseURL 是否在出站白名单。SEC-013 SSRF 防御。
+func (c *TingwuClient) guardOutboundURL() error {
+	u, err := url.Parse(c.baseURL)
+	if err != nil {
+		return fmt.Errorf("baseURL 解析失败: %w", err)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("baseURL 缺少 host: %s", c.baseURL)
+	}
+	// 开发环境绕过白名单
+	if c.environment == "development" {
+		return nil
+	}
+	if len(c.outboundURLAllowlist) == 0 {
+		return fmt.Errorf("outbound URL allowlist 为空且非开发环境，禁止访问: %s", host)
+	}
+	for _, suffix := range c.outboundURLAllowlist {
+		if strings.HasSuffix(host, suffix) {
+			return nil
+		}
+	}
+	return fmt.Errorf("URL 不在出站白名单: %s", host)
 }
 
 // IsEnabled returns whether Tingwu is configured and enabled
@@ -195,6 +231,10 @@ func (c *TingwuClient) GetResult(ctx context.Context, taskID string) (*TingwuTas
 
 // buildRequest builds an HTTP request with HMAC-SHA256 signature per Aliyun ROA spec
 func (c *TingwuClient) buildRequest(ctx context.Context, method, path string, body interface{}) (*http.Request, error) {
+	// SEC-013: 出站 URL 白名单校验（SSRF 防御）
+	if err := c.guardOutboundURL(); err != nil {
+		return nil, err
+	}
 	url := c.baseURL + path
 
 	var bodyReader io.Reader

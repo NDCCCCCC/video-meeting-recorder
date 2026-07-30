@@ -26,6 +26,9 @@ type Manager struct {
 	// 默认 InsecureSkipVerify=false、MinTLSVersion=tls.VersionTLS12。
 	tlsInsecureSkipVerify bool
 	tlsMinVersion         uint16
+	// SEC-013: 出站 URL 白名单 + 环境标识（开发环境绕过）
+	outboundURLAllowlist []string
+	environment          string
 }
 
 // DBInterface 数据库接口（用于解耦）
@@ -67,6 +70,13 @@ func (m *Manager) SetTLSPolicy(insecureSkipVerify bool, minTLSVersion uint16, is
 	}
 	m.tlsInsecureSkipVerify = insecureSkipVerify
 	m.tlsMinVersion = minTLSVersion
+}
+
+// SetOutboundURLAllowlist 注入 SEC-013 出站 URL 白名单与运行环境。
+// env=="development" 时 allowlist 为空也允许所有出站。
+func (m *Manager) SetOutboundURLAllowlist(allowlist []string, environment string) {
+	m.outboundURLAllowlist = allowlist
+	m.environment = environment
 }
 
 // ParseMinTLSVersion 将配置中的字符串版本号（"1.2"/"1.3"）或数字（"771"）解析为 tls 常量。
@@ -129,6 +139,8 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	}
 
 	client := NewHuaweiClient(config, m.logger)
+	// SEC-013: 注入出站 URL 白名单与开发环境标识
+	client.httpClient.SetOutboundURLAllowlist(m.outboundURLAllowlist, m.environment)
 
 	// 初始化并启动保活
 	if err := client.InitializeAndStartKeepAlive(ctx); err != nil {

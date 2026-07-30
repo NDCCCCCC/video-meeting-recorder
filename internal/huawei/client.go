@@ -212,9 +212,11 @@ type MailboxState struct {
 
 // HTTPClient HTTP客户端封装
 type HTTPClient struct {
-	client  *http.Client
-	logger  *zap.Logger
-	baseURL *url.URL
+	client              *http.Client
+	logger              *zap.Logger
+	baseURL             *url.URL
+	outboundURLAllowlist []string
+	environment          string
 }
 
 // NewHTTPClient 创建HTTP客户端
@@ -275,6 +277,37 @@ func (c *HTTPClient) SetLogger(logger *zap.Logger) {
 	c.logger = logger
 }
 
+// SetOutboundURLAllowlist 注入 SEC-013 出站 URL 白名单与运行环境。
+// allowlist 元素为 host 后缀匹配；env=="development" 时 allowlist 为空也允许。
+func (c *HTTPClient) SetOutboundURLAllowlist(allowlist []string, environment string) {
+	c.outboundURLAllowlist = allowlist
+	c.environment = environment
+}
+
+// guardOutboundURL 校验 baseURL 是否在出站白名单。SEC-013 SSRF 防御。
+func (c *HTTPClient) guardOutboundURL() error {
+	if c.baseURL == nil {
+		return fmt.Errorf("client 未初始化 baseURL")
+	}
+	host := c.baseURL.Hostname()
+	if host == "" {
+		return fmt.Errorf("baseURL 缺少 host: %s", c.baseURL.String())
+	}
+	// 开发环境绕过白名单
+	if c.environment == "development" {
+		return nil
+	}
+	if len(c.outboundURLAllowlist) == 0 {
+		return fmt.Errorf("outbound URL allowlist 为空且非开发环境，禁止访问: %s", host)
+	}
+	for _, suffix := range c.outboundURLAllowlist {
+		if strings.HasSuffix(host, suffix) {
+			return nil
+		}
+	}
+	return fmt.Errorf("URL 不在出站白名单: %s", host)
+}
+
 // buildURL 构建API URL
 func (c *HTTPClient) buildURL(actionID string) string {
 	u := *c.baseURL
@@ -286,6 +319,10 @@ func (c *HTTPClient) buildURL(actionID string) string {
 
 // Post 发送POST请求
 func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}, headers ...map[string]string) (*APIResponse, error) {
+	// SEC-013: 出站 URL 白名单校验（SSRF 防御）
+	if err := c.guardOutboundURL(); err != nil {
+		return nil, err
+	}
 	url := c.buildURL(actionID)
 
 	var reqBody io.Reader

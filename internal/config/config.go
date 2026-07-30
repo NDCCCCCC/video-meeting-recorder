@@ -46,6 +46,10 @@ type CORSConfig struct {
 type SecurityConfig struct {
 	CSRFEnabled             bool     `mapstructure:"csrf_enabled" json:"csrf_enabled" yaml:"csrf_enabled"`
 	AllowedTokenURLPrefixes []string `mapstructure:"allowed_token_url_prefixes" json:"allowed_token_url_prefixes" yaml:"allowed_token_url_prefixes"`
+	// OutboundURLAllowlist guards all outbound HTTP requests (SEC-013: SSRF defense).
+	// Empty list means "allow all in non-production; deny all in production".
+	// Each entry is a suffix matched against the URL host (e.g. "aliyun.com").
+	OutboundURLAllowlist []string `mapstructure:"outbound_url_allowlist" json:"outbound_url_allowlist" yaml:"outbound_url_allowlist"`
 }
 
 // ServerConfig 服务器配置
@@ -415,6 +419,11 @@ func setDefaults(cfg *Config) {
 
 	if cfg.Security.AllowedTokenURLPrefixes == nil {
 		cfg.Security.AllowedTokenURLPrefixes = []string{"/api/v1/files/download/", "/api/v1/recordings/", "/api/v1/ppts/"}
+	}
+	// SEC-013: 出站 URL 白名单默认 nil（空列表 = 生产环境拒绝所有出站请求；
+	// 开发环境由 caller 的 development bypass 跳过）。BindEnv 留给调用方。
+	if cfg.Security.OutboundURLAllowlist == nil {
+		cfg.Security.OutboundURLAllowlist = []string{}
 	}
 
 	// SEC-001/D-03.4: 不再保留硬编码 fallback 默认密钥；
