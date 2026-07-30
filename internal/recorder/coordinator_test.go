@@ -351,3 +351,15 @@ func TestHealthCheck(t *testing.T) {
 	err := coordinator.HealthCheck()
 	assert.NoError(t, err)
 }
+
+func TestAttemptReconnectReturnsImmediatelyWhenContextCanceled(t *testing.T) {
+	coordinator := &SimpleRecordingCoordinator{logger: zap.NewNop()}
+	process := &RecordingProcess{ReconnectDelay: 10 * time.Second, MaxReconnects: 1}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	start := time.Now()
+	coordinator.attemptReconnect(ctx, "test", process)
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Fatalf("canceled reconnect blocked for %v", elapsed)
+	}
+}
