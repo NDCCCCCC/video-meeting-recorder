@@ -373,6 +373,7 @@ type HuaweiClient struct {
 	logger          *zap.Logger
 	mu              sync.RWMutex
 	cancelKeepAlive context.CancelFunc
+	keepAliveWG     sync.WaitGroup
 }
 
 // NewHuaweiClient 创建华为终端API客户端
@@ -587,10 +588,12 @@ func (c *HuaweiClient) StartKeepAlive(ctx context.Context) {
 	}
 	keepAliveCtx, cancel := context.WithCancel(ctx)
 	c.cancelKeepAlive = cancel
+	c.keepAliveWG.Add(1)
 	c.mu.Unlock()
 
 	ticker := time.NewTicker(c.config.KeepAliveInterval)
 	go func() {
+		defer c.keepAliveWG.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				c.logger.Error("keep-alive goroutine panicked",
@@ -616,6 +619,34 @@ func (c *HuaweiClient) StartKeepAlive(ctx context.Context) {
 	}()
 
 	c.logger.Info("启动会话自动保活", zap.Duration("interval", c.config.KeepAliveInterval))
+}
+
+// Stop 停止客户端会话并关闭 keep-alive goroutine。
+// 该方法会取消 keep-alive 上下文，等待 goroutine 真正退出（最多 ctx 超时）。
+// 用于显式客户端生命周期终结，避免 ctx 长期存活导致的 goroutine 泄漏（PERF-006）。
+func (c *HuaweiClient) Stop(ctx context.Context) error {
+	c.mu.Lock()
+	if c.cancelKeepAlive != nil {
+		c.cancelKeepAlive()
+		c.cancelKeepAlive = nil
+	}
+	c.mu.Unlock()
+
+	// 等待 goroutine 真正退出；如超时则记录警告（已 cancel，goroutine 会在下次 select 退出）
+	done := make(chan struct{})
+	go func() {
+		c.keepAliveWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		c.logger.Info("HuaweiClient 停止（keep-alive goroutine 已退出）")
+		return nil
+	case <-ctx.Done():
+		c.logger.Warn("HuaweiClient 停止超时（keep-alive goroutine 未在 ctx 内退出）",
+			zap.Error(ctx.Err()))
+		return ctx.Err()
+	}
 }
 
 // GetMailboxData 获取邮箱数据用于保活，返回终端状态
