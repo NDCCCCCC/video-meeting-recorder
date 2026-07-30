@@ -206,7 +206,7 @@ func (s *AuditLogService) LogOperation(ctx context.Context, req *LogOperationReq
 	default:
 		// 队列满，同步写入
 		s.logger.Warn("审计日志队列已满，同步写入")
-		return s.db.Create(log).Error
+		return s.db.WithContext(ctx).Create(log).Error
 	}
 }
 
@@ -268,7 +268,7 @@ func (s *AuditLogService) generateDiff(oldData, newData interface{}) interface{}
 
 // Query 查询审计日志（带数据范围权限）
 func (s *AuditLogService) Query(ctx context.Context, req *QueryRequest, userID uint, dataScope string) (*QueryResponse, error) {
-	query := s.db.Model(&models.AuditLog{})
+	query := s.db.WithContext(ctx).Model(&models.AuditLog{})
 
 	// 应用数据范围权限（个人只能看自己的日志）
 	if dataScope == "self" {
@@ -374,7 +374,7 @@ func (s *AuditLogService) Query(ctx context.Context, req *QueryRequest, userID u
 // GetByID 获取单条日志详情
 func (s *AuditLogService) GetByID(ctx context.Context, id uint, userID uint, dataScope string) (*models.AuditLog, error) {
 	var log models.AuditLog
-	err := s.db.First(&log, id).Error
+	err := s.db.WithContext(ctx).First(&log, id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +394,7 @@ func (s *AuditLogService) GetStatistics(ctx context.Context, days int, userID ui
 	}
 
 	startDate := time.Now().AddDate(0, 0, -days)
-	query := s.db.Model(&models.AuditLog{}).Where("created_at >= ?", startDate)
+	query := s.db.WithContext(ctx).Model(&models.AuditLog{}).Where("created_at >= ?", startDate)
 
 	// 应用数据范围权限
 	if dataScope == "self" {
@@ -407,11 +407,11 @@ func (s *AuditLogService) GetStatistics(ctx context.Context, days int, userID ui
 
 	// 成功/失败统计
 	var successOps, failureOps int64
-	s.db.Model(&models.AuditLog{}).
+	s.db.WithContext(ctx).Model(&models.AuditLog{}).
 		Where("created_at >= ? AND status = ?", startDate, models.StatusSuccess).
 		Count(&successOps)
 
-	s.db.Model(&models.AuditLog{}).
+	s.db.WithContext(ctx).Model(&models.AuditLog{}).
 		Where("created_at >= ? AND status = ?", startDate, models.StatusFailure).
 		Count(&failureOps)
 
@@ -420,7 +420,7 @@ func (s *AuditLogService) GetStatistics(ctx context.Context, days int, userID ui
 		Module string
 		Count  int64
 	}
-	s.db.Model(&models.AuditLog{}).
+	s.db.WithContext(ctx).Model(&models.AuditLog{}).
 		Select("module, count(*) as count").
 		Where("created_at >= ?", startDate).
 		Group("module").
@@ -441,7 +441,7 @@ func (s *AuditLogService) GetStatistics(ctx context.Context, days int, userID ui
 		Username string
 		Count    int64
 	}
-	userQuery := s.db.Model(&models.AuditLog{}).
+	userQuery := s.db.WithContext(ctx).Model(&models.AuditLog{}).
 		Select("username, count(*) as count").
 		Where("created_at >= ?", startDate).
 		Group("username").
@@ -466,7 +466,7 @@ func (s *AuditLogService) GetStatistics(ctx context.Context, days int, userID ui
 		Date  string
 		Count int64
 	}
-	s.db.Model(&models.AuditLog{}).
+	s.db.WithContext(ctx).Model(&models.AuditLog{}).
 		Select("date(created_at) as date, count(*) as count").
 		Where("created_at >= ?", startDate).
 		Group("date(created_at)").
