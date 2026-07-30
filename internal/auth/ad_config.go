@@ -6,14 +6,14 @@ package auth
 
 // ADUser represents an Active Directory user
 type ADUser struct {
-	Username            string
-	DN                  string
-	ObjectGUID          string
-	Email               string
-	DisplayName         string
-	Department          string
-	UserPrincipalName   string
-	UserAccountControl  uint32
+	Username           string
+	DN                 string
+	ObjectGUID         string
+	Email              string
+	DisplayName        string
+	Department         string
+	UserPrincipalName  string
+	UserAccountControl uint32
 }
 
 // IsDisabled checks if the AD account is disabled
@@ -24,18 +24,18 @@ func (u *ADUser) IsDisabled() bool {
 
 // ADAuthConfig holds AD connection configuration
 type ADAuthConfig struct {
-	Server   string `mapstructure:"server" json:"server"`         // ad.example.com:636
-	BindDN   string `mapstructure:"bind_dn" json:"bind_dn"`       // cn=admin,cn=users,dc=example,dc=com
-	Password string `mapstructure:"password" json:"password"`     // From environment variable
-	BaseDN   string `mapstructure:"base_dn" json:"base_dn"`       // dc=example,dc=com
-	UseTLS   bool   `mapstructure:"use_tls" json:"use_tls"`       // true for LDAPS (636), false for LDAP (389)
+	Server   string `mapstructure:"server" json:"server"`     // ad.example.com:636
+	BindDN   string `mapstructure:"bind_dn" json:"bind_dn"`   // cn=admin,cn=users,dc=example,dc=com
+	Password string `mapstructure:"password" json:"password"` // From environment variable
+	BaseDN   string `mapstructure:"base_dn" json:"base_dn"`   // dc=example,dc=com
+	UseTLS   bool   `mapstructure:"use_tls" json:"use_tls"`   // true for LDAPS (636), false for LDAP (389)
 
 	// Connection pool settings
-	PoolSize int `mapstructure:"pool_size" json:"pool_size"`     // Default: 10
+	PoolSize int `mapstructure:"pool_size" json:"pool_size"` // Default: 10
 
 	// Timeout settings
-	DialTimeout    int `mapstructure:"dial_timeout" json:"dial_timeout"`        // Default: 10 seconds
-	RequestTimeout int `mapstructure:"request_timeout" json:"request_timeout"`  // Default: 30 seconds
+	DialTimeout    int `mapstructure:"dial_timeout" json:"dial_timeout"`       // Default: 10 seconds
+	RequestTimeout int `mapstructure:"request_timeout" json:"request_timeout"` // Default: 30 seconds
 
 	// Test mode (for development only)
 	InsecureSkipVerify bool `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify"` // Default: false
@@ -47,12 +47,12 @@ type ADAuthConfig struct {
 
 // ADConfigValidationResult holds the result of AD configuration validation
 type ADConfigValidationResult struct {
-	Valid         bool     `json:"valid"`
-	Level         int      `json:"level"`          // 0-4: format, network, auth, functionality
-	Errors        []string `json:"errors"`
-	Warnings      []string `json:"warnings"`
-	ServerInfo    string   `json:"server_info"`
-	ResponseTime  int64    `json:"response_time"` // milliseconds
+	Valid        bool     `json:"valid"`
+	Level        int      `json:"level"` // 0-4: format, network, auth, functionality
+	Errors       []string `json:"errors"`
+	Warnings     []string `json:"warnings"`
+	ServerInfo   string   `json:"server_info"`
+	ResponseTime int64    `json:"response_time"` // milliseconds
 }
 
 // ADUserLookupResult holds the result of an AD user lookup
@@ -70,4 +70,3 @@ type ADUserLookupResult struct {
 
 // Authenticator 接口定义已迁移到 service.go（STYLE-003：消费方包定义接口）。
 // 该结构体类型 ADUser 保留在本文件（AD 配置 + 用户数据）。
-

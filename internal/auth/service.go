@@ -42,7 +42,7 @@ type Service struct {
 
 	// NEW: Strategy pattern - authenticators (per Spike 003)
 	localAuth Authenticator
-	adAuth   Authenticator
+	adAuth    Authenticator
 }
 
 // LoginRequest 登录请求
@@ -113,7 +113,7 @@ func NewService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Service {
 		logger:            logger,
 		rateLimiter:       rateLimiter,
 		localAuth:         localAuth,
-		adAuth:           adAuth,
+		adAuth:            adAuth,
 	}
 }
 
@@ -306,12 +306,12 @@ func (s *Service) toUserDTO(user *models.User) *UserDTO {
 	}
 
 	dto := &UserDTO{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		FullName:  user.FullName,
-		RoleIDs:   roleIDs,
-		IsActive:  user.IsActive,
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		FullName: user.FullName,
+		RoleIDs:  roleIDs,
+		IsActive: user.IsActive,
 	}
 
 	// Check if user has any roles

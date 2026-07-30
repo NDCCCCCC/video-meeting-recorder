@@ -2,6 +2,8 @@ package recorder
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -361,5 +363,94 @@ func TestAttemptReconnectReturnsImmediatelyWhenContextCanceled(t *testing.T) {
 	coordinator.attemptReconnect(ctx, "test", process)
 	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
 		t.Fatalf("canceled reconnect blocked for %v", elapsed)
+	}
+}
+
+// TestBuildRecordingCommand_HLSListSizeValidation 验证 PERF-011 修复：
+// 当 cfg.FFmpeg.HLSListSize 为 0 或负数时，hlsDeleteThreshold fallback 到 6。
+func TestBuildRecordingCommand_HLSListSizeValidation(t *testing.T) {
+	cases := []struct {
+		name          string
+		hlsListSize   int
+		wantListSize  int
+		wantDeleteThr int
+	}{
+		{"zero_falls_back_to_6", 0, 6, 7},
+		{"negative_falls_back_to_6", -3, 6, 7},
+		{"positive_unchanged", 10, 10, 11},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := zap.NewNop()
+			cfg := &config.Config{
+				Storage: config.StorageConfig{
+					RecordingsPath: t.TempDir(),
+					HLSPath:        t.TempDir(),
+				},
+				FFmpeg: config.FFmpegConfig{
+					Path:               "ffmpeg",
+					HLSSegmentDuration: 10,
+					HLSListSize:        tc.hlsListSize,
+					CRF:                23,
+					Preset:             "medium",
+					MaxVideoBitrate:    "3M",
+					VideoBufSize:       "6M",
+				},
+			}
+			c := NewSimpleRecordingCoordinator(logger, cfg)
+			input := RecordingInput{
+				Type:          InputSourceRTSP,
+				RTSPURL:       "rtsp://example.com/stream",
+				CameraBackend: "dshow",
+			}
+			args, err := c.buildRecordingCommand(input, "out.mkv", "hls_dir", time.Minute, 1)
+			if err != nil {
+				t.Fatalf("buildRecordingCommand: %v", err)
+			}
+			// 拼接 args，找 hls_list_size=N 与 hls_delete_threshold=N
+			joined := ""
+			for _, a := range args {
+				joined += a + " "
+			}
+			expectedList := fmt.Sprintf("hls_list_size=%d", tc.wantListSize)
+			expectedDel := fmt.Sprintf("hls_delete_threshold=%d", tc.wantDeleteThr)
+			if !strings.Contains(joined, expectedList) {
+				t.Errorf("args 缺 %q: %s", expectedList, joined)
+			}
+			if !strings.Contains(joined, expectedDel) {
+				t.Errorf("args 缺 %q: %s", expectedDel, joined)
+			}
+		})
+	}
+}
+
+// TestRecordingProcess_ReconnectCountAtomic 验证 PERF-010 修复：
+// ReconnectCount 改 atomic.Int32，多 goroutine 并发增 1 无 race。
+func TestRecordingProcess_ReconnectCountAtomic(t *testing.T) {
+	process := &RecordingProcess{
+		MaxReconnects:  100,
+		ReconnectDelay: 10 * time.Millisecond,
+	}
+
+	const goroutines = 50
+	done := make(chan struct{})
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			process.ReconnectCount.Add(1)
+		}()
+	}
+	// 等待完成
+	go func() {
+		// busy wait 通过原子读
+		for process.ReconnectCount.Load() < goroutines {
+			time.Sleep(time.Millisecond)
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("ReconnectCount 在 2s 内未达到 %d（实际 %d）", goroutines, process.ReconnectCount.Load())
 	}
 }

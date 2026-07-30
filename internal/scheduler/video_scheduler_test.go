@@ -3,6 +3,7 @@ package scheduler
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -101,20 +102,20 @@ func (m *mockTaskService) UpdateTaskStatus(id uint, status models.VideoRecording
 
 func (m *mockTaskService) GetInputConfig(id uint) (*models.InputConfig, error) {
 	return &models.InputConfig{
-		Base:           models.Base{ID: id},
-		Name:           "Test Config",
-		ConfigType:     models.ConfigTypeUSB,
-		Server:         "192.168.1.100",
-		Port:           80,
-		Username:       "admin",
-		Password:       "password",
-		OutputFormat:   "mp4",
-		CameraBackend:  "dshow",
-		USBCameraName:  "Integrated Camera",
+		Base:            models.Base{ID: id},
+		Name:            "Test Config",
+		ConfigType:      models.ConfigTypeUSB,
+		Server:          "192.168.1.100",
+		Port:            80,
+		Username:        "admin",
+		Password:        "password",
+		OutputFormat:    "mp4",
+		CameraBackend:   "dshow",
+		USBCameraName:   "Integrated Camera",
 		USBCameraDevice: "Integrated Camera",
-		AudioBackend:   "dshow",
-		USBAudioName:   "Microphone",
-		USBAudioDevice: "Microphone",
+		AudioBackend:    "dshow",
+		USBAudioName:    "Microphone",
+		USBAudioDevice:  "Microphone",
 	}, nil
 }
 
@@ -433,3 +434,30 @@ func TestGetStats(t *testing.T) {
 
 // ErrTaskNotFound 任务未找到错误
 var ErrTaskNotFound = fmt.Errorf("task not found")
+
+// stubConversionService 验证 STYLE-003 修复：
+// 一个空 stub 满足 ConversionService 接口，编译期即可断言接口契约。
+// 真正的 *services.FFmpegConversionService 在 internal/services 包内通过
+// 同名 _test 形式覆盖（避免 import cycle：services → scheduler → services）。
+type stubConversionService struct{}
+
+func (stubConversionService) SubmitConversion(uint) error { return nil }
+func (stubConversionService) GetConversionStatus(uint) (models.ConversionStatus, error) {
+	return "", nil
+}
+func (stubConversionService) RetryConversion(uint) error { return nil }
+func (stubConversionService) Start() error               { return nil }
+func (stubConversionService) Stop()                      {}
+
+// TestConversionService_InterfaceCompilationCheck 验证接口契约。
+func TestConversionService_InterfaceCompilationCheck(t *testing.T) {
+	var _ ConversionService = stubConversionService{}
+
+	// 通过 reflect 验证接口方法数（防止误删方法）
+	// 注意：reflect.TypeOf((*Interface)(nil)).NumMethod() == 0（ptr 化的 iface type
+	// 是 *interface — 必须用 reflect.TypeOf((*Interface)(nil)).Elem()）。
+	ifaceType := reflect.TypeOf((*ConversionService)(nil)).Elem()
+	if ifaceType.NumMethod() != 5 {
+		t.Errorf("ConversionService 方法数 = %d，期望 5", ifaceType.NumMethod())
+	}
+}

@@ -67,8 +67,8 @@ type VideoSimpleScheduler struct {
 	taskService       TaskServiceInterface
 	coordinator       RecorderCoordinatorInterface
 	connector         *video_recording.HuaweiConferenceConnector
-	conversionService ConversionService            // 转换服务
-	videoFileService  VideoFileServiceInterface  // 视频文件服务
+	conversionService ConversionService         // 转换服务
+	videoFileService  VideoFileServiceInterface // 视频文件服务
 	taskEntries       map[uint]cron.EntryID
 	entryTasks        map[cron.EntryID]uint
 	executing         map[uint]bool

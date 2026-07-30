@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -394,4 +395,40 @@ func TestCalculateSHA256Reader(t *testing.T) {
 	assert.Len(t, first, 64)
 	assert.Len(t, second, 64)
 	assert.NotEqual(t, first, second)
+}
+
+// stubStorageDriver 验证 STYLE-003 修复：StorageDriver 接口从 driver.go
+// 迁移到 file_service.go，consumer package 定义接口（"accept interfaces,
+// return structs"）。stub 实现满足接口即验证 move 编译。
+type stubStorageDriver struct{}
+
+func (stubStorageDriver) Upload(ctx context.Context, file *multipart.FileHeader, path string) (*UploadResult, error) {
+	return &UploadResult{FilePath: path}, nil
+}
+func (stubStorageDriver) Download(ctx context.Context, path string) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
+func (stubStorageDriver) Delete(ctx context.Context, path string) error         { return nil }
+func (stubStorageDriver) Exists(ctx context.Context, path string) (bool, error) { return true, nil }
+func (stubStorageDriver) GetURL(ctx context.Context, path string, expires time.Duration) (string, error) {
+	return "http://localhost/" + path, nil
+}
+func (stubStorageDriver) GetInfo(ctx context.Context, path string) (*FileInfo, error) {
+	return &FileInfo{Path: path, Name: filepath.Base(path)}, nil
+}
+func (stubStorageDriver) Copy(ctx context.Context, src, dst string) error { return nil }
+func (stubStorageDriver) Move(ctx context.Context, src, dst string) error { return nil }
+func (stubStorageDriver) List(ctx context.Context, prefix string, limit int) ([]*FileInfo, error) {
+	return []*FileInfo{}, nil
+}
+
+// TestStorageDriver_InterfaceCompilationCheck 验证接口契约。
+func TestStorageDriver_InterfaceCompilationCheck(t *testing.T) {
+	var _ StorageDriver = stubStorageDriver{}
+
+	// 通过 reflect 验证接口方法数
+	ifaceType := reflect.TypeOf((*StorageDriver)(nil)).Elem()
+	if ifaceType.NumMethod() != 9 {
+		t.Errorf("StorageDriver 方法数 = %d，期望 9", ifaceType.NumMethod())
+	}
 }
