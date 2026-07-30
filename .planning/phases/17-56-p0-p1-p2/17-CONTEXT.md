@@ -22,6 +22,7 @@
 - 新增功能（仅修复，不增功能）
 - `bin/`、`data/`、`certs/`、`.claude/`、`.planning/`、worktrees
 - 文档类项目（README 重写等）
+- **审计文档** (`docs/audits/*.md`) — 不可变，作为唯一 source of truth，不允许修改或追加注释
 - 引入新依赖（除非修复必须且 spike 已验证）— 例：MD5→SHA-256 不引入 `crypto/sha256`（已标准库）
 
 </domain>
@@ -33,31 +34,33 @@
 - **D-01.1:** 范围=**一次性完成全量 56 个**（与 Phase 16 D-01.2 "一次完成全量改"一致）
 - **D-01.2:** 节奏=按优先级 **P0 → P1 → P2 顺序**推进，P0 必须先合并通过验证再做 P1
 - **D-01.3:** 改动仅限 `internal/` + `cmd/server/app.go`，不动 `frontend/`、`.planning/`、worktrees
-- **D-01.4:** **P0 修复全部需配单测**（13 处必做）；**P1 至少每个修复都加单测**（18 处）；**P2 跳过单测**（25 处，仅做代码修改）
+- **D-01.4:** **P0 11 项代码发现全部需配单测**（11 处必做；STYLE-001/002 虽为 HIGH 项目级但归入 P2 处理或误报标记）；**P1 至少每个修复都加单测**（18 处）；**P2 跳过单测**（25 处，仅做代码修改）
 - **D-01.5:** 不重新执行代码审查本身（审计文档已是最终产物）；只按其清单逐项修复
 - **D-01.6:** 修复顺序参考审计文档 6.2 节"优先级修复清单"，不另设顺序
 
 ### D-02 提交/合并策略
-- **D-02.1:** **3 个 mega commit** 按 P0/P1/P2 分组：
-  - `fix(17-p0): P0 HIGH 发现修复（13 项）`
-  - `refactor(17-p1): P1 MEDIUM 发现修复（18 项）`
-  - `chore(17-p2): P2 LOW 发现清理（25 项）`
+- **D-02.1:** **4 个 mega commit** 按 P0/P1a/P1b/P2 分组（P1 因规模拆为 a/b 两个 commit）：
+  - `fix(17-p0): P0 HIGH 发现修复（11 项）`
+  - `refactor(17-p1a): P1 MEDIUM 发现修复 - 错误处理 + 安全加固（12 项）`
+  - `refactor(17-p1b): P1 MEDIUM 发现修复 - 性能 + 接口归位（7 项）`
+  - `chore(17-p2): P2 LOW 发现清理（20 项 + STYLE-002 误报 + STYLE-009 延后）`
 - **D-02.2:** 每个 mega commit 的 commit message body 列出**所有引用的 finding ID**（如 `SEC-001`, `BUG-001`, `PERF-003`）
 - **D-02.3:** 每个 mega commit 内部按 finding ID 顺序提交多个普通 commit，最后 squash 成 mega commit（或保留多个 commit 由 planner 决定）
 - **D-02.4:** 每个 mega commit 必须保证 `go build ./...` 通过 + 该 tier 涉及的相关测试包通过
-- **D-02.5:** 不再为每个 finding 单独开分支或 PR；3 个 mega commit 直接推 `main`
+- **D-02.5:** 不再为每个 finding 单独开分支或 PR；4 个 mega commit 直接推 `main`
 
 ### D-03 破坏性变更处理（SEC-001/003/004 等）
 - **D-03.1:** **内置启动校验**：SEC-001 中 `Environment=="production" && Secret==""` 时 `logger.Fatal`；非 production 仅打印严重警告
 - **D-03.2:** **同步更新部署文档**：`DEPLOYMENT.md`、`BUILD.md`、`SECURITY.md`、`.env.example` 中所有相关环境变量名（`RECORD_*` 前缀修正、SM4 secret 长度要求等）
 - **D-03.3:** **HMAC 编码变更保持向后兼容**（SEC-004）：新代码签发用 `base64.RawURLEncoding`，但 `Verify()` 接受新旧两种编码，重启后旧 token 仍可验证
 - **D-03.4:** **删除硬编码 fallback secret**（SEC-001/2）：不再保留 `change-me-in-production` 默认值；启动时检查 secret 长度 ≥ 32 字节
-- **D-03.5:** **TLS 最低版本强制 1.2**（SEC-003）：移除 `MinTLSVersion: 0x0301` 硬编码，改为从配置读取 `cfg.MinTLSVersion` 默认 `tls.VersionTLS12`
+- **D-03.5:** **TLS 最低版本强制 1.2**（SEC-003a：仅 TLS 三项）：移除 `MinTLSVersion: 0x0301` 硬编码，改为从配置读取 `cfg.MinTLSVersion` 默认 `tls.VersionTLS12`
 - **D-03.6:** **CORS 收紧**（SEC-007）：从配置 `cfg.CORS.AllowedOrigins`（数组）读取允许的 origin 列表；默认拒绝所有跨域
 - **D-03.7:** 不保留 deprecated 兼容开关（与审计建议一致，避免技术债）
+- **D-03.8:** **PERF-005 保持 HTTP 200 契约**：sync-IO handler 改用 **bounded concurrency + streaming**（信号量限流 + 分块处理），**不**改响应码或 JSON 形状；不为 PERF-005 引入 async/202 + 任务队列基础设施
 
 ### D-04 测试纪律
-- **D-04.1:** P0 修复（13 项）**必须**配单元测试，测试用例覆盖正常路径 + 至少 1 个回归路径
+- **D-04.1:** P0 修复（11 项代码发现）**必须**配单元测试，测试用例覆盖正常路径 + 至少 1 个回归路径
 - **D-04.2:** P1 修复（18 项）**至少配一个测试**，可用表驱动测试合并多个 finding 的边界用例
 - **D-04.3:** P2 修复（25 项）**跳过单测**，仅 `go vet` + `gofmt -l` 通过即可
 - **D-04.4:** 既有测试包不删（如 `handlers` 测试包），修复若改动既有函数签名需同步更新测试
@@ -70,6 +73,7 @@
 - **D-05.3:** `SECURITY.md`：补充 SECRET 校验章节、HLS Token jti 防重放说明、TLS 最低版本说明
 - **D-05.4:** `.env.example`：所有 secret 占位改为 `<必须显式设置，最小 32 字符>` 警告文案，移除可用的默认值示例
 - **D-05.5:** 文档更新随 D-02 的 P0 mega commit 一起提交（文档与代码同步上线）
+- **D-05.6:** **仅授权**修改 `DEPLOYMENT.md` / `BUILD.md` / `SECURITY.md` / `.env.example` 四个文档；**禁止**修改 `docs/audits/*.md`、禁止新增 `internal/**/README.md`、禁止向生产源码注入 STYLE-002/SYTLE-009 等延后决策的注释
 
 ### Claude's Discretion
 - BUG-006（time.Sleep → time.NewTimer + select）的具体重构写法
@@ -86,7 +90,7 @@
 **Downstream agents MUST read these before planning or implementing.**
 
 ### 审计报告（修复清单的唯一来源）
-- `docs/audits/2026-07-30-backend-code-review.md` — 647 行审计报告，列出全部 56 个 finding，每项含文件:行号、触发场景、修复建议。**这是 planning 的唯一 source of truth**，不允许重新解读 finding 含义
+- `docs/audits/2026-07-30-backend-code-review.md` — 647 行审计报告，列出全部 56 个 finding，每项含文件:行号、触发场景、修复建议。**这是 planning 的唯一 source of truth，不允许重新解读 finding 含义，也不允许修改/追加内容**
 - `docs/audits/2026-07-30-backend-code-review.md` §1.3 — Top 5 最严重问题（爆炸半径排序）
 - `docs/audits/2026-07-30-backend-code-review.md` §6.2 — 优先级修复清单（P0/P1/P2）
 
@@ -128,7 +132,7 @@
 
 ### Established Patterns
 
-- **Go 错误处理**：项目已有 168 处 `errors.New("中文")` + 474 处 `fmt.Errorf`（仅 59% 用 `%w`），STYLE-001 修复应引入 `%w` 包装，不破坏既有错误字符串
+- **Go 错误处理**：项目已有 168 处 `errors.New("中文")` + 474 处 `fmt.Errorf`（仅 59% 用 `%w`），STYLE-001 修复**仅在本次新修改/接触的代码处用 `%w` 包装**，不做全库扫荡（全库迁移列入 `<deferred>`）
 - **GORM 调用**：项目 GORM 调用均无 `WithContext(ctx)`（0/403），PERF-003 修复涉及 403 处，工作量大；建议**只在新增/修改的 GORM 调用上加 WithContext**（避免 PR 噪音），不在本次做全库扫荡式改造（除非 planner 评估后可接受）
 - **环境变量命名**：项目用 viper `SetEnvPrefix("RECORD")` 但文档写 `SM4_SECRET`（无前缀），SEC-001 修复需明确文档/代码统一
 - **审计日志格式**：sanitizer 已 DI 注入，新日志字段遵循既有 schema，不引入新结构
@@ -140,7 +144,7 @@
 - **`internal/auth/hlstoken/hls_token.go`**：`NewHLSToken` 启动校验 + base64 编码（SEC-004）
 - **`internal/middleware/auth.go`**：所有 GORM 调用加 `WithContext`（PERF-003，**仅限本次修改的函数**）
 - **`internal/services/video_recording_task_service.go`**：BUG-001 RetryTask 修复 + PERF-001 N+1 修复 + WithContext 改造
-- **`internal/huawei/manager.go` + `client.go`**：SEC-003 TLS 加固 + ctx 透传
+- **`internal/huawei/manager.go` + `client.go`**：SEC-003a TLS 加固 + ctx 透传
 - **`internal/migrations/013_add_ad_fields.go`**：SEC-005 SQL 拼接改 GORM Migrator
 
 </code_context>
@@ -187,11 +191,30 @@ if err1 != nil {
 }
 ```
 
+### PERF-005 修复（保持 HTTP 200，D-03.8）
+```go
+// bounded concurrency: handler 用 semaphore 限制并发重操作，
+// 同时保持原有 200 + JSON 响应形状不变（不改 202、不引任务队列）
+sem := make(chan struct{}, cfg.Admin.MigrationConcurrency) // default 4
+var wg sync.WaitGroup
+for _, item := range batch {
+    wg.Add(1)
+    sem <- struct{}{}
+    go func(it Item) {
+        defer wg.Done()
+        defer func() { <-sem }()
+        processChunk(ctx, it) // 已有处理函数
+    }(item)
+}
+wg.Wait()
+// 返回原有 200 响应
+```
+
 ### P0 单测最低标准
 - BUG-001：表驱动测试覆盖"原时长 > 新 StartTime 偏移"和"原时长 < 偏移"两个边界
 - SEC-001：测试覆盖 `production + secret=""` → Fatal；`dev + secret=""` → Warn；`production + secret>=32` → OK
 - SEC-002：测试覆盖 `SetAuditService(nil)` 不 panic；`auditLogger != nil` 时调用被路由
-- SEC-003：测试覆盖 `MinTLSVersion == 0x0302`；`InsecureSkipVerify == false` 默认
+- SEC-003a：测试覆盖 `MinTLSVersion == 0x0302`；`InsecureSkipVerify == false` 默认
 - SEC-004：测试覆盖 `len(secret) < 32` → Fatal；jti 重放 → 拒绝
 
 </specifics>
@@ -199,6 +222,8 @@ if err1 != nil {
 <deferred>
 ## Deferred Ideas
 
+- **STYLE-001 全库错误包装迁移**（168 处 `errors.New` + 474 处 `fmt.Errorf` + 5 处 `err.Error()=="中文"` + 13 处 `err == gorm.ErrRecordNotFound`）— 影响面过大，与审计核心修复无关；本次**仅在新修改/接触的代码处**用 `%w` 包装 + 在 handler 层迁移 2-3 处 `errors.Is(err, internalerrors.ErrNotFound)`，全库扫荡留作独立 phase
+- **SEC-003b 华为密码 DB 加密存储**（`models.InputConfig.Password` 明文 → SM4-ECB 加密）— 需独立迁移 + 前端/配置联动（解密路径 + 旧明文数据兼容），留作独立 phase；本 phase 仅完成 SEC-003a（TLS 三项 + ctx 透传）
 - STYLE-009 包名冗余清理（133 处 Get*）— 影响面过大且与审计核心修复无关，列入下个 LOW 清理 phase
 - 引入 `koanf` 替代 viper（审计 6.3 节建议）— 范围外的依赖迁移，留作独立 phase
 - audit 包从 `internal/services/audit` 挪到 `internal/audit`（审计 6.3 节建议）— 影响 import 链，留作独立 phase
@@ -211,5 +236,6 @@ if err1 != nil {
 
 *Phase: 17-56-p0-p1-p2*
 *Context gathered: 2026-07-30*
+*Revised: 2026-07-30 (per checker feedback — D-01.4/D-02.1/D-03.8/D-05.6 clarified; STYLE-001 full migration + SEC-003b added to `<deferred>`)*
 </content>
 </invoke>
