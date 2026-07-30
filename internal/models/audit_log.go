@@ -68,6 +68,8 @@ const (
 	ActionUpdate = "update"
 	ActionDelete = "delete"
 	ActionQuery  = "query"
+	ActionRead   = "read"
+	ActionList   = "list"
 
 	// 业务操作
 	ActionExport  = "export"

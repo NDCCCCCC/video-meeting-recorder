@@ -694,7 +694,7 @@ func (a *MinimalApp) registerRoutes() error {
 	a.router.GET("/api/v1/system/stats", a.statsHandler)
 
 	// 调度器调试端点（需要认证）
-	a.router.GET("/api/v1/scheduler/debug", a.schedulerDebugHandler)
+	a.router.GET("/api/v1/scheduler/debug", auditOp(models.ModuleSystem, models.ActionRead), a.schedulerDebugHandler)
 
 	// 认证路由（无需前置认证，但写操作仍走审计）
 	auth := a.router.Group("/api/v1/auth")
@@ -712,7 +712,7 @@ func (a *MinimalApp) registerRoutes() error {
 		authenticated.POST("/logout", auditOp(models.ModuleUser, "logout"), a.handlers.Auth.Logout)
 		authenticated.POST("/logout-all", auditOp(models.ModuleUser, "logout_all"), a.handlers.Auth.LogoutAll)
 		authenticated.POST("/change-password", auditOp(models.ModuleUser, "password_change"), a.handlers.Auth.ChangePassword)
-		authenticated.GET("/me", a.handlers.Auth.GetCurrentUser)
+		authenticated.GET("/me", auditOp(models.ModuleUser, models.ActionRead), a.handlers.Auth.GetCurrentUser)
 		authenticated.POST("/ad/test-connection", auditOp(models.ModuleAdmin, "ad_test"), a.handlers.Auth.TestADConnection)
 	}
 
@@ -720,9 +720,9 @@ func (a *MinimalApp) registerRoutes() error {
 	adminGroup := a.router.Group("/api/v1/admin/auth")
 	adminGroup.Use(middleware.SM4Auth(a.tokenService), middleware.RequireRole(a.db, "admin"))
 	{
-		adminGroup.GET("/config", a.handlers.Admin.GetAuthConfig)
+		adminGroup.GET("/config", auditOp(models.ModuleAdmin, models.ActionRead), a.handlers.Admin.GetAuthConfig)
 		adminGroup.PUT("/config", auditOp(models.ModuleAdmin, "update_config"), a.handlers.Admin.UpdateAuthConfig)
-		adminGroup.GET("/me", a.handlers.Admin.GetCurrentUser)
+		adminGroup.GET("/me", auditOp(models.ModuleAdmin, models.ActionRead), a.handlers.Admin.GetCurrentUser)
 		adminGroup.POST("/lookup-ad-user", auditOp(models.ModuleAdmin, "lookup_ad_user"), a.handlers.Admin.LookupADUser)
 	}
 
@@ -733,10 +733,10 @@ func (a *MinimalApp) registerRoutes() error {
 	// 用户管理
 	users := api.Group("/users")
 	{
-		users.GET("", a.handlers.User.ListUsers)                                                             // 获取用户列表
-		users.GET("/profile", a.handlers.User.GetCurrentProfile)                                             // 获取当前用户资料
+		users.GET("", auditOp(models.ModuleUser, models.ActionList), a.handlers.User.ListUsers)                         // 获取用户列表
+		users.GET("/profile", auditOp(models.ModuleUser, models.ActionRead), a.handlers.User.GetCurrentProfile)         // 获取当前用户资料
 		users.PUT("/profile", auditOp(models.ModuleUser, "update_profile"), a.handlers.User.UpdateCurrentProfile)       // 更新当前用户资料
-		users.GET("/:id", a.handlers.User.GetUser)                                                           // 获取用户详情
+		users.GET("/:id", auditOp(models.ModuleUser, models.ActionRead), a.handlers.User.GetUser)                       // 获取用户详情
 		users.POST("", auditOp(models.ModuleUser, "create"), a.handlers.User.CreateUser)                                // 创建用户
 		users.PUT("/:id", auditOp(models.ModuleUser, "update"), a.handlers.User.UpdateUser)                             // 更新用户
 		users.DELETE("/:id", auditOp(models.ModuleUser, "delete"), a.handlers.User.DeleteUser)                          // 删除用户
@@ -747,36 +747,36 @@ func (a *MinimalApp) registerRoutes() error {
 	// 角色管理
 	roles := api.Group("/roles")
 	{
-		roles.GET("", a.handlers.Role.ListRoles)                                                                 // 获取角色列表
-		roles.GET("/:id", a.handlers.Role.GetRole)                                                               // 获取角色详情
+		roles.GET("", auditOp(models.ModuleRole, models.ActionList), a.handlers.Role.ListRoles)                             // 获取角色列表
+		roles.GET("/:id", auditOp(models.ModuleRole, models.ActionRead), a.handlers.Role.GetRole)                           // 获取角色详情
 		roles.POST("", auditOp(models.ModuleRole, "create"), a.handlers.Role.CreateRole)                                    // 创建角色
 		roles.PUT("/:id", auditOp(models.ModuleRole, "update"), a.handlers.Role.UpdateRole)                                 // 更新角色
 		roles.DELETE("/:id", auditOp(models.ModuleRole, "delete"), a.handlers.Role.DeleteRole)                              // 删除角色
-		roles.GET("/:id/permissions", a.handlers.Role.GetRolePermissions)                                        // 获取角色权限
+		roles.GET("/:id/permissions", auditOp(models.ModuleRole, models.ActionRead), a.handlers.Role.GetRolePermissions)    // 获取角色权限
 		roles.POST("/:id/permissions", auditOp(models.ModuleRole, "assign_permissions"), a.handlers.Role.AssignPermissions) // 分配权限
 	}
 
 	// 权限列表
-	api.GET("/permissions", a.handlers.Role.GetAllPermissions)
+	api.GET("/permissions", auditOp(models.ModuleRole, models.ActionList), a.handlers.Role.GetAllPermissions)
 
 	// API密钥管理
 	apikeys := api.Group("/apikeys")
 	{
-		apikeys.GET("", a.handlers.APIKey.ListAPIKeys)                                                 // 获取API密钥列表
-		apikeys.POST("", auditOp(models.ModuleAPIKey, "create"), a.handlers.APIKey.CreateAPIKey)                  // 创建API密钥
-		apikeys.GET("/:id", a.handlers.APIKey.GetAPIKey)                                               // 获取API密钥详情
-		apikeys.PUT("/:id", auditOp(models.ModuleAPIKey, "update"), a.handlers.APIKey.UpdateAPIKey)               // 更新API密钥
-		apikeys.DELETE("/:id", auditOp(models.ModuleAPIKey, "delete"), a.handlers.APIKey.DeleteAPIKey)            // 删除API密钥
-		apikeys.POST("/:id/toggle", auditOp(models.ModuleAPIKey, "toggle"), a.handlers.APIKey.ToggleAPIKeyStatus) // 切换状态
-		apikeys.GET("/:id/logs", a.handlers.APIKey.ListUsageLogs)                                      // 获取使用日志
-		apikeys.GET("/:id/summary", a.handlers.APIKey.GetUsageLogSummary)                              // 获取使用统计
+		apikeys.GET("", auditOp(models.ModuleAPIKey, models.ActionList), a.handlers.APIKey.ListAPIKeys)                    // 获取API密钥列表
+		apikeys.POST("", auditOp(models.ModuleAPIKey, "create"), a.handlers.APIKey.CreateAPIKey)                           // 创建API密钥
+		apikeys.GET("/:id", auditOp(models.ModuleAPIKey, models.ActionRead), a.handlers.APIKey.GetAPIKey)                  // 获取API密钥详情
+		apikeys.PUT("/:id", auditOp(models.ModuleAPIKey, "update"), a.handlers.APIKey.UpdateAPIKey)                        // 更新API密钥
+		apikeys.DELETE("/:id", auditOp(models.ModuleAPIKey, "delete"), a.handlers.APIKey.DeleteAPIKey)                     // 删除API密钥
+		apikeys.POST("/:id/toggle", auditOp(models.ModuleAPIKey, "toggle"), a.handlers.APIKey.ToggleAPIKeyStatus)          // 切换状态
+		apikeys.GET("/:id/logs", auditOp(models.ModuleAPIKey, models.ActionRead), a.handlers.APIKey.ListUsageLogs)         // 获取使用日志
+		apikeys.GET("/:id/summary", auditOp(models.ModuleAPIKey, models.ActionRead), a.handlers.APIKey.GetUsageLogSummary) // 获取使用统计
 	}
 
 	// 录制任务管理 (使用 /recordings 路径符合API文档规范)
 	recordings := api.Group("/recordings")
 	{
-		recordings.GET("", a.handlers.VideoTask.ListTasks)                                                       // 获取任务列表
-		recordings.GET("/:id", a.handlers.VideoTask.GetTask)                                                     // 获取任务详情
+		recordings.GET("", auditOp(models.ModuleTask, models.ActionList), a.handlers.VideoTask.ListTasks)                   // 获取任务列表
+		recordings.GET("/:id", auditOp(models.ModuleTask, models.ActionRead), a.handlers.VideoTask.GetTask)                 // 获取任务详情
 		recordings.POST("", auditOp(models.ModuleRecording, "create"), a.handlers.VideoTask.CreateTask)                     // 创建任务
 		recordings.POST("/auto", auditOp(models.ModuleRecording, "create_auto"), a.handlers.VideoTask.CreateTaskAuto)       // 自动创建任务（固定华为配置）
 		recordings.PUT("/:id", auditOp(models.ModuleRecording, "update"), a.handlers.VideoTask.UpdateTask)                  // 更新任务
@@ -787,10 +787,10 @@ func (a *MinimalApp) registerRoutes() error {
 		recordings.POST("/:id/cancel", auditOp(models.ModuleRecording, "cancel"), a.handlers.VideoTask.CancelTask)          // 取消任务
 		recordings.POST("/:id/retry", auditOp(models.ModuleRecording, "retry"), a.handlers.VideoTask.RetryTask)             // 重试任务
 		// 转换相关
-		recordings.GET("/:id/conversion-status", a.handlers.VideoTask.GetConversionStatus)                                       // 获取转换状态
+		recordings.GET("/:id/conversion-status", auditOp(models.ModuleTask, models.ActionRead), a.handlers.VideoTask.GetConversionStatus)   // 获取转换状态
 		recordings.POST("/:id/conversion-retry", auditOp(models.ModuleRecording, "conversion_retry"), a.handlers.VideoTask.RetryConversion) // 重试转换
 		// HLS 预览相关
-		recordings.GET("/:id/preview", a.handlers.VideoTask.GetHLSPreview) // 获取HLS预览信息
+		recordings.GET("/:id/preview", auditOp(models.ModuleTask, models.ActionRead), a.handlers.VideoTask.GetHLSPreview) // 获取HLS预览信息
 		// 注意：/:id/preview/stream/:file 路由已移至公开路由（无需Token认证）
 	}
 
@@ -803,9 +803,9 @@ func (a *MinimalApp) registerRoutes() error {
 	// 输入配置管理
 	inputConfigs := api.Group("/input-configs")
 	{
-		inputConfigs.GET("", a.handlers.InputConfig.ListConfigs)
-		inputConfigs.GET("/active", a.handlers.InputConfig.GetActiveConfigs)
-		inputConfigs.GET("/:id", a.handlers.InputConfig.GetConfig)
+		inputConfigs.GET("", auditOp(models.ModuleInputConfig, models.ActionList), a.handlers.InputConfig.ListConfigs)
+		inputConfigs.GET("/active", auditOp(models.ModuleInputConfig, models.ActionRead), a.handlers.InputConfig.GetActiveConfigs)
+		inputConfigs.GET("/:id", auditOp(models.ModuleInputConfig, models.ActionRead), a.handlers.InputConfig.GetConfig)
 		inputConfigs.POST("", auditOp(models.ModuleInputConfig, "create"), a.handlers.InputConfig.CreateConfig)
 		inputConfigs.PUT("/:id", auditOp(models.ModuleInputConfig, "update"), a.handlers.InputConfig.UpdateConfig)
 		inputConfigs.DELETE("/:id", auditOp(models.ModuleInputConfig, "delete"), a.handlers.InputConfig.DeleteConfig)
@@ -816,75 +816,75 @@ func (a *MinimalApp) registerRoutes() error {
 	// 文件存储管理
 	storage := api.Group("/storage")
 	{
-		storage.POST("/upload", auditOp(models.ModuleFile, "upload"), a.handlers.File.Upload)  // 上传文件
-		storage.GET("/quota", a.handlers.File.GetQuota)                             // 获取配额
-		storage.GET("", a.handlers.File.List)                                       // 获取文件列表
-		storage.DELETE("/:id", auditOp(models.ModuleFile, "delete"), a.handlers.File.Delete)   // 删除文件
-		storage.POST("/:id/share", auditOp(models.ModuleFile, "share"), a.handlers.File.Share) // 生成分享链接
+		storage.POST("/upload", auditOp(models.ModuleFile, "upload"), a.handlers.File.Upload)          // 上传文件
+		storage.GET("/quota", auditOp(models.ModuleFile, models.ActionRead), a.handlers.File.GetQuota) // 获取配额
+		storage.GET("", auditOp(models.ModuleFile, models.ActionList), a.handlers.File.List)           // 获取文件列表
+		storage.DELETE("/:id", auditOp(models.ModuleFile, "delete"), a.handlers.File.Delete)           // 删除文件
+		storage.POST("/:id/share", auditOp(models.ModuleFile, "share"), a.handlers.File.Share)         // 生成分享链接
 	}
 
 	// 视频文件管理
 	files := api.Group("/files")
 	{
-		files.GET("", a.handlers.VideoFile.ListFiles)                                                  // 获取文件列表
-		files.GET("/stats", a.handlers.VideoFile.GetFileStats)                                         // 获取文件统计
-		files.DELETE("/batch", auditOp(models.ModuleFile, "batch_delete"), a.handlers.VideoFile.BatchDeleteFiles) // 批量删除文件（必须在 /:id 之前）
+		files.GET("", auditOp(models.ModuleFile, models.ActionList), a.handlers.VideoFile.ListFiles)                            // 获取文件列表
+		files.GET("/stats", auditOp(models.ModuleFile, models.ActionRead), a.handlers.VideoFile.GetFileStats)                   // 获取文件统计
+		files.DELETE("/batch", auditOp(models.ModuleFile, "batch_delete"), a.handlers.VideoFile.BatchDeleteFiles)               // 批量删除文件（必须在 /:id 之前）
 		files.POST("/batch/download", auditOp(models.ModuleFile, models.ActionExport), a.handlers.VideoFile.BatchDownloadFiles) // 批量下载（数据导出，按中危处理补审计）
-		files.GET("/:id/download", a.handlers.VideoFile.DownloadFile)                                  // 下载文件（必须在 /:id 之前）
-		files.GET("/:id", a.handlers.VideoFile.GetFile)                                                // 获取文件详情
-		files.DELETE("/:id", auditOp(models.ModuleFile, "delete"), a.handlers.VideoFile.DeleteFile)               // 删除文件
-		files.POST("/scan", auditOp(models.ModuleFile, "scan"), a.handlers.VideoFile.ScanFiles)                   // 扫描并导入文件
+		files.GET("/:id/download", auditOp(models.ModuleFile, models.ActionExport), a.handlers.VideoFile.DownloadFile)          // 下载文件（必须在 /:id 之前）
+		files.GET("/:id", auditOp(models.ModuleFile, models.ActionRead), a.handlers.VideoFile.GetFile)                          // 获取文件详情
+		files.DELETE("/:id", auditOp(models.ModuleFile, "delete"), a.handlers.VideoFile.DeleteFile)                             // 删除文件
+		files.POST("/scan", auditOp(models.ModuleFile, "scan"), a.handlers.VideoFile.ScanFiles)                                 // 扫描并导入文件
 	}
 
 	// 公开文件访问（无需认证）
-	a.router.GET("/api/v1/files/download/:token", a.handlers.File.Download)
-	a.router.GET("/api/v1/files/share/:token", a.handlers.File.ShareDownload)
+	a.router.GET("/api/v1/files/download/:token", auditOp(models.ModuleFile, models.ActionExport), a.handlers.File.Download)
+	a.router.GET("/api/v1/files/share/:token", auditOp(models.ModuleFile, models.ActionExport), a.handlers.File.ShareDownload)
 
 	// 视频分割和快照
 	videos := api.Group("/videos")
 	{
-		videos.POST("/:id/split", auditOp(models.ModuleVideo, "split"), a.handlers.Split.SubmitSplit)                           // 提交分割任务
-		videos.GET("/:id/split-status", a.handlers.Split.GetSplitStatus)                                             // 获取分割状态
-		videos.GET("/:id/segments", a.handlers.Split.GetSegments)                                                    // 获取分割段落列表
-		videos.POST("/:id/transcribe", auditOp(models.ModuleVideo, "transcribe"), a.handlers.Transcription.SubmitTranscription) // 提交转录任务
-		videos.GET("/:id/transcription-status", a.handlers.Transcription.GetTranscriptionStatus)                     // 获取转录状态
-		videos.GET("/:id/transcription-text", a.handlers.Transcription.GetTranscriptionText)                         // 获取转录文字内容
-		videos.GET("/:id/ppts", a.handlers.PPT.GetPptsByVideo)                                                       // 获取视频的所有PPT结果
-		videos.POST("/:id/rename", auditOp(models.ModuleVideo, "rename"), a.handlers.VideoFile.RenameFile)                      // 重命名视频文件
+		videos.POST("/:id/split", auditOp(models.ModuleVideo, "split"), a.handlers.Split.SubmitSplit)                                                    // 提交分割任务
+		videos.GET("/:id/split-status", auditOp(models.ModuleTask, models.ActionRead), a.handlers.Split.GetSplitStatus)                                  // 获取分割状态
+		videos.GET("/:id/segments", auditOp(models.ModuleTask, models.ActionList), a.handlers.Split.GetSegments)                                         // 获取分割段落列表
+		videos.POST("/:id/transcribe", auditOp(models.ModuleVideo, "transcribe"), a.handlers.Transcription.SubmitTranscription)                          // 提交转录任务
+		videos.GET("/:id/transcription-status", auditOp(models.ModuleTranscription, models.ActionRead), a.handlers.Transcription.GetTranscriptionStatus) // 获取转录状态
+		videos.GET("/:id/transcription-text", auditOp(models.ModuleTranscription, models.ActionRead), a.handlers.Transcription.GetTranscriptionText)     // 获取转录文字内容
+		videos.GET("/:id/ppts", auditOp(models.ModulePPT, models.ActionList), a.handlers.PPT.GetPptsByVideo)                                             // 获取视频的所有PPT结果
+		videos.POST("/:id/rename", auditOp(models.ModuleVideo, "rename"), a.handlers.VideoFile.RenameFile)                                               // 重命名视频文件
 	}
 
 	// 转录任务管理
 	transcriptions := api.Group("/transcriptions")
 	{
-		transcriptions.GET("/active", a.handlers.Transcription.ListActiveTasks)                                             // 获取活跃的转录任务列表
-		transcriptions.GET("/:videoFileId/timestamps", a.handlers.Transcription.GetTimestampMapHandler)                     // 获取时间戳映射
-		transcriptions.POST("/batch", auditOp(models.ModuleTranscription, "batch"), a.handlers.Transcription.SubmitBatchTranscription) // 批量提交转录任务
-		transcriptions.GET("/batch/:id", a.handlers.Transcription.GetBatchTranscriptionStatus)                              // 获取批量转录任务组状态
+		transcriptions.GET("/active", auditOp(models.ModuleTranscription, models.ActionList), a.handlers.Transcription.ListActiveTasks)                         // 获取活跃的转录任务列表
+		transcriptions.GET("/:videoFileId/timestamps", auditOp(models.ModuleTranscription, models.ActionRead), a.handlers.Transcription.GetTimestampMapHandler) // 获取时间戳映射
+		transcriptions.POST("/batch", auditOp(models.ModuleTranscription, "batch"), a.handlers.Transcription.SubmitBatchTranscription)                          // 批量提交转录任务
+		transcriptions.GET("/batch/:id", auditOp(models.ModuleTranscription, models.ActionRead), a.handlers.Transcription.GetBatchTranscriptionStatus)          // 获取批量转录任务组状态
 	}
 
 	// PPT管理
 	ppts := api.Group("/ppts")
 	{
-		ppts.GET("/:id/slides", a.handlers.PPT.GetSlides) // 获取幻灯片图片列表
+		ppts.GET("/:id/slides", auditOp(models.ModulePPT, models.ActionList), a.handlers.PPT.GetSlides) // 获取幻灯片图片列表
 		// 		ppts.GET("/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage)      // 服务幻灯片图片
-		ppts.POST("/merge", auditOp(models.ModulePPT, "merge"), a.handlers.PPT.MergeSlides)                        // 合并幻灯片
-		ppts.GET("/:id/download", a.handlers.PPT.DownloadPPT)                                           // 下载PPT文件
-		ppts.DELETE("/:id", auditOp(models.ModulePPT, "delete"), a.handlers.PPT.DeletePPT)                         // 删除PPT
-		ppts.POST("/:id/rename", auditOp(models.ModulePPT, "rename"), a.handlers.PPT.RenamePPT)                    // 重命名PPT文件
-		ppts.GET("/:id/duplicates", a.handlers.PPT.DetectDuplicatesHandler)                             // 检测重复幻灯片
-		ppts.DELETE("/:id/slides", auditOp(models.ModulePPT, "delete_slides"), a.handlers.PPT.DeleteSlidesHandler) // 删除指定幻灯片
-		ppts.POST("/:id/rollback", auditOp(models.ModulePPT, "rollback"), a.handlers.PPT.RollbackHandler)          // 回滚到备份版本
-		ppts.POST(":id/reorder", auditOp(models.ModulePPT, "reorder"), a.handlers.PPT.ReorderSlidesHandler)        // 重排序幻灯片
-		ppts.POST(":id/capture", auditOp(models.ModulePPT, "capture"), a.handlers.PPT.CaptureFrameHandler)         // 捕获视频帧
-		ppts.POST(":id/slides", auditOp(models.ModulePPT, "insert_slide"), a.handlers.PPT.InsertSlideHandler)      // 插入幻灯片
-		ppts.POST("/batch-check", a.handlers.PPT.BatchGetPptsByVideos)                                  // 批量检查视频PPT结果（只读不审计）
+		ppts.POST("/merge", auditOp(models.ModulePPT, "merge"), a.handlers.PPT.MergeSlides)                               // 合并幻灯片
+		ppts.GET("/:id/download", auditOp(models.ModulePPT, models.ActionExport), a.handlers.PPT.DownloadPPT)             // 下载PPT文件
+		ppts.DELETE("/:id", auditOp(models.ModulePPT, "delete"), a.handlers.PPT.DeletePPT)                                // 删除PPT
+		ppts.POST("/:id/rename", auditOp(models.ModulePPT, "rename"), a.handlers.PPT.RenamePPT)                           // 重命名PPT文件
+		ppts.GET("/:id/duplicates", auditOp(models.ModulePPT, models.ActionRead), a.handlers.PPT.DetectDuplicatesHandler) // 检测重复幻灯片
+		ppts.DELETE("/:id/slides", auditOp(models.ModulePPT, "delete_slides"), a.handlers.PPT.DeleteSlidesHandler)        // 删除指定幻灯片
+		ppts.POST("/:id/rollback", auditOp(models.ModulePPT, "rollback"), a.handlers.PPT.RollbackHandler)                 // 回滚到备份版本
+		ppts.POST(":id/reorder", auditOp(models.ModulePPT, "reorder"), a.handlers.PPT.ReorderSlidesHandler)               // 重排序幻灯片
+		ppts.POST(":id/capture", auditOp(models.ModulePPT, "capture"), a.handlers.PPT.CaptureFrameHandler)                // 捕获视频帧
+		ppts.POST(":id/slides", auditOp(models.ModulePPT, "insert_slide"), a.handlers.PPT.InsertSlideHandler)             // 插入幻灯片
+		ppts.POST("/batch-check", a.handlers.PPT.BatchGetPptsByVideos)                                                    // 批量检查视频PPT结果（只读不审计）
 	}
 
 	// HLS 预览流文件访问（无需认证，但需要任务权限验证）
-	a.router.GET("/api/v1/recordings/:id/preview/stream/:file", a.handlers.VideoTask.ServeHLSStream)
+	a.router.GET("/api/v1/recordings/:id/preview/stream/:file", auditOp(models.ModuleTask, models.ActionExport), a.handlers.VideoTask.ServeHLSStream)
 
 	// PPT幻灯片图片访问（无需认证，handler内部验证权限，用于<img>标签显示）
-	a.router.GET("/api/v1/ppts/:id/slides/:resolution/:filename", a.handlers.PPT.ServeSlideImage)
+	a.router.GET("/api/v1/ppts/:id/slides/:resolution/:filename", auditOp(models.ModulePPT, models.ActionExport), a.handlers.PPT.ServeSlideImage)
 
 	// 审计日志管理
 	auditLog := api.Group("/audit")
@@ -897,25 +897,25 @@ func (a *MinimalApp) registerRoutes() error {
 	// 通知管理
 	notifications := api.Group("/notifications")
 	{
-		notifications.GET("", a.handlers.Notification.ListNotifications)                                                      // 获取通知列表
-		notifications.GET("/unread-count", a.handlers.Notification.GetUnreadCount)                                            // 获取未读数量
-		notifications.PUT("/:id/read", auditOp(models.ModuleNotification, "mark_read"), a.handlers.Notification.MarkAsRead)              // 标记为已读
-		notifications.PUT("/read-all", auditOp(models.ModuleNotification, "mark_all_read"), a.handlers.Notification.MarkAllAsRead)       // 全部标记为已读
-		notifications.GET("/settings", a.handlers.Notification.GetUserSetting)                                                // 获取通知配置
-		notifications.PUT("/settings", auditOp(models.ModuleNotification, "update_settings"), a.handlers.Notification.UpdateUserSetting) // 更新通知配置
+		notifications.GET("", auditOp(models.ModuleNotification, models.ActionList), a.handlers.Notification.ListNotifications)           // 获取通知列表
+		notifications.GET("/unread-count", auditOp(models.ModuleNotification, models.ActionRead), a.handlers.Notification.GetUnreadCount) // 获取未读数量
+		notifications.PUT("/:id/read", auditOp(models.ModuleNotification, "mark_read"), a.handlers.Notification.MarkAsRead)               // 标记为已读
+		notifications.PUT("/read-all", auditOp(models.ModuleNotification, "mark_all_read"), a.handlers.Notification.MarkAllAsRead)        // 全部标记为已读
+		notifications.GET("/settings", auditOp(models.ModuleNotification, models.ActionRead), a.handlers.Notification.GetUserSetting)     // 获取通知配置
+		notifications.PUT("/settings", auditOp(models.ModuleNotification, "update_settings"), a.handlers.Notification.UpdateUserSetting)  // 更新通知配置
 	}
 
 	// 仪表板（需要 admin 权限）
 	dashboard := api.Group("/dashboard")
 	dashboard.Use(middleware.RequirePermission(a.db, "dashboard", "view"))
 	{
-		dashboard.GET("/stats", a.handlers.Dashboard.GetStats) // 获取仪表板统计数据
+		dashboard.GET("/stats", auditOp(models.ModuleSystem, models.ActionRead), a.handlers.Dashboard.GetStats) // 获取仪表板统计数据
 	}
 
 	// 系统管理（需要 admin 权限）
 	system := api.Group("/system")
 	{
-		system.GET("/config", a.handlers.System.GetConfig)                                          // 获取系统配置
+		system.GET("/config", auditOp(models.ModuleSystem, models.ActionRead), a.handlers.System.GetConfig)    // 获取系统配置
 		system.PUT("/config", auditOp(models.ModuleSystem, "update_config"), a.handlers.System.UpdateConfig)   // 更新系统配置
 		system.POST("/clear-files", auditOp(models.ModuleSystem, "clear_files"), a.handlers.System.ClearFiles) // 清空文件数据库
 	}
