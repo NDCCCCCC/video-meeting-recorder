@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"go.uber.org/zap"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -101,7 +103,10 @@ func (u *User) GetAllowedIPs() []string {
 		return []string{}
 	}
 	var ips []string
-	_ = json.Unmarshal([]byte(u.AllowedIPs), &ips)
+	if err := json.Unmarshal([]byte(u.AllowedIPs), &ips); err != nil {
+		zap.L().Warn("JSON 字段解析失败", zap.String("field", "AllowedIPs"), zap.Error(err))
+		return nil
+	}
 	return ips
 }
 

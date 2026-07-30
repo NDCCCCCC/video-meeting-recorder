@@ -2,6 +2,8 @@ package models
 
 import (
 	"encoding/json"
+
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -35,7 +37,10 @@ func (r *Role) GetAllowedIPs() []string {
 		return []string{}
 	}
 	var ips []string
-	_ = json.Unmarshal([]byte(r.AllowedIPs), &ips)
+	if err := json.Unmarshal([]byte(r.AllowedIPs), &ips); err != nil {
+		zap.L().Warn("JSON 字段解析失败", zap.String("field", "AllowedIPs"), zap.Error(err))
+		return nil
+	}
 	return ips
 }
 

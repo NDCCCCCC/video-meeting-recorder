@@ -118,7 +118,9 @@ func (s *USBDeviceScanner) scanWindowsVideoDevicesFFmpeg() ([]USBDeviceInfo, err
 	cmd.Stderr = &stderr
 
 	// ffmpeg会输出到stderr
-	_ = cmd.Run()
+	if err := cmd.Run(); err != nil {
+		s.logger.Warn("FFmpeg 设备扫描返回错误", zap.Error(err))
+	}
 	// ffmpeg会返回错误码，但设备列表仍然在stderr中
 
 	output := stderr.String()
@@ -333,7 +335,9 @@ func (s *USBDeviceScanner) scanWindowsAudioDevicesFFmpeg() ([]USBDeviceInfo, err
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
-	_ = cmd.Run() // ffmpeg会返回错误码，但设备列表仍然在stderr中
+	if err := cmd.Run(); err != nil {
+		s.logger.Warn("FFmpeg 音频设备扫描返回错误", zap.Error(err))
+	} // ffmpeg会返回错误码，但设备列表仍然在stderr中
 
 	output := stderr.String()
 	s.logger.Info("FFmpeg音频扫描原始输出", zap.String("output", output))

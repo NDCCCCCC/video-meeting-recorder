@@ -34,16 +34,16 @@ const (
 // Token格式: base64url(nonce[12] + SM4-GCM(claims_json) + authTag[16])
 // SM4-GCM同时提供加密（payload不可读）和认证（防篡改）。
 type SM4TokenService struct {
-	gcm              cipher.AEAD // 预初始化的SM4-GCM实例，避免每次加解密重复创建
-	issuer           string
-	expireHours      int
-	refreshExpire    int
-	maxSession       int
-	db               *gorm.DB
-	logger           *zap.Logger
+	gcm           cipher.AEAD // 预初始化的SM4-GCM实例，避免每次加解密重复创建
+	issuer        string
+	expireHours   int
+	refreshExpire int
+	maxSession    int
+	db            *gorm.DB
+	logger        *zap.Logger
 	// token 缓存：支持宽限期机制
-	tokenCache       map[string]*TokenCacheEntry // key: refresh token, value: 缓存的 token 对
-	tokenCacheMutex  sync.RWMutex
+	tokenCache      map[string]*TokenCacheEntry // key: refresh token, value: 缓存的 token 对
+	tokenCacheMutex sync.RWMutex
 }
 
 // Claims Token声明
@@ -353,7 +353,9 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 				zap.Uint("user_id", claims.UserID),
 				zap.String("token_prefix", refreshToken[:8]),
 			)
-			_ = s.RevokeUserSessions(claims.UserID)
+			if err := s.RevokeUserSessions(claims.UserID); err != nil {
+				s.logger.Warn("撤销用户会话失败", zap.Uint("user_id", claims.UserID), zap.Error(err))
+			}
 			return nil, errors.New("token reuse detected")
 		}
 	}
@@ -406,7 +408,6 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 
 	return newTokenPair, nil
 }
-
 
 // CreateSession 创建会话记录
 func (s *SM4TokenService) CreateSession(userID uint, token string, ipAddress, userAgent string, expiresAt time.Time) error {

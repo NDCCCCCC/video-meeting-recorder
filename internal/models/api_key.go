@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/common"
 	"gorm.io/gorm"
 )
@@ -89,7 +91,10 @@ func (a *APIKey) GetScopeList() []string {
 		return []string{}
 	}
 	var scopes []string
-	_ = json.Unmarshal([]byte(a.Scopes), &scopes)
+	if err := json.Unmarshal([]byte(a.Scopes), &scopes); err != nil {
+		zap.L().Warn("JSON 字段解析失败", zap.String("field", "Scopes"), zap.Error(err))
+		return nil
+	}
 	return scopes
 }
 
@@ -109,7 +114,10 @@ func (a *APIKey) GetIPWhitelist() []string {
 		return []string{}
 	}
 	var whitelist []string
-	_ = json.Unmarshal([]byte(a.IPWhitelist), &whitelist)
+	if err := json.Unmarshal([]byte(a.IPWhitelist), &whitelist); err != nil {
+		zap.L().Warn("JSON 字段解析失败", zap.String("field", "IPWhitelist"), zap.Error(err))
+		return nil
+	}
 	return whitelist
 }
 
@@ -126,6 +134,9 @@ func (a *APIKey) SetIPWhitelist(whitelist []string) error {
 // IsIPAllowed 检查IP是否在白名单中
 func (a *APIKey) IsIPAllowed(clientIP string) bool {
 	whitelist := a.GetIPWhitelist()
+	if whitelist == nil && a.IPWhitelist != "" {
+		return false
+	}
 	if len(whitelist) == 0 {
 		return true
 	}

@@ -415,7 +415,12 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		var newStartTime time.Time
 		if req.StartTime != nil {
 			beijingLocation := time.FixedZone("CST", 8*3600)
-			newStartTime, _ = time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
+			parsedStartTime, parseErr := time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
+			if parseErr != nil {
+				s.logger.Warn("开始时间解析失败", zap.Error(parseErr))
+				return nil, nil, errors.New("开始时间格式错误")
+			}
+			newStartTime = parsedStartTime
 		} else {
 			newStartTime = task.StartTime
 		}

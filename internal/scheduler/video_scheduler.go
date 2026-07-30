@@ -372,7 +372,6 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		return
 	}
 
-
 	// 加载所有关联的华为配置
 	var inputConfigs []models.InputConfig
 	for _, tc := range taskConfigs {
@@ -456,7 +455,9 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 				// 创建临时任务对象用于清理
 				cleanupTask := *task
 				// cleanupTask.HuaweiConfig = mainConfig  // TODO: 更新为InputConfig
-				_ = s.connector.DisconnectFromConference(cleanupCtx, &cleanupTask)
+				if err := s.connector.DisconnectFromConference(cleanupCtx, &cleanupTask); err != nil {
+					s.logger.Warn("清理会议连接失败", zap.Error(err))
+				}
 			}
 		}
 		return
@@ -564,7 +565,7 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 	// 加载任务关联的输入配置
 	var taskConfigs []models.TaskInputConfig
 	s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
-	
+
 	// 检查是否有华为控制配置
 	hasHuaweiAuto := false
 	for _, tc := range taskConfigs {
@@ -573,7 +574,7 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 			break
 		}
 	}
-	
+
 	// 加载任务（用于断开华为会议连接）
 	task, err := s.taskService.GetTask(taskID)
 	if err != nil {
@@ -1206,7 +1207,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 	// 加载任务关联的输入配置
 	var taskConfigs []models.TaskInputConfig
 	s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
-	
+
 	// 检查是否有华为控制配置
 	hasHuaweiAuto := false
 	for _, tc := range taskConfigs {
@@ -1215,7 +1216,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 			break
 		}
 	}
-	
+
 	// 加载任务信息用于断开连接和提交转换
 	task, err := s.taskService.GetTask(taskID)
 
