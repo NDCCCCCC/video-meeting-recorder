@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -12,13 +15,15 @@ import (
 // APIKeyHandler API密钥处理器
 type APIKeyHandler struct {
 	apiKeyService *services.APIKeyService
+	auditService  *audit.AuditLogService
 	logger        *zap.Logger
 }
 
 // NewAPIKeyHandler 创建API密钥处理器
-func NewAPIKeyHandler(apiKeyService *services.APIKeyService, logger *zap.Logger) *APIKeyHandler {
+func NewAPIKeyHandler(apiKeyService *services.APIKeyService, auditService *audit.AuditLogService, logger *zap.Logger) *APIKeyHandler {
 	return &APIKeyHandler{
 		apiKeyService: apiKeyService,
+		auditService:  auditService,
 		logger:        logger,
 	}
 }
@@ -204,7 +209,7 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	isAdmin := middleware.GetIsAdmin(c)
 
-	apiKey, err := h.apiKeyService.UpdateAPIKey(id, userID, isAdmin, &req)
+	oldAPIKey, apiKey, err := h.apiKeyService.UpdateAPIKey(id, userID, isAdmin, &req)
 	if err != nil {
 		h.logger.Warn("更新API密钥失败",
 			zap.Uint("user_id", userID),
@@ -213,6 +218,18 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 		)
 		response.GinError(c, response.CodeInternalError, err.Error())
 		return
+	}
+
+	resourceID := apiKey.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionUpdate,
+		Module:     models.ModuleAPIKey,
+		Resource:   fmt.Sprintf("apikey:%d", apiKey.ID),
+		ResourceID: &resourceID,
+		OldData:    oldAPIKey,
+		NewData:    apiKey,
+	}); err != nil {
+		h.logger.Warn("Failed to record apikey update change", zap.Error(err), zap.Uint("key_id", id))
 	}
 
 	h.logger.Info("API密钥更新成功",
@@ -242,7 +259,8 @@ func (h *APIKeyHandler) DeleteAPIKey(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	isAdmin := middleware.GetIsAdmin(c)
 
-	if err := h.apiKeyService.DeleteAPIKey(id, userID, isAdmin); err != nil {
+	oldAPIKey, err := h.apiKeyService.DeleteAPIKey(id, userID, isAdmin)
+	if err != nil {
 		h.logger.Warn("删除API密钥失败",
 			zap.Uint("user_id", userID),
 			zap.Uint("key_id", id),
@@ -250,6 +268,18 @@ func (h *APIKeyHandler) DeleteAPIKey(c *gin.Context) {
 		)
 		response.GinError(c, response.CodeInternalError, err.Error())
 		return
+	}
+
+	resourceID := oldAPIKey.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionDelete,
+		Module:     models.ModuleAPIKey,
+		Resource:   fmt.Sprintf("apikey:%d", oldAPIKey.ID),
+		ResourceID: &resourceID,
+		OldData:    oldAPIKey,
+		NewData:    nil,
+	}); err != nil {
+		h.logger.Warn("Failed to record apikey delete change", zap.Error(err), zap.Uint("key_id", id))
 	}
 
 	h.logger.Info("API密钥删除成功",
@@ -281,7 +311,7 @@ func (h *APIKeyHandler) ToggleAPIKeyStatus(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	isAdmin := middleware.GetIsAdmin(c)
 
-	apiKey, err := h.apiKeyService.ToggleAPIKeyStatus(id, userID, isAdmin)
+	oldAPIKey, apiKey, err := h.apiKeyService.ToggleAPIKeyStatus(id, userID, isAdmin)
 	if err != nil {
 		h.logger.Warn("切换API密钥状态失败",
 			zap.Uint("user_id", userID),
@@ -290,6 +320,18 @@ func (h *APIKeyHandler) ToggleAPIKeyStatus(c *gin.Context) {
 		)
 		response.GinError(c, response.CodeInternalError, err.Error())
 		return
+	}
+
+	resourceID := apiKey.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     "toggle",
+		Module:     models.ModuleAPIKey,
+		Resource:   fmt.Sprintf("apikey:%d", apiKey.ID),
+		ResourceID: &resourceID,
+		OldData:    oldAPIKey,
+		NewData:    apiKey,
+	}); err != nil {
+		h.logger.Warn("Failed to record apikey toggle change", zap.Error(err), zap.Uint("key_id", id))
 	}
 
 	h.logger.Info("API密钥状态切换成功",

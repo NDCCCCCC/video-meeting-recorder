@@ -259,8 +259,10 @@ func TestFileServiceShare(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 创建分享链接
-		shareURL, err := service.ShareFile(ctx, result.FileID, 1, 24*time.Hour, "")
+		oldShare, newShare, shareURL, err := service.ShareFile(ctx, result.FileID, 1, 24*time.Hour, "")
 		assert.NoError(t, err)
+		assert.Nil(t, oldShare)
+		assert.NotNil(t, newShare)
 		assert.Contains(t, shareURL, "/api/v1/files/share/")
 
 		// 提取分享令牌
@@ -294,8 +296,9 @@ func TestFileServiceShare(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 创建带密码的分享链接
-		shareURL, err := service.ShareFile(ctx, result.FileID, 1, 24*time.Hour, "password123")
+		_, newShare, shareURL, err := service.ShareFile(ctx, result.FileID, 1, 24*time.Hour, "password123")
 		assert.NoError(t, err)
+		assert.NotNil(t, newShare)
 
 		// 提取分享令牌
 		parts := strings.Split(shareURL, "/")
@@ -338,8 +341,10 @@ func TestFileServiceDelete(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 删除文件
-		err = service.Delete(ctx, result.FileID, 1)
+		oldFile, err := service.Delete(ctx, result.FileID, 1)
 		assert.NoError(t, err)
+		assert.NotNil(t, oldFile)
+		assert.Equal(t, result.FileID, oldFile.ID)
 
 		// 验证文件状态已更新
 		var file models.UploadedFile

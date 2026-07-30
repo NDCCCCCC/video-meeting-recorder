@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -255,21 +256,24 @@ func (s *FileService) Download(ctx context.Context, accessToken string, userID u
 }
 
 // Delete 删除文件
-func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) error {
+func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*models.UploadedFile, error) {
 	var file models.UploadedFile
 	err := s.db.First(&file, fileID).Error
 	if err != nil {
-		return fmt.Errorf("文件不存在")
+		return nil, fmt.Errorf("文件不存在")
 	}
 
 	// 检查权限
 	if file.UploadedBy != userID {
-		return fmt.Errorf("无权限删除")
+		return nil, fmt.Errorf("无权限删除")
 	}
+
+	// Snapshot before soft-delete for audit OldData capture
+	oldFile := file
 
 	// 软删除
 	if err := s.db.Model(&file).Update("status", models.FileStatusDeleted).Error; err != nil {
-		return err
+		return nil, err
 	}
 
 	// 异步删除物理文件（传递上下文并记录错误）
@@ -297,20 +301,31 @@ func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) erro
 		zap.Uint("file_id", fileID),
 	)
 
-	return nil
+	return &oldFile, nil
 }
 
 // ShareFile 生成分享链接
-func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, expiresIn time.Duration, password string) (string, error) {
+func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, expiresIn time.Duration, password string) (*models.FileShare, *models.FileShare, string, error) {
 	var file models.UploadedFile
 	err := s.db.First(&file, fileID).Error
 	if err != nil {
-		return "", fmt.Errorf("文件不存在")
+		return nil, nil, "", fmt.Errorf("文件不存在")
 	}
 
 	// 检查权限
 	if file.UploadedBy != userID && !file.IsPublic {
-		return "", fmt.Errorf("无权限分享")
+		return nil, nil, "", fmt.Errorf("无权限分享")
+	}
+
+	// Snapshot most recent existing share (same file + shared_by) before creating a new one.
+	// This is nil when no prior share exists; other errors are propagated.
+	var oldShare *models.FileShare
+	var existing models.FileShare
+	if err := s.db.Where("file_id = ? AND shared_by = ?", fileID, userID).
+		Order("created_at DESC").First(&existing).Error; err == nil {
+		oldShare = &existing
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, "", err
 	}
 
 	// 生成分享记录
@@ -324,11 +339,11 @@ func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, e
 	}
 
 	if err := s.db.Create(share).Error; err != nil {
-		return "", err
+		return nil, nil, "", err
 	}
 
 	shareURL := fmt.Sprintf("%s/api/v1/files/share/%s", s.getServerURL(), share.ShareToken)
-	return shareURL, nil
+	return oldShare, share, shareURL, nil
 }
 
 // GetShareDownload 通过分享链接下载
