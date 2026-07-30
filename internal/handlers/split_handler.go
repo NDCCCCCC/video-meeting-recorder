@@ -10,6 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// SplitHandler 视频分割 HTTP handler：负责提交分割任务、查询分割状态、
+// 生成录制快照、获取分割段落列表。底层调用 FFmpeg 执行分割与快照生成。
 type SplitHandler struct {
 	splittingService *services.SplittingService
 	snapshotService  *services.SnapshotService
@@ -17,6 +19,8 @@ type SplitHandler struct {
 	logger           *zap.Logger
 }
 
+// NewSplitHandler 创建视频分割 handler，整合 SplittingService（实际分割）、
+// SnapshotService（任务快照）与 VideoFileService（视频文件元数据查询）。
 func NewSplitHandler(
 	splittingService *services.SplittingService,
 	snapshotService *services.SnapshotService,

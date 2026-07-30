@@ -24,6 +24,8 @@ var snapshotCopyBufPool = sync.Pool{
 	},
 }
 
+// SnapshotService 录制快照服务：为指定录制任务生成 partial-MKV 快照片段，
+// 用于预览/对外发布。每个 taskID 持有独立 sync.Mutex 防止对同一任务的并发快照。
 type SnapshotService struct {
 	db               *gorm.DB
 	logger           *zap.Logger
@@ -33,6 +35,8 @@ type SnapshotService struct {
 	snapshotMutexes  sync.Map // map[uint]*sync.Mutex - one mutex per task
 }
 
+// NewSnapshotService 创建录制快照服务。ffmpegPath 优先取 cfg.FFmpeg.Path，
+// 否则使用 PATH 中的 ffmpeg。
 func NewSnapshotService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, videoFileService *VideoFileService) *SnapshotService {
 	ffmpegPath := cfg.FFmpeg.Path
 	if ffmpegPath == "" {

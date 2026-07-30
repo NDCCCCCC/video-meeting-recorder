@@ -10,7 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// ADConfigValidator AD配置验证器 (per Spike 005 four-layer validation)
+// ADConfigValidator AD 域控配置验证器：执行四级验证（格式→网络→认证→功能）
+// 帮助管理员在部署前确认 AD 配置正确性（per Spike 005 four-layer validation）。
 type ADConfigValidator struct {
 	logger *zap.Logger
 }

@@ -27,6 +27,9 @@ type SplitTask struct {
 	CreatedAt   time.Time
 }
 
+// SplittingService 视频分割服务：维护按时间戳切分录制视频的任务队列；
+// 接收 split handler 提交的任务后由 worker goroutine 调用 FFmpeg 执行分割，
+// 并按 videoFileID 维护 状态 (processing/completed/failed) 映射。
 type SplittingService struct {
 	db               *gorm.DB
 	logger           *zap.Logger
@@ -46,6 +49,8 @@ type SplittingService struct {
 	statusMu  sync.RWMutex
 }
 
+// NewSplittingService 创建视频分割服务。worker 数默认 2，最大重试 3 次；
+// 任务队列入队前会通过 cfg.FFmpeg.Path 探测 ffmpeg 路径。
 func NewSplittingService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, videoFileService *VideoFileService) *SplittingService {
 	ctx, cancel := context.WithCancel(context.Background())
 	ffmpegPath := cfg.FFmpeg.Path

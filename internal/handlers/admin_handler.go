@@ -16,7 +16,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// AdminHandler 管理员处理器
+// AdminHandler 管理员后台 handler：负责认证配置查询/更新、华为配置迁移、
+// 用户查找、配置 diff 与审计可视化等管理操作。鉴权由 RequireRole("admin") 中间件保证。
 type AdminHandler struct {
 	cfg           *config.Config
 	logger        *zap.Logger
