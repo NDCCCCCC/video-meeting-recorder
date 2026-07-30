@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"testing"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -74,6 +75,7 @@ func createTestUserWithRoles(t *testing.T, db *gorm.DB, username string, userIPs
 // Validates that when only user has IP restrictions, role IPs are not considered
 func TestCheckIPRestriction_UserOnly(t *testing.T) {
 
+	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
@@ -124,6 +126,7 @@ func TestCheckIPRestriction_UserOnly(t *testing.T) {
 // Validates that when only role has IP restrictions, user IPs are not considered
 func TestCheckIPRestriction_RoleOnly(t *testing.T) {
 
+	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
@@ -174,6 +177,7 @@ func TestCheckIPRestriction_RoleOnly(t *testing.T) {
 // Validates that user and role IP restrictions are merged using OR logic
 func TestCheckIPRestriction_UserAndRole_OR(t *testing.T) {
 
+	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
@@ -229,6 +233,7 @@ func TestCheckIPRestriction_UserAndRole_OR(t *testing.T) {
 // Validates that when neither user nor roles have IP restrictions, all IPs are allowed
 func TestCheckIPRestriction_NoRestrictions(t *testing.T) {
 
+	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
@@ -280,6 +285,7 @@ func TestCheckIPRestriction_NoRestrictions(t *testing.T) {
 // Validates that IPs not matching any restriction rule are rejected
 func TestCheckIPRestriction_IPNotInList(t *testing.T) {
 
+	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
@@ -329,6 +335,7 @@ func TestCheckIPRestriction_IPNotInList(t *testing.T) {
 // Validates that IP restrictions from multiple roles are all merged (OR logic)
 func TestCheckIPRestriction_MultiRoleMerge(t *testing.T) {
 
+	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
@@ -395,6 +402,7 @@ func TestCheckIPRestriction_MultiRoleMerge(t *testing.T) {
 // Validates that malformed client IPs return appropriate errors
 func TestCheckIPRestriction_InvalidClientIP(t *testing.T) {
 
+	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
@@ -444,6 +452,7 @@ func TestCheckIPRestriction_InvalidClientIP(t *testing.T) {
 // Validates that IP restriction failures are logged to audit log per D-14
 func TestCheckIPRestriction_AuditLogOnFailure(t *testing.T) {
 
+	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
