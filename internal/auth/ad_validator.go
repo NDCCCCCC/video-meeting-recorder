@@ -41,7 +41,10 @@ func (v *ADConfigValidator) Validate(config *ADAuthConfig) *ADConfigValidationRe
 		result.Errors = append(result.Errors, v.formatConnectionError(err))
 		return result
 	}
-	defer conn.Close()
+	// STYLE-008: nil 防御——testConnection 失败时 conn 为 nil，defer Close 会 panic
+	if conn != nil {
+		defer conn.Close()
+	}
 	result.ResponseTime = time.Since(start).Milliseconds()
 	result.Level = 2
 

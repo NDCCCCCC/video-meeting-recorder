@@ -65,7 +65,10 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 		a.logger.Error("AD connection failed", zap.Error(err))
 		return nil, fmt.Errorf("无法连接到域控服务器，请检查网络和配置") // per D-18
 	}
-	defer conn.Close()
+	// STYLE-008: nil 防御——connectAD 失败时 conn 为 nil，defer Close 会 panic
+	if conn != nil {
+		defer conn.Close()
+	}
 
 	// Step 2: Bind as admin to search for user
 	err = conn.Bind(a.adConfig.BindDN, a.adConfig.Password)
@@ -387,7 +390,10 @@ func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, erro
 		a.logger.Error("AD connection failed during lookup", zap.Error(err))
 		return nil, fmt.Errorf("无法连接到域控服务器")
 	}
-	defer conn.Close()
+	// STYLE-008: nil 防御——connectAD 失败时 conn 为 nil，defer Close 会 panic
+	if conn != nil {
+		defer conn.Close()
+	}
 
 	// Bind as admin to search for user
 	err = conn.Bind(a.adConfig.BindDN, a.adConfig.Password)

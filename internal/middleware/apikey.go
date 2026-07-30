@@ -280,6 +280,10 @@ func RequireScope(requiredScope string) gin.HandlerFunc {
 				// admin 作用域需要管理员权限
 				isAdmin := c.GetBool("is_admin")
 				hasPermission = isAdmin
+			default:
+				// STYLE-007: 未知 scope 默认拒绝（fail-closed）。避免未来新增
+				// scope 时未覆盖到导致旧权限静默通过。
+				hasPermission = false
 			}
 
 			if !hasPermission {
