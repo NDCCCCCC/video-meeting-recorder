@@ -596,6 +596,9 @@ func (a *MinimalApp) initHandlers() error {
 	// API密钥服务
 	apikeyService := services.NewAPIKeyService(a.db, a.logger)
 	apikeyService.SetAuditService(auditService)
+	// SEC-002: authService 此前从未注入 auditService，导致登录失败等 6 个审计点全部因
+	// auditLogger==nil 短路。此处补一行注入（与 apikeyService 同一模式）。
+	authService.SetAuditService(auditService)
 	apikeyHandler := handlers.NewAPIKeyHandler(apikeyService, auditService, a.logger)
 	apikeyHandler.SetLogger(a.logger)
 

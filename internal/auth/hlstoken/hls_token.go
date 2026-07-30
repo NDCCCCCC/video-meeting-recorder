@@ -2,34 +2,51 @@ package hlstoken
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
+// ErrTokenReplayed 表示同一 jti 的 token 已被使用过（防重放）。
+var ErrTokenReplayed = errors.New("token 已被使用（防重放）")
+
 // HLSTokenClaims HLS Token 声明
 type HLSTokenClaims struct {
-	TaskID    uint  `json:"task_id"`
-	UserID    uint  `json:"user_id"`
-	ExpiresAt int64 `json:"expires_at"`
-	IssuedAt  int64 `json:"issued_at"`
+	TaskID    uint   `json:"task_id"`
+	UserID    uint   `json:"user_id"`
+	ExpiresAt int64  `json:"expires_at"`
+	IssuedAt  int64  `json:"issued_at"`
+	Jti       string `json:"jti"` // SEC-004: 唯一标识，用于一次性防重放
 }
 
 // HLSToken HLS Token 管理器
 type HLSToken struct {
 	secret        string
 	tokenDuration time.Duration
+	// SEC-004: 进程内 jti 防重放集合。同一 jti 在进程生命周期内只能 Verify 通过一次。
+	// 局限：进程重启后记录清零；服务端持久化 used_jtis（Redis/DB）留作下个独立 phase。
+	usedJTIs map[string]struct{}
+	mu       sync.Mutex
 }
 
 // NewHLSToken 创建 HLS Token 管理器
 func NewHLSToken(secret string, duration time.Duration) *HLSToken {
+	// SEC-004: 密钥长度校验（防御性兜底；启动期 config.ValidateProductionSecrets 已先行 Fatal）。
+	if len(secret) < 32 {
+		panic(fmt.Sprintf("HLS token secret 必须 ≥ 32 字符（当前 %d），拒绝初始化", len(secret)))
+	}
 	return &HLSToken{
 		secret:        secret,
 		tokenDuration: duration,
+		usedJTIs:      make(map[string]struct{}),
 	}
 }
 
@@ -41,6 +58,7 @@ func (h *HLSToken) Generate(taskID, userID uint) string {
 		UserID:    userID,
 		ExpiresAt: now.Add(h.tokenDuration).Unix(),
 		IssuedAt:  now.Unix(),
+		Jti:       generateJti(), // SEC-004: 一次性防重放标识
 	}
 
 	// 序列化为 JSON
@@ -52,7 +70,7 @@ func (h *HLSToken) Generate(taskID, userID uint) string {
 	// Base64 编码
 	encodedData := base64.URLEncoding.EncodeToString(data)
 
-	// 生成签名
+	// 生成签名（SEC-004/D-03.3: 签发用 RawURLEncoding）
 	signature := h.sign(encodedData)
 
 	// 返回格式: data.signature
@@ -69,9 +87,24 @@ func (h *HLSToken) Verify(token string) (*HLSTokenClaims, error) {
 	encodedData := parts[0]
 	signature := parts[1]
 
-	// 验证签名
-	expectedSignature := h.sign(encodedData)
-	if signature != expectedSignature {
+	// SEC-004/D-03.3: 计算期望 HMAC 字节，并尝试多种 base64 编码解码 provided 签名。
+	// 新 token 用 RawURLEncoding 签发；旧 token（重启前）用 URLEncoding/StdEncoding 签发，
+	// 这里同时接受三种编码以保持向后兼容（旧 token 重启后仍可验证一次）。
+	mac := hmac.New(sha256.New, []byte(h.secret))
+	mac.Write([]byte(encodedData))
+	expectedMAC := mac.Sum(nil)
+
+	providedMAC, err := base64.RawURLEncoding.DecodeString(signature)
+	if err != nil {
+		providedMAC, err = base64.URLEncoding.DecodeString(signature)
+		if err != nil {
+			providedMAC, err = base64.StdEncoding.DecodeString(signature)
+			if err != nil {
+				return nil, fmt.Errorf("token 签名无效")
+			}
+		}
+	}
+	if !hmac.Equal(expectedMAC, providedMAC) {
 		return nil, fmt.Errorf("token 签名无效")
 	}
 
@@ -92,14 +125,35 @@ func (h *HLSToken) Verify(token string) (*HLSTokenClaims, error) {
 		return nil, fmt.Errorf("token 已过期")
 	}
 
+	// SEC-004: jti 一次性防重放。同一 jti 在进程生命周期内只能验证通过一次。
+	if claims.Jti != "" {
+		h.mu.Lock()
+		if _, used := h.usedJTIs[claims.Jti]; used {
+			h.mu.Unlock()
+			return nil, ErrTokenReplayed
+		}
+		h.usedJTIs[claims.Jti] = struct{}{}
+		h.mu.Unlock()
+	}
+
 	return &claims, nil
 }
 
-// sign 生成签名
+// sign 生成签名（SEC-004/D-03.3: 新签发统一用 RawURLEncoding，去除尾部 padding）
 func (h *HLSToken) sign(data string) string {
 	mac := hmac.New(sha256.New, []byte(h.secret))
 	mac.Write([]byte(data))
-	return base64.URLEncoding.EncodeToString(mac.Sum(nil))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+// generateJti 生成 16 字节随机 hex 编码的唯一标识（crypto/rand）。
+func generateJti() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand 失败极罕见；回退到时间戳保证唯一性，不影响安全（HMAC 仍是主防线）。
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }
 
 // GetTokenFromURL 从 URL 查询参数中提取 token

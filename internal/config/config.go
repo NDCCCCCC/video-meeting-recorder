@@ -8,7 +8,14 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
+
+// fatalFunc 允许测试覆盖 logger.Fatal 行为（默认调用 logger.Fatal 触发 os.Exit）。
+// 测试中可替换为 panic 以便 recover 捕获。SEC-001 启动校验使用。
+var fatalFunc = func(logger *zap.Logger, msg string, fields ...zap.Field) {
+	logger.Fatal(msg, fields...)
+}
 
 // Config 应用配置
 type Config struct {
@@ -33,11 +40,11 @@ type ServerConfig struct {
 	ReadTimeout  int    `mapstructure:"read_timeout" json:"read_timeout" yaml:"read_timeout"`
 	WriteTimeout int    `mapstructure:"write_timeout" json:"write_timeout" yaml:"write_timeout"`
 	// TLS 配置
-	TLSEnabled       bool   `mapstructure:"tls_enabled" json:"tls_enabled" yaml:"tls_enabled"`
-	TLSCertFile      string `mapstructure:"tls_cert_file" json:"tls_cert_file" yaml:"tls_cert_file"`
-	TLSKeyFile       string `mapstructure:"tls_key_file" json:"tls_key_file" yaml:"tls_key_file"`
-	HTTPSPort        int    `mapstructure:"https_port" json:"https_port" yaml:"https_port"`
-	RedirectHTTPToHTTPS bool `mapstructure:"redirect_http_to_https" json:"redirect_http_to_https" yaml:"redirect_http_to_https"`
+	TLSEnabled          bool   `mapstructure:"tls_enabled" json:"tls_enabled" yaml:"tls_enabled"`
+	TLSCertFile         string `mapstructure:"tls_cert_file" json:"tls_cert_file" yaml:"tls_cert_file"`
+	TLSKeyFile          string `mapstructure:"tls_key_file" json:"tls_key_file" yaml:"tls_key_file"`
+	HTTPSPort           int    `mapstructure:"https_port" json:"https_port" yaml:"https_port"`
+	RedirectHTTPToHTTPS bool   `mapstructure:"redirect_http_to_https" json:"redirect_http_to_https" yaml:"redirect_http_to_https"`
 }
 
 // DatabaseConfig 数据库配置
@@ -57,14 +64,14 @@ type DatabaseConfig struct {
 
 // AuthConfig 认证配置
 type AuthConfig struct {
-	SM4Secret              string        `mapstructure:"sm4_secret" json:"sm4_secret" yaml:"sm4_secret"`
-	AccessTokenDuration    time.Duration `mapstructure:"access_token_duration" json:"access_token_duration" yaml:"access_token_duration"`
-	RefreshTokenDuration   time.Duration `mapstructure:"refresh_token_duration" json:"refresh_token_duration" yaml:"refresh_token_duration"`
-	MaxSessionDuration     time.Duration `mapstructure:"max_session_duration" json:"max_session_duration" yaml:"max_session_duration"`
-	HLSTokenSecret          string        `mapstructure:"hls_token_secret" json:"hls_token_secret" yaml:"hls_token_secret"`
-	HLSTokenDuration        time.Duration `mapstructure:"hls_token_duration" json:"hls_token_duration" yaml:"hls_token_duration"`
-	MaxDecryptFailures      int           `mapstructure:"max_decrypt_failures" json:"max_decrypt_failures" yaml:"max_decrypt_failures"`        // 最大解密失败次数
-	DecryptFailureWindow    int           `mapstructure:"decrypt_failure_window" json:"decrypt_failure_window" yaml:"decrypt_failure_window"`      // 时间窗口（秒）
+	SM4Secret            string        `mapstructure:"sm4_secret" json:"sm4_secret" yaml:"sm4_secret"`
+	AccessTokenDuration  time.Duration `mapstructure:"access_token_duration" json:"access_token_duration" yaml:"access_token_duration"`
+	RefreshTokenDuration time.Duration `mapstructure:"refresh_token_duration" json:"refresh_token_duration" yaml:"refresh_token_duration"`
+	MaxSessionDuration   time.Duration `mapstructure:"max_session_duration" json:"max_session_duration" yaml:"max_session_duration"`
+	HLSTokenSecret       string        `mapstructure:"hls_token_secret" json:"hls_token_secret" yaml:"hls_token_secret"`
+	HLSTokenDuration     time.Duration `mapstructure:"hls_token_duration" json:"hls_token_duration" yaml:"hls_token_duration"`
+	MaxDecryptFailures   int           `mapstructure:"max_decrypt_failures" json:"max_decrypt_failures" yaml:"max_decrypt_failures"`       // 最大解密失败次数
+	DecryptFailureWindow int           `mapstructure:"decrypt_failure_window" json:"decrypt_failure_window" yaml:"decrypt_failure_window"` // 时间窗口（秒）
 
 	// Authentication mode (local, ad) - per D-01, D-02, D-03
 	Mode string `mapstructure:"mode" json:"mode" yaml:"mode"`
@@ -290,6 +297,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to merge expanded config: %w", err)
 	}
 
+	// SEC-001: 显式绑定部署文档中的环境变量名（无 RECORD 前缀），使运维设置的
+	// SM4_SECRET/HLS_TOKEN_SECRET 等真正加载到配置结构（绕过 SetEnvPrefix 机制）。
+	bindSecretEnv(v)
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
@@ -357,9 +368,8 @@ func setDefaults(cfg *Config) {
 		cfg.Database.MaxIdleConns = 1
 	}
 
-	if cfg.Auth.SM4Secret == "" {
-		cfg.Auth.SM4Secret = "change-me-in-production"
-	}
+	// SEC-001/D-03.4: 不再保留硬编码 fallback 默认密钥；
+	// 缺失时保持空字符串，由 ValidateProductionSecrets 在启动时决定是否 Fatal。
 	if cfg.Auth.AccessTokenDuration == 0 {
 		cfg.Auth.AccessTokenDuration = 2 * time.Hour
 	}
@@ -369,10 +379,7 @@ func setDefaults(cfg *Config) {
 	if cfg.Auth.MaxSessionDuration == 0 {
 		cfg.Auth.MaxSessionDuration = 30 * 24 * time.Hour
 	}
-	// HLS Token 默认值：使用与SM4相同的密钥，5分钟有效期
-	if cfg.Auth.HLSTokenSecret == "" {
-		cfg.Auth.HLSTokenSecret = cfg.Auth.SM4Secret
-	}
+	// SEC-001: HLS Token 密钥不再默认复用 SM4Secret；必须显式设置，否则启动校验告警。
 	if cfg.Auth.HLSTokenDuration == 0 {
 		cfg.Auth.HLSTokenDuration = 5 * time.Minute
 	}
@@ -581,11 +588,13 @@ database:
   conn_max_lifetime: 3600
 
 auth:
-  sm4_secret: "change-me-in-production-please-set-a-secure-random-key"
+  # SEC-001: 密钥必须显式设置（最小 32 字符），推荐通过环境变量 SM4_SECRET / HLS_TOKEN_SECRET 注入。
+  # 生产环境缺失或过短将触发 logger.Fatal 终止启动。
+  sm4_secret: "${SM4_SECRET:}"
   access_token_duration: "2h"
   refresh_token_duration: "168h"  # 7 days
   max_session_duration: "720h"   # 30 days
-  hls_token_secret: "change-me-in-production"
+  hls_token_secret: "${HLS_TOKEN_SECRET:}"
   hls_token_duration: "5m"
 
 logging:
@@ -678,4 +687,50 @@ python:
 	}
 
 	return nil
+}
+
+// bindSecretEnv 显式将部署文档中的环境变量名（无 RECORD 前缀）绑定到 viper 配置键。
+// 背景：项目历史上用 SetEnvPrefix("RECORD")，但 DEPLOYMENT.md/.env.example/运维都写
+// SM4_SECRET/HLS_TOKEN_SECRET（无前缀），导致环境变量无法生效（SEC-001）。
+// 这里用显式 BindEnv 精确映射，绕过 prefix 机制，使 os.Getenv("SM4_SECRET") 真正加载到配置。
+func bindSecretEnv(v *viper.Viper) {
+	_ = v.BindEnv("auth.sm4_secret", "SM4_SECRET")
+	_ = v.BindEnv("auth.hls_token_secret", "HLS_TOKEN_SECRET")
+	_ = v.BindEnv("huawei.insecure_skip_verify", "HUAWEI_INSECURE_SKIP_VERIFY")
+	_ = v.BindEnv("huawei.min_tls_version", "HUAWEI_MIN_TLS_VERSION")
+}
+
+// ValidateProductionSecrets 在生产环境强制校验 SM4/HLS Token 密钥：
+// 必须显式设置、长度 ≥ 32 字符、且互不相同。缺失或不合规时调用 logger.Fatal 终止启动。
+// 非生产环境仅打印警告（便于本地/测试运行）。SEC-001/D-03.1/D-03.4。
+func (c *Config) ValidateProductionSecrets(logger *zap.Logger) {
+	if logger == nil {
+		return
+	}
+	isProd := c.Server.Environment == "production"
+	sm4, hls := c.Auth.SM4Secret, c.Auth.HLSTokenSecret
+
+	if isProd {
+		if len(sm4) < 32 {
+			fatalFunc(logger, "SM4_SECRET 必须显式设置且 ≥ 32 字符（生产环境），进程终止",
+				zap.Int("length", len(sm4)))
+			return
+		}
+		if len(hls) < 32 {
+			fatalFunc(logger, "HLS_TOKEN_SECRET 必须显式设置且 ≥ 32 字符（生产环境），进程终止",
+				zap.Int("length", len(hls)))
+			return
+		}
+		if sm4 == hls {
+			fatalFunc(logger, "SM4_SECRET 与 HLS_TOKEN_SECRET 必须互不相同（生产环境），进程终止")
+			return
+		}
+	} else {
+		if len(sm4) < 32 {
+			logger.Warn("SM4_SECRET 长度不足 32 字符（非生产环境仅警告）", zap.Int("length", len(sm4)))
+		}
+		if len(hls) < 32 {
+			logger.Warn("HLS_TOKEN_SECRET 长度不足 32 字符（非生产环境仅警告）", zap.Int("length", len(hls)))
+		}
+	}
 }
