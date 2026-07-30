@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -353,8 +354,10 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 			zap.Error(err))
 
 		// Map service errors to HTTP status codes
+		// STYLE-001 partial: err == gorm.ErrRecordNotFound 改 errors.Is 守卫
+		// （保持字符串匹配作为兼容路径；新代码应改为 sentinel 错误。W6a 全库迁移 DEFERRED）
 		switch {
-		case err.Error() == "文件不存在" || err == gorm.ErrRecordNotFound:
+		case err.Error() == "文件不存在" || errors.Is(err, gorm.ErrRecordNotFound):
 			response.GinError(c, response.CodeNotFound, "文件不存在")
 		case err.Error() == "无权操作此文件":
 			response.GinError(c, response.CodeForbidden, "无权操作此文件")

@@ -477,7 +477,9 @@ func (s *FileService) GetUserQuota(ctx context.Context, userID uint) (*QuotaInfo
 	var quota models.UserStorageQuota
 	err := s.db.Where("user_id = ?", userID).First(&quota).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		// STYLE-001 partial: 改用 errors.Is 替代 err == gorm.ErrRecordNotFound
+		// （与项目 internal/errors 错误链惯例一致；W6a 全库迁移 DEFERRED）
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 创建默认配额
 			quota = models.UserStorageQuota{
 				UserID:     userID,
@@ -619,7 +621,8 @@ func (s *FileService) checkUserQuota(ctx context.Context, userID uint, fileSize 
 	var quota models.UserStorageQuota
 	err := s.db.Where("user_id = ?", userID).First(&quota).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		// STYLE-001 partial: 改用 errors.Is 替代 err == gorm.ErrRecordNotFound
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 创建默认配额
 			quota = models.UserStorageQuota{
 				UserID:     userID,
