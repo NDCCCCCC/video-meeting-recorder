@@ -309,5 +309,6 @@ func GetRegisteredMigrations() []interface{} {
 		&DropLegacyRoleIDMigration{},
 		&Migration014_CreateInputConfigs{},
 		&Migration015_AddTranscriptionJobGroups{},
+		&Migration016AlterFingerprintToSHA256{},
 	}
 }

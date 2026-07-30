@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -124,15 +124,15 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 		return nil, err
 	}
 
-	// 3. 计算文件MD5
-	fileMD5, err := s.calculateMD5(req.File)
+	// 3. 计算文件 SHA-256
+	fileFingerprint, err := s.calculateSHA256(req.File)
 	if err != nil {
-		s.logger.Warn("计算MD5失败", zap.Error(err))
+		s.logger.Warn("计算 SHA-256 失败", zap.Error(err))
 	}
 
 	// 4. 检查文件是否已存在（秒传）
-	if fileMD5 != "" {
-		existingFile := s.findExistingFile(ctx, userID, fileMD5)
+	if fileFingerprint != "" {
+		existingFile := s.findExistingFile(ctx, userID, fileFingerprint)
 		if existingFile != nil {
 			return &FileUploadResult{
 				FileID:    existingFile.ID,
@@ -178,7 +178,7 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 		FilePath:     result.FilePath,
 		FileSize:     req.File.Size,
 		MimeType:     req.File.Header.Get("Content-Type"),
-		FileMD5:      fileMD5,
+		FileMD5:      fileFingerprint,
 		StorageType:  string(models.StorageLocal),
 		StoragePath:  result.StoragePath,
 		IsPublic:     req.IsPublic,
@@ -505,19 +505,22 @@ func (s *FileService) validateFile(file *multipart.FileHeader) error {
 	return nil
 }
 
-// calculateMD5 计算文件MD5
-func (s *FileService) calculateMD5(file *multipart.FileHeader) (string, error) {
+// calculateSHA256 计算文件 SHA-256
+func (s *FileService) calculateSHA256(file *multipart.FileHeader) (string, error) {
 	src, err := file.Open()
 	if err != nil {
 		return "", err
 	}
 	defer src.Close()
 
-	hash := md5.New()
+	return calculateSHA256Reader(src)
+}
+
+func calculateSHA256Reader(src io.Reader) (string, error) {
+	hash := sha256.New()
 	if _, err := io.Copy(hash, src); err != nil {
 		return "", err
 	}
-
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 

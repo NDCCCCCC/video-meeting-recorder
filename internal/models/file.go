@@ -33,7 +33,7 @@ type UploadedFile struct {
 	FilePath     string `gorm:"type:varchar(500);not null;index" json:"file_path"`
 	FileSize     int64  `gorm:"not null" json:"file_size"`
 	MimeType     string `gorm:"type:varchar(100)" json:"mime_type"`
-	FileMD5      string `gorm:"type:varchar(32);index" json:"file_md5,omitempty"`
+	FileMD5      string `gorm:"type:varchar(64);index" json:"file_md5,omitempty"`
 
 	// 存储信息
 	StorageType string `gorm:"type:varchar(20);index" json:"storage_type"` // local, oss, s3

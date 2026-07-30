@@ -385,3 +385,13 @@ func TestQuotaExceeded(t *testing.T) {
 		assert.Contains(t, err.Error(), "存储空间不足")
 	})
 }
+
+func TestCalculateSHA256Reader(t *testing.T) {
+	first, err := calculateSHA256Reader(strings.NewReader("first"))
+	assert.NoError(t, err)
+	second, err := calculateSHA256Reader(strings.NewReader("second"))
+	assert.NoError(t, err)
+	assert.Len(t, first, 64)
+	assert.Len(t, second, 64)
+	assert.NotEqual(t, first, second)
+}
