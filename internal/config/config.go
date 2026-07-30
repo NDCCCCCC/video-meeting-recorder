@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -32,6 +33,19 @@ type Config struct {
 	Python        PythonConfig        `mapstructure:"python" json:"python" yaml:"python"`
 	Admin         AdminConfig         `mapstructure:"admin" json:"admin" yaml:"admin"`
 	Transcription TranscriptionConfig `mapstructure:"transcription" json:"transcription" yaml:"transcription"`
+	CORS          CORSConfig          `mapstructure:"cors" json:"cors" yaml:"cors"`
+	Security      SecurityConfig      `mapstructure:"security" json:"security" yaml:"security"`
+}
+
+// CORSConfig controls exact cross-origin allowlisting. Empty denies cross-origin requests.
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins" json:"allowed_origins" yaml:"allowed_origins"`
+}
+
+// SecurityConfig contains transport security feature switches.
+type SecurityConfig struct {
+	CSRFEnabled             bool     `mapstructure:"csrf_enabled" json:"csrf_enabled" yaml:"csrf_enabled"`
+	AllowedTokenURLPrefixes []string `mapstructure:"allowed_token_url_prefixes" json:"allowed_token_url_prefixes" yaml:"allowed_token_url_prefixes"`
 }
 
 // ServerConfig 服务器配置
@@ -323,6 +337,13 @@ func Load() (*Config, error) {
 	// 设置默认值
 	setDefaults(&cfg)
 
+	if value := os.Getenv("CORS_ALLOWED_ORIGINS"); value != "" {
+		cfg.CORS.AllowedOrigins = splitCommaSeparated(value)
+	}
+	if value := os.Getenv("ALLOWED_TOKEN_URL_PREFIXES"); value != "" {
+		cfg.Security.AllowedTokenURLPrefixes = splitCommaSeparated(value)
+	}
+
 	// 创建必要的目录
 	if err := ensureDirectories(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to create directories: %w", err)
@@ -564,6 +585,17 @@ func setDefaults(cfg *Config) {
 	}
 }
 
+func splitCommaSeparated(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
 // ensureDirectories 确保目录存在
 func ensureDirectories(cfg *Config) error {
 	dirs := []string{
@@ -722,6 +754,9 @@ func bindSecretEnv(v *viper.Viper) {
 	_ = v.BindEnv("auth.hls_token_secret", "HLS_TOKEN_SECRET")
 	_ = v.BindEnv("huawei.insecure_skip_verify", "HUAWEI_INSECURE_SKIP_VERIFY")
 	_ = v.BindEnv("huawei.min_tls_version", "HUAWEI_MIN_TLS_VERSION")
+	_ = v.BindEnv("cors.allowed_origins", "CORS_ALLOWED_ORIGINS")
+	_ = v.BindEnv("security.csrf_enabled", "CSRF_ENABLED")
+	_ = v.BindEnv("security.allowed_token_url_prefixes", "ALLOWED_TOKEN_URL_PREFIXES")
 	// PERF-005/D-03.8: 三个 handler 的有界并发度可通过环境变量覆盖。
 	_ = v.BindEnv("admin.migration_concurrency", "ADMIN_MIGRATION_CONCURRENCY")
 	_ = v.BindEnv("transcription.batch_concurrency", "TRANSCRIPTION_BATCH_CONCURRENCY")

@@ -520,17 +520,13 @@ func (a *MinimalApp) initRouter() error {
 	a.router.Use(gin.Logger())
 
 	// CORS中间件
-	a.router.Use(corsMiddleware())
+	a.router.Use(corsMiddleware(a.config.CORS.AllowedOrigins))
 
 	return nil
 }
 
 // corsMiddleware CORS中间件
-func corsMiddleware() gin.HandlerFunc {
-	allowedOrigins := []string{
-		"http://localhost:5173", // dev
-		"http://localhost:8080", // production
-	}
+func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 		for _, allowed := range allowedOrigins {

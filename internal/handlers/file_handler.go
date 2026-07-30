@@ -15,9 +15,9 @@ import (
 
 // FileHandler 文件处理器
 type FileHandler struct {
-	fileService   *storage.FileService
-	auditService  *audit.AuditLogService
-	logger        *zap.Logger
+	fileService  *storage.FileService
+	auditService *audit.AuditLogService
+	logger       *zap.Logger
 }
 
 // NewFileHandler 创建文件处理器
@@ -29,7 +29,7 @@ func NewFileHandler(
 	return &FileHandler{
 		fileService:  fileService,
 		auditService: auditService,
-		logger:      logger,
+		logger:       logger,
 	}
 }
 
@@ -138,7 +138,6 @@ func (h *FileHandler) Download(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Accept-Ranges", "bytes")
-	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
 
 	// 流式传输文件

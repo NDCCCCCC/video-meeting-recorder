@@ -166,7 +166,6 @@ func setVideoHeaders(c *gin.Context, file *models.VideoFile, fileSize int64) {
 	// 设置视频流所需的 CORS 头
 	// 注意：使用 * 允许所有源访问。如果部署在公网环境，建议改为 Origin 白名单
 	// 内网环境或前后端同源部署时，此配置是安全的
-	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
 	c.Header("Access-Control-Allow-Headers", "Range, Content-Type, Authorization")
 	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
@@ -424,7 +423,6 @@ func (h *VideoFileHandler) BatchDownloadFiles(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", resp.Filename))
 	c.Header("Content-Type", resp.ContentType)
 	c.Header("Accept-Ranges", "none") // ZIP 不支持范围请求
-	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Type")
 
 	// 流式响应

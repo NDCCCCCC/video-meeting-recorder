@@ -801,7 +801,6 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 	// 设置正确的Content-Type
 	c.Header("Content-Type", getHLSContentType(filePath))
 	c.Header("Cache-Control", "no-cache")
-	c.Header("Access-Control-Allow-Origin", "*")
 
 	// 如果是 m3u8 文件，需要重写内容，在分段 URL 中添加 token
 	if strings.HasSuffix(filePath, ".m3u8") {
