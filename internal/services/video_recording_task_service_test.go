@@ -117,10 +117,10 @@ func TestDeleteTask_NoNPlusOne(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		lockedBy := task.ID
 		cfg := models.InputConfig{
-			Name:      "cfg",
+			Name:       "cfg",
 			ConfigType: "usb",
-			IsLocked:  true,
-			LockedBy:  &lockedBy,
+			IsLocked:   true,
+			LockedBy:   &lockedBy,
 		}
 		if err := db.Create(&cfg).Error; err != nil {
 			t.Fatalf("创建 InputConfig 失败: %v", err)
