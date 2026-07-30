@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
@@ -12,6 +13,12 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
+
+// strUint 将 uint 转为字符串（避免引入 strconv 仅用于一处）。
+// 内部 SEC-015 类型断言辅助函数。
+func strUint(u uint) string {
+	return strconv.FormatUint(uint64(u), 10)
+}
 
 // SystemHandler 系统设置处理器
 type SystemHandler struct {
@@ -143,9 +150,19 @@ func (h *SystemHandler) UpdateConfig(c *gin.Context) {
 
 	// 记录配置变更
 	if len(changes) > 0 {
+		// SEC-015: 类型断言守卫；user_id 应为 uint，缺失/类型错误时回退到 "unknown"
+		userIDStr := "unknown"
+		if v, ok := c.Get("user_id"); ok {
+			switch typed := v.(type) {
+			case uint:
+				userIDStr = strUint(typed)
+			case string:
+				userIDStr = typed
+			}
+		}
 		h.logger.Info("系统配置已更新",
 			zap.Strings("changes", changes),
-			zap.String("user", c.GetString("user_id")),
+			zap.String("user", userIDStr),
 		)
 	}
 
