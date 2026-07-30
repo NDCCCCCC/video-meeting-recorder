@@ -371,7 +371,10 @@ func TestQuotaExceeded(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 创建一个大文件 (200 bytes)
-		content := make([]byte, 200)
+		// SEC-012 兼容性: 使用有效 UTF-8 文本内容以通过 MIME magic bytes 校验
+		// (零字节会被 DetectContentType 判为 application/octet-stream 而非 text/plain)
+		content := []byte("This is a valid plain text test content exceeding 100 bytes for quota testing. " +
+			"Padding text to ensure 200+ bytes of UTF-8 plain text content for the test case to pass SEC-012 MIME check.")
 		fileHeader := createTestFileHeader(t, "large.txt", content)
 
 		ctx := context.Background()
