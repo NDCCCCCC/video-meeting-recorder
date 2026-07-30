@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -40,7 +41,13 @@ const (
 // BeforeCreate GORM hook - 生成API密钥
 func (a *APIKey) BeforeCreate(tx *gorm.DB) error {
 	if a.Key == "" {
-		a.Key = a.GenerateKey()
+		// STYLE-006: GenerateKey 返回 error 替代 panic；modern OS 几乎不会失败
+		// 但模型层保留错误路径，避免进程级 panic
+		key, err := generateAPIKey()
+		if err != nil {
+			return fmt.Errorf("生成API密钥失败: %w", err)
+		}
+		a.Key = key
 	}
 	return nil
 }
@@ -75,14 +82,26 @@ func (a *APIKey) HasScope(requiredScope string) bool {
 }
 
 // GenerateKey 生成新的API密钥
+// Deprecated: 此方法保留仅为向后兼容；推荐使用 generateAPIKey() 配合 BeforeCreate hook。
+// 新代码应在 BeforeCreate hook 中调用 generateAPIKey 并处理 error。
 func (a *APIKey) GenerateKey() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		// 如果加密随机数生成失败，记录错误并panic
-		// 不使用不安全的时间戳后备方案
+	key, err := generateAPIKey()
+	if err != nil {
+		// 旧路径保持 panic 行为以避免静默退化（与 gin.Recovery 兜底配合）
+		// 新代码应使用 BeforeCreate 路径并将错误返回 GORM
 		panic("failed to generate random bytes for API key: " + err.Error())
 	}
-	return "rec_" + hex.EncodeToString(b)
+	return key
+}
+
+// generateAPIKey 包级纯函数，返回随机生成的 API key 字符串与错误。
+// 分离该函数便于 BeforeCreate hook 与需要错误返回的调用方使用。
+func generateAPIKey() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read 失败: %w", err)
+	}
+	return "rec_" + hex.EncodeToString(b), nil
 }
 
 // GetScopeList 获取作用域列表
@@ -140,9 +159,10 @@ func (a *APIKey) IsIPAllowed(clientIP string) bool {
 	if len(whitelist) == 0 {
 		return true
 	}
-	ip := net.ParseIP(clientIP)
+	// BUG-016: 归一化 IPv6-mapped IPv4（如 ::ffff:192.0.2.1 等价 192.0.2.1）
+	parsed := net.ParseIP(clientIP)
+	ip := normalizeIP(parsed)
 	for _, allowed := range whitelist {
-		// 磁化显示密钥，仅保留前8位
 		if allowed == clientIP {
 			return true
 		}
@@ -158,6 +178,18 @@ func (a *APIKey) IsIPAllowed(clientIP string) bool {
 		}
 	}
 	return false
+}
+
+// normalizeIP 将 IPv6-mapped IPv4 转换为 IPv4（如 ::ffff:192.0.2.1 → 192.0.2.1），
+// 使 net.IP.To4() 兼容 RFC 4291 客户端双栈字符串（BUG-016）。
+func normalizeIP(ip net.IP) net.IP {
+	if ip == nil {
+		return nil
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4
+	}
+	return ip
 }
 
 // Validate 验证API密钥
