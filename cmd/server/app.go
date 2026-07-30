@@ -573,8 +573,6 @@ func (a *MinimalApp) initHandlers() error {
 	a.videoFileService.SetHLSPath(a.config.Storage.HLSPath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
 	inputConfigService := services.NewInputConfigService(a.db, a.logger, a.config, usbScanner)
-	fileService := storage.NewFileService(a.db, a.logger, a.config)
-	fileHandler := handlers.NewFileHandler(fileService, a.logger)
 
 	// 审计日志服务（必须在 userService 之前创建）
 	auditService := audit.NewAuditLogService(a.db, a.logger)
@@ -582,19 +580,23 @@ func (a *MinimalApp) initHandlers() error {
 	// 避免凭据类写操作（input-configs、admin/auth/config）把明文写入审计表
 	sanitizer := audit.NewSanitizer()
 	a.auditMiddleware = middleware.NewAuditMiddleware(auditService, a.logger, sanitizer)
+
+	fileService := storage.NewFileService(a.db, a.logger, a.config)
+	fileHandler := handlers.NewFileHandler(fileService, auditService, a.logger)
+
 	userService := services.NewUserService(a.db, a.logger, auditService)
 	auditHandler := handlers.NewAuditHandler(auditService)
 	auditHandler.SetLogger(a.logger)
 
 	// 通知服务
 	notificationService := notification.NewNotificationService(a.db, a.logger, a.config)
-	notificationHandler := handlers.NewNotificationHandler(notificationService)
+	notificationHandler := handlers.NewNotificationHandler(notificationService, auditService)
 	notificationHandler.SetLogger(a.logger)
 
 	// API密钥服务
 	apikeyService := services.NewAPIKeyService(a.db, a.logger)
 	apikeyService.SetAuditService(auditService)
-	apikeyHandler := handlers.NewAPIKeyHandler(apikeyService, a.logger)
+	apikeyHandler := handlers.NewAPIKeyHandler(apikeyService, auditService, a.logger)
 	apikeyHandler.SetLogger(a.logger)
 
 	// API密钥速率限制器
@@ -665,7 +667,7 @@ func (a *MinimalApp) initHandlers() error {
 		User:          handlers.NewUserHandler(userService, auditService, a.logger),
 		Role:          handlers.NewRoleHandler(roleService, auditService, a.logger),
 		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db),
-		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, a.logger, a.config),
+		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, auditService, a.logger, a.config),
 		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, auditService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, auditService, a.logger),
 		File:          fileHandler,
@@ -675,7 +677,7 @@ func (a *MinimalApp) initHandlers() error {
 		APIKey:        apikeyHandler,
 		Split:         handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
 		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, timestampMapper, a.logger),
-		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.frameCaptureService, a.logger),
+		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.frameCaptureService, auditService, a.logger),
 		Dashboard:     handlers.NewDashboardHandler(dashboardService, a.logger),
 	}
 

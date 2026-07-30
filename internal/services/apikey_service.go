@@ -187,11 +187,14 @@ func (s *APIKeyService) GetAPIKey(id uint, userID uint, isAdmin bool) (*models.A
 }
 
 // UpdateAPIKey 更新API密钥
-func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *UpdateAPIKeyRequest) (*models.APIKey, error) {
+func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *UpdateAPIKeyRequest) (*models.APIKey, *models.APIKey, error) {
 	apiKey, err := s.findAPIKeyForUser(id, userID, isAdmin)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	// Snapshot before mutation for audit OldData capture
+	oldAPIKey := *apiKey
 
 	updates := make(map[string]interface{})
 
@@ -206,20 +209,20 @@ func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *Up
 	}
 	if req.Scopes != nil {
 		if err := apiKey.SetScopes(*req.Scopes); err != nil {
-			return nil, fmt.Errorf("设置作用域失败: %w", err)
+			return nil, nil, fmt.Errorf("设置作用域失败: %w", err)
 		}
 		updates["scopes"] = apiKey.Scopes
 	}
 	if req.IPWhitelist != nil {
 		if err := apiKey.SetIPWhitelist(*req.IPWhitelist); err != nil {
-			return nil, fmt.Errorf("设置IP白名单失败: %w", err)
+			return nil, nil, fmt.Errorf("设置IP白名单失败: %w", err)
 		}
 		updates["ip_whitelist"] = apiKey.IPWhitelist
 	}
 
 	if len(updates) > 0 {
 		if err := s.db.Model(apiKey).Updates(updates).Error; err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		s.logger.Info("API密钥已更新",
@@ -230,21 +233,24 @@ func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *Up
 
 	// 重新查询获取更新后的数据
 	if err := s.db.First(apiKey, id).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return apiKey, nil
+	return &oldAPIKey, apiKey, nil
 }
 
 // DeleteAPIKey 删除API密钥
-func (s *APIKeyService) DeleteAPIKey(id uint, userID uint, isAdmin bool) error {
+func (s *APIKeyService) DeleteAPIKey(id uint, userID uint, isAdmin bool) (*models.APIKey, error) {
 	apiKey, err := s.findAPIKeyForUser(id, userID, isAdmin)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	// Snapshot before delete for audit OldData capture
+	oldAPIKey := *apiKey
+
 	if err := s.db.Delete(apiKey).Error; err != nil {
-		return err
+		return nil, err
 	}
 
 	s.logger.Info("API密钥已删除",
@@ -252,19 +258,22 @@ func (s *APIKeyService) DeleteAPIKey(id uint, userID uint, isAdmin bool) error {
 		zap.Uint("key_id", apiKey.ID),
 	)
 
-	return nil
+	return &oldAPIKey, nil
 }
 
 // ToggleAPIKeyStatus 切换API密钥状态
-func (s *APIKeyService) ToggleAPIKeyStatus(id uint, userID uint, isAdmin bool) (*models.APIKey, error) {
+func (s *APIKeyService) ToggleAPIKeyStatus(id uint, userID uint, isAdmin bool) (*models.APIKey, *models.APIKey, error) {
 	apiKey, err := s.findAPIKeyForUser(id, userID, isAdmin)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	// Snapshot before mutation for audit OldData capture
+	oldAPIKey := *apiKey
 
 	apiKey.IsActive = !apiKey.IsActive
 	if err := s.db.Save(apiKey).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	s.logger.Info("API密钥状态已切换",
@@ -273,7 +282,7 @@ func (s *APIKeyService) ToggleAPIKeyStatus(id uint, userID uint, isAdmin bool) (
 		zap.Bool("is_active", apiKey.IsActive),
 	)
 
-	return apiKey, nil
+	return &oldAPIKey, apiKey, nil
 }
 
 // ValidateAPIKey 验证API密钥（供中间件使用）

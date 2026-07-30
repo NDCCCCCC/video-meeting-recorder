@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/storage"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -13,17 +15,20 @@ import (
 
 // FileHandler 文件处理器
 type FileHandler struct {
-	fileService *storage.FileService
-	logger      *zap.Logger
+	fileService   *storage.FileService
+	auditService  *audit.AuditLogService
+	logger        *zap.Logger
 }
 
 // NewFileHandler 创建文件处理器
 func NewFileHandler(
 	fileService *storage.FileService,
+	auditService *audit.AuditLogService,
 	logger *zap.Logger,
 ) *FileHandler {
 	return &FileHandler{
-		fileService: fileService,
+		fileService:  fileService,
+		auditService: auditService,
 		logger:      logger,
 	}
 }
@@ -89,6 +94,18 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	resourceID := result.FileID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionCreate,
+		Module:     models.ModuleStorage,
+		Resource:   fmt.Sprintf("storage:%d", result.FileID),
+		ResourceID: &resourceID,
+		OldData:    nil,
+		NewData:    result,
+	}); err != nil {
+		h.logger.Warn("Failed to record storage upload change", zap.Error(err), zap.Uint("file_id", result.FileID))
+	}
+
 	response.GinSuccess(c, result)
 }
 
@@ -142,11 +159,23 @@ func (h *FileHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	err = h.fileService.Delete(c.Request.Context(), uint(fileID), h.getUserID(c))
+	oldFile, err := h.fileService.Delete(c.Request.Context(), uint(fileID), h.getUserID(c))
 	if err != nil {
 		h.logger.Warn("删除文件失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, err.Error())
 		return
+	}
+
+	resourceID := oldFile.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionDelete,
+		Module:     models.ModuleStorage,
+		Resource:   fmt.Sprintf("storage:%d", oldFile.ID),
+		ResourceID: &resourceID,
+		OldData:    oldFile,
+		NewData:    nil,
+	}); err != nil {
+		h.logger.Warn("Failed to record storage delete change", zap.Error(err), zap.Uint("file_id", uint(fileID)))
 	}
 
 	response.GinSuccess(c, gin.H{"message": "删除成功"})
@@ -179,7 +208,7 @@ func (h *FileHandler) Share(c *gin.Context) {
 		expiresIn = time.Duration(req.ExpiresIn) * time.Second
 	}
 
-	shareURL, err := h.fileService.ShareFile(
+	oldShare, newShare, shareURL, err := h.fileService.ShareFile(
 		c.Request.Context(),
 		uint(fileID),
 		h.getUserID(c),
@@ -190,6 +219,18 @@ func (h *FileHandler) Share(c *gin.Context) {
 		h.logger.Warn("生成分享链接失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, err.Error())
 		return
+	}
+
+	resourceID := uint(fileID)
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     "share",
+		Module:     models.ModuleStorage,
+		Resource:   fmt.Sprintf("storage:%d", fileID),
+		ResourceID: &resourceID,
+		OldData:    oldShare,
+		NewData:    newShare,
+	}); err != nil {
+		h.logger.Warn("Failed to record storage share change", zap.Error(err), zap.Uint("file_id", uint(fileID)))
 	}
 
 	response.GinSuccess(c, gin.H{"share_url": shareURL})

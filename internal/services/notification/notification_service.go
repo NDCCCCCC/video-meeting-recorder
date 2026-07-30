@@ -291,9 +291,31 @@ func (s *NotificationService) GetUserSetting(ctx context.Context, userID uint) (
 }
 
 // UpdateUserSetting 更新用户通知配置
-func (s *NotificationService) UpdateUserSetting(ctx context.Context, userID uint, setting *models.UserNotificationSetting) error {
+func (s *NotificationService) UpdateUserSetting(ctx context.Context, userID uint, setting *models.UserNotificationSetting) (*models.UserNotificationSetting, *models.UserNotificationSetting, error) {
+	// Snapshot pre-update state for audit OldData capture
+	var oldSetting models.UserNotificationSetting
+	if err := s.db.Where("user_id = ?", userID).First(&oldSetting).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Use default setting snapshot when no existing row
+			defaultSetting := s.getDefaultSetting(userID)
+			oldSetting = *defaultSetting
+		} else {
+			return nil, nil, err
+		}
+	}
+
 	setting.UserID = userID
-	return s.db.Save(setting).Error
+	if err := s.db.Save(setting).Error; err != nil {
+		return nil, nil, err
+	}
+
+	// Reload committed state for NewData
+	var newSetting models.UserNotificationSetting
+	if err := s.db.Where("user_id = ?", userID).First(&newSetting).Error; err != nil {
+		return nil, nil, err
+	}
+
+	return &oldSetting, &newSetting, nil
 }
 
 // getUserSetting 获取用户通知配置（内部方法）
