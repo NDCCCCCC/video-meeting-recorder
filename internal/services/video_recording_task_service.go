@@ -344,15 +344,15 @@ func (s *VideoRecordingTaskService) CreateTaskAuto(req *CreateTaskAutoRequest, c
 }
 
 // UpdateTask 更新任务
-func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
-		return nil, errors.New("任务不存在")
+		return nil, nil, errors.New("任务不存在")
 	}
 
 	// 检查权限 (shared_viewers 可以修改任何任务)
 	if !hasSharedViewer && task.CreatedBy != userID {
-		return nil, errors.New("无权限修改此任务")
+		return nil, nil, errors.New("无权限修改此任务")
 	}
 
 	// 待执行状态：可以更新所有字段
@@ -360,8 +360,11 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 	isRecording := task.Status == models.VideoStatusRecording
 
 	if !isRecording && task.Status != models.VideoStatusPending {
-		return nil, errors.New("只能更新待执行状态或录制中状态的任务")
+		return nil, nil, errors.New("只能更新待执行状态或录制中状态的任务")
 	}
+
+	// Snapshot before mutation for audit OldData capture
+	oldTask := task
 
 	// 更新字段
 	updates := make(map[string]interface{})
@@ -379,7 +382,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 			beijingLocation := time.FixedZone("CST", 8*3600)
 			startTime, err := time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
 			if err != nil {
-				return nil, errors.New("开始时间格式错误")
+				return nil, nil, errors.New("开始时间格式错误")
 			}
 			updates["start_time"] = startTime.UTC()
 		}
@@ -397,7 +400,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		beijingLocation := time.FixedZone("CST", 8*3600)
 		endTime, err := time.ParseInLocation(time.RFC3339, *req.EndTime, beijingLocation)
 		if err != nil {
-			return nil, errors.New("结束时间格式错误")
+			return nil, nil, errors.New("结束时间格式错误")
 		}
 
 		// 验证结束时间必须在开始时间之后
@@ -410,7 +413,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		}
 
 		if endTime.Before(newStartTime) {
-			return nil, errors.New("结束时间不能早于开始时间")
+			return nil, nil, errors.New("结束时间不能早于开始时间")
 		}
 
 		updates["end_time"] = endTime.UTC()
@@ -428,7 +431,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 	}
 
 	if err := s.db.Model(&task).Updates(updates).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 重新加载数据
@@ -436,7 +439,7 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 
 	// 验证更新后的数据
 	if err := task.IsValid(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	s.logger.Info("录制任务已更新",
@@ -445,25 +448,28 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		zap.Uint("updated_by", userID),
 	)
 
-	return &task, nil
+	return &oldTask, &task, nil
 }
 
 // DeleteTask 删除任务
-func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin bool) error {
+func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
-		return errors.New("任务不存在")
+		return nil, errors.New("任务不存在")
 	}
 
 	// 只能删除非运行状态的任务（运行中的任务不能删除）
 	if task.Status == models.VideoStatusRecording || task.Status == models.VideoStatusConnecting {
-		return errors.New("运行中的任务无法删除，请先停止任务")
+		return nil, errors.New("运行中的任务无法删除，请先停止任务")
 	}
 
 	// 检查权限（管理员可以删除任何任务）
 	if !isAdmin && task.CreatedBy != userID {
-		return errors.New("无权限删除此任务")
+		return nil, errors.New("无权限删除此任务")
 	}
+
+	// Snapshot before delete for audit OldData capture
+	oldTask := task
 
 	// 删除前先解锁所有关联的输入配置（防止锁遗留）
 	var taskConfigs []models.TaskInputConfig
@@ -483,10 +489,10 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin boo
 
 	result := s.db.Delete(&models.VideoRecordingTask{}, id)
 	if result.Error != nil {
-		return result.Error
+		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("任务不存在")
+		return nil, errors.New("任务不存在")
 	}
 
 	s.logger.Info("录制任务已删除",
@@ -495,7 +501,7 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin boo
 		zap.String("task_status", string(task.Status)),
 	)
 
-	return nil
+	return &oldTask, nil
 }
 
 // BatchDeleteTasksRequest 批量删除任务请求
@@ -538,18 +544,19 @@ func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask
 }
 
 // BatchDeleteTasks 批量删除任务
-func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, isAdmin bool) (*BatchDeleteTasksResult, error) {
+func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, isAdmin bool) ([]models.VideoRecordingTask, *BatchDeleteTasksResult, error) {
 	if len(ids) == 0 {
-		return nil, errors.New("任务ID列表不能为空")
+		return nil, nil, errors.New("任务ID列表不能为空")
 	}
 
-	var tasks []models.VideoRecordingTask
-	if err := s.db.Where("id IN ?", ids).Find(&tasks).Error; err != nil {
-		return nil, err
+	// Snapshot requested tasks BEFORE any deletion or filtering — for audit OldData capture
+	var oldTasks []models.VideoRecordingTask
+	if err := s.db.Where("id IN ?", ids).Find(&oldTasks).Error; err != nil {
+		return nil, nil, err
 	}
 
-	if len(tasks) == 0 {
-		return nil, errors.New("任务不存在")
+	if len(oldTasks) == 0 {
+		return nil, nil, errors.New("任务不存在")
 	}
 
 	result := &BatchDeleteTasksResult{
@@ -558,7 +565,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 		FailedTasks: make([]string, 0),
 	}
 
-	for _, task := range tasks {
+	for _, task := range oldTasks {
 		if canDelete, reason := s.canDeleteTask(task, userID, isAdmin); canDelete {
 			result.DeletedIDs = append(result.DeletedIDs, task.ID)
 		} else {
@@ -568,7 +575,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 	}
 
 	if len(result.DeletedIDs) == 0 {
-		return result, errors.New("没有可删除的任务")
+		return oldTasks, result, errors.New("没有可删除的任务")
 	}
 
 	// 删除前先解锁所有待删除任务的输入配置（防止锁遗留）
@@ -591,7 +598,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 	// 执行删除
 	dbResult := s.db.Delete(&models.VideoRecordingTask{}, result.DeletedIDs)
 	if dbResult.Error != nil {
-		return nil, dbResult.Error
+		return nil, nil, dbResult.Error
 	}
 
 	result.TotalDeleted = int(dbResult.RowsAffected)
@@ -607,33 +614,41 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 		s.logger.Warn("部分任务无法删除", zap.Strings("tasks", result.FailedTasks))
 	}
 
-	return result, nil
+	return oldTasks, result, nil
 }
 
 // StartTask 手动启动任务
-func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
-		return nil, errors.New("任务不存在")
+		return nil, nil, errors.New("任务不存在")
 	}
 
 	// 检查权限
 	if task.CreatedBy != userID {
-		return nil, errors.New("无权限操作此任务")
+		return nil, nil, errors.New("无权限操作此任务")
 	}
 
 	// 检查状态
 	if task.Status != models.VideoStatusPending {
-		return nil, errors.New("只能启动待执行状态的任务")
+		return nil, nil, errors.New("只能启动待执行状态的任务")
 	}
+
+	// Snapshot pre-start state for audit OldData capture
+	oldTask := task
 
 	// 触发任务执行
 	if s.scheduler != nil {
 		if err := s.scheduler.ExecuteTask(id); err != nil {
-			return nil, fmt.Errorf("触发任务执行失败: %w", err)
+			return nil, nil, fmt.Errorf("触发任务执行失败: %w", err)
 		}
 	} else {
-		return nil, errors.New("调度器未初始化")
+		return nil, nil, errors.New("调度器未初始化")
+	}
+
+	// Reload post-dispatch state for NewData (asynchronous scheduler may have mutated status).
+	if err := s.db.First(&task, id).Error; err != nil {
+		return nil, nil, err
 	}
 
 	s.logger.Info("录制任务已手动启动",
@@ -641,25 +656,28 @@ func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.Vid
 		zap.Uint("started_by", userID),
 	)
 
-	return &task, nil
+	return &oldTask, &task, nil
 }
 
 // StopTask 手动停止任务
-func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.First(&task, id).Error; err != nil {
-		return nil, errors.New("任务不存在")
+		return nil, nil, errors.New("任务不存在")
 	}
 
 	// 检查权限
 	if !hasSharedViewer && task.CreatedBy != userID {
-		return nil, errors.New("无权限操作此任务")
+		return nil, nil, errors.New("无权限操作此任务")
 	}
 
 	// 检查状态
 	if task.Status != models.VideoStatusRecording && task.Status != models.VideoStatusConnecting {
-		return nil, errors.New("只能停止录制中或连接中的任务")
+		return nil, nil, errors.New("只能停止录制中或连接中的任务")
 	}
+
+	// Snapshot pre-stop state for audit OldData capture (before CancelTaskExecution)
+	oldTask := task
 
 	// 记录原始状态，用于后续判断
 	wasRecording := task.Status == models.VideoStatusRecording
@@ -674,7 +692,7 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedView
 
 	// 重新加载任务以获取最新状态（因为 CancelTaskExecution 可能创建了 MKV 文件）
 	if err := s.db.First(&task, id).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 根据是否有录制文件来决定最终状态
@@ -698,10 +716,10 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedView
 	}
 
 	if err := s.db.Save(&task).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &task, nil
+	return &oldTask, &task, nil
 }
 
 // CancelTask 取消任务

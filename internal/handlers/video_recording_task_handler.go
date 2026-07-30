@@ -5,12 +5,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth/hlstoken"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -20,18 +23,20 @@ import (
 type VideoRecordingTaskHandler struct {
 	taskService       *services.VideoRecordingTaskService
 	conversionService services.ConversionService
+	auditService      *audit.AuditLogService
 	logger            *zap.Logger
 	config            *config.Config
 	hlsToken          *hlstoken.HLSToken
 }
 
 // NewVideoRecordingTaskHandler 创建视频录制任务处理器
-func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskService, logger *zap.Logger, cfg *config.Config) *VideoRecordingTaskHandler {
+func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskService, auditService *audit.AuditLogService, logger *zap.Logger, cfg *config.Config) *VideoRecordingTaskHandler {
 	return &VideoRecordingTaskHandler{
-		taskService: taskService,
-		logger:      logger,
-		config:      cfg,
-		hlsToken:    hlstoken.NewHLSToken(cfg.Auth.HLSTokenSecret, cfg.Auth.HLSTokenDuration),
+		taskService:  taskService,
+		auditService: auditService,
+		logger:       logger,
+		config:       cfg,
+		hlsToken:     hlstoken.NewHLSToken(cfg.Auth.HLSTokenSecret, cfg.Auth.HLSTokenDuration),
 	}
 }
 
@@ -205,10 +210,22 @@ func (h *VideoRecordingTaskHandler) UpdateTask(c *gin.Context) {
 
 	userID := middleware.GetUserID(c)
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
-	task, err := h.taskService.UpdateTask(id, &req, userID, hasSharedViewer)
+	oldTask, task, err := h.taskService.UpdateTask(id, &req, userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	resourceID := task.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionUpdate,
+		Module:     models.ModuleTask,
+		Resource:   fmt.Sprintf("task:%d", task.ID),
+		ResourceID: &resourceID,
+		OldData:    oldTask,
+		NewData:    task,
+	}); err != nil {
+		h.logger.Warn("Failed to record task update change", zap.Error(err), zap.Uint("task_id", id))
 	}
 
 	h.logger.Info("录制任务已更新", zap.Uint("task_id", id))
@@ -232,9 +249,22 @@ func (h *VideoRecordingTaskHandler) DeleteTask(c *gin.Context) {
 
 	userID := middleware.GetUserID(c)
 	isAdmin := middleware.GetIsAdmin(c)
-	if err := h.taskService.DeleteTask(id, userID, isAdmin); err != nil {
+	oldTask, err := h.taskService.DeleteTask(id, userID, isAdmin)
+	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	resourceID := oldTask.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     models.ActionDelete,
+		Module:     models.ModuleTask,
+		Resource:   fmt.Sprintf("task:%d", oldTask.ID),
+		ResourceID: &resourceID,
+		OldData:    oldTask,
+		NewData:    nil,
+	}); err != nil {
+		h.logger.Warn("Failed to record task delete change", zap.Error(err), zap.Uint("task_id", id))
 	}
 
 	h.logger.Info("录制任务已删除", zap.Uint("task_id", id))
@@ -260,10 +290,31 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 
 	userID := middleware.GetUserID(c)
 	isAdmin := middleware.GetIsAdmin(c)
-	result, err := h.taskService.BatchDeleteTasks(req.IDs, userID, isAdmin)
+	oldTasks, result, err := h.taskService.BatchDeleteTasks(req.IDs, userID, isAdmin)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	// Emit single RecordChange for batch operation (option b per plan): OldData is the
+	// pre-delete slice captured from initial id IN ? query, NewData is nil.
+	if len(oldTasks) > 0 {
+		idStrs := make([]string, len(oldTasks))
+		for i, t := range oldTasks {
+			idStrs[i] = strconv.FormatUint(uint64(t.ID), 10)
+		}
+		resource := "task:" + strings.Join(idStrs, ",")
+		resourceID := uint(0)
+		if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+			Action:     "batch_delete",
+			Module:     models.ModuleTask,
+			Resource:   resource,
+			ResourceID: &resourceID,
+			OldData:    oldTasks,
+			NewData:    nil,
+		}); err != nil {
+			h.logger.Warn("Failed to record batch task delete change", zap.Error(err))
+		}
 	}
 
 	// 根据结果构造响应消息
@@ -306,10 +357,22 @@ func (h *VideoRecordingTaskHandler) StartTask(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	task, err := h.taskService.StartTask(id, userID)
+	oldTask, task, err := h.taskService.StartTask(id, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	resourceID := task.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     "start",
+		Module:     models.ModuleTask,
+		Resource:   fmt.Sprintf("task:%d", task.ID),
+		ResourceID: &resourceID,
+		OldData:    oldTask,
+		NewData:    task,
+	}); err != nil {
+		h.logger.Warn("Failed to record task start change", zap.Error(err), zap.Uint("task_id", id))
 	}
 
 	h.logger.Info("录制任务已启动", zap.Uint("task_id", id))
@@ -333,10 +396,22 @@ func (h *VideoRecordingTaskHandler) StopTask(c *gin.Context) {
 
 	userID := middleware.GetUserID(c)
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
-	task, err := h.taskService.StopTask(id, userID, hasSharedViewer)
+	oldTask, task, err := h.taskService.StopTask(id, userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
+	}
+
+	resourceID := task.ID
+	if err := h.auditService.RecordChange(c.Request.Context(), audit.RecordChangeOpts{
+		Action:     "stop",
+		Module:     models.ModuleTask,
+		Resource:   fmt.Sprintf("task:%d", task.ID),
+		ResourceID: &resourceID,
+		OldData:    oldTask,
+		NewData:    task,
+	}); err != nil {
+		h.logger.Warn("Failed to record task stop change", zap.Error(err), zap.Uint("task_id", id))
 	}
 
 	h.logger.Info("录制任务已停止", zap.Uint("task_id", id))
