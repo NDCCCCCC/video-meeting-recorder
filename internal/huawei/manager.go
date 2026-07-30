@@ -2,12 +2,18 @@ package huawei
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+// fatalFunc 允许测试覆盖 logger.Fatal 行为（默认触发 os.Exit）；测试可替换为 panic。
+var fatalFunc = func(logger *zap.Logger, msg string, fields ...zap.Field) {
+	logger.Fatal(msg, fields...)
+}
 
 // Manager 华为终端客户端管理器
 // 负责管理多个华为终端API客户端的生命周期
@@ -16,6 +22,10 @@ type Manager struct {
 	mu      sync.RWMutex
 	logger  *zap.Logger
 	db      DBInterface
+	// SEC-003a: 全局 TLS 策略（由 app 层通过 SetTLSPolicy 注入）。
+	// 默认 InsecureSkipVerify=false、MinTLSVersion=tls.VersionTLS12。
+	tlsInsecureSkipVerify bool
+	tlsMinVersion         uint16
 }
 
 // DBInterface 数据库接口（用于解耦）
@@ -36,9 +46,44 @@ type HuaweiConfigDB struct {
 // NewManager 创建华为终端客户端管理器
 func NewManager(logger *zap.Logger, db DBInterface) *Manager {
 	return &Manager{
-		clients: make(map[uint]*HuaweiClient),
-		logger:  logger,
-		db:      db,
+		clients:       make(map[uint]*HuaweiClient),
+		logger:        logger,
+		db:            db,
+		tlsMinVersion: tls.VersionTLS12, // SEC-003a: 默认强制 TLS 1.2 最低
+		// tlsInsecureSkipVerify 默认 false（零值）
+	}
+}
+
+// SetTLSPolicy 设置华为客户端全局 TLS 策略（SEC-003a）。
+// insecureSkipVerify 默认 false；生产环境若为 true 则 logger.Fatal（defense-in-depth）。
+// minTLSVersion 为 0 时归一化为 tls.VersionTLS12。
+func (m *Manager) SetTLSPolicy(insecureSkipVerify bool, minTLSVersion uint16, isProduction bool) {
+	if minTLSVersion == 0 {
+		minTLSVersion = tls.VersionTLS12
+	}
+	if isProduction && insecureSkipVerify {
+		fatalFunc(m.logger, "生产环境不允许 HUAWEI_INSECURE_SKIP_VERIFY=true，进程终止（SEC-003a）")
+		return
+	}
+	m.tlsInsecureSkipVerify = insecureSkipVerify
+	m.tlsMinVersion = minTLSVersion
+}
+
+// ParseMinTLSVersion 将配置中的字符串版本号（"1.2"/"1.3"）或数字（"771"）解析为 tls 常量。
+// 空串或无法识别返回 0（由调用方归一化为 tls.VersionTLS12）。SEC-003a/D-03.5。
+func ParseMinTLSVersion(s string) uint16 {
+	switch s {
+	case "1.2", "771":
+		return tls.VersionTLS12
+	case "1.3", "772":
+		return tls.VersionTLS13
+	case "1.1", "770":
+		return tls.VersionTLS11
+	case "1.0", "769":
+		// SEC-003a: 显式拒绝 TLS 1.0，归一化为 1.2。
+		return tls.VersionTLS12
+	default:
+		return 0
 	}
 }
 
@@ -53,8 +98,8 @@ func (m *Manager) GetClient(ctx context.Context, configID uint) (*HuaweiClient, 
 		if client.hasSession() {
 			return client, nil
 		}
-		// 会话过期，需要重新创建
-		m.removeClient(configID)
+		// 会话过期，需要重新创建（SEC-003a：透传 ctx，不再用 context.Background()）
+		m.removeClient(ctx, configID)
 	}
 
 	// 创建新客户端
@@ -70,15 +115,17 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	}
 
 	config := &Config{
-		Server:             cfg.Server,
-		Port:               cfg.Port,
+		Server: cfg.Server,
+		Port:   cfg.Port,
+		// SEC-003b deferred (per CONTEXT.md): 华为密码 DB 加密需独立迁移 + 前端/配置联动，
+		// 本 phase 仅完成 SEC-003a（TLS 三项 + ctx 透传），密码仍以明文形式从 DB 读取。
 		Username:           cfg.Username,
 		Password:           cfg.Password,
 		APITimeout:         30 * time.Second,
-		SessionTimeout:     1800 * time.Second, // 30分钟会话有效期
-		KeepAliveInterval:  30 * time.Second,   // 30秒保活间隔（必须小于60秒）
-		InsecureSkipVerify: true,
-		MinTLSVersion:      0x0301, // TLS 1.0
+		SessionTimeout:     1800 * time.Second,      // 30分钟会话有效期
+		KeepAliveInterval:  30 * time.Second,        // 30秒保活间隔（必须小于60秒）
+		InsecureSkipVerify: m.tlsInsecureSkipVerify, // SEC-003a: 默认 false，可配置
+		MinTLSVersion:      m.tlsMinVersion,         // SEC-003a: 默认 tls.VersionTLS12，不再硬编码 TLS1.0
 	}
 
 	client := NewHuaweiClient(config, m.logger)
@@ -102,13 +149,13 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	return client, nil
 }
 
-// removeClient 移除客户端
-func (m *Manager) removeClient(configID uint) {
+// removeClient 移除客户端（SEC-003a：透传调用方 ctx 给 Logout，不再用 context.Background()）
+func (m *Manager) removeClient(ctx context.Context, configID uint) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if client, exists := m.clients[configID]; exists {
-		client.Logout(context.Background())
+		client.Logout(ctx)
 		delete(m.clients, configID)
 	}
 }

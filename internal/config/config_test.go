@@ -90,3 +90,17 @@ func TestLoad_NoHardcodedSecretDefault(t *testing.T) {
 	assert.NotEqual(t, "change-me-in-production", cfg.Auth.HLSTokenSecret,
 		"HLS 密钥不应回退到硬编码默认值")
 }
+
+// TestLoad_BindEnvHuaweiTLS 验证 SEC-003a：HUAWEI_INSECURE_SKIP_VERIFY 与
+// HUAWEI_MIN_TLS_VERSION 环境变量通过显式 BindEnv 加载到配置。
+func TestLoad_BindEnvHuaweiTLS(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("HUAWEI_INSECURE_SKIP_VERIFY", "true")
+	t.Setenv("HUAWEI_MIN_TLS_VERSION", "1.3")
+
+	cfg, err := Load()
+	assert.NoError(t, err)
+	// viper 把字符串 "true" 反序列化为 bool
+	assert.True(t, cfg.Huawei.InsecureSkipVerify, "HUAWEI_INSECURE_SKIP_VERIFY 应加载为 true")
+	assert.Equal(t, "1.3", cfg.Huawei.MinTLSVersion, "HUAWEI_MIN_TLS_VERSION 应加载为 1.3")
+}

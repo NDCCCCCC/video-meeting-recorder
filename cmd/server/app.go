@@ -652,6 +652,12 @@ func (a *MinimalApp) initHandlers() error {
 	// 华为管理器（使用数据库配置动态创建客户端）
 	dbAdapter := &huaweiDBAdapter{db: a.db}
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
+	// SEC-003a: 注入全局 TLS 策略（默认 TLS 1.2、InsecureSkipVerify=false；生产环境强制校验）。
+	a.huaweiManager.SetTLSPolicy(
+		a.config.Huawei.InsecureSkipVerify,
+		huaweiapi.ParseMinTLSVersion(a.config.Huawei.MinTLSVersion),
+		a.config.Server.Environment == "production",
+	)
 	a.huaweiConnector = video_recording.NewHuaweiConferenceConnector(a.db, a.huaweiManager, a.logger)
 
 	// 仪表板服务

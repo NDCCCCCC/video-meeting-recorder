@@ -236,18 +236,19 @@ func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipV
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: insecureSkipVerify,
-					MinVersion:         minTLSVersion,    // TLS 1.0
+					MinVersion:         minTLSVersion,    // SEC-003a: 由调用方注入，默认 tls.VersionTLS12
 					MaxVersion:         tls.VersionTLS12, // 限制最大版本为 TLS 1.2（华为终端兼容性）
-					// 华为终端使用的密码套件
+					// SEC-003a: 密码套件——优先 ECDHE 前向保密，保留 RSA-AES 兼容华为老设备；
+					// 已剔除基于 3DES 的弱套件（SWEET32 攻击面）。
 					CipherSuites: []uint16{
 						tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 						tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+						tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
 						tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 						tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
 						tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 						tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 						tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-						tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
 					},
 					// 支持更多的曲线以兼容老设备
 					CurvePreferences: []tls.CurveID{
