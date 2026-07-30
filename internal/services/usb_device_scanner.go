@@ -22,6 +22,20 @@ type USBDeviceInfo struct {
 	Backend  string `json:"backend"`   // "v4l2" | "alsa" | "dshow" | "wasapi"
 }
 
+// PowerShellVideoDevice PowerShell Get-PnpDevice 返回的 JSON 项（PERF-009）。
+// 替代 parseWindowsDevice / parseWindowsAudioDevice 中的 map[string]interface{}
+// 反射路径，避免每条设备都做 map → 类型断言。
+type PowerShellVideoDevice struct {
+	FriendlyName string `json:"FriendlyName"`
+	InstanceId   string `json:"InstanceId"`
+}
+
+// PowerShellAudioDevice PowerShell Get-AudioDevice 返回的 JSON 项（PERF-009）。
+type PowerShellAudioDevice struct {
+	Name string `json:"Name"`
+	ID   string `json:"ID"`
+}
+
 // USBDeviceScanner USB设备扫描器
 type USBDeviceScanner struct {
 	logger *zap.Logger
@@ -81,20 +95,19 @@ func (s *USBDeviceScanner) scanWindowsVideoDevices() ([]USBDeviceInfo, error) {
 		return s.scanWindowsVideoDevicesFFmpeg()
 	}
 
-	// 解析JSON输出
-	var result interface{}
-	if err := json.Unmarshal([]byte(output), &result); err == nil {
-		switch v := result.(type) {
-		case []interface{}:
-			// 多个设备
-			for _, item := range v {
-				if device, ok := s.parseWindowsDevice(item); ok {
-					devices = append(devices, device)
-				}
+	// 解析JSON输出（PERF-009：直接解析为强类型 slice）
+	var psDevices []PowerShellVideoDevice
+	if err := json.Unmarshal([]byte(output), &psDevices); err == nil {
+		for _, item := range psDevices {
+			if device, ok := s.parseWindowsDevice(item); ok {
+				devices = append(devices, device)
 			}
-		case map[string]interface{}:
-			// 单个设备
-			if device, ok := s.parseWindowsDevice(v); ok {
+		}
+	} else {
+		// 兼容单对象返回（PowerShell 在仅有一个设备时返回 dict 而非 list）
+		var single PowerShellVideoDevice
+		if err2 := json.Unmarshal([]byte(output), &single); err2 == nil {
+			if device, ok := s.parseWindowsDevice(single); ok {
 				devices = append(devices, device)
 			}
 		}
@@ -164,31 +177,16 @@ func (s *USBDeviceScanner) scanWindowsVideoDevicesFFmpeg() ([]USBDeviceInfo, err
 	return devices, nil
 }
 
-// parseWindowsDevice 解析Windows设备信息
-func (s *USBDeviceScanner) parseWindowsDevice(item interface{}) (USBDeviceInfo, bool) {
-	deviceMap, ok := item.(map[string]interface{})
-	if !ok {
-		return USBDeviceInfo{}, false
-	}
-
-	name := ""
-	instanceID := ""
-
-	if friendlyName, ok := deviceMap["FriendlyName"].(string); ok {
-		name = friendlyName
-	}
-	if id, ok := deviceMap["InstanceId"].(string); ok {
-		instanceID = id
-	}
-
-	if name == "" {
+// parseWindowsDevice 解析Windows设备信息（PERF-009：直接接收强类型）
+func (s *USBDeviceScanner) parseWindowsDevice(item PowerShellVideoDevice) (USBDeviceInfo, bool) {
+	if item.FriendlyName == "" {
 		return USBDeviceInfo{}, false
 	}
 
 	return USBDeviceInfo{
 		Type:     "camera",
-		Name:     name,
-		DeviceID: instanceID,
+		Name:     item.FriendlyName,
+		DeviceID: item.InstanceId,
 		Status:   "available",
 		Backend:  "dshow",
 	}, true
@@ -301,18 +299,19 @@ func (s *USBDeviceScanner) scanWindowsAudioDevices() ([]USBDeviceInfo, error) {
 		return s.scanWindowsAudioDevicesFFmpeg()
 	}
 
-	// 解析JSON输出
-	var result interface{}
-	if err := json.Unmarshal([]byte(output), &result); err == nil {
-		switch v := result.(type) {
-		case []interface{}:
-			for _, item := range v {
-				if device, ok := s.parseWindowsAudioDevice(item); ok {
-					devices = append(devices, device)
-				}
+	// 解析JSON输出（PERF-009：直接解析为强类型 slice）
+	var psDevices []PowerShellAudioDevice
+	if err := json.Unmarshal([]byte(output), &psDevices); err == nil {
+		for _, item := range psDevices {
+			if device, ok := s.parseWindowsAudioDevice(item); ok {
+				devices = append(devices, device)
 			}
-		case map[string]interface{}:
-			if device, ok := s.parseWindowsAudioDevice(v); ok {
+		}
+	} else {
+		// 兼容单对象返回
+		var single PowerShellAudioDevice
+		if err2 := json.Unmarshal([]byte(output), &single); err2 == nil {
+			if device, ok := s.parseWindowsAudioDevice(single); ok {
 				devices = append(devices, device)
 			}
 		}
@@ -387,31 +386,16 @@ func (s *USBDeviceScanner) scanWindowsAudioDevicesFFmpeg() ([]USBDeviceInfo, err
 	return devices, nil
 }
 
-// parseWindowsAudioDevice 解析Windows音频设备信息
-func (s *USBDeviceScanner) parseWindowsAudioDevice(item interface{}) (USBDeviceInfo, bool) {
-	deviceMap, ok := item.(map[string]interface{})
-	if !ok {
-		return USBDeviceInfo{}, false
-	}
-
-	name := ""
-	deviceID := ""
-
-	if n, ok := deviceMap["Name"].(string); ok {
-		name = n
-	}
-	if id, ok := deviceMap["ID"].(string); ok {
-		deviceID = id
-	}
-
-	if name == "" {
+// parseWindowsAudioDevice 解析Windows音频设备信息（PERF-009：直接接收强类型）
+func (s *USBDeviceScanner) parseWindowsAudioDevice(item PowerShellAudioDevice) (USBDeviceInfo, bool) {
+	if item.Name == "" {
 		return USBDeviceInfo{}, false
 	}
 
 	return USBDeviceInfo{
 		Type:     "audio",
-		Name:     name,
-		DeviceID: deviceID,
+		Name:     item.Name,
+		DeviceID: item.ID,
 		Status:   "available",
 		Backend:  "wasapi",
 	}, true

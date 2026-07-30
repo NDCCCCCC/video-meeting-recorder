@@ -261,7 +261,16 @@ func expandEnvWithDefault(s string) string {
 // expandEnvRegex 匹配 \${VAR} 或 \${VAR:default} 格式（PERF-008 提到包级）
 var expandEnvRegex = regexp.MustCompile(`\$\{([^:}]+)(?::([^}]*))?\}`)
 
-// expandConfig 递归展开配置中的所有字符串值
+// ConfigDiffEntry 类型化配置变更条目（PERF-009）。
+// 历史 rawCfg 走 map[string]interface{} 会触发装箱；定义专用类型避免反射/类型断言。
+type ConfigDiffEntry struct {
+	Key      string `json:"key"`
+	OldValue string `json:"old_value"`
+	NewValue string `json:"new_value"`
+}
+
+// expandConfig 递归展开配置中的所有字符串值（保留 map[string]interface{}
+// 以兼容 viper 的 MergeConfigMap 入参类型；调用方拿到展开后的值再转为强类型）。
 func expandConfig(cfg interface{}) interface{} {
 	switch v := cfg.(type) {
 	case map[string]interface{}:

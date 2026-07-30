@@ -118,6 +118,27 @@ type AuditLogData struct {
 	Diff    interface{} `json:"diff,omitempty"`
 }
 
+// AuditLogOldDataPayload 强类型 OldData payload（PERF-009）。
+// 替代 audit handler 中以 map[string]interface{} 序列化的路径，
+// 减少 JSON 序列化时的反射与装箱开销；字段均使用 string/数值类型
+// 以匹配 audit_logs.old_data 列（type:text）。
+type AuditLogOldDataPayload struct {
+	ID       uint   `json:"id,omitempty"`
+	Username string `json:"username,omitempty"`
+	Email    string `json:"email,omitempty"`
+	FullName string `json:"full_name,omitempty"`
+	IsActive bool   `json:"is_active,omitempty"`
+}
+
+// AuditLogNewDataPayload 强类型 NewData payload（PERF-009）。
+type AuditLogNewDataPayload struct {
+	ID       uint   `json:"id,omitempty"`
+	Username string `json:"username,omitempty"`
+	Email    string `json:"email,omitempty"`
+	FullName string `json:"full_name,omitempty"`
+	IsActive bool   `json:"is_active,omitempty"`
+}
+
 // MarshalJSON 序列化
 func (a *AuditLogData) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
