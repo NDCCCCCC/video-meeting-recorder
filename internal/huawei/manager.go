@@ -149,23 +149,30 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	return client, nil
 }
 
-// removeClient 移除客户端（SEC-003a：透传调用方 ctx 给 Logout，不再用 context.Background()）
+// removeClient 移除客户端（SEC-003a：透传 ctx；PERF-004：Logout 移出锁，仅 map 操作进锁）
 func (m *Manager) removeClient(ctx context.Context, configID uint) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if client, exists := m.clients[configID]; exists {
-		client.Logout(ctx)
+	client, exists := m.clients[configID]
+	if exists {
 		delete(m.clients, configID)
+	}
+	m.mu.Unlock()
+
+	if exists {
+		if err := client.Logout(ctx); err != nil {
+			m.logger.Warn("登出华为客户端失败", zap.Uint("config_id", configID), zap.Error(err))
+		}
 	}
 }
 
-// Close 关闭管理器，清理所有客户端
+// Close 关闭管理器，清理所有客户端（PERF-004：批量取客户端后解锁，再逐个 Logout）
 func (m *Manager) Close(ctx context.Context) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	clients := m.clients
+	m.clients = make(map[uint]*HuaweiClient)
+	m.mu.Unlock()
 
-	for configID, client := range m.clients {
+	for configID, client := range clients {
 		if err := client.Logout(ctx); err != nil {
 			m.logger.Error("关闭华为客户端失败",
 				zap.Uint("config_id", configID),
@@ -174,7 +181,6 @@ func (m *Manager) Close(ctx context.Context) error {
 		}
 	}
 
-	m.clients = make(map[uint]*HuaweiClient)
 	return nil
 }
 

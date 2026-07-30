@@ -685,7 +685,7 @@ func (a *MinimalApp) initHandlers() error {
 		System:        handlers.NewSystemHandler(a.db, auditService, a.logger, a.config),
 		APIKey:        apikeyHandler,
 		Split:         handlers.NewSplitHandler(a.splittingService, a.snapshotService, a.videoFileService, a.logger),
-		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, timestampMapper, a.logger),
+		Transcription: handlers.NewTranscriptionHandler(a.transcriptionService, a.videoFileService, timestampMapper, a.config, a.logger),
 		PPT:           handlers.NewPPThandler(pptFileService, a.slideCacheService, a.pptMergeService, a.videoFileService, a.pptEditorService, a.frameCaptureService, auditService, a.logger),
 		Dashboard:     handlers.NewDashboardHandler(dashboardService, a.logger),
 	}

@@ -37,7 +37,7 @@ type RecordingProcess struct {
 	// 自动重连支持
 	ConfigType      string                     // 配置类型: usb 或 stream
 	Task            *models.VideoRecordingTask // 任务信息（用于重连）
-	HuaweiConfig    *models.InputConfig       // 华为配置（用于重连）
+	HuaweiConfig    *models.InputConfig        // 华为配置（用于重连）
 	ReconnectCount  int                        // 当前重连次数
 	MaxReconnects   int                        // 最大重连次数
 	ReconnectDelay  time.Duration              // 重连间隔
@@ -90,8 +90,7 @@ func (c *SimpleRecordingCoordinator) StartRecording(task *models.VideoRecordingT
 
 // StartRecordingWithConfig 启动指定配置类型的录制
 func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.VideoRecordingTask, huaweiConfig *models.InputConfig, configType string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// PERF-004: 把昂贵的资源创建（dir + ffmpeg 进程启动）移出锁外，仅保留最小临界区。
 
 	// 根据配置类型生成输出路径
 	mkvPath := c.getOutputPathWithType(task, configType, "mkv")
@@ -132,7 +131,7 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 	isStreamRecording := configType == "stream" && input.Type != InputSourceUSB
 	shouldReconnect := isStreamRecording
 
-	c.processes[processKey] = &RecordingProcess{
+	rec := &RecordingProcess{
 		TaskID:          task.ID,
 		Cmd:             cmd,
 		StartTime:       time.Now(),
@@ -149,7 +148,12 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 		ReconnectDelay:  10 * time.Second, // 重连间隔10秒
 		ShouldReconnect: shouldReconnect,
 	}
+
+	// 最小临界区：仅做 map 注册（PERF-004）
+	c.mu.Lock()
+	c.processes[processKey] = rec
 	c.cancelFuncs[processKey] = cancel
+	c.mu.Unlock()
 
 	// 对于主配置（USB或第一个配置），更新任务的主要路径
 	if configType == "usb" || task.MKVFilePath == "" {

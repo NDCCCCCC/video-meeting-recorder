@@ -19,17 +19,19 @@ var fatalFunc = func(logger *zap.Logger, msg string, fields ...zap.Field) {
 
 // Config 应用配置
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server" json:"server" yaml:"server"`
-	Database DatabaseConfig `mapstructure:"database" json:"database" yaml:"database"`
-	Auth     AuthConfig     `mapstructure:"auth" json:"auth" yaml:"auth"`
-	Logging  LoggingConfig  `mapstructure:"logging" json:"logging" yaml:"logging"`
-	Storage  StorageConfig  `mapstructure:"storage" json:"storage" yaml:"storage"`
-	Huawei   HuaweiConfig   `mapstructure:"huawei" json:"huawei" yaml:"huawei"`
-	RTSP     RTSPConfig     `mapstructure:"rtsp" json:"rtsp" yaml:"rtsp"`
-	FFmpeg   FFmpegConfig   `mapstructure:"ffmpeg" json:"ffmpeg" yaml:"ffmpeg"`
-	OSS      OSSConfig      `mapstructure:"oss" json:"oss" yaml:"oss"`
-	Tingwu   TingwuConfig   `mapstructure:"tingwu" json:"tingwu" yaml:"tingwu"`
-	Python   PythonConfig   `mapstructure:"python" json:"python" yaml:"python"`
+	Server        ServerConfig        `mapstructure:"server" json:"server" yaml:"server"`
+	Database      DatabaseConfig      `mapstructure:"database" json:"database" yaml:"database"`
+	Auth          AuthConfig          `mapstructure:"auth" json:"auth" yaml:"auth"`
+	Logging       LoggingConfig       `mapstructure:"logging" json:"logging" yaml:"logging"`
+	Storage       StorageConfig       `mapstructure:"storage" json:"storage" yaml:"storage"`
+	Huawei        HuaweiConfig        `mapstructure:"huawei" json:"huawei" yaml:"huawei"`
+	RTSP          RTSPConfig          `mapstructure:"rtsp" json:"rtsp" yaml:"rtsp"`
+	FFmpeg        FFmpegConfig        `mapstructure:"ffmpeg" json:"ffmpeg" yaml:"ffmpeg"`
+	OSS           OSSConfig           `mapstructure:"oss" json:"oss" yaml:"oss"`
+	Tingwu        TingwuConfig        `mapstructure:"tingwu" json:"tingwu" yaml:"tingwu"`
+	Python        PythonConfig        `mapstructure:"python" json:"python" yaml:"python"`
+	Admin         AdminConfig         `mapstructure:"admin" json:"admin" yaml:"admin"`
+	Transcription TranscriptionConfig `mapstructure:"transcription" json:"transcription" yaml:"transcription"`
 }
 
 // ServerConfig 服务器配置
@@ -165,6 +167,8 @@ type FFmpegConfig struct {
 	DefaultFormat       string        `mapstructure:"default_format" json:"default_format" yaml:"default_format"`
 	DefaultVideoBitrate string        `mapstructure:"default_video_bitrate" json:"default_video_bitrate" yaml:"default_video_bitrate"`
 	DefaultAudioBitrate string        `mapstructure:"default_audio_bitrate" json:"default_audio_bitrate" yaml:"default_audio_bitrate"`
+	// HLSRewriteConcurrency 控制 HLS 改写 handler 的并发度（PERF-005/D-03.8 默认 2）。
+	HLSRewriteConcurrency int `mapstructure:"hls_rewrite_concurrency" json:"hls_rewrite_concurrency" yaml:"hls_rewrite_concurrency"`
 	// 视频编码质量控制
 	CRF             int    `mapstructure:"crf" json:"crf" yaml:"crf"`                                           // CRF质量值（0-51，值越小质量越高，推荐23）
 	Preset          string `mapstructure:"preset" json:"preset" yaml:"preset"`                                  // 编码速度预设（ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow）
@@ -203,6 +207,16 @@ type TingwuConfig struct {
 // PythonConfig Python依赖配置
 type PythonConfig struct {
 	PreferUV bool `mapstructure:"prefer_uv" json:"prefer_uv" yaml:"prefer_uv"` // 优先使用uv管理Python依赖
+}
+
+// AdminConfig 管理后台配置（PERF-005/D-03.8 bounded concurrency 字段）
+type AdminConfig struct {
+	MigrationConcurrency int `mapstructure:"migration_concurrency" json:"migration_concurrency" yaml:"migration_concurrency"` // 迁移 handler 并发度
+}
+
+// TranscriptionConfig 转录配置（PERF-005/D-03.8）
+type TranscriptionConfig struct {
+	BatchConcurrency int `mapstructure:"batch_concurrency" json:"batch_concurrency" yaml:"batch_concurrency"` // 批量转录 handler 并发度
 }
 
 // expandEnvWithDefault 展开环境变量，支持 ${VAR:default} 格式
@@ -505,6 +519,16 @@ func setDefaults(cfg *Config) {
 	if cfg.FFmpeg.MaxRecordingDuration == 0 {
 		cfg.FFmpeg.MaxRecordingDuration = 24 * time.Hour
 	}
+	// PERF-005/D-03.8: 三个 handler 的有界并发度默认值。
+	if cfg.FFmpeg.HLSRewriteConcurrency == 0 {
+		cfg.FFmpeg.HLSRewriteConcurrency = 2 // FFmpeg 较重，默认较低
+	}
+	if cfg.Admin.MigrationConcurrency == 0 {
+		cfg.Admin.MigrationConcurrency = 4
+	}
+	if cfg.Transcription.BatchConcurrency == 0 {
+		cfg.Transcription.BatchConcurrency = 4
+	}
 
 	// Huawei config defaults
 	if cfg.Huawei.ConferencePort == 0 {
@@ -698,6 +722,10 @@ func bindSecretEnv(v *viper.Viper) {
 	_ = v.BindEnv("auth.hls_token_secret", "HLS_TOKEN_SECRET")
 	_ = v.BindEnv("huawei.insecure_skip_verify", "HUAWEI_INSECURE_SKIP_VERIFY")
 	_ = v.BindEnv("huawei.min_tls_version", "HUAWEI_MIN_TLS_VERSION")
+	// PERF-005/D-03.8: 三个 handler 的有界并发度可通过环境变量覆盖。
+	_ = v.BindEnv("admin.migration_concurrency", "ADMIN_MIGRATION_CONCURRENCY")
+	_ = v.BindEnv("transcription.batch_concurrency", "TRANSCRIPTION_BATCH_CONCURRENCY")
+	_ = v.BindEnv("ffmpeg.hls_rewrite_concurrency", "FFMPEG_HLS_REWRITE_CONCURRENCY")
 }
 
 // ValidateProductionSecrets 在生产环境强制校验 SM4/HLS Token 密钥：

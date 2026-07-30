@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth/hlstoken"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
@@ -736,24 +737,56 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 }
 
 // rewriteM3U8WithToken 重写 m3u8 播放列表，在分段 URL 中添加 token 参数
+// PERF-005/D-03.8: 对 .ts/.m3u8 分段 URL 的 tokenize 改用 bounded concurrency，
+// 限制在 cfg.FFmpeg.HLSRewriteConcurrency（默认 2）以避免突发请求耗尽 FFmpeg 子进程槽位。
 func (h *VideoRecordingTaskHandler) rewriteM3U8WithToken(content string, token string, taskID uint) string {
 	lines := strings.Split(content, "\n")
-	var result []string
-
 	tokenParam := fmt.Sprintf("?token=%s", token)
+	_ = taskID
 
-	for _, line := range lines {
+	result := make([]string, len(lines))
+	copy(result, lines)
+
+	// 收集需要添加 token 的行下标。
+	indices := make([]int, 0, len(lines))
+	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		// 跳过空行和注释行
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			result = append(result, line)
-		} else if strings.HasSuffix(trimmed, ".ts") || strings.HasSuffix(trimmed, ".m3u8") {
-			// 这是分段 URL 或子播放列表，添加 token 参数
-			result = append(result, trimmed+tokenParam)
-		} else {
-			result = append(result, line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") &&
+			(strings.HasSuffix(trimmed, ".ts") || strings.HasSuffix(trimmed, ".m3u8")) {
+			indices = append(indices, i)
 		}
 	}
+
+	if len(indices) == 0 {
+		return content
+	}
+
+	concurrency := 2
+	if h.config != nil && h.config.FFmpeg.HLSRewriteConcurrency > 0 {
+		concurrency = h.config.FFmpeg.HLSRewriteConcurrency
+	}
+	if concurrency > len(indices) {
+		concurrency = len(indices)
+	}
+
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	for _, idx := range indices {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					h.logger.Error("m3u8 rewrite worker panicked",
+						zap.Any("recover", r), zap.Stack("stack"))
+				}
+			}()
+			result[i] = strings.TrimSpace(lines[i]) + tokenParam
+		}(idx)
+	}
+	wg.Wait()
 
 	return strings.Join(result, "\n")
 }

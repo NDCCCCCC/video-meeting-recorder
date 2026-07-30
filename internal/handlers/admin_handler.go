@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
@@ -270,66 +271,95 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 	migratedCount := 0
 	skippedCount := 0
 
+	// PERF-005/D-03.8: 将每条记录的迁移工作改为 bounded concurrency，缩短 handler 响应时间。
+	// 注意：仍使用同一个 tx（共享事务），所有迁移在同一 SQL 事务内成功后才统一 Commit。
+	concurrency := h.cfg.Admin.MigrationConcurrency
+	if concurrency <= 0 {
+		concurrency = 4
+	}
+	if concurrency > len(huaweiConfigs) {
+		concurrency = len(huaweiConfigs)
+	}
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
 	for _, hc := range huaweiConfigs {
-		// Check if already migrated (by name matching)
-		var existingCount int64
-		tx.Table("input_configs").
-			Where("name = ? AND created_at = ?", hc.Name, hc.CreatedAt).
-			Count(&existingCount)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(hc HuaweiConfigRow) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					h.logger.Error("admin migration worker panicked",
+						zap.Any("recover", r), zap.Stack("stack"))
+				}
+			}()
+			// 内联迁移：因 HuaweiConfigRow 是 handler 内本地类型，无法移到包级 helper。
+			var existingCount int64
+			if err := tx.Table("input_configs").
+				Where("name = ? AND created_at = ?", hc.Name, hc.CreatedAt).
+				Count(&existingCount).Error; err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				return
+			}
+			if existingCount > 0 {
+				mu.Lock()
+				skippedCount++
+				mu.Unlock()
+				return
+			}
+			configType := "usb"
+			if hc.USBCameraDevice == "" && hc.StreamURL != "" {
+				configType = "stream"
+			}
+			hwEnabled := hc.Server != "" && hc.Username != "" && hc.TerminalNumber != ""
+			insertSQL := `
+				INSERT INTO input_configs (
+					created_at, updated_at, deleted_at,
+					name, description, config_type, huawei_enabled,
+					server, port, username, password, terminal_number, conference_number,
+					camera_backend, usb_camera_name, usb_camera_device, camera_binding_status,
+					audio_backend, usb_audio_name, usb_audio_device, audio_binding_status,
+					output_format,
+					stream_protocol, stream_url, stream_username, stream_password, stream_enabled,
+					is_active, is_locked, locked_by, locked_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`
+			if err := tx.Exec(insertSQL,
+				hc.CreatedAt, hc.UpdatedAt, hc.DeletedAt,
+				hc.Name, hc.Description, configType, hwEnabled,
+				hc.Server, hc.Port, hc.Username, hc.Password, hc.TerminalNumber, hc.ConferenceNumber,
+				hc.CameraBackend, hc.USBCameraName, hc.USBCameraDevice, hc.CameraBindingStatus,
+				hc.AudioBackend, hc.USBAudioName, hc.USBAudioDevice, hc.AudioBindingStatus,
+				hc.OutputFormat,
+				hc.StreamProtocol, hc.StreamURL, hc.StreamUsername, hc.StreamPassword, hc.StreamEnabled,
+				hc.IsActive, hc.IsLocked, hc.LockedBy, hc.LockedAt,
+			).Error; err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				return
+			}
+			mu.Lock()
+			migratedCount++
+			mu.Unlock()
+		}(hc)
+	}
+	wg.Wait()
 
-		if existingCount > 0 {
-			skippedCount++
-			continue
-		}
-
-		// Determine config_type based on existing configuration
-		// Priority: USB device > Stream > default to USB
-		configType := "usb"
-		if hc.USBCameraDevice == "" && hc.StreamURL != "" {
-			configType = "stream"
-		}
-
-		// Determine huawei_enabled based on whether Huawei fields are configured
-		huaweiEnabled := hc.Server != "" && hc.Username != "" && hc.TerminalNumber != ""
-
-		// Insert into input_configs
-		insertSQL := `
-			INSERT INTO input_configs (
-				created_at, updated_at, deleted_at,
-				name, description,
-				config_type, huawei_enabled,
-				server, port, username, password, terminal_number, conference_number,
-				camera_backend, usb_camera_name, usb_camera_device, camera_binding_status,
-				audio_backend, usb_audio_name, usb_audio_device, audio_binding_status,
-				output_format,
-				stream_protocol, stream_url, stream_username, stream_password, stream_enabled,
-				is_active, is_locked, locked_by, locked_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`
-
-		result := tx.Exec(insertSQL,
-			hc.CreatedAt, hc.UpdatedAt, hc.DeletedAt,
-			hc.Name, hc.Description,
-			configType, huaweiEnabled, // D-10: set config_type and huawei_enabled
-			hc.Server, hc.Port, hc.Username, hc.Password, hc.TerminalNumber, hc.ConferenceNumber,
-			hc.CameraBackend, hc.USBCameraName, hc.USBCameraDevice, hc.CameraBindingStatus,
-			hc.AudioBackend, hc.USBAudioName, hc.USBAudioDevice, hc.AudioBindingStatus,
-			hc.OutputFormat,
-			hc.StreamProtocol, hc.StreamURL, hc.StreamUsername, hc.StreamPassword, hc.StreamEnabled,
-			hc.IsActive, hc.IsLocked, hc.LockedBy, hc.LockedAt,
-		)
-
-		if result.Error != nil {
-			h.logger.Error("Failed to migrate config",
-				zap.Uint("config_id", hc.ID),
-				zap.Error(result.Error),
-			)
-			tx.Rollback()
-			response.GinError(c, response.CodeInternalError, "迁移失败：无法写入目标数据")
-			return
-		}
-
-		migratedCount++
+	if firstErr != nil {
+		h.logger.Error("Failed to migrate config", zap.Error(firstErr))
+		tx.Rollback()
+		response.GinError(c, response.CodeInternalError, "迁移失败：无法写入目标数据")
+		return
 	}
 
 	// Commit transaction
@@ -352,3 +382,6 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 		"message":  fmt.Sprintf("成功迁移 %d 条配置（跳过 %d 条已存在记录）", migratedCount, skippedCount),
 	})
 }
+
+// migrateOneHuaweiConfig 已被内联到 MigrateHuaweiConfigsHandler 的 PERF-005 闭包中，
+// 因为 HuaweiConfigRow 是 handler 内本地类型，无法在包级 helper 中引用。

@@ -3,7 +3,9 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"sync"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
@@ -17,6 +19,7 @@ type TranscriptionHandler struct {
 	transcriptionService *services.TranscriptionService
 	videoFileService     *services.VideoFileService
 	timestampMapper      *services.TimestampMapper
+	cfg                  *config.Config
 	logger               *zap.Logger
 }
 
@@ -25,12 +28,14 @@ func NewTranscriptionHandler(
 	transcriptionService *services.TranscriptionService,
 	videoFileService *services.VideoFileService,
 	timestampMapper *services.TimestampMapper,
+	cfg *config.Config,
 	logger *zap.Logger,
 ) *TranscriptionHandler {
 	return &TranscriptionHandler{
 		transcriptionService: transcriptionService,
 		videoFileService:     videoFileService,
 		timestampMapper:      timestampMapper,
+		cfg:                  cfg,
 		logger:               logger,
 	}
 }
@@ -343,17 +348,56 @@ func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	isAdmin := middleware.CanAccessAllData(c)
 
-	// 验证文件所有权
+	// PERF-005/D-03.8: 所有权校验改为 bounded concurrency，缩短大批量请求的延迟。
+	concurrency := h.cfg.Transcription.BatchConcurrency
+	if concurrency <= 0 {
+		concurrency = 4
+	}
+	if concurrency > len(req.VideoFileIDs) {
+		concurrency = len(req.VideoFileIDs)
+	}
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	var checkErr string
+	var checkMu sync.Mutex
 	for _, videoFileID := range req.VideoFileIDs {
-		file, err := h.videoFileService.GetFileByID(videoFileID)
-		if err != nil {
-			response.GinError(c, response.CodeNotFound, fmt.Sprintf("视频文件 %d 不存在", videoFileID))
-			return
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(id uint) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					h.logger.Error("batch ownership check panicked",
+						zap.Any("recover", r), zap.Stack("stack"))
+				}
+			}()
+			file, err := h.videoFileService.GetFileByID(id)
+			if err != nil {
+				checkMu.Lock()
+				if checkErr == "" {
+					checkErr = fmt.Sprintf("视频文件 %d 不存在", id)
+				}
+				checkMu.Unlock()
+				return
+			}
+			if !isAdmin && file.CreatedBy != userID {
+				checkMu.Lock()
+				if checkErr == "" {
+					checkErr = fmt.Sprintf("无权操作视频文件 %d", id)
+				}
+				checkMu.Unlock()
+			}
+		}(videoFileID)
+	}
+	wg.Wait()
+	if checkErr != "" {
+		if checkErr != "" && (checkErr[:len("视频文件")] == "视频文件") {
+			response.GinError(c, response.CodeNotFound, checkErr)
+		} else {
+			response.GinError(c, response.CodeForbidden, checkErr)
 		}
-		if !isAdmin && file.CreatedBy != userID {
-			response.GinError(c, response.CodeForbidden, fmt.Sprintf("无权操作视频文件 %d", videoFileID))
-			return
-		}
+		return
 	}
 
 	// 调用服务层
