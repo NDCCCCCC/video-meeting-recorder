@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -11,6 +12,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+// auditBodyBufPool 复用 Request.Body 读取缓冲（PERF-007）。
+// 每个请求 body 的中转 buffer 用完即还池，避免每个请求都重新分配。
+var auditBodyBufPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
 
 // AuditMiddleware 审计日志中间件
 type AuditMiddleware struct {
@@ -42,8 +51,12 @@ func (m *AuditMiddleware) AuditOperation(module, action string) gin.HandlerFunc 
 		if c.Request.Method != "GET" && c.Request.ContentLength > 0 {
 			body, err := io.ReadAll(c.Request.Body)
 			if err == nil && len(body) > 0 {
-				// 重新设置请求体，以便后续处理器可以读取
-				c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+				// 重新设置请求体，以便后续处理器可以读取（PERF-007：复用 buffer）
+				buf := auditBodyBufPool.Get().(*bytes.Buffer)
+				buf.Reset()
+				buf.Write(body)
+				c.Request.Body = io.NopCloser(buf)
+				defer auditBodyBufPool.Put(buf)
 				if err := json.Unmarshal(body, &requestBody); err != nil {
 					m.logger.Warn("请求体 JSON 解析失败", zap.Error(err))
 					requestBody = nil

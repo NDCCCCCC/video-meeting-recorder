@@ -16,6 +16,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// snapshotCopyBufPool 复用 snapshot 服务 partial-MKV copy 的 32KB chunk buffer（PERF-007）。
+var snapshotCopyBufPool = sync.Pool{
+	New: func() interface{} {
+		buf := make([]byte, 32*1024)
+		return &buf
+	},
+}
+
 type SnapshotService struct {
 	db               *gorm.DB
 	logger           *zap.Logger
@@ -292,7 +300,9 @@ func copyFile(src, dst string) error {
 	defer destFile.Close()
 
 	// Read from source in chunks (allows reading partial files being written to)
-	buf := make([]byte, 32*1024)
+	bufPtr := snapshotCopyBufPool.Get().(*[]byte)
+	defer snapshotCopyBufPool.Put(bufPtr)
+	buf := *bufPtr
 	for {
 		n, err := sourceFile.Read(buf)
 		if n > 0 {

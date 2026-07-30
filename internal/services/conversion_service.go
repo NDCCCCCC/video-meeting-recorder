@@ -16,6 +16,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// conversionCmdBufPool 复用 FFmpeg 转换时 stdout/stderr 捕获 buffer（PERF-007）。
+var conversionCmdBufPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
 // ConversionService 转换服务接口
 type ConversionService interface {
 	// SubmitConversion 提交转换任务
@@ -361,11 +368,19 @@ func (s *FFmpegConversionService) convertMKVToMP4(ctx context.Context, task *mod
 		zap.Any("args", args),
 	)
 
-	// 执行转换，捕获输出用于错误诊断
+	// 执行转换，捕获输出用于错误诊断（PERF-007：复用 buffer）
+	stdout := conversionCmdBufPool.Get().(*bytes.Buffer)
+	stdout.Reset()
+	stderr := conversionCmdBufPool.Get().(*bytes.Buffer)
+	stderr.Reset()
+	defer func() {
+		conversionCmdBufPool.Put(stdout)
+		conversionCmdBufPool.Put(stderr)
+	}()
+
 	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	s.logger.Info("正在执行FFmpeg转换",
 		zap.Uint("task_id", task.ID),

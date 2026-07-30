@@ -10,10 +10,18 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+// frameCaptureCmdBufPool 复用 FrameCaptureService 中 ffprobe 调用的 stdout/stderr buffer（PERF-007）。
+var frameCaptureCmdBufPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
 
 // FrameCaptureService handles capturing frames from videos at specific timestamps
 type FrameCaptureService struct {
@@ -195,10 +203,19 @@ func (s *FrameCaptureService) GetVideoDuration(ctx context.Context, videoPath st
 	}
 
 	// WR-04: Use CommandContext to respect timeout
+	// PERF-007：ffprobe 输出 buffer 复用
+	stdout := frameCaptureCmdBufPool.Get().(*bytes.Buffer)
+	stdout.Reset()
+	stderr := frameCaptureCmdBufPool.Get().(*bytes.Buffer)
+	stderr.Reset()
+	defer func() {
+		frameCaptureCmdBufPool.Put(stdout)
+		frameCaptureCmdBufPool.Put(stderr)
+	}()
+
 	cmd := exec.CommandContext(ctx, s.ffprobePath, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
 		return 0, fmt.Errorf("ffprobe failed: %w, stderr: %s", err, stderr.String())
