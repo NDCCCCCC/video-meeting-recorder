@@ -196,7 +196,7 @@ func (s *RoleService) AssignPermissions(roleID uint, req *AssignPermissionsReque
 
 	// 验证权限ID是否存在
 	var permissions []models.Permission
-	if err := s.db.Find(&permissions, req.PermissionIDs).Error; err != nil {
+	if err := s.db.Limit(1000).Find(&permissions, req.PermissionIDs).Error; err != nil {
 		return nil, nil, err
 	}
 	if len(permissions) != len(req.PermissionIDs) {
@@ -230,7 +230,8 @@ func (s *RoleService) GetRolePermissions(roleID uint) ([]models.Permission, erro
 // GetAllPermissions 获取所有权限
 func (s *RoleService) GetAllPermissions() ([]models.Permission, error) {
 	var permissions []models.Permission
-	if err := s.db.Order("resource, action").Find(&permissions).Error; err != nil {
+	// PERF-002: 列表查询加 Limit 上限。
+	if err := s.db.Order("resource, action").Limit(1000).Find(&permissions).Error; err != nil {
 		return nil, err
 	}
 	return permissions, nil

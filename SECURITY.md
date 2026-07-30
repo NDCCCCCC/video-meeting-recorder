@@ -97,6 +97,37 @@ cd frontend && npm run build
 
 部署文档：`DEPLOYMENT.md`
 
+## SECRET 校验
+
+生产环境启动时（`server.environment == "production"`），后端对关键密钥执行强制校验：
+
+- `SM4_SECRET` 长度 ≥ 32 字符；
+- `HLS_TOKEN_SECRET` 长度 ≥ 32 字符，且与 `SM4_SECRET` 互不相同。
+
+若任一校验失败，进程以 `logger.Fatal` 退出（不可降级为 warn）。非生产环境仅打印 `Warn` 级别日志，不阻止启动。详见 `internal/config/config.go:ValidateProductionSecrets`。
+
+历史上代码曾存在 `change-me-in-production` 硬编码 fallback，已在 Phase 17 中删除——不再有"忘记配置也能启动"的危险路径。
+
+## HLS Token 安全
+
+HLS Token（`internal/auth/hlstoken/hls_token.go`）当前的安全保证：
+
+- **密钥长度**：构造函数 `NewHLSToken` 强制密钥 ≥ 32 字符，否则 `panic`。
+- **HMAC 编码**：签发使用 `base64.RawURLEncoding`（无 padding）。`Verify()` 同时接受 `RawURLEncoding` / `URLEncoding` / `StdEncoding` 三种签名编码，保证**重启后旧 token 仍可验证一次**（D-03.3 向后兼容承诺）。
+- **防重放**：每次签发的 token 含 16 字节随机 `jti` 字段；同一 jti 在进程生命周期内只能验证通过一次，第二次返回 `ErrTokenReplayed`。局限：进程重启后记录清零；服务端持久化 `used_jtis`（Redis/DB）列入下个独立 phase。
+
+## TLS 最低版本
+
+华为会议系统 TLS 客户端（`internal/huawei/manager.go`）：
+
+- **`MinTLSVersion` 默认 `tls.VersionTLS12`**（TLS 1.2 强制最低）；
+- **`InsecureSkipVerify` 默认 `false`**（证书校验启用）；
+- **生产环境 `HUAWEI_INSECURE_SKIP_VERIFY=true` → `logger.Fatal`**（defense-in-depth）；
+- **密码套件**：`CipherSuites` 已剔除基于 3DES 的弱套件（SWEET32 攻击面），优先 ECDHE 前向保密套件（AES-GCM、CHACHA20），并保留 RSA-AES 兼容华为老设备；
+- **入站 HTTP 调用**：`removeClient` 已透传调用方 `ctx`，不再使用 `context.Background()`，可被优雅退出级联。
+
+历史残留的 `MinTLSVersion: 0x0301`（TLS 1.0）、`InsecureSkipVerify: true`、3DES cipher 硬编码均已在 Phase 17 中移除。
+
 ## 恢复操作
 
 如果未来需要恢复某个被 filter-repo 删除的文件内容（误删），可从原始备份恢复：

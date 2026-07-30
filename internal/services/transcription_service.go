@@ -909,6 +909,12 @@ func (s *TranscriptionService) StartOSSCleanupScheduler() {
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("cleanupOrphanedOSSFiles goroutine panicked",
+					zap.Any("recover", r), zap.Stack("stack"))
+			}
+		}()
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 

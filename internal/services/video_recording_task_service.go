@@ -13,6 +13,8 @@ import (
 )
 
 // VideoRecordingTaskService 视频录制任务服务
+// PERF-003 deferred (per CONTEXT.md): 本 service 的方法均无 ctx 参数，无法在 DB 调用上
+// 加 .WithContext(ctx)；全面 ctx 透传需独立 phase 处理 403 处签名级联。
 type VideoRecordingTaskService struct {
 	db        *gorm.DB
 	logger    *zap.Logger
@@ -311,6 +313,12 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 	// 同步任务到调度器（使用 goroutine 避免阻塞请求）
 	if s.scheduler != nil {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					s.logger.Error("scheduler sync goroutine panicked",
+						zap.Any("recover", r), zap.Stack("stack"))
+				}
+			}()
 			if err := s.scheduler.SyncPendingTasks(); err != nil {
 				s.logger.Error("同步任务到调度器失败",
 					zap.Uint("task_id", task.ID),
@@ -472,18 +480,18 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin boo
 	oldTask := task
 
 	// 删除前先解锁所有关联的输入配置（防止锁遗留）
-	var taskConfigs []models.TaskInputConfig
-	if err := s.db.Where("task_id = ?", id).Find(&taskConfigs).Error; err == nil {
-		for _, tc := range taskConfigs {
-			updates := map[string]interface{}{
+	// PERF-001: 改 Pluck + IN 批量更新，消除 N+1（原每配置一次 UPDATE）。
+	var configIDs []uint
+	if err := s.db.Model(&models.TaskInputConfig{}).Where("task_id = ?", id).Pluck("input_config_id", &configIDs).Error; err == nil {
+		if len(configIDs) > 0 {
+			s.db.Model(&models.InputConfig{}).Where("id IN ?", configIDs).Updates(map[string]interface{}{
 				"is_locked": false,
 				"locked_by": nil,
-			}
-			s.db.Model(&models.InputConfig{}).Where("id = ?", tc.InputConfigID).Updates(updates)
+			})
 		}
 		s.logger.Info("删除任务时解锁终端",
 			zap.Uint("task_id", id),
-			zap.Int("unlocked_configs", len(taskConfigs)),
+			zap.Int("unlocked_configs", len(configIDs)),
 		)
 	}
 
@@ -551,7 +559,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 
 	// Snapshot requested tasks BEFORE any deletion or filtering — for audit OldData capture
 	var oldTasks []models.VideoRecordingTask
-	if err := s.db.Where("id IN ?", ids).Find(&oldTasks).Error; err != nil {
+	if err := s.db.Where("id IN ?", ids).Limit(5000).Find(&oldTasks).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -579,16 +587,14 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 	}
 
 	// 删除前先解锁所有待删除任务的输入配置（防止锁遗留）
-	for _, taskID := range result.DeletedIDs {
-		var taskConfigs []models.TaskInputConfig
-		if err := s.db.Where("task_id = ?", taskID).Find(&taskConfigs).Error; err == nil {
-			for _, tc := range taskConfigs {
-				updates := map[string]interface{}{
-					"is_locked": false,
-					"locked_by": nil,
-				}
-				s.db.Model(&models.InputConfig{}).Where("id = ?", tc.InputConfigID).Updates(updates)
-			}
+	// PERF-001: 单次 Pluck 跨所有待删除任务 + 单次批量 UPDATE，消除双层 N+1。
+	var batchConfigIDs []uint
+	if err := s.db.Model(&models.TaskInputConfig{}).Where("task_id IN ?", result.DeletedIDs).Pluck("input_config_id", &batchConfigIDs).Error; err == nil {
+		if len(batchConfigIDs) > 0 {
+			s.db.Model(&models.InputConfig{}).Where("id IN ?", batchConfigIDs).Updates(map[string]interface{}{
+				"is_locked": false,
+				"locked_by": nil,
+			})
 		}
 	}
 	s.logger.Info("批量删除任务时解锁终端",
@@ -784,9 +790,12 @@ func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint, hasSharedVie
 	task.RecordingDuration = 0
 
 	// 重新计算触发时间 (当前时间 + 1分钟)
+	// BUG-001 修复：必须先捕获原时长，再改 StartTime，否则 EndTime.Sub(StartTime) 读取的
+	// 是已被改写的 StartTime，得到 oldEnd-newStart（负数或离谱值），静默损坏任务时长。
 	newTriggerTime := time.Now().Add(1 * time.Minute)
+	duration := task.EndTime.Sub(task.StartTime)
 	task.StartTime = newTriggerTime.Add(time.Duration(task.PreJoinMinutes) * time.Minute)
-	task.EndTime = task.StartTime.Add(task.EndTime.Sub(task.StartTime))
+	task.EndTime = task.StartTime.Add(duration)
 
 	if err := s.db.Save(&task).Error; err != nil {
 		return nil, err
@@ -795,6 +804,12 @@ func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint, hasSharedVie
 	// 重新调度任务
 	if s.scheduler != nil {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					s.logger.Error("RetryTask scheduler sync goroutine panicked",
+						zap.Any("recover", r), zap.Stack("stack"))
+				}
+			}()
 			if err := s.scheduler.SyncPendingTasks(); err != nil {
 				s.logger.Error("重新调度任务失败",
 					zap.Uint("task_id", id),
@@ -816,7 +831,8 @@ func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint, hasSharedVie
 // GetTasksByStatus 根据状态获取任务列表
 func (s *VideoRecordingTaskService) GetTasksByStatus(status models.VideoRecordingTaskStatus) ([]models.VideoRecordingTask, error) {
 	var tasks []models.VideoRecordingTask
-	if err := s.db.Where("status = ?", status).Find(&tasks).Error; err != nil {
+	// PERF-002: 列表查询加 Limit 上限，防止数据增长后全表扫描。
+	if err := s.db.Where("status = ?", status).Limit(1000).Find(&tasks).Error; err != nil {
 		return nil, err
 	}
 	return tasks, nil
@@ -896,7 +912,7 @@ func (s *VideoRecordingTaskService) validateConfigTypes(configIDs []uint) error 
 	}
 
 	var configs []models.InputConfig
-	if err := s.db.Where("id IN ?", configIDs).Find(&configs).Error; err != nil {
+	if err := s.db.Where("id IN ?", configIDs).Limit(1000).Find(&configs).Error; err != nil {
 		return err
 	}
 
@@ -961,7 +977,8 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearS
 
 	// 查找所有 converting 状态且超过超时时间的任务
 	var stuckTasks []models.VideoRecordingTask
-	if err := s.db.Where("status = ? AND updated_at < ?", models.VideoStatusConverting, timeout).Find(&stuckTasks).Error; err != nil {
+	// PERF-002: 清理路径加 Limit 上限（bounded cleanup）。
+	if err := s.db.Where("status = ? AND updated_at < ?", models.VideoStatusConverting, timeout).Limit(5000).Find(&stuckTasks).Error; err != nil {
 		return nil, fmt.Errorf("查询卡住任务失败: %w", err)
 	}
 
@@ -994,22 +1011,21 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearS
 		}
 		result.ClearedTaskIDs = append(result.ClearedTaskIDs, task.ID)
 
-		// 释放所有关联的输入配置锁
-		var taskConfigs []models.TaskInputConfig
-		if err := s.db.Where("task_id = ?", task.ID).Find(&taskConfigs).Error; err == nil {
-			for _, tc := range taskConfigs {
-				updates := map[string]interface{}{
+		// 释放所有关联的输入配置锁（PERF-001: Pluck + IN 批量更新，消除每配置一次 UPDATE）
+		var configIDs []uint
+		if err := s.db.Model(&models.TaskInputConfig{}).Where("task_id = ?", task.ID).Pluck("input_config_id", &configIDs).Error; err == nil {
+			if len(configIDs) > 0 {
+				if err := s.db.Model(&models.InputConfig{}).Where("id IN ?", configIDs).Updates(map[string]interface{}{
 					"is_locked": false,
 					"locked_by": nil,
 					"locked_at": nil,
-				}
-				if err := s.db.Model(&models.InputConfig{}).Where("id = ?", tc.InputConfigID).Updates(updates).Error; err == nil {
-					result.UnlockedConfigIDs = append(result.UnlockedConfigIDs, tc.InputConfigID)
+				}).Error; err == nil {
+					result.UnlockedConfigIDs = append(result.UnlockedConfigIDs, configIDs...)
 				}
 			}
 			s.logger.Info("已释放终端锁",
 				zap.Uint("task_id", task.ID),
-				zap.Int("unlocked_count", len(taskConfigs)),
+				zap.Int("unlocked_count", len(configIDs)),
 			)
 		}
 

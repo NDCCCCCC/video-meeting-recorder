@@ -278,6 +278,12 @@ func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*mo
 
 	// 异步删除物理文件（传递上下文并记录错误）
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("async file delete goroutine panicked",
+					zap.Any("recover", r), zap.Stack("stack"))
+			}
+		}()
 		driver, ok := s.drivers[models.StorageType(file.StorageType)]
 		if !ok {
 			s.logger.Warn("Storage driver not found for async file deletion",

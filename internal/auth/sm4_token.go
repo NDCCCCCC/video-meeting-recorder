@@ -392,6 +392,12 @@ func (s *SM4TokenService) RefreshAccessToken(refreshToken string) (*TokenPair, e
 
 	// 启动后台任务：在宽限期过后撤销旧 token
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("GracePeriod revoke goroutine panicked",
+					zap.Any("recover", r), zap.Stack("stack"))
+			}
+		}()
 		time.Sleep(GracePeriod)
 		s.db.Model(&models.Session{}).
 			Where("token = ? AND is_active = ?", refreshToken, true).

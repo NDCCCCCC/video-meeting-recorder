@@ -138,4 +138,22 @@ export ALIYUN_ACCESS_KEY_ID="<your-key>"
 
 ---
 
-最后更新：2026-07-24
+## 7. viper 环境变量绑定（Phase 17 P0 修复）
+
+历史代码曾配置 viper 的环境变量前缀为 `RECORD`（即查找 `RECORD_*` 环境变量），但部署文档
+与 `.env.example` 全部使用无前缀的 `SM4_SECRET` / `HLS_TOKEN_SECRET` 等名称，导致运维设置的
+环境变量无法生效。Phase 17 已改为 `BindEnv` 显式映射（见 `internal/config/config.go:bindSecretEnv`）：
+
+| 环境变量 | viper key |
+|----------|-----------|
+| `SM4_SECRET` | `auth.sm4_secret` |
+| `HLS_TOKEN_SECRET` | `auth.hls_token_secret` |
+| `HUAWEI_INSECURE_SKIP_VERIFY` | `huawei.insecure_skip_verify` |
+| `HUAWEI_MIN_TLS_VERSION` | `huawei.min_tls_version` |
+
+**重要**：上述环境变量名**大小写敏感**（viper 默认行为）。`config.yaml` 内可继续使用
+`${SM4_SECRET:}` 等语法作为辅助注入路径，最终由显式 `BindEnv` 覆写。
+
+---
+
+最后更新：2026-07-30

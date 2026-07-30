@@ -590,6 +590,12 @@ func (c *HuaweiClient) StartKeepAlive(ctx context.Context) {
 
 	ticker := time.NewTicker(c.config.KeepAliveInterval)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				c.logger.Error("keep-alive goroutine panicked",
+					zap.Any("recover", r), zap.Stack("stack"))
+			}
+		}()
 		defer ticker.Stop()
 		for {
 			select {

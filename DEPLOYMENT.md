@@ -128,5 +128,24 @@ npm run dev        # 开发热更新
 
 ---
 
-*部署文档版本: 1.1*
-*最后更新: 2026-07-24*
+## 环境变量与启动校验
+
+下表列出本版本（Phase 17 P0 之后）支持的密钥类环境变量及其启动校验行为：
+
+| 变量名 | 必填 | 校验规则 | 缺失/不合规时的行为 |
+|--------|------|----------|----------------------|
+| `SM4_SECRET` | 是 | 最小 32 字符 | 生产环境：`logger.Fatal` 终止启动；非生产：Warn |
+| `HLS_TOKEN_SECRET` | 是 | 最小 32 字符，且与 `SM4_SECRET` 互不相同 | 生产环境：`logger.Fatal` 终止启动；非生产：Warn |
+| `HUAWEI_MIN_TLS_VERSION` | 否 | "1.2"（默认）/ "1.3"；TLS 1.0 强制提升为 1.2 | 非法值归一化为 TLS 1.2 |
+| `HUAWEI_INSECURE_SKIP_VERIFY` | 否 | 默认 `false`；生产环境强制 `false` | 生产环境为 `true` 时：`logger.Fatal` 终止启动 |
+
+### 启动校验行为
+
+- **生产环境** (`server.environment == "production"`): 若 `SM4_SECRET` 或 `HLS_TOKEN_SECRET` 长度 < 32 字符、或两者相同、或 `HUAWEI_INSECURE_SKIP_VERIFY=true`，进程以 `logger.Fatal` 退出（不可降级为 warn）。
+- **非生产环境**: 仅打印 `Warn` 级别日志，不阻止启动，便于本地开发与测试。
+- **HLS Token 防重放**: 每次签发的 token 含一次性 `jti`；同一 jti 在进程生命周期内只能验证通过一次（重启后旧 token 失效一次后即作废）。
+
+---
+
+*部署文档版本: 1.2*
+*最后更新: 2026-07-30*

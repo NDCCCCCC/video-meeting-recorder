@@ -28,6 +28,14 @@ func logAPIKeyUsage(c *gin.Context, db *gorm.DB, logger *zap.Logger, apiKeyID, u
 	durationMs := int(duration.Milliseconds())
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if logger != nil {
+					logger.Error("api key usage log goroutine panicked",
+						zap.Any("recover", r), zap.Stack("stack"))
+				}
+			}
+		}()
 		log := &models.APIKeyUsageLog{
 			APIKeyID:   apiKeyID,
 			UserID:     userID,

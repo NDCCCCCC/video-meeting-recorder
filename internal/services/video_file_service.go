@@ -361,7 +361,7 @@ func (s *VideoFileService) BatchDeleteFiles(ids []uint) ([]models.VideoFile, *Ba
 
 	// ★ Snapshot OldData BEFORE any delete（含 processing 跳过的也记录——forensic 完整性）
 	var oldFiles []models.VideoFile
-	if err := s.db.Where("id IN ?", ids).Find(&oldFiles).Error; err != nil {
+	if err := s.db.Where("id IN ?", ids).Limit(5000).Find(&oldFiles).Error; err != nil {
 		return nil, result, err
 	}
 
@@ -1043,7 +1043,7 @@ func (s *VideoFileService) CreateSegmentFile(segmentPath string, parentVideoID *
 // GetSegmentsByParentID 根据父视频ID获取所有分割段
 func (s *VideoFileService) GetSegmentsByParentID(parentID uint) ([]models.VideoFile, error) {
 	var segments []models.VideoFile
-	err := s.db.Where("parent_id = ?", parentID).Order("id ASC").Find(&segments).Error
+	err := s.db.Where("parent_id = ?", parentID).Order("id ASC").Limit(1000).Find(&segments).Error
 	return segments, err
 }
 
@@ -1122,7 +1122,8 @@ func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 // getExistingFilesMap 获取已存在文件的映射
 func (s *VideoFileService) getExistingFilesMap() (map[string]bool, error) {
 	var existingFiles []models.VideoFile
-	if err := s.db.Select("file_path").Find(&existingFiles).Error; err != nil {
+	// PERF-002: 清理路径加 Limit 上限（bounded cleanup）。
+	if err := s.db.Select("file_path").Limit(5000).Find(&existingFiles).Error; err != nil {
 		return nil, err
 	}
 
@@ -1456,7 +1457,7 @@ func (s *VideoFileService) extractTaskIDFromPath(path string) *uint {
 func (s *VideoFileService) DeleteSplitSegmentsByParentID(parentID uint, userID uint) (int, error) {
 	// 1. Query segments with ownership and source type validation
 	var segments []models.VideoFile
-	err := s.db.Where("parent_id = ? AND created_by = ? AND source_type IN ?", parentID, userID, []string{"split", "snapshot"}).Find(&segments).Error
+	err := s.db.Where("parent_id = ? AND created_by = ? AND source_type IN ?", parentID, userID, []string{"split", "snapshot"}).Limit(1000).Find(&segments).Error
 	if err != nil {
 		return 0, fmt.Errorf("failed to query segments: %w", err)
 	}
@@ -1548,7 +1549,7 @@ type BatchDownloadFilesResponse struct {
 func (s *VideoFileService) BatchDownloadFiles(ids []uint, userID uint, isAdmin bool) (*BatchDownloadFilesResponse, error) {
 	// 查询所有文件
 	var files []models.VideoFile
-	if err := s.db.Where("id IN ?", ids).Find(&files).Error; err != nil {
+	if err := s.db.Where("id IN ?", ids).Limit(5000).Find(&files).Error; err != nil {
 		return nil, fmt.Errorf("查询文件失败: %w", err)
 	}
 
@@ -1583,6 +1584,12 @@ func (s *VideoFileService) BatchDownloadFiles(ids []uint, userID uint, isAdmin b
 	// 创建流式 ZIP
 	pr, pw := io.Pipe()
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("zip writer goroutine panicked",
+					zap.Any("recover", r), zap.Stack("stack"))
+			}
+		}()
 		defer pw.Close()
 		zipWriter := zip.NewWriter(pw)
 		defer zipWriter.Close()

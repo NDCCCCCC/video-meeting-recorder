@@ -308,7 +308,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 	// 加载任务关联的所有输入配置
 	var taskConfigs []models.TaskInputConfig
-	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs).Error; err != nil {
+	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs).Error; err != nil {
 		s.logger.Error("加载任务关联配置失败", zap.Error(err))
 		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
 		return
@@ -357,7 +357,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 	// 重新加载任务关联的所有输入配置（可能已更新）
 	taskConfigs = nil
-	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs).Error; err != nil {
+	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs).Error; err != nil {
 		s.logger.Error("重新加载任务关联配置失败", zap.Error(err))
 		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
 		return
@@ -563,7 +563,7 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 
 	// 加载任务关联的输入配置
 	var taskConfigs []models.TaskInputConfig
-	s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs)
+	s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
 	
 	// 检查是否有华为控制配置
 	hasHuaweiAuto := false
@@ -1205,7 +1205,7 @@ func (s *VideoSimpleScheduler) UpdateTaskEndTime(taskID uint, newEndTime time.Ti
 func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 	// 加载任务关联的输入配置
 	var taskConfigs []models.TaskInputConfig
-	s.taskService.GetDB().Where("task_id = ?", taskID).Find(&taskConfigs)
+	s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
 	
 	// 检查是否有华为控制配置
 	hasHuaweiAuto := false
