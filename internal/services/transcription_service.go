@@ -777,11 +777,14 @@ func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *model
 	maxAttempts := 120
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// PERF-016: 改用 time.NewTimer + defer Stop() 显式释放 timer
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			s.handleCloudFailure(task, ctx.Err(), false)
 			return false
-		case <-time.After(delay):
+		case <-timer.C:
 		}
 
 		status, err := s.tingwuClient.GetStatus(ctx, cloudTaskID)
