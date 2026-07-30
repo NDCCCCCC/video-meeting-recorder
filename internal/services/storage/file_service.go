@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -626,17 +627,20 @@ func (s *FileService) getServerURL() string {
 
 // generateUUID 生成UUID（简化版）
 func generateUUID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	// BUG-011: use strconv.FormatInt for explicit int64 nanosecond formatting
+	return strconv.FormatInt(time.Now().UnixNano(), 10)
 }
 
 // generateAccessToken 生成访问令牌
 func generateAccessToken() string {
-	return fmt.Sprintf("%d%s", time.Now().UnixNano(), generateUUID())
+	// BUG-011: use strconv.FormatInt for explicit int64 nanosecond formatting
+	return fmt.Sprintf("%s%s", strconv.FormatInt(time.Now().UnixNano(), 10), generateUUID())
 }
 
 // generateShareToken 生成分享令牌
 func generateShareToken() string {
-	return fmt.Sprintf("share_%d", time.Now().UnixNano())
+	// BUG-011: use strconv.FormatInt for explicit int64 nanosecond formatting
+	return fmt.Sprintf("share_%s", strconv.FormatInt(time.Now().UnixNano(), 10))
 }
 
 // generateUniqueFileName 生成唯一文件名，保持原始文件名，处理同名冲突
@@ -668,5 +672,6 @@ func (s *FileService) generateUniqueFileName(ctx context.Context, folder, baseNa
 	}
 
 	// 如果尝试1000次仍然冲突（极不可能），使用时间戳作为后备
-	return fmt.Sprintf("%s_%d%s", nameWithoutExt, time.Now().UnixNano(), ext)
+	// BUG-011: use strconv.FormatInt for explicit int64 nanosecond formatting
+	return fmt.Sprintf("%s_%s%s", nameWithoutExt, strconv.FormatInt(time.Now().UnixNano(), 10), ext)
 }

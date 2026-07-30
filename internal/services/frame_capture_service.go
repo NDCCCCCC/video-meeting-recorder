@@ -125,7 +125,8 @@ func (s *FrameCaptureService) CaptureFrame(ctx context.Context, videoPath string
 func (s *FrameCaptureService) CaptureFrameToBytes(ctx context.Context, videoPath string, timestamp float64) ([]byte, string, error) {
 	// Create temp file for captured frame
 	tempDir := os.TempDir()
-	tempFile := filepath.Join(tempDir, fmt.Sprintf("capture_%d_%d.jpg", time.Now().UnixNano(), int(timestamp)))
+	// BUG-011: use strconv.FormatInt for explicit int64 nanosecond formatting
+	tempFile := filepath.Join(tempDir, fmt.Sprintf("capture_%s_%d.jpg", strconv.FormatInt(time.Now().UnixNano(), 10), int(timestamp)))
 
 	// Capture frame to temp file
 	if err := s.CaptureFrame(ctx, videoPath, timestamp, tempFile); err != nil {
