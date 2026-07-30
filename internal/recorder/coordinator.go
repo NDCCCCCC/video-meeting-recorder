@@ -497,19 +497,25 @@ func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPat
 	cmd.Stderr = logFile
 
 	// 打印完整的 FFmpeg 命令行用于调试
+	// PERF-012: 用 strings.Builder 替换循环字符串拼接（避免重复分配）
 	// Args[0] 是程序名，Args[1:] 是参数
-	commandLine := cmd.Path
+	var commandLine strings.Builder
+	commandLine.Grow(len(cmd.Path) + len(cmd.Args)*16)
+	commandLine.WriteString(cmd.Path)
 	if len(cmd.Args) > 0 {
 		for _, arg := range cmd.Args[1:] {
 			if strings.Contains(arg, " ") || strings.Contains(arg, "\t") {
-				commandLine += " \"" + arg + "\""
+				commandLine.WriteString(" \"")
+				commandLine.WriteString(arg)
+				commandLine.WriteString("\"")
 			} else {
-				commandLine += " " + arg
+				commandLine.WriteString(" ")
+				commandLine.WriteString(arg)
 			}
 		}
 	}
 	c.logger.Info("FFmpeg 命令行（可手动运行测试）",
-		zap.String("command", commandLine),
+		zap.String("command", commandLine.String()),
 		zap.String("log_file", logPath),
 	)
 
