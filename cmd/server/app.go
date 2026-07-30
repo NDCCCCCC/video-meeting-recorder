@@ -519,6 +519,11 @@ func (a *MinimalApp) initRouter() error {
 	a.router.Use(gin.Recovery())
 	a.router.Use(gin.Logger())
 
+	// SEC-008: 保留 CSRF 配置开关；Bearer-only 认证当前风险低，未来 Cookie 认证启用时接入中间件。
+	if a.config.Security.CSRFEnabled {
+		a.logger.Warn("csrf_enabled 已开启，但 CSRF 中间件尚未接入；Cookie 认证上线前必须实现")
+	}
+
 	// CORS中间件
 	a.router.Use(corsMiddleware(a.config.CORS.AllowedOrigins))
 

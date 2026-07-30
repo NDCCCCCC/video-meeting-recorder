@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -103,4 +104,20 @@ func TestLoad_BindEnvHuaweiTLS(t *testing.T) {
 	// viper 把字符串 "true" 反序列化为 bool
 	assert.True(t, cfg.Huawei.InsecureSkipVerify, "HUAWEI_INSECURE_SKIP_VERIFY 应加载为 true")
 	assert.Equal(t, "1.3", cfg.Huawei.MinTLSVersion, "HUAWEI_MIN_TLS_VERSION 应加载为 1.3")
+}
+
+func TestCSRFEnabledEnvBinding(t *testing.T) {
+	if (&Config{}).Security.CSRFEnabled {
+		t.Fatal("CSRF must default to false")
+	}
+	t.Setenv("CSRF_ENABLED", "true")
+	v := viper.New()
+	bindSecretEnv(v)
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Security.CSRFEnabled {
+		t.Fatal("CSRF_ENABLED=true was not bound")
+	}
 }
