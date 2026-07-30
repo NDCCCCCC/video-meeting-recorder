@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
-status: executing
-last_updated: "2026-07-30T13:55:00.000Z"
+status: complete
+last_updated: "2026-07-30T16:30:00.000Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 20
-  completed_phases: 16
+  completed_phases: 17
   total_plans: 82
-  completed_plans: 76
-  percent: 80
+  completed_plans: 80
+  percent: 85
 ---
 
 # STATE.md - Project Memory
@@ -40,40 +40,52 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 
 ## Current Position
 
-Phase: 17 (后端代码审查 56 个发现修复 - P0/P1/P2 全量) — EXECUTING
-Plan: 17-04 (P2) — IN PROGRESS
+Phase: 17 (后端代码审查 56 个发现修复 - P0/P1/P2 全量) — ✅ COMPLETE
+Plan: All 4 plans complete (17-01 P0 / 17-02 P1a / 17-03 P1b / 17-04 P2)
 **Phase:** 17
-**Status:** Executing (3/4 plans done; Waves 1+2+3 verified)
-**Progress:** [███████░░░] 75%
+**Status:** Complete
+**Progress:** [██████████] 100%
 
 ### Phase Summary
 
-按 P0→P1a→P1b→P2 顺序修复 `docs/audits/2026-07-30-backend-code-review.md` 中 56 个发现。每个 wave 间有验证关卡（`go build ./...` + tier 测试包 with `-race`）。Wave 1 (P0) + Wave 2 (P1a) + Wave 3 (P1b) 已完成。
+按 P0→P1a→P1b→P2 顺序修复 `docs/audits/2026-07-30-backend-code-review.md` 中 **56 个代码审查发现**（13 HIGH + 18 MEDIUM + 25 LOW），全部落地 `main`：45 个原子 commit（41 代码/测试 + 4 docs/state），`go build ./...` + `go vet ./...` 静默通过，所有 12 个 phase-17 触及包 `gofmt -l` clean，12 包 `go test -race` 全部 PASS，零回归。
 
 ### Wave Status
 
-| Wave | Plan | Finding | Status |
+| Wave | Plan | Commits | Status |
 |------|------|---------|--------|
-| 1 | 17-01 (P0) | SEC-001/002/003a/004 + BUG-001/002 + PERF-001/002/004/005 + 文档 | ✅ Verified (4 commits) |
-| 2 | 17-02 (P1a) | BUG-003..006 + SEC-005..010 + STYLE-004/005 | ✅ Verified (12 commits, -race green) |
-| 3 | 17-03 (P1b) | PERF-006..011 + STYLE-003 | ✅ Verified (7 commits, -race green; recovered from transient API error mid-SUMMARY) |
-| 4 | 17-04 (P2) | BUG-011/015/016 + SEC-011..015 + PERF-012..016 + STYLE-001/006/007/008/010 | 🔄 In progress |
+| 1 | 17-01 (P0) | 4 | ✅ Verified (SEC-001/002/003a/004 + BUG-001/002 + PERF-001/002/004/005 + 文档) |
+| 2 | 17-02 (P1a) | 12 | ✅ Verified (BUG-003..006 + SEC-005..010 + STYLE-004/005) |
+| 3 | 17-03 (P1b) | 7 | ✅ Verified (PERF-006..011 + STYLE-003 接口归位) |
+| 4 | 17-04 (P2) | 18 | ✅ Verified (BUG-011/015/016 + SEC-011..015 + PERF-012..016 + STYLE-001 partial/006/007/008/010) |
+| + | housekeeping | 1 | ✅ gofmt 修复 2 个 Wave-1 跨 wave 遗漏 |
+| + | docs checkpoints | 3 | ✅ STATE/ROADMAP x3 (W1/W2/W3) |
 
-### Base HEAD for Phase 17
+### Deferred (独立 phase 处理，per CONTEXT.md `<deferred>`)
 
-- Wave 1 end: `4fc1d3c` (P0) → Wave 2 end: `b53cc8c` (P1a) → Wave 3 end: `0190f83` (P1b)
-- Doc checkpoints: `7852303` (W1), `5007815` (W2)
+- **STYLE-001 全库 %w 迁移**：168 处 `errors.New` + 474 处 `fmt.Errorf` → `%w`（本 phase 仅 2 service + 1 handler + 3 处 `%w` 包装 in touched files）
+- **SEC-003b** 华为密码 DB 加密（`models.InputConfig.Password` 明文 → SM4-ECB），需独立迁移 + 前端/配置联动
+- **PERF-003** `video_recording_task_service` 全面 `WithContext(ctx)` 透传（需为 30 个 service 方法加 ctx 参数，403 处签名级联）
+- **STYLE-009** 133 处包名冗余 `Get*` rename（CONTEXT.md Claude's Discretion 默认跳过）
+- **HMAC jti 服务端 `used_jtis` 表**（Redis 或 DB）—— 架构决策
+- **`koanf` 替代 viper**、**audit 包迁移**、**golangci-lint + errcheck/gosec** 等工具链改进
 
-### To Resume
+### Wave 3 Recovery Note
 
-Wave 4 (17-04 P2) is now executing — final wave. Gate = `go build ./...` + go vet + gofmt + tests green, then phase verification + STATE/ROADMAP completion.
+Wave 3 (P1b) 执行器在写 SUMMARY.md 时遇上游 API 错误（`模型不存在`）崩溃；**全部 7 个代码+测试 commit 已落地 main**，build/tests 绿，仅 SUMMARY 叙述中断——由 orchestrator 通过文件系统核验确认恢复，无需重跑 plan。Wave 4 prompt 已加入"API 错误时优先保证 SUMMARY 写盘提交"的纪律。
 
-### Notes — Wave 3 Deviations
+### Phase Base HEAD
 
-- PERF-009 部分（5/6）：middleware/audit.go 的请求体快照承载动态 schema，保留 `map[string]interface{}`；其余静态 schema 全部类型化
-- STYLE-003 接口归位：3 接口迁移（Authenticator/StorageDriver/ConversionService）；ConversionService 跨包到 scheduler，call site 全部更新；编译期断言用 stub pattern（避免 import cycle）
-- common/interfaces.go 的 `Service` 接口因 consumer >5 未动（保守，留待独立 plan）
-- Wave 3 执行器在写 SUMMARY.md 时遇上游 API 错误（模型瞬时不可用）崩溃；但全部 7 个代码+测试 commit 已落地 main，build/tests 绿——仅 SUMMARY 叙述中断，由 orchestrator 确认恢复
+- 规划基线：`cf2d248` (docs(17): create phase plan)
+- 最终 HEAD：`c04f805` (chore housekeeping + gofmt clean)
+- 增量：45 commits (41 code/test + 4 docs/state)
+
+### Next Steps (非阻塞)
+
+Phase 17 完成。无即时 follow-up。可选：
+1. 用真实凭据做生产环境审计验证（参考 `.planning/quick/260729-lr4-100/260729-lr4-SUMMARY.md` 验证步骤）——验证新加的 12 个 auth 审计点是否真的入 audit_logs
+2. 处理 `<deferred>` 列表中的任何独立 phase
+3. 整理前端 23 个未提交文件（与 phase 17 无关）
 
 ---
 

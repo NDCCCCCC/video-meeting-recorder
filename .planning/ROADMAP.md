@@ -49,7 +49,7 @@
 | 12. Windows AD 域控 | v1.0 | 6/6 | Complete | 2026-04-30 |
 | 13. 重构华为配置，支持USB和流媒体 | v1.0 | 6/6 | Complete | 2026-04-29 |
 | 14. 批量操作 | v1.0 | 4/4 | Complete | 2026-04-30 |
-| 17. 后端代码审查 56 发现修复 P0/P1/P2 | v1.1 | 1/4 | Executing (Wave 1 done) | 2026-07-30 |
+| 17. 后端代码审查 56 发现修复 P0/P1/P2 | v1.1 | 4/4 | Complete | 2026-07-30 |
 
 ## Backlog
 
@@ -144,4 +144,4 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 17-04-PLAN.md — P2 LOW 发现清理（20 项；STYLE-001 partial / STYLE-002 误报 / STYLE-009 deferred）
+- [x] 17-04-PLAN.md — P2 LOW 发现清理（20 项；STYLE-001 partial / STYLE-002 误报 / STYLE-009 deferred） — 18 atomic commits on main (4f5579a..857bb55), go build/vet/fmt + 12 包 -race tests green
