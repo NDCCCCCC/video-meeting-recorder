@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: completed
 last_updated: "2026-07-30T02:10:00.000Z"
-last_activity: 2026-07-30 - Completed quick task 260730-dr8: 补 48 个敏感 GET 端点审计（HIGH 13 + MEDIUM 35）
+last_activity: 2026-07-30 - Completed quick task 260730-eis: 清理构建阻塞 + line-ending 修复（app.go CRLF + frontend/dist 占位 + ip_restriction_test.go ctx 未透传）
 progress:
   total_phases: 3
   completed_phases: 3
@@ -91,6 +91,7 @@ Run `/gsd-execute-phase 12-windows-ad` to start implementation
 | 260729-mwt | 补 input-config / system / file OldData 捕获（6 个高危站点） | 2026-07-29 | 20a7abe | [260729-mwt-input-config-system-file-olddata-6](./quick/260729-mwt-input-config-system-file-olddata-6/) |
 | 260730-bc3 | 补 16 站点 OldData 捕获（recording 5 + storage 3 + ppts 4 + apikey 3 + notification 1，中危 P1） | 2026-07-30 | a494c77 | [260730-bc3-38-recording-5-storage-3-ppts-4-apikey-3](./quick/260730-bc3-38-recording-5-storage-3-ppts-4-apikey-3/) |
 | 260730-dr8 | 补 48 个敏感 GET 端点审计（HIGH 13 + MEDIUM 35） | 2026-07-30 | e934df9 | [260730-dr8-42-get-high-14-medium-28](./quick/260730-dr8-42-get-high-14-medium-28/) |
+| 260730-eis | 清理构建阻塞 + line-ending 修复（app.go CRLF + frontend/dist 占位 + ip_restriction_test.go ctx 未透传） | 2026-07-30 | 4d2e39f | [260730-eis-clean-build-blockers-line-ending-ctx](./quick/260730-eis-clean-build-blockers-line-ending-ctx/) |
 
 ---
 
