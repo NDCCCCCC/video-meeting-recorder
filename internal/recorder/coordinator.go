@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
@@ -38,7 +39,7 @@ type RecordingProcess struct {
 	ConfigType      string                     // 配置类型: usb 或 stream
 	Task            *models.VideoRecordingTask // 任务信息（用于重连）
 	HuaweiConfig    *models.InputConfig        // 华为配置（用于重连）
-	ReconnectCount  int                        // 当前重连次数
+	ReconnectCount  atomic.Int32               // 当前重连次数（PERF-010：原子读，监控 goroutine 增 1 不会与 reconnect 比对产生 race）
 	MaxReconnects   int                        // 最大重连次数
 	ReconnectDelay  time.Duration              // 重连间隔
 	ShouldReconnect bool                       // 是否应该重连（仅对流媒体有效）
@@ -143,7 +144,6 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 		ConfigType:      configType,
 		Task:            task,
 		HuaweiConfig:    huaweiConfig,
-		ReconnectCount:  0,
 		MaxReconnects:   3,                // 最多重连3次
 		ReconnectDelay:  10 * time.Second, // 重连间隔10秒
 		ShouldReconnect: shouldReconnect,
@@ -253,8 +253,10 @@ func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cm
 
 // attemptReconnect 尝试重新连接流媒体
 func (c *SimpleRecordingCoordinator) attemptReconnect(ctx context.Context, processKey string, process *RecordingProcess) {
+	// PERF-010：原子读 ReconnectCount（避免与监控 goroutine 的状态切换竞争）
+	currentCount := process.ReconnectCount.Load()
 	// 检查是否超过最大重连次数
-	if process.ReconnectCount >= process.MaxReconnects {
+	if currentCount >= int32(process.MaxReconnects) {
 		c.logger.Error("已达到最大重连次数，停止重连",
 			zap.String("process_key", processKey),
 			zap.Int("max_reconnects", process.MaxReconnects),
@@ -266,7 +268,7 @@ func (c *SimpleRecordingCoordinator) attemptReconnect(ctx context.Context, proce
 	c.logger.Info("等待重连间隔...",
 		zap.String("process_key", processKey),
 		zap.Duration("delay", process.ReconnectDelay),
-		zap.Int("attempt", process.ReconnectCount+1),
+		zap.Int32("attempt", currentCount+1),
 	)
 	timer := time.NewTimer(process.ReconnectDelay)
 	defer timer.Stop()
@@ -276,12 +278,13 @@ func (c *SimpleRecordingCoordinator) attemptReconnect(ctx context.Context, proce
 	case <-timer.C:
 	}
 
-	// 增加重连计数
-	process.ReconnectCount++
+	// 增加重连计数（PERF-010：原子 +1）
+	process.ReconnectCount.Add(1)
+	newCount := process.ReconnectCount.Load()
 
 	c.logger.Info("尝试重新连接流媒体",
 		zap.String("process_key", processKey),
-		zap.Int("attempt", process.ReconnectCount),
+		zap.Int("attempt", int(newCount)),
 		zap.Int("max_attempts", process.MaxReconnects),
 	)
 
@@ -292,7 +295,7 @@ func (c *SimpleRecordingCoordinator) attemptReconnect(ctx context.Context, proce
 			zap.Error(err),
 		)
 		// 递归尝试下一次重连
-		if process.ReconnectCount < process.MaxReconnects {
+		if process.ReconnectCount.Load() < int32(process.MaxReconnects) {
 			go c.attemptReconnect(ctx, processKey, process)
 		}
 	} else {
@@ -711,8 +714,16 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	// 从配置读取 HLS 参数
 	hlsSegmentDuration := c.config.FFmpeg.HLSSegmentDuration
 	hlsListSize := c.config.FFmpeg.HLSListSize
-	// hls_delete_threshold 设置为 hls_list_size + 1，确保只保留最近的分片
+	// PERF-011：HLSListSize 缺配置校验。
+	// 配置为 0（未设置） → fallback 6；负数 → fallback 6 并记录警告。
+	// 避免未校验的 hlsDeleteThreshold (= hlsListSize + 1) 传给 FFmpeg 导致未定义行为。
 	hlsDeleteThreshold := hlsListSize + 1
+	if hlsListSize <= 0 {
+		c.logger.Warn("无效的 HLSListSize，使用默认值 6",
+			zap.Int("got", hlsListSize))
+		hlsListSize = 6
+		hlsDeleteThreshold = hlsListSize + 1
+	}
 
 	// 使用相对路径，避免 Windows 盘符转义问题
 	// 配置中的路径本身就是相对路径（如 ./data/recordings），直接使用即可
