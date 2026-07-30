@@ -374,7 +374,7 @@ export default function RoleManagement() {
         onOk={handleSubmit}
         onCancel={closeModal}
         width={600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -455,7 +455,7 @@ export default function RoleManagement() {
         onOk={handleSavePermissions}
         onCancel={closePermissionModal}
         width={800}
-        destroyOnClose
+        destroyOnHidden
       >
         <div style={{ marginBottom: '16px' }}>
           <Descriptions size="small" column={2}>

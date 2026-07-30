@@ -177,7 +177,7 @@ export function TimelineWithMarkers({
       </div>
 
       {/* 手动输入和标记列表 */}
-      <Space direction="vertical" style={{ width: '100%' }} size="small">
+      <Space orientation="vertical" style={{ width: '100%' }} size="small">
         {/* 手动输入框 */}
         <Input.Search
           placeholder="输入时间点 (MM:SS 或秒数)"

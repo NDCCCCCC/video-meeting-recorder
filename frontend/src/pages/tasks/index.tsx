@@ -774,7 +774,7 @@ export default function TaskManagement() {
     <Empty
       style={{ padding: '48px 24px' }}
       image={<ErrorNetwork style={{ width: 180, height: 126, color: designTokens.colors.error }} />}
-      imageStyle={{ height: 126 }}
+      styles={{ image: { height: 126 } }}
       description={
         <div>
           <div style={{ color: designTokens.colors.text.primary }}>加载失败：{loadError}</div>
@@ -795,7 +795,7 @@ export default function TaskManagement() {
     <Empty
       style={{ padding: '48px 24px' }}
       image={<EmptyTasks style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
-      imageStyle={{ height: 126 }}
+      styles={{ image: { height: 126 } }}
       description={
         <div>
           <div style={{ color: designTokens.colors.text.primary }}>没有匹配的任务</div>
@@ -813,7 +813,7 @@ export default function TaskManagement() {
     <Empty
       style={{ padding: '48px 24px' }}
       image={<EmptyTasks style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
-      imageStyle={{ height: 126 }}
+      styles={{ image: { height: 126 } }}
       description={
         <div>
           <div style={{ color: designTokens.colors.text.primary }}>还没有录制任务</div>
@@ -927,7 +927,7 @@ export default function TaskManagement() {
         onOk={handleSubmit}
         onCancel={closeModal}
         width={700}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical">
           {/* 录制中状态只能编辑结束时间，其他字段被禁用并显示提示 */}

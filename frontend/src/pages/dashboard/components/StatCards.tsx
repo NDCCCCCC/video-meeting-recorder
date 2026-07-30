@@ -7,7 +7,7 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  LoadingOutlined,
+  HourglassOutlined,
 } from '@ant-design/icons'
 import { m } from 'framer-motion'
 import type { TaskStats, FileStats, SystemStats } from '../../../types/dashboard'
@@ -72,10 +72,10 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
               <Statistic
                 title="进行中任务"
                 value={taskStats.in_progress}
-                prefix={<LoadingOutlined />}
+                prefix={<HourglassOutlined />}
                 suffix="个"
                 loading={loading}
-                valueStyle={{ color: designTokens.colors.primary }}
+                styles={{ content: { color: '#1890ff' } }}
               />
             </Card>
           </m.div>
@@ -89,7 +89,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
                 prefix={<CheckCircleOutlined />}
                 suffix="个"
                 loading={loading}
-                valueStyle={{ color: designTokens.colors.success }}
+                styles={{ content: { color: '#52c41a' } }}
               />
             </Card>
           </m.div>
@@ -103,7 +103,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
                 prefix={<CloseCircleOutlined />}
                 suffix="个"
                 loading={loading}
-                valueStyle={{ color: designTokens.colors.error }}
+                styles={{ content: { color: '#ff4d4f' } }}
               />
             </Card>
           </m.div>
@@ -181,13 +181,15 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
                 suffix="%"
                 loading={loading}
                 precision={1}
-                valueStyle={{
-                  color:
-                    systemStats.disk_usage_percent > 80
-                      ? designTokens.colors.error
-                      : systemStats.disk_usage_percent > 60
-                        ? designTokens.colors.warning
-                        : designTokens.colors.success,
+                styles={{
+                  content: {
+                    color:
+                      systemStats.disk_usage_percent > 80
+                        ? '#ff4d4f'
+                        : systemStats.disk_usage_percent > 60
+                          ? '#faad14'
+                          : '#52c41a',
+                  },
                 }}
               />
             </Card>
@@ -213,9 +215,7 @@ export function StatCards({ taskStats, fileStats, systemStats, loading }: StatCa
                 title="最近错误数"
                 value={systemStats.error_count}
                 loading={loading}
-                valueStyle={{
-                  color: systemStats.error_count > 10 ? designTokens.colors.error : 'inherit',
-                }}
+                styles={{ content: { color: systemStats.error_count > 10 ? '#ff4d4f' : 'inherit' } }}
               />
             </Card>
           </m.div>

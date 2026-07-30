@@ -165,7 +165,10 @@ export default function PPTPreview({
           }}
         >
           {isLoading ? (
-            <Spin tip="正在生成预览..." />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <Spin />
+              <div style={{ color: '#999' }}>正在生成预览...</div>
+            </div>
           ) : slides[currentSlide] ? (
             <Image
               src={slides[currentSlide].fullsize_url}

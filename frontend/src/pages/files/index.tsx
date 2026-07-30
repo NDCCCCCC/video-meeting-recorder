@@ -721,7 +721,7 @@ export default function FileManagement() {
         }
         const config = SOURCE_CONFIG[sourceType] || SOURCE_CONFIG.recording
         return (
-          <Space direction="vertical" size={2}>
+          <Space orientation="vertical" size={2}>
             <Tag color={config.color}>{config.label}</Tag>
             {record.parent_id && (
               <Button
@@ -770,7 +770,7 @@ export default function FileManagement() {
     <Empty
       style={{ padding: '48px 24px' }}
       image={<ErrorNetwork style={{ width: 180, height: 126, color: designTokens.colors.error }} />}
-      imageStyle={{ height: 126 }}
+      styles={{ image: { height: 126 } }}
       description={
         <div>
           <div style={{ color: designTokens.colors.text.primary }}>加载失败：{loadError}</div>
@@ -798,7 +798,7 @@ export default function FileManagement() {
     <Empty
       style={{ padding: '48px 24px' }}
       image={<EmptyFiles style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
-      imageStyle={{ height: 126 }}
+      styles={{ image: { height: 126 } }}
       description={
         <div>
           <div style={{ color: designTokens.colors.text.primary }}>没有匹配的文件</div>
@@ -816,7 +816,7 @@ export default function FileManagement() {
     <Empty
       style={{ padding: '48px 24px' }}
       image={<EmptyFiles style={{ width: 180, height: 126, color: designTokens.colors.muted }} />}
-      imageStyle={{ height: 126 }}
+      styles={{ image: { height: 126 } }}
       description={
         <div>
           <div style={{ color: designTokens.colors.text.primary }}>还没有文件</div>
@@ -1127,7 +1127,7 @@ export default function FileManagement() {
       </Modal>
 
       {/* 转录进度模态框 - 使用 Suspense 包裹动态导入 */}
-      <Suspense fallback={<Spin tip="加载中..." />}>
+      <Suspense fallback={<Spin />}>
         <TranscriptionProgressModal
           open={transcriptionModalOpen}
           onClose={() => setTranscriptionModalOpen(false)}
@@ -1152,7 +1152,7 @@ export default function FileManagement() {
             newFileName.trim() === renamingFile?.file_name.replace(/\.[^/.]+$/, ''),
         }}
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           <Input
             value={newFileName}
             onChange={(e) => setNewFileName(e.target.value)}
@@ -1233,7 +1233,7 @@ export default function FileManagement() {
         {batchTranscribeMode === 'cloud' && (
           <div style={{ marginBottom: 16 }}>
             <Alert
-              message="云端转录使用阿里通义听悟服务，支持更准确的语音识别和PPT提取，但需要消耗API配额"
+              title="云端转录使用阿里通义听悟服务，支持更准确的语音识别和PPT提取，但需要消耗API配额"
               type="info"
               showIcon
             />

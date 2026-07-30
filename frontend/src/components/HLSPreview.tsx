@@ -227,7 +227,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
       >
         {loading && (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
-            <Space direction="vertical">
+            <Space orientation="vertical">
               <div>加载中...</div>
             </Space>
           </div>
@@ -236,7 +236,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
         {error && (
           <Alert
             type={isPreparing ? 'warning' : 'error'}
-            message={error}
+            title={error}
             action={
               <Button size="small" onClick={handleRefresh}>
                 <ReloadOutlined /> 刷新
@@ -260,7 +260,7 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
         )}
 
         {!loading && !error && !hlsUrl && (
-          <Alert type="warning" message="暂无预览可用" description="该任务暂无可用的 HLS 预览流" />
+          <Alert type="warning" title="暂无预览可用" description="该任务暂无可用的 HLS 预览流" />
         )}
       </Modal>
     </>

@@ -188,7 +188,7 @@ const AuthConfigPage: React.FC = () => {
 
         {config?.mode && (
           <Alert
-            message={
+            title={
               <Space>
                 当前模式:{' '}
                 <Tag color={config.mode === 'local' ? 'blue' : 'green'}>
@@ -206,7 +206,7 @@ const AuthConfigPage: React.FC = () => {
             getFieldValue('mode') === 'ad' ? (
               <>
                 <Alert
-                  message="AD域控配置"
+                  title="AD域控配置"
                   description="配置AD服务器连接信息，端口636推荐用于生产环境"
                   type="info"
                   showIcon
@@ -281,7 +281,7 @@ const AuthConfigPage: React.FC = () => {
 
                 {getFieldValue(['ad', 'insecure_skip_verify']) && (
                   <Alert
-                    message="安全警告"
+                    title="安全警告"
                     description="⚠️ 跳过证书验证会降低连接安全性，仅建议在测试环境或内网环境中使用。"
                     type="warning"
                     showIcon
@@ -292,7 +292,7 @@ const AuthConfigPage: React.FC = () => {
 
                 {!getFieldValue(['ad', 'use_tls']) && (
                   <Alert
-                    message="安全警告"
+                    title="安全警告"
                     description="⚠️ 使用LDAP 389端口时密码将以明文传输，存在安全风险。建议在生产环境使用LDAPS 636端口。"
                     type="warning"
                     showIcon
@@ -319,7 +319,7 @@ const AuthConfigPage: React.FC = () => {
 
                 <Form.Item>
                   <Alert
-                    message={
+                    title={
                       getFieldValue(['ad', 'allow_auto_create'])
                         ? '自动创建模式：首次登录的域控账号将自动在系统中创建'
                         : '白名单模式：只有预先在系统中添加的域控账号才能登录'
@@ -340,10 +340,10 @@ const AuthConfigPage: React.FC = () => {
                     </Button>
 
                     {validationResult && (
-                      <Space direction="vertical" style={{ width: '100%' }}>
+                      <Space orientation="vertical" style={{ width: '100%' }}>
                         {validationResult.valid ? (
                           <Alert
-                            message={
+                            title={
                               <Space>
                                 <CheckCircleOutlined />
                                 连接测试成功
@@ -355,7 +355,7 @@ const AuthConfigPage: React.FC = () => {
                           />
                         ) : (
                           <Alert
-                            message="连接测试失败"
+                            title="连接测试失败"
                             description={validationResult.errors?.join(', ')}
                             type="error"
                           />
@@ -363,7 +363,7 @@ const AuthConfigPage: React.FC = () => {
 
                         {validationResult.warnings && validationResult.warnings.length > 0 && (
                           <Alert
-                            message="警告"
+                            title="警告"
                             description={validationResult.warnings.join('\n')}
                             type="warning"
                           />

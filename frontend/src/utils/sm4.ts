@@ -1,29 +1,18 @@
 // SM4-ECB 加密模式（与后端兼容）
 import { sm4 } from 'sm-crypto'
 
-const SM4_KEY_SIZE = 16 // SM4 密钥 16 字节
 export const ENCRYPTION_PREFIX = 'SM4:' // 加密前缀标记，用于可靠检测加密密码
 
 /**
  * 从字符串派生 SM4 密钥（与后端 deriveSM4Key 兼容）
- * 使用 SHA256 哈希的前 16 字节
+ * 后端将 32 字符十六进制 secret 解码为 16 字节密钥，sm-crypto 对字符串密钥执行相同转换
  */
 export async function deriveSM4Key(secret: string): Promise<string> {
-  // 使用 crypto subtle API 进行 SHA256
-  const encoder = new TextEncoder()
-  const data = encoder.encode(secret)
-
-  // 在浏览器环境使用 SubtleCrypto
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-
-  // 直接返回 32 字符 hex secret。
-// sm-crypto sm4.encrypt/decrypt 内部把 string key hex-decode 成 16 字节
-// (node_modules/sm-crypto/src/sm4/index.js: `if (typeof key === 'string')
-// key = hexToArray(key)`)，这与后端 internal/utils/sm4_password.go
-// DeriveSM4Key 中的 `hex.DecodeString(secret)` 输出**字节完全一致**
-// (hex chars 都是 ASCII，UTF-8 编码 = 1 字节/字符 = raw bytes)。
-// 不要在此 hash — 后端是直接 hex decode，不 hash。
+  // sm-crypto sm4.encrypt/decrypt 内部把 string key hex-decode 成 16 字节
+  // (node_modules/sm-crypto/src/sm4/index.js: `if (typeof key === 'string')
+  // key = hexToArray(key)`)，这与后端 internal/utils/sm4_password.go
+  // DeriveSM4Key 中的 `hex.DecodeString(secret)` 输出字节完全一致。
+  // 不要在此 hash — 后端是直接 hex decode，不 hash。
   return secret
 }
 
@@ -53,14 +42,6 @@ export function encryptPassword(password: string, key: string): string {
   } catch (error) {
     throw new Error(`Failed to encrypt password: ${error}`)
   }
-}
-
-/**
- * 十六进制字符串转 Base64（后端是 raw bytes Base64 格式，已不需要，保留供向后兼容）
- */
-function hexToBase64(hexString: string): string {
-  const hexBytes = new Uint8Array(hexString.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)))
-  return btoa(String.fromCharCode(...hexBytes))
 }
 
 /**

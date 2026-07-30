@@ -77,7 +77,7 @@ export default function AuditLogsPage() {
           image={
             <ErrorNetwork style={{ width: 180, height: 126, color: designTokens.colors.error }} />
           }
-          imageStyle={{ height: 126 }}
+          styles={{ image: { height: 126 } }}
           description={
             <div>
               <div style={{ color: designTokens.colors.text.primary }}>
@@ -99,7 +99,7 @@ export default function AuditLogsPage() {
           image={
             <EmptyAudit style={{ width: 180, height: 126, color: designTokens.colors.muted }} />
           }
-          imageStyle={{ height: 126 }}
+          styles={{ image: { height: 126 } }}
           description={
             <div>
               <div style={{ color: designTokens.colors.text.primary }}>还没有日志</div>

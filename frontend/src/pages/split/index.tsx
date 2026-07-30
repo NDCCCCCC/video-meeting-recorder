@@ -208,7 +208,7 @@ export default function SplitPage() {
         existingSplits.length > 0 ? (
           <div>
             <Alert
-              message="检测到现有分割"
+              title="检测到现有分割"
               description={`此视频已有 ${existingSplits.length} 个分割段，重新分割将自动删除这些文件。`}
               type="warning"
               showIcon
@@ -315,7 +315,8 @@ export default function SplitPage() {
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
-        <Spin size="large" tip="加载中..." />
+        <Spin size="large" />
+        <div style={{ marginTop: 12, color: '#999' }}>加载中...</div>
       </div>
     )
   }
@@ -325,7 +326,7 @@ export default function SplitPage() {
       <div className={styles.errorContainer}>
         <Alert
           type="error"
-          message="加载失败"
+          title="加载失败"
           description={error || '视频文件不存在'}
           showIcon
           action={
@@ -451,7 +452,7 @@ export default function SplitPage() {
 
             <Alert
               type="warning"
-              message="快速分割模式可能有±2秒误差"
+              title="快速分割模式可能有±2秒误差"
               description="FFmpeg 快速分割模式基于关键帧定位，实际分割点可能与标记点略有偏差。如需精确分割，请在分割后使用重新编码模式。"
               showIcon
               style={{ marginTop: 16 }}
@@ -480,7 +481,7 @@ export default function SplitPage() {
             ) : (
               <Alert
                 type="info"
-                message="暂无分割标记"
+                title="暂无分割标记"
                 description={
                   '点击视频时间线添加分割点，或输入时间精确定位。添加标记后点击"确认分割"开始处理。'
                 }

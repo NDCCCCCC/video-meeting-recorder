@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Dropdown, message } from 'antd'
+import { Button, Dropdown, Space, message } from 'antd'
 import { DownloadOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
 import type { AuditLogExportParams } from '../../../types/audit'
@@ -45,9 +45,15 @@ export function ExportButton({ params }: ExportButtonProps) {
     },
   ]
 
+  // antd v6 deprecates Dropdown.Button; use Space.Compact + Dropdown + Button
   return (
-    <Dropdown.Button menu={{ items: menuItems }} loading={loading} icon={<DownloadOutlined />}>
-      导出日志
-    </Dropdown.Button>
+    <Space.Compact>
+      <Button loading={loading} icon={<DownloadOutlined />}>
+        导出日志
+      </Button>
+      <Dropdown menu={{ items: menuItems }} placement="bottomRight">
+        <Button icon={<DownloadOutlined />} />
+      </Dropdown>
+    </Space.Compact>
   )
 }

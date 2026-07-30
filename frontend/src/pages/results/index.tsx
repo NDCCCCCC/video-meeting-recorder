@@ -694,12 +694,7 @@ export default function ResultDetailPage() {
 
       {/* Info & Operations Bar - Inline layout without tabs */}
       <Card size="small" style={{ marginBottom: 16 }}>
-        <Space
-          direction="vertical"
-          style={{ width: '100%' }}
-          size="middle"
-          className="info-section"
-        >
+        <Space orientation="vertical" style={{ width: '100%' }} size="middle" className="info-section">
           {/* Basic Info - displayed inline without tabs */}
           <Descriptions column={2} size="small">
             <Descriptions.Item label="视频名称">{videoName}</Descriptions.Item>

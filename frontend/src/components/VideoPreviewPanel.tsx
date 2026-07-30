@@ -329,10 +329,10 @@ export function VideoPreviewPanel({
         )}
 
         {timestampError && (
-          <Alert type="warning" message={timestampError} showIcon style={{ marginBottom: 12 }} />
+          <Alert type="warning" title={timestampError} showIcon style={{ marginBottom: 12 }} />
         )}
 
-        {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 12 }} />}
+        {error && <Alert type="error" title={error} showIcon style={{ marginBottom: 12 }} />}
 
         <div
           style={{

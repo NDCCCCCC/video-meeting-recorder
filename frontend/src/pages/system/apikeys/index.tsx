@@ -400,7 +400,7 @@ const APIKeysPage: React.FC = () => {
         }}
         onOk={() => form.submit()}
         width={600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={form}
@@ -481,7 +481,7 @@ const APIKeysPage: React.FC = () => {
         }}
         onOk={() => form.submit()}
         width={600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleUpdate}>
           <Form.Item label="名称" name="name" rules={[{ required: true, message: '请输入名称' }]}>

@@ -364,7 +364,7 @@ export default function InputConfigManagement() {
       dataIndex: 'is_active',
       width: 100,
       render: (active, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Tag color={active ? 'green' : 'red'}>{active ? '激活' : '禁用'}</Tag>
           {record.is_locked && (
             <Tag color="orange" icon={<LockOutlined />}>
@@ -480,7 +480,7 @@ export default function InputConfigManagement() {
         onOk={handleSubmit}
         onCancel={closeModal}
         width={900}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical">
           <Tabs
@@ -881,7 +881,7 @@ export default function InputConfigManagement() {
         width={900}
       >
         {viewingConfig && (
-          <Descriptions column={2} bordered size="small">
+          <Descriptions column={2} size="small">
             <Descriptions.Item label="配置ID">{viewingConfig.id}</Descriptions.Item>
             <Descriptions.Item label="配置名称">{viewingConfig.name}</Descriptions.Item>
             <Descriptions.Item label="配置类型" span={2}>

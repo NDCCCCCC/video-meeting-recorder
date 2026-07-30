@@ -170,7 +170,7 @@ export default function Settings() {
             </Form.Item>
 
             <Alert
-              message="FFmpeg 路径修改后需要重启服务才能生效"
+              title="FFmpeg 路径修改后需要重启服务才能生效"
               type="info"
               showIcon
               style={{ marginTop: '12px' }}
@@ -207,7 +207,7 @@ export default function Settings() {
           {/* 危险操作 */}
           <Card title="危险操作" style={{ marginBottom: '24px' }}>
             <Alert
-              message="清空文件数据库将删除所有文件记录，此操作不可恢复！"
+              title="清空文件数据库将删除所有文件记录，此操作不可恢复！"
               type="warning"
               showIcon
               style={{ marginBottom: '16px' }}

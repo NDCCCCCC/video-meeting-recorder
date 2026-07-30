@@ -219,7 +219,7 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
         </Button>,
       ]}
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
+      <Space orientation="vertical" style={{ width: '100%' }} size="large">
         {/* Video Player Section */}
         <div>
           <div style={{ marginBottom: 8, fontWeight: 'bold' }}>视频预览</div>
@@ -285,7 +285,7 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
         {/* Insert Position Selection */}
         <div>
           <div style={{ marginBottom: 8, fontWeight: 'bold' }}>插入位置</div>
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Select
               value={insertPositionOption}
               onChange={handleInsertPositionOptionChange}

@@ -446,7 +446,7 @@ export default function UserManagement() {
         onOk={handleSubmit}
         onCancel={closeModal}
         width={600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -556,7 +556,7 @@ export default function UserManagement() {
         open={passwordModalVisible}
         onOk={handleResetPassword}
         onCancel={closePasswordModal}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={passwordForm} layout="vertical">
           <Form.Item

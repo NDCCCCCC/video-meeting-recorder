@@ -204,7 +204,7 @@ const DuplicateDetectionPanel: React.FC<DuplicateDetectionPanelProps> = ({
     >
       {error && (
         <Alert
-          message="扫描失败"
+          title="扫描失败"
           description={error}
           type="error"
           closable
@@ -222,14 +222,14 @@ const DuplicateDetectionPanel: React.FC<DuplicateDetectionPanelProps> = ({
 
       {!isScanning && duplicateGroups.length === 0 && (
         <Alert
-          message="未检测到重复幻灯片"
+          title="未检测到重复幻灯片"
           description="所有幻灯片都是独特的，无需删除重复项。"
           type="success"
           showIcon
         />
       )}
 
-      <Space direction="vertical" style={{ width: '100%', maxHeight: '60vh', overflowY: 'auto' }}>
+      <Space orientation="vertical" style={{ width: '100%', maxHeight: '60vh', overflowY: 'auto' }}>
         {duplicateGroups.map((group, index) => (
           <Card
             key={index}
@@ -253,7 +253,7 @@ const DuplicateDetectionPanel: React.FC<DuplicateDetectionPanelProps> = ({
               </Checkbox>
             }
           >
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               {group.slides.map((slideNum) => {
                 const isRecommended = slideNum !== group.slides[0]
                 const filename = `slide_${String(slideNum).padStart(3, '0')}.jpg`

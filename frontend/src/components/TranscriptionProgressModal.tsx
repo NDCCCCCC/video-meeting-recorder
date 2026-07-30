@@ -340,7 +340,7 @@ export default function TranscriptionProgressModal({
       {/* Fallback alert (per D-08) */}
       {fallbackToLocal && (
         <Alert
-          message="云端转录失败，已自动切换到本地转录"
+          title="云端转录失败，已自动切换到本地转录"
           type="info"
           showIcon
           icon={<InfoCircleOutlined />}

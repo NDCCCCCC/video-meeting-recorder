@@ -355,7 +355,7 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
     >
       <Alert
         type="warning"
-        message="浏览器不支持直接播放此格式"
+        title="浏览器不支持直接播放此格式"
         description={
           <div>
             <p>
@@ -396,7 +396,7 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
 
             {error && (
               <div style={STYLES.errorOverlay}>
-                <Alert type="error" message={error} showIcon style={{ margin: 20 }} />
+                <Alert type="error" title={error} showIcon style={{ margin: 20 }} />
               </div>
             )}
 
