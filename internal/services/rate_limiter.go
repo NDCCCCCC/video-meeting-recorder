@@ -42,7 +42,9 @@ func NewRateLimiter(logger *zap.Logger) *RateLimiter {
 	rl := &RateLimiter{
 		logger:  logger,
 		windows: make(map[uint]*rateLimitWindow),
-		done:    make(chan struct{}),
+		// PERF-014: 无缓冲 channel 仅用作 stop 信号 (close-only)
+		// — 关闭后 cleanupExpiredWindows 在 select 中收到零值并退出。
+		done: make(chan struct{}),
 	}
 
 	rl.cleanTick = time.NewTicker(5 * time.Minute)

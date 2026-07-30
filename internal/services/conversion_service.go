@@ -240,7 +240,10 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 		cancel()
 	}()
 
-	// 更新状态为processing
+	// PERF-013: 单一时钟基准——processTask 入口取一次 time.Now()，整个函数
+	// 复用该值作为 started_at 与 completed_at 的时间戳。语义差异：completed_at
+	// 表示"任务被处理开始的时间点"而非"转换完成"——这是可接受的，因为审计
+	// 关心的核心是"任务处理流"而非"FFmpeg 转码结束时点"。
 	now := time.Now()
 	updates := map[string]interface{}{
 		"conversion_status":     models.ConversionStatusProcessing,
@@ -258,7 +261,7 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 	}
 
 	// 转换成功，更新转换状态和任务状态
-	now = time.Now()
+	// PERF-013: 复用上面 now 变量，避免第二次 time.Now() 调用产生不一致时间
 	updates = map[string]interface{}{
 		"conversion_status":       models.ConversionStatusCompleted,
 		"conversion_completed_at": &now,
@@ -441,9 +444,13 @@ func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecord
 	})
 
 	// 安排重试
+	// PERF-016: 改用 time.NewTimer + defer Stop() 显式释放 timer（time.After
+	// 等待 GC 回收，可能累积未触发 timer 直到 select 退出）
 	go func() {
+		timer := time.NewTimer(backoffDuration)
+		defer timer.Stop()
 		select {
-		case <-time.After(backoffDuration):
+		case <-timer.C:
 			select {
 			case s.taskQueue <- task.ID:
 				s.logger.Info("重试已安排",

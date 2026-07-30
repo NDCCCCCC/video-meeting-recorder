@@ -66,6 +66,8 @@ func NewNotificationService(db *gorm.DB, logger *zap.Logger, config *config.Conf
 		logger: logger,
 		config: config,
 		queue:  make(chan *models.NotificationMessage, 1000),
+		// PERF-014: 无缓冲 channel 仅用作 stop 信号 (close-only)
+		// — 关闭后 processQueue 在 select 中收到零值并退出。
 		stopCh: make(chan struct{}),
 	}
 

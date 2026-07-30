@@ -135,7 +135,9 @@ func NewAuditLogService(db *gorm.DB, logger *zap.Logger) *AuditLogService {
 		logger:     logger,
 		sanitizer:  NewSanitizer(),
 		asyncQueue: make(chan *models.AuditLog, 1000),
-		stopCh:     make(chan struct{}),
+		// PERF-014: 无缓冲 channel 仅用作 stop 信号 (close-only)
+		// — 关闭后 processQueue 在 select 中收到零值并退出。
+		stopCh: make(chan struct{}),
 	}
 
 	// 启动异步处理goroutine
