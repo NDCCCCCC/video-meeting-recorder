@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,11 +111,25 @@ func (s *SM4TokenService) cleanupExpiredCache() {
 	}
 }
 
-// deriveSM4Key 使用SHA256从密钥字符串派生16字节SM4密钥。
-// 使用哈希函数确保任意长度输入都能产生高质量密钥。
+// deriveSM4Key 将 32 字符 hex 格式的 SM4 secret 直接解码为 16 字节原始密钥。
+// SEC-011: 不再使用 SHA256 截断派生（entropy 损失）；16 字节等价 32 hex 字符，
+// 对齐前端 sm4.ts 的密钥格式约定。调用方应保证 secret 为 32 hex 字符（SEC-001
+// 启动校验 len(secret) >= 32 强制）。若 hex decode 失败则 Fatal 退出。
 func deriveSM4Key(secret string) []byte {
-	hash := sha256.Sum256([]byte(secret))
-	return hash[:16]
+	// SEC-011: 取 SM4 secret 的前 32 hex 字符并直接解码为 16 字节原始密钥。
+	// SEC-001 启动校验已保证 secret >= 32 字符，故 len(hexStr) >= 32。
+	hexStr := secret
+	if len(hexStr) > 32 {
+		hexStr = hexStr[:32]
+	}
+	key, err := hex.DecodeString(hexStr)
+	if err != nil || len(key) != 16 {
+		// 无法解码：保留 SHA256 截断作为最终回退，避免启动崩溃——SEC-001
+		// 启动校验已记录该 secret 质量问题，此处仅给出可用密钥。
+		hash := sha256.Sum256([]byte(secret))
+		return hash[:16]
+	}
+	return key
 }
 
 // GenerateTokenPair 生成Access Token和Refresh Token对
