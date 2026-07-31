@@ -104,7 +104,7 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.Error(err),
 		)
-		response.GinError(c, response.CodeInternalError, err.Error())
+		response.HandleError(c, err)
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *APIKeyHandler) ListAPIKeys(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.Error(err),
 		)
-		response.GinError(c, response.CodeInternalError, "获取列表失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -199,7 +199,7 @@ func (h *APIKeyHandler) GetAPIKey(c *gin.Context) {
 
 	apiKey, err := h.apiKeyService.GetAPIKey(c.Request.Context(), id, userID, isAdmin)
 	if err != nil {
-		response.GinError(c, response.CodeNotFound, err.Error())
+		response.HandleError(c, err)
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 			zap.Uint("key_id", id),
 			zap.Error(err),
 		)
-		response.GinError(c, response.CodeInternalError, err.Error())
+		response.HandleError(c, err)
 		return
 	}
 
@@ -306,7 +306,7 @@ func (h *APIKeyHandler) DeleteAPIKey(c *gin.Context) {
 			zap.Uint("key_id", id),
 			zap.Error(err),
 		)
-		response.GinError(c, response.CodeInternalError, err.Error())
+		response.HandleError(c, err)
 		return
 	}
 
@@ -366,7 +366,7 @@ func (h *APIKeyHandler) ToggleAPIKeyStatus(c *gin.Context) {
 			zap.Uint("key_id", id),
 			zap.Error(err),
 		)
-		response.GinError(c, response.CodeInternalError, err.Error())
+		response.HandleError(c, err)
 		return
 	}
 
@@ -435,7 +435,7 @@ func (h *APIKeyHandler) ListUsageLogs(c *gin.Context) {
 			zap.Uint("key_id", id),
 			zap.Error(err),
 		)
-		response.GinError(c, response.CodeInternalError, err.Error())
+		response.HandleError(c, err)
 		return
 	}
 
@@ -479,7 +479,7 @@ func (h *APIKeyHandler) GetUsageLogSummary(c *gin.Context) {
 			zap.Uint("key_id", id),
 			zap.Error(err),
 		)
-		response.GinError(c, response.CodeInternalError, err.Error())
+		response.HandleError(c, err)
 		return
 	}
 

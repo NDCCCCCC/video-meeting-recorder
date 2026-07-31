@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"go.uber.org/zap"
@@ -41,7 +42,7 @@ func (s *APIKeyService) findAPIKeyForUser(ctx context.Context, id, userID uint, 
 	}
 	if err := query.First(&apiKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("API密钥不存在")
+			return nil, apperrors.ErrAPIKeyNotFound
 		}
 		return nil, err
 	}
@@ -86,7 +87,7 @@ func (s *APIKeyService) CreateAPIKey(ctx context.Context, userID uint, req *Crea
 	// 验证作用域
 	for _, scope := range req.Scopes {
 		if scope != models.ScopeRead && scope != models.ScopeWrite && scope != models.ScopeAdmin {
-			return nil, "", fmt.Errorf("无效的作用域: %s", scope)
+			return nil, "", fmt.Errorf("无效的作用域: %s: %w", scope, apperrors.ErrInvalidInput)
 		}
 	}
 
@@ -95,10 +96,10 @@ func (s *APIKeyService) CreateAPIKey(ctx context.Context, userID uint, req *Crea
 	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
 		t, err := time.Parse(time.RFC3339, *req.ExpiresAt)
 		if err != nil {
-			return nil, "", fmt.Errorf("无效的过期时间格式: %w", err)
+			return nil, "", fmt.Errorf("无效的过期时间格式: %w", fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err))
 		}
 		if t.Before(time.Now()) {
-			return nil, "", errors.New("过期时间不能早于当前时间")
+			return nil, "", fmt.Errorf("过期时间不能早于当前时间: %w", apperrors.ErrInvalidInput)
 		}
 		expiresAt = &t
 	}
@@ -128,7 +129,7 @@ func (s *APIKeyService) CreateAPIKey(ctx context.Context, userID uint, req *Crea
 	// 生成密钥并保存
 	if err := s.db.WithContext(ctx).Create(apiKey).Error; err != nil {
 		s.logger.Error("创建API密钥失败", zap.Error(err))
-		return nil, "", errors.New("创建API密钥失败")
+		return nil, "", fmt.Errorf("创建API密钥失败: %w", err)
 	}
 
 	s.logger.Info("API密钥已创建",
@@ -291,29 +292,29 @@ func (s *APIKeyService) ValidateAPIKey(ctx context.Context, key string, clientIP
 	var apiKey models.APIKey
 	if err := s.db.WithContext(ctx).Preload("User").Preload("User.Role").Where("key = ?", key).First(&apiKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("无效的API密钥")
+			return nil, apperrors.ErrAPIKeyInvalid
 		}
 		return nil, err
 	}
 
 	// 检查是否过期
 	if apiKey.IsExpired() {
-		return nil, errors.New("API密钥已过期")
+		return nil, apperrors.ErrAPIKeyExpired
 	}
 
 	// 检查是否启用
 	if !apiKey.IsActive {
-		return nil, errors.New("API密钥已禁用")
+		return nil, apperrors.ErrAPIKeyDisabled
 	}
 
 	// 检查用户状态
 	if !apiKey.User.IsActive {
-		return nil, errors.New("用户已被禁用")
+		return nil, apperrors.ErrUserDisabled
 	}
 
 	// 检查IP白名单
 	if !apiKey.IsIPAllowed(clientIP) {
-		return nil, errors.New("IP地址不在白名单中")
+		return nil, apperrors.ErrAPIKeyIPNotAllowed
 	}
 
 	// 更新最后使用时间
@@ -363,7 +364,7 @@ func (s *APIKeyService) ListUsageLogs(ctx context.Context, userID uint, isAdmin 
 		}
 		if err := keyQuery.First(&apiKey).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, 0, errors.New("API密钥不存在")
+				return nil, 0, apperrors.ErrAPIKeyNotFound
 			}
 			return nil, 0, err
 		}

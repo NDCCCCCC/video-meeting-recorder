@@ -65,6 +65,15 @@ var (
 	ErrSystemRoleProtected   = errors.New("system role protected from deletion")
 	ErrRoleInUse             = errors.New("role still in use by users")
 	ErrPermissionNotFound    = errors.New("permission not found")
+
+	// APIKey sentinels（Phase 19 D10）：apikey_service admin 路径统一化。
+	// apikey 验证路径（ValidateAPIKey）与 D7 token 校验类似——区分 NotFound / Invalid /
+	// Expired / Disabled / IP-Not-Allowed。错误经 IsKnownError 链调用方分支。
+	ErrAPIKeyNotFound       = errors.New("API key not found")
+	ErrAPIKeyInvalid        = errors.New("API key invalid")
+	ErrAPIKeyExpired        = errors.New("API key expired")
+	ErrAPIKeyDisabled       = errors.New("API key disabled")
+	ErrAPIKeyIPNotAllowed   = errors.New("API key IP not allowed")
 )
 
 // Wrap 包装错误，添加上下文信息

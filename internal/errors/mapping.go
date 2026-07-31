@@ -48,18 +48,23 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		errors.Is(err, ErrUserNotFound),
 		errors.Is(err, ErrRoleNotFound),
 		errors.Is(err, ErrADAccountNotFound),
-		errors.Is(err, ErrPermissionNotFound):
+		errors.Is(err, ErrPermissionNotFound),
+		errors.Is(err, ErrAPIKeyNotFound):
 		return http.StatusNotFound, respCodeNotFound, "资源不存在"
 	case errors.Is(err, ErrUnauthorized),
 		errors.Is(err, ErrTokenInvalid),
 		errors.Is(err, ErrTokenExpired),
 		errors.Is(err, ErrTokenNotYetValid),
-		errors.Is(err, ErrTokenReplayed):
+		errors.Is(err, ErrTokenReplayed),
+		errors.Is(err, ErrAPIKeyInvalid),
+		errors.Is(err, ErrAPIKeyExpired):
 		return http.StatusUnauthorized, respCodeUnauthorized, "未授权"
 	case errors.Is(err, ErrForbidden),
 		errors.Is(err, ErrSystemAdminProtected),
 		errors.Is(err, ErrSystemRoleProtected),
-		errors.Is(err, ErrUserDisabled):
+		errors.Is(err, ErrUserDisabled),
+		errors.Is(err, ErrAPIKeyDisabled),
+		errors.Is(err, ErrAPIKeyIPNotAllowed):
 		return http.StatusForbidden, respCodeForbidden, "禁止访问"
 	case errors.Is(err, ErrInvalidInput),
 		errors.Is(err, ErrInvalidFileType):
@@ -128,11 +133,14 @@ func IsKnownError(err error) bool {
 	for _, sentinel := range []error{
 		ErrNotFound, ErrTaskNotFound, ErrVideoFileNotFound,
 		ErrUserNotFound, ErrRoleNotFound, ErrADAccountNotFound, ErrPermissionNotFound,
+		ErrAPIKeyNotFound,
 		ErrUnauthorized, ErrForbidden, ErrInvalidInput, ErrInvalidFileType,
 		ErrAlreadyExists, ErrTaskInProgress, ErrUsernameExists, ErrEmailExists,
 		ErrRoleNameExists, ErrRoleInUse,
 		ErrSystemAdminProtected, ErrSystemRoleProtected, ErrUserDisabled,
+		ErrAPIKeyDisabled, ErrAPIKeyIPNotAllowed,
 		ErrTokenInvalid, ErrTokenExpired, ErrTokenNotYetValid, ErrTokenReplayed,
+		ErrAPIKeyInvalid, ErrAPIKeyExpired,
 		ErrInsufficientQuota,
 		ErrServiceUnavailable, ErrADConfigError, ErrADUnreachable,
 		ErrFFmpegFailed, ErrTranscriptionFailed,
