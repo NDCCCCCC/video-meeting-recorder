@@ -468,3 +468,176 @@ func TestRotateIfNeeded_Idempotent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, rotated2, "二轮轮换应为 no-op")
 }
+
+// ============================================================================
+// Wave 4: 按 version 计数（CountByVersion / LogVersionCounts）
+// ============================================================================
+
+func TestCountByVersion_EmptyDB(t *testing.T) {
+	enc := newTestEncryptor(t, "0123456789abcdef0123456789abcdef")
+	db := openInMemoryDB(t)
+	ctx := context.Background()
+
+	counts, err := enc.CountByVersion(ctx, db)
+	require.NoError(t, err)
+	require.Len(t, counts, 3, "3 个列（input_configs.password / stream_password / system_settings[auth.ad.password]）")
+
+	for _, c := range counts {
+		assert.Equal(t, 0, c.Total)
+		assert.Equal(t, 0, c.EmptyRows)
+		assert.Equal(t, 0, c.NonEnvelopeRows)
+		assert.Equal(t, 0, c.UnknownVersion)
+		assert.Empty(t, c.ByVersion)
+	}
+}
+
+func TestCountByVersion_MixedVersions(t *testing.T) {
+	cur := "0123456789abcdef0123456789abcdef"
+	prev := "fedcba9876543210fedcba9876543210"
+
+	// 用 prev 密钥写 v1 envelope
+	encPrev := newTestEncryptorWithPrevious(t, "", "", "v1", prev)
+	env1, _ := encPrev.Encrypt("secret-1")
+	env2, _ := encPrev.Encrypt("secret-2")
+	env3, _ := encPrev.Encrypt("secret-3")
+
+	// 用 cur 密钥写 v2 envelope
+	encCur := newTestEncryptorWithPrevious(t, "v1", prev, "v2", cur)
+	envCur1, _ := encCur.Encrypt("new-1")
+
+	db := openInMemoryDB(t)
+
+	// input_configs.password: 2 个 v1 + 1 个 v2
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "R1", ConfigType: "stream", StreamURL: "rtmp://a",
+		Password: env1, StreamPassword: env2, IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "R2", ConfigType: "stream", StreamURL: "rtmp://b",
+		Password: envCur1, IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "R3", ConfigType: "stream", StreamURL: "rtmp://c",
+		StreamPassword: env3, IsActive: true,
+	}).Error)
+	// 空行（合法"无凭据"）
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Empty", ConfigType: "stream", StreamURL: "rtmp://e", IsActive: true,
+	}).Error)
+	// 明文遗留（应被 NonEnvelopeRows 捕获）
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Stale", ConfigType: "stream", StreamURL: "rtmp://s",
+		Password: "still-plain", IsActive: true,
+	}).Error)
+	// 未知 version envelope
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "UnknownVer", ConfigType: "stream", StreamURL: "rtmp://u",
+		StreamPassword: "SM4:v999:YWJjZGVm", IsActive: true,
+	}).Error)
+	// system_settings[auth.ad.password] 一个 v1
+	require.NoError(t, db.Create(&models.SystemSetting{
+		Key: "auth.ad.password", Value: env1,
+	}).Error)
+
+	counts, err := encCur.CountByVersion(context.Background(), db)
+	require.NoError(t, err)
+	require.Len(t, counts, 3)
+
+	// 找到 input_configs.password 这一列
+	var pwCounts, spCounts, adCounts VersionCounts
+	for _, c := range counts {
+		switch c.Column {
+		case "input_configs.password":
+			pwCounts = c
+		case "input_configs.stream_password":
+			spCounts = c
+		case "system_settings[auth.ad.password]":
+			adCounts = c
+		}
+	}
+
+	// input_configs.password: 1 v1 (R1.env1) + 1 v2 (R2.envCur1) = 2 envelopes,
+	// 3 empty (R3/Empty/UnknownVer.Password=""), 1 non-envelope (Stale.Password="still-plain")
+	assert.Equal(t, 2, pwCounts.Total)
+	assert.Equal(t, 1, pwCounts.NonEnvelopeRows, "明文遗留应被 NonEnvelopeRows 捕获")
+	assert.Equal(t, 3, pwCounts.EmptyRows)
+	assert.Equal(t, 0, pwCounts.UnknownVersion)
+	assert.Equal(t, 1, pwCounts.ByVersion["v1"])
+	assert.Equal(t, 1, pwCounts.ByVersion["v2"])
+
+	// input_configs.stream_password: 2 v1 (R1.env2 + R3.env3) + 1 v999 (UnknownVer) = 3 envelopes,
+	// 3 empty (R2/Empty/Stale.StreamPassword=""), 0 non-envelope
+	assert.Equal(t, 3, spCounts.Total)
+	assert.Equal(t, 1, spCounts.UnknownVersion, "v999 应被 UnknownVersion 捕获")
+	assert.Equal(t, 3, spCounts.EmptyRows)
+	assert.Equal(t, 0, spCounts.NonEnvelopeRows)
+	assert.Equal(t, 2, spCounts.ByVersion["v1"])
+	assert.Equal(t, 0, spCounts.ByVersion["v2"])
+	_, hasV999 := spCounts.ByVersion["v999"]
+	assert.True(t, hasV999, "v999 应出现在 ByVersion map")
+
+	// system_settings[auth.ad.password]: 1 v1
+	assert.Equal(t, 1, adCounts.Total)
+	assert.Equal(t, 1, adCounts.ByVersion["v1"])
+}
+
+func TestVersionCounts_FormatForLog_SortedKeys(t *testing.T) {
+	// 不依赖 db，纯字段测试
+	c := VersionCounts{
+		Column:         "input_configs.password",
+		Total:          5,
+		EmptyRows:      1,
+		ByVersion:      map[string]int{"v2": 2, "v1": 2, "v3": 1, "v999": 0},
+		UnknownVersion: 0,
+	}
+
+	fields := c.FormatForLog()
+	require.Greater(t, len(fields), 4, "至少含 column / total / empty_rows / non_envelope_rows / unknown_version_rows + by_version__*")
+
+	// 检查 by_version__* 输出按字典序排列：v1, v2, v3, v999
+	var prev string
+	for _, f := range fields {
+		key := f.Key
+		if !strings.HasPrefix(key, "by_version__") {
+			continue
+		}
+		v := strings.TrimPrefix(key, "by_version__")
+		if prev != "" {
+			assert.True(t, prev <= v, "by_version__ 字段必须按字典序排列：prev=%q v=%q", prev, v)
+		}
+		prev = v
+	}
+}
+
+func TestLogVersionCounts_DoesNotError(t *testing.T) {
+	enc := newTestEncryptor(t, "0123456789abcdef0123456789abcdef")
+	db := openInMemoryDB(t)
+
+	require.NoError(t, enc.LogVersionCounts(context.Background(), db, "after_migrate"))
+}
+
+func TestLogVersionCounts_NoPrevious(t *testing.T) {
+	// 验证无 previous 密钥时（默认场景），unknown_version 仍正确报告
+	enc := newTestEncryptor(t, "0123456789abcdef0123456789abcdef")
+	db := openInMemoryDB(t)
+
+	// 直接 INSERT 一个 v2 envelope（不是 current=v1）
+	ct, _ := utils.EncryptGCM(enc.currentKey, []byte("pw"))
+	envV2, _ := utils.EncodeCredentialEnvelope("v2", ct)
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Mismatch", ConfigType: "stream", StreamURL: "rtmp://m",
+		Password: envV2, IsActive: true,
+	}).Error)
+
+	counts, err := enc.CountByVersion(context.Background(), db)
+	require.NoError(t, err)
+
+	var pw VersionCounts
+	for _, c := range counts {
+		if c.Column == "input_configs.password" {
+			pw = c
+		}
+	}
+	assert.Equal(t, 1, pw.UnknownVersion, "无 previous 密钥时 v2 应算 unknown")
+	assert.Equal(t, 1, pw.ByVersion["v2"])
+}

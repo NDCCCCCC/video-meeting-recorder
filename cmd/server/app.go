@@ -163,6 +163,11 @@ func (a *MinimalApp) Initialize() error {
 		return fmt.Errorf("凭据明文迁移失败: %w", err)
 	}
 
+	// Wave 4 step 4a：迁移后按 version 计数打日志（operator 确认 plaintext 已清零）
+	if err := a.credentialEncryptor.LogVersionCounts(context.Background(), a.db, "after_migrate"); err != nil {
+		a.logger.Warn("凭据 version 计数日志（after_migrate）失败", zap.Error(err))
+	}
+
 	// Phase 18 step 5：第一次 InvariantScan（必须 0 失败）
 	if err := a.credentialEncryptor.InvariantScan(context.Background(), a.db); err != nil {
 		return fmt.Errorf("凭据 invariant scan 失败: %w", err)
@@ -177,9 +182,19 @@ func (a *MinimalApp) Initialize() error {
 		a.logger.Info("凭据轮换完成", zap.Int("rotated", rotated))
 	}
 
+	// Wave 4 step 6a：轮换后按 version 计数打日志（operator 确认 previous 已归零）
+	if err := a.credentialEncryptor.LogVersionCounts(context.Background(), a.db, "after_rotate"); err != nil {
+		a.logger.Warn("凭据 version 计数日志（after_rotate）失败", zap.Error(err))
+	}
+
 	// Phase 18 step 7：第二次 InvariantScan（轮换后必须全部为 current version）
 	if err := a.credentialEncryptor.InvariantScan(context.Background(), a.db); err != nil {
 		return fmt.Errorf("凭据轮换后 invariant scan 失败: %w", err)
+	}
+
+	// Wave 4 step 7a：第二次 invariant 通过后再打一次 version 计数日志（最终确认）
+	if err := a.credentialEncryptor.LogVersionCounts(context.Background(), a.db, "after_invariant"); err != nil {
+		a.logger.Warn("凭据 version 计数日志（after_invariant）失败", zap.Error(err))
 	}
 
 	// 初始化Gin路由

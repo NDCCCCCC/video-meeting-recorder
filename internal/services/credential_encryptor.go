@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -313,6 +314,184 @@ func (e *CredentialEncryptor) stripPasswordFromADJSON(raw string) (string, bool,
 		return raw, false, fmt.Errorf("序列化去除 password 后的 JSON 失败: %w", err)
 	}
 	return string(out), true, nil
+}
+
+// ---------------------------------------------------------------------------
+// 凭据按 version 计数（启动期 / 轮换后可观测）
+// ---------------------------------------------------------------------------
+
+// VersionCounts 报告单个 envelope 列（input_configs.password 等）按 version 切片的行数。
+// 版本计数是 fail-closed 启动流程中的关键可观测性数据：operator 通过日志确认
+// （1）历史 plaintext 已全部 envelope 化；（2）previous 版本在 RotateIfNeeded 后归零。
+type VersionCounts struct {
+	Column          string         // "input_configs.password" 等
+	Total           int            // 该列所有非空 envelope 行数
+	ByVersion       map[string]int // version -> 行数（包含 current / previous / unknown）
+	EmptyRows       int            // 该列空字符串行数（视为"无凭据"，合法）
+	NonEnvelopeRows int            // 该列"非 envelope"行数（明文 / base64-stub，迁移遗漏，应为 0）
+	UnknownVersion  int            // envelope 但 version 不在 current/previous 白名单
+}
+
+// FormatForLog 把 VersionCounts 序列化成适合 zap logger 字段的扁平 map。
+// keys: column、total、by_version__<v>、empty、non_envelope、unknown_version。
+func (vc VersionCounts) FormatForLog() []zap.Field {
+	fields := []zap.Field{
+		zap.String("column", vc.Column),
+		zap.Int("total", vc.Total),
+		zap.Int("empty_rows", vc.EmptyRows),
+		zap.Int("non_envelope_rows", vc.NonEnvelopeRows),
+		zap.Int("unknown_version_rows", vc.UnknownVersion),
+	}
+	// 排序输出，避免 map 迭代顺序波动打乱日志
+	versions := make([]string, 0, len(vc.ByVersion))
+	for v := range vc.ByVersion {
+		versions = append(versions, v)
+	}
+	sort.Strings(versions)
+	for _, v := range versions {
+		fields = append(fields, zap.Int("by_version__"+v, vc.ByVersion[v]))
+	}
+	return fields
+}
+
+// countColumnByVersion 扫描指定表的指定列，按 envelope version 切片统计。
+//
+// 行为约定：
+//   - 空字符串视为"无凭据"，计入 EmptyRows（合法）；
+//   - 形如 "SM4:<ver>:<base64>" 的字符串 → ByVersion[ver]++；
+//     若 ver 既不是 current 也不是 previous，则同时记入 UnknownVersion；
+//   - 其他非空字符串（明文 / base64-stub / 损坏 envelope） → 记入 NonEnvelopeRows。
+//
+// 调用场景：MigratePlaintextToGCM 之后、RotateIfNeeded 之后、第二次 InvariantScan 之后；
+// 日志输出后 operator 可视化确认每一阶段的 version 分布。
+func (e *CredentialEncryptor) countColumnByVersion(ctx context.Context, db *gorm.DB, table, column string) (VersionCounts, error) {
+	counts := VersionCounts{
+		Column:    table + "." + column,
+		ByVersion: make(map[string]int),
+	}
+
+	// 用 raw SQL SELECT 仅取目标列 —— 避免 GORM 把 SELECT column 当作 model 字段扫描
+	// （column=password 时，Scan 到 type=struct {Value string} 会因 gorm scanner 不识别而失败）。
+	// 表名 / 列名都来自内部常量，不存在注入风险。
+	rows, err := db.WithContext(ctx).Raw(
+		"SELECT " + column + " AS v FROM " + table,
+	).Rows()
+	if err != nil {
+		return counts, fmt.Errorf("countColumnByVersion: 扫描 %s.%s 失败: %w", table, column, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return counts, fmt.Errorf("countColumnByVersion: Scan %s.%s 失败: %w", table, column, err)
+		}
+		if v == "" {
+			counts.EmptyRows++
+			continue
+		}
+		version, _, err := utils.ParseCredentialEnvelope(v)
+		if err != nil {
+			// 非 envelope → 迁移遗漏或历史损坏
+			counts.NonEnvelopeRows++
+			continue
+		}
+		counts.ByVersion[version]++
+		if version != e.currentVersion && version != e.previousVersion {
+			counts.UnknownVersion++
+		}
+		counts.Total++
+	}
+	if err := rows.Err(); err != nil {
+		return counts, fmt.Errorf("countColumnByVersion: 迭代 %s.%s 失败: %w", table, column, err)
+	}
+	return counts, nil
+}
+
+// CountByVersion 报告所有受保护凭据列的 version 分布快照。
+//
+// 返回结构：每个 (table, column) 元组对应一个 VersionCounts；调用方负责把
+// 结果打到日志（MigratePlaintextToGCM 后、RotateIfNeeded 后、第二次 InvariantScan 后各一次）。
+//
+// 设计选择：扫描 input_configs.password / input_configs.stream_password /
+// system_settings[auth.ad.password] 三列；auth.ad JSON 不再包含 password
+// 字段（已被 MigratePlaintextToGCM 剥离），所以跳过。
+func (e *CredentialEncryptor) CountByVersion(ctx context.Context, db *gorm.DB) ([]VersionCounts, error) {
+	targets := []struct {
+		table, column string
+	}{
+		{"input_configs", "password"},
+		{"input_configs", "stream_password"},
+	}
+
+	out := make([]VersionCounts, 0, len(targets)+1)
+	for _, t := range targets {
+		c, err := e.countColumnByVersion(ctx, db, t.table, t.column)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+
+	// system_settings 是 key-value 表；我们只关心 key='auth.ad.password' 的行
+	adCounts := VersionCounts{
+		Column:    "system_settings[auth.ad.password]",
+		ByVersion: make(map[string]int),
+	}
+	adRows, err := db.WithContext(ctx).Raw(
+		"SELECT value AS v FROM system_settings WHERE `key` = ?", "auth.ad.password",
+	).Rows()
+	if err != nil {
+		return nil, fmt.Errorf("CountByVersion: 扫描 system_settings[auth.ad.password] 失败: %w", err)
+	}
+	defer adRows.Close()
+	for adRows.Next() {
+		var v string
+		if err := adRows.Scan(&v); err != nil {
+			return nil, fmt.Errorf("CountByVersion: Scan auth.ad.password 失败: %w", err)
+		}
+		if v == "" {
+			adCounts.EmptyRows++
+			continue
+		}
+		version, _, err := utils.ParseCredentialEnvelope(v)
+		if err != nil {
+			adCounts.NonEnvelopeRows++
+			continue
+		}
+		adCounts.ByVersion[version]++
+		if version != e.currentVersion && version != e.previousVersion {
+			adCounts.UnknownVersion++
+		}
+		adCounts.Total++
+	}
+	if err := adRows.Err(); err != nil {
+		return nil, fmt.Errorf("CountByVersion: 迭代 auth.ad.password 失败: %w", err)
+	}
+	out = append(out, adCounts)
+	return out, nil
+}
+
+// LogVersionCounts 把 CountByVersion 结果扁平化成 zap fields 并以 Info 级别输出。
+//
+// 输出示例（INFO 阶段 = "after_migrate"）：
+//
+//	"credential version counts" column="input_configs.password" total=12
+//	    empty_rows=3 non_envelope_rows=0 unknown_version_rows=0 by_version__v1=9
+//
+// stage 取值：建议 "after_migrate" / "after_rotate" / "after_invariant"，
+// 方便 operator 在日志聚合系统按 stage 切片观察轮换进度。
+func (e *CredentialEncryptor) LogVersionCounts(ctx context.Context, db *gorm.DB, stage string) error {
+	counts, err := e.CountByVersion(ctx, db)
+	if err != nil {
+		return err
+	}
+	for _, c := range counts {
+		fields := c.FormatForLog()
+		fields = append(fields, zap.String("stage", stage))
+		e.logger.Info("credential version counts", fields...)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
