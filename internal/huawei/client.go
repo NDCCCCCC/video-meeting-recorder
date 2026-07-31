@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
 )
 
@@ -285,27 +286,29 @@ func (c *HTTPClient) SetOutboundURLAllowlist(allowlist []string, environment str
 }
 
 // guardOutboundURL 校验 baseURL 是否在出站白名单。SEC-013 SSRF 防御。
+// Phase 19 D17: URL config 错误包装 apperrors.ErrServiceUnavailable (503),
+//   与 tingwu_client (D14) 行为对称——区分配置错与传输错。
 func (c *HTTPClient) guardOutboundURL() error {
 	if c.baseURL == nil {
-		return fmt.Errorf("client 未初始化 baseURL")
+		return fmt.Errorf("client 未初始化 baseURL: %w", apperrors.ErrServiceUnavailable)
 	}
 	host := c.baseURL.Hostname()
 	if host == "" {
-		return fmt.Errorf("baseURL 缺少 host: %s", c.baseURL.String())
+		return fmt.Errorf("baseURL 缺少 host: %s: %w", c.baseURL.String(), apperrors.ErrServiceUnavailable)
 	}
 	// 开发环境绕过白名单
 	if c.environment == "development" {
 		return nil
 	}
 	if len(c.outboundURLAllowlist) == 0 {
-		return fmt.Errorf("outbound URL allowlist 为空且非开发环境，禁止访问: %s", host)
+		return fmt.Errorf("outbound URL allowlist 为空且非开发环境，禁止访问: %s: %w", host, apperrors.ErrServiceUnavailable)
 	}
 	for _, suffix := range c.outboundURLAllowlist {
 		if strings.HasSuffix(host, suffix) {
 			return nil
 		}
 	}
-	return fmt.Errorf("URL 不在出站白名单: %s", host)
+	return fmt.Errorf("URL 不在出站白名单: %s: %w", host, apperrors.ErrServiceUnavailable)
 }
 
 // buildURL 构建API URL
@@ -329,14 +332,14 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("序列化请求体失败: %w", err)
+			return nil, fmt.Errorf("序列化请求体失败: %w: %w", apperrors.ErrInternal, err)
 		}
 		reqBody = bytes.NewReader(jsonBody)
 	}
 	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, "POST", url, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+		return nil, fmt.Errorf("创建请求失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -374,13 +377,13 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("请求失败: %w", err)
+		return nil, fmt.Errorf("请求失败: %w: %w", apperrors.ErrInternal, err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
+		return nil, fmt.Errorf("读取响应失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	if c.logger != nil {
@@ -393,7 +396,7 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 
 	var apiResp APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+		return nil, fmt.Errorf("解析响应失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 提取Cookies（华为终端使用SessionID cookie进行认证）
@@ -433,17 +436,17 @@ func (c *HuaweiClient) InitializeAndStartKeepAlive(ctx context.Context) error {
 
 	// 1. 获取会话ID
 	if err := c.GetSessionID(ctx); err != nil {
-		return fmt.Errorf("获取会话ID失败: %w", err)
+		return fmt.Errorf("获取会话ID失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 2. 用户认证
 	if err := c.Authenticate(ctx); err != nil {
-		return fmt.Errorf("用户认证失败: %w", err)
+		return fmt.Errorf("用户认证失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 3. 替换会话ID
 	if err := c.ChangeSessionID(ctx); err != nil {
-		return fmt.Errorf("替换会话ID失败: %w", err)
+		return fmt.Errorf("替换会话ID失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 4. 启动后台保活机制
@@ -486,14 +489,14 @@ func (c *HuaweiClient) GetSessionID(ctx context.Context) error {
 	if sessionID == "" && resp.Data != "" {
 		var sessionResp SessionIDResponse
 		if err := json.Unmarshal([]byte(resp.Data), &sessionResp); err != nil {
-			return fmt.Errorf("解析会话ID响应失败: %w, data: %s", err, resp.Data)
+			return fmt.Errorf("解析会话ID响应失败: %w, data: %s: %w", err, resp.Data, apperrors.ErrInternal)
 		}
 		sessionID = sessionResp.AcSessionID
 		c.logger.Debug("从data字段获取到SessionID", zap.String("session_id", sessionID))
 	}
 
 	if sessionID == "" {
-		return fmt.Errorf("未能获取到会话ID")
+		return fmt.Errorf("未能获取到会话ID: %w", apperrors.ErrInternal)
 	}
 
 	c.mu.Lock()
@@ -883,7 +886,7 @@ func (c *HuaweiClient) GetTerminalStatus(ctx context.Context, terminalNumber str
 // HealthCheck 健康检查
 func (c *HuaweiClient) HealthCheck() error {
 	if !c.hasSession() {
-		return fmt.Errorf("会话未初始化")
+		return fmt.Errorf("会话未初始化: %w", apperrors.ErrInternal)
 	}
 	return nil
 }

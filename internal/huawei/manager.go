@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
 )
 
@@ -121,7 +122,7 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	// 从数据库获取配置
 	cfg, err := m.db.GetHuaweiConfig(configID)
 	if err != nil {
-		return nil, fmt.Errorf("获取华为配置失败: %w", err)
+		return nil, fmt.Errorf("获取华为配置失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	config := &Config{
@@ -144,7 +145,7 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 
 	// 初始化并启动保活
 	if err := client.InitializeAndStartKeepAlive(ctx); err != nil {
-		return nil, fmt.Errorf("华为终端初始化失败: %w", err)
+		return nil, fmt.Errorf("华为终端初始化失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 缓存客户端
@@ -250,13 +251,13 @@ func (m *Manager) SafeCallConference(ctx context.Context, configID uint, req *Ca
 	// 1. 获取客户端
 	client, err := m.GetClient(ctx, configID)
 	if err != nil {
-		return fmt.Errorf("获取客户端失败: %w", err)
+		return fmt.Errorf("获取客户端失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 2. 获取终端状态
 	status, err := client.GetTerminalStatus(ctx, req.TerminalNumber)
 	if err != nil {
-		return fmt.Errorf("获取终端状态失败: %w", err)
+		return fmt.Errorf("获取终端状态失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 3. 如果终端正在通话，先挂断
@@ -276,7 +277,7 @@ func (m *Manager) SafeCallConference(ctx context.Context, configID uint, req *Ca
 
 	// 4. 呼叫会议
 	if err := client.CallConference(ctx, req.ConferenceNumber); err != nil {
-		return fmt.Errorf("呼叫会议失败: %w", err)
+		return fmt.Errorf("呼叫会议失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	m.logger.Info("安全呼叫会议成功",
@@ -309,7 +310,7 @@ func (m *Manager) WaitForConnection(ctx context.Context, configID uint, conferen
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("等待连接超时")
+			return fmt.Errorf("等待连接超时: %w", apperrors.ErrServiceUnavailable)
 		case <-ticker.C:
 			client, err := m.GetClient(ctx, configID)
 			if err != nil {
@@ -322,7 +323,7 @@ func (m *Manager) WaitForConnection(ctx context.Context, configID uint, conferen
 			if err != nil {
 				retryCount++
 				if retryCount >= maxRetries {
-					return fmt.Errorf("获取会议信息失败，已重试%d次: %w", maxRetries, err)
+					return fmt.Errorf("获取会议信息失败，已重试%d次: %w: %w", maxRetries, apperrors.ErrInternal, err)
 				}
 				m.logger.Warn("获取会议信息失败，继续等待",
 					zap.Error(err),
