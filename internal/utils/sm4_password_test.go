@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDeriveSM4Key(t *testing.T) {
@@ -129,4 +131,142 @@ func TestDecryptPasswordECB(t *testing.T) {
 
 func TestENCRYPTION_PREFIX(t *testing.T) {
 	assert.Equal(t, "SM4:", ENCRYPTION_PREFIX, "加密前缀必须为 'SM4:'")
+}
+
+// ============================================================================
+// Phase 18: 凭据静态加密 (SM4-GCM) 测试
+// ============================================================================
+
+func TestEncryptGCM_DecryptGCM_RoundTrip(t *testing.T) {
+	key := DeriveCredentialSM4Key("test-credential-sm4-secret-key-32+")
+
+	tests := []struct {
+		name      string
+		plaintext string
+	}{
+		{"ASCII 短明文", "admin123"},
+		{"中文凭据", "复杂密码_中文"},
+		{"长明文 (1KB)", strings.Repeat("a", 1024)},
+		{"空字符串以外的极短", "x"},
+		{"数字 + 符号", "P@ssw0rd!#$%"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ct, err := EncryptGCM(key, []byte(tt.plaintext))
+			require.NoError(t, err, "EncryptGCM 应成功")
+			require.GreaterOrEqual(t, len(ct), gcmNonceSize+gcmTagSize, "密文至少包含 nonce + tag")
+
+			pt, err := DecryptGCM(key, ct)
+			require.NoError(t, err, "DecryptGCM 应成功")
+			assert.Equal(t, tt.plaintext, string(pt), "明文回环应一致")
+		})
+	}
+}
+
+func TestEncryptGCM_NonceIsRandom(t *testing.T) {
+	key := DeriveCredentialSM4Key("test-credential-sm4-secret-key-32+")
+	plaintext := []byte("admin123")
+
+	ct1, err := EncryptGCM(key, plaintext)
+	require.NoError(t, err)
+	ct2, err := EncryptGCM(key, plaintext)
+	require.NoError(t, err)
+
+	// 同明文 + 同密钥 → 密文必须不同（nonce 随机）
+	assert.NotEqual(t, ct1, ct2, "GCM nonce 必须随机生成，避免 deterministic 加密")
+
+	// 但都应能解密回原文
+	pt1, _ := DecryptGCM(key, ct1)
+	pt2, _ := DecryptGCM(key, ct2)
+	assert.Equal(t, string(pt1), string(pt2), "两次密文都应能解出相同明文")
+}
+
+func TestDecryptGCM_WrongKey(t *testing.T) {
+	key1 := DeriveCredentialSM4Key("key-one-1234567890abcdefghij")
+	key2 := DeriveCredentialSM4Key("key-two-1234567890abcdefghij")
+
+	ct, err := EncryptGCM(key1, []byte("admin123"))
+	require.NoError(t, err)
+
+	_, err = DecryptGCM(key2, ct)
+	assert.Error(t, err, "错误密钥解密应失败")
+}
+
+func TestDecryptGCM_TamperedCiphertext(t *testing.T) {
+	key := DeriveCredentialSM4Key("test-credential-sm4-secret-key-32+")
+	ct, err := EncryptGCM(key, []byte("admin123"))
+	require.NoError(t, err)
+
+	// 篡改密文中间一个字节（不在 nonce 也不在 tag）
+	ct[len(ct)-1] ^= 0xFF // 翻转 tag 最后一个 bit
+
+	_, err = DecryptGCM(key, ct)
+	assert.Error(t, err, "篡改 tag 的密文应被拒绝")
+	assert.Contains(t, err.Error(), "tag", "错误应提及 tag 校验")
+}
+
+func TestDecryptGCM_TruncatedCiphertext(t *testing.T) {
+	key := DeriveCredentialSM4Key("test-credential-sm4-secret-key-32+")
+	ct, err := EncryptGCM(key, []byte("admin123"))
+	require.NoError(t, err)
+
+	// 截断到 < nonce+tag → 必须失败
+	_, err = DecryptGCM(key, ct[:gcmNonceSize+gcmTagSize-1])
+	assert.Error(t, err, "过短密文应被拒绝")
+}
+
+func TestDecryptGCM_InvalidKeyLength(t *testing.T) {
+	shortKey := []byte("short") // < 16 bytes
+	_, err := EncryptGCM(shortKey, []byte("x"))
+	assert.Error(t, err, "短密钥应被拒绝")
+	assert.Contains(t, err.Error(), "密钥长度", "错误应明确说明密钥长度问题")
+}
+
+func TestParseCredentialEnvelope_Success(t *testing.T) {
+	payload := []byte("test-payload-bytes")
+	encoded, err := EncodeCredentialEnvelope("v1", payload)
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(encoded, "SM4:"), "envelope 必须以 SM4: 开头")
+
+	version, decoded, err := ParseCredentialEnvelope(encoded)
+	require.NoError(t, err)
+	assert.Equal(t, "v1", version, "version 段解析应一致")
+	assert.Equal(t, payload, decoded, "payload 解码应一致")
+}
+
+func TestParseCredentialEnvelope_MissingPrefix(t *testing.T) {
+	_, _, err := ParseCredentialEnvelope("v1:abc")
+	assert.Error(t, err, "缺少 SM4: 前缀应失败")
+}
+
+func TestParseCredentialEnvelope_MissingVersion(t *testing.T) {
+	// "SM4:" 之后没有冒号 → version 段缺失
+	_, _, err := ParseCredentialEnvelope("SM4:" + base64.StdEncoding.EncodeToString([]byte("x")))
+	assert.Error(t, err, "缺少 version 段应失败")
+}
+
+func TestParseCredentialEnvelope_EmptyPayload(t *testing.T) {
+	_, _, err := ParseCredentialEnvelope("SM4:v1:")
+	assert.Error(t, err, "空 payload 应失败")
+}
+
+func TestParseCredentialEnvelope_InvalidBase64(t *testing.T) {
+	_, _, err := ParseCredentialEnvelope("SM4:v1:!!!invalid-base64!!!")
+	assert.Error(t, err, "无效 base64 应失败")
+}
+
+func TestEncodeCredentialEnvelope_EmptyVersion(t *testing.T) {
+	_, err := EncodeCredentialEnvelope("", []byte("x"))
+	assert.Error(t, err, "空 version 应失败")
+}
+
+func TestEncodeCredentialEnvelope_EmptyPayload(t *testing.T) {
+	_, err := EncodeCredentialEnvelope("v1", nil)
+	assert.Error(t, err, "空 payload 应失败")
+}
+
+func TestCredentialEnvelopeVersion_Constant(t *testing.T) {
+	// 锁定的常量，防止未来无意修改
+	assert.Equal(t, "v1", CredentialEnvelopeVersion, "当前 envelope 版本必须为 v1")
 }
