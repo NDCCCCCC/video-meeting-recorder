@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -449,7 +450,10 @@ func TestCheckIPRestriction_InvalidClientIP(t *testing.T) {
 }
 
 // TestCheckIPRestriction_AuditLogOnFailure tests audit logging on IP check failure
-// Validates that IP restriction failures are logged to audit log per D-14
+// Validates that IP restriction failures are logged to audit log per D-14.
+// Phase 19 D12: 验证 sentinel (apperrors.ErrForbidden) 而非 string-match——
+// errors.Is 是稳定契约;Service.CheckIPRestriction 现在返回 ErrForbidden,
+// audit log 仍保留详细 message string 给运维 (与 sentinel err.Error() 分离)。
 func TestCheckIPRestriction_AuditLogOnFailure(t *testing.T) {
 
 	ctx := context.Background()
@@ -463,7 +467,8 @@ func TestCheckIPRestriction_AuditLogOnFailure(t *testing.T) {
 	// For now, just verify the error is returned correctly
 	err := service.CheckIPRestriction(ctx, user, "192.168.1.101")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "不在允许列表中")
+	assert.True(t, apperrors.Is(err, apperrors.ErrForbidden),
+		"expected ErrForbidden sentinel, got %v", err)
 
 	// TODO: Verify audit log entry was created
 	// TODO: Assert log contains: UserID, Username, Action=ip_restriction_failed, ClientIP, Status=failure

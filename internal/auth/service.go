@@ -3,7 +3,9 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
@@ -147,7 +149,7 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, ipAddress, userA
 		authenticator = s.adAuth
 	default:
 		s.logger.Error("Invalid authentication mode", zap.String("mode", s.cfg.Auth.Mode))
-		return nil, errors.New("无效的认证模式")
+		return nil, apperrors.ErrInternal
 	}
 
 	// Route to selected authenticator (no fallback per D-04)
@@ -209,6 +211,9 @@ func (s *Service) CheckIPRestriction(ctx context.Context, user *models.User, cli
 				ErrorMsg:  "IP地址验证失败: " + err.Error(),
 			})
 		}
+		// Phase 19 D12: 维持 errors.New (400 通用错误语义由 IPValidator.IsIPAllowed 内部
+		// 错误统一化已经是 D8);保留 errors.New \"IP地址验证失败\" 文案保证 admin_handler_test
+		// 等 string-match 测试稳定;sentinel 化留给后续 phase 触达 admin_handler.go 时一并。
 		return errors.New("IP地址验证失败")
 	}
 
@@ -225,7 +230,7 @@ func (s *Service) CheckIPRestriction(ctx context.Context, user *models.User, cli
 				ErrorMsg:  "您的IP地址不在允许列表中",
 			})
 		}
-		return errors.New("您的IP地址不在允许列表中")
+		return fmt.Errorf("您的IP地址不在允许列表中: %w", apperrors.ErrForbidden)
 	}
 
 	return nil
@@ -265,13 +270,13 @@ func (s *Service) ChangePassword(userID uint, req *ChangePasswordRequest) error 
 
 	// 验证旧密码
 	if !user.CheckPassword(req.OldPassword) {
-		return errors.New("原密码错误")
+		return apperrors.ErrUnauthorized
 	}
 
 	// 验证新密码强度
 	result := s.passwordValidator.Validate(req.NewPassword)
 	if !result.Valid {
-		return errors.New(result.Errors[0])
+		return apperrors.ErrInvalidInput
 	}
 
 	// 设置新密码
