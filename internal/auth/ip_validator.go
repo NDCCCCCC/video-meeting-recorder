@@ -2,23 +2,28 @@ package auth
 
 import (
 	"bytes"
-	"errors"
 	"net"
 	"strings"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // IPValidator IP地址验证器
 type IPValidator struct{}
 
 // ValidateIP 验证单个IP地址
+// Phase 19 D8: 9 散点统一复用 apperrors.ErrInvalidInput (400 BadRequest 语义一致);
+// 无新 sentinel，因为所有 IP/CIDR/range 错误都是"用户配置错误"400 类型。
+// 当前零生产调用方（仅 ip_validator_test.go 测试）；未来 admin UI 配 IP 白名单时，
+// 已 standard 错误路径可被 HandleError 识别。
 func (v *IPValidator) ValidateIP(ipStr string) error {
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
-		return errors.New("invalid IP address")
+		return apperrors.ErrInvalidInput
 	}
 	// Reject IPv6 per D-09
 	if ip.To4() == nil {
-		return errors.New("IPv6 is not supported")
+		return apperrors.ErrInvalidInput
 	}
 	return nil
 }
@@ -27,7 +32,7 @@ func (v *IPValidator) ValidateIP(ipStr string) error {
 func (v *IPValidator) ValidateCIDR(cidr string) error {
 	_, _, err := net.ParseCIDR(cidr)
 	if err != nil {
-		return errors.New("invalid CIDR range")
+		return apperrors.ErrInvalidInput
 	}
 	return nil
 }
@@ -36,19 +41,19 @@ func (v *IPValidator) ValidateCIDR(cidr string) error {
 func (v *IPValidator) ValidateIPRange(rangeStr string) error {
 	parts := strings.Split(rangeStr, "-")
 	if len(parts) != 2 {
-		return errors.New("invalid IP range format")
+		return apperrors.ErrInvalidInput
 	}
 	startIP := net.ParseIP(strings.TrimSpace(parts[0]))
 	endIP := net.ParseIP(strings.TrimSpace(parts[1]))
 	if startIP == nil || endIP == nil {
-		return errors.New("invalid IP addresses in range")
+		return apperrors.ErrInvalidInput
 	}
 	if startIP.To4() == nil || endIP.To4() == nil {
-		return errors.New("IPv6 is not supported")
+		return apperrors.ErrInvalidInput
 	}
 	// Check that end IP is not before start IP
 	if bytes.Compare(startIP.To4(), endIP.To4()) > 0 {
-		return errors.New("invalid IP range format")
+		return apperrors.ErrInvalidInput
 	}
 	return nil
 }
@@ -62,12 +67,12 @@ func (v *IPValidator) IsIPAllowed(clientIP string, allowedList []string) (bool, 
 
 	clientAddr := net.ParseIP(clientIP)
 	if clientAddr == nil {
-		return false, errors.New("invalid client IP")
+		return false, apperrors.ErrInvalidInput
 	}
 
 	// Reject IPv6 addresses per D-09
 	if clientAddr.To4() == nil {
-		return false, errors.New("IPv6 is not supported")
+		return false, apperrors.ErrInvalidInput
 	}
 
 	for _, allowed := range allowedList {

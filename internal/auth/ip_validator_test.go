@@ -3,6 +3,7 @@ package auth
 import (
 	"testing"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -95,45 +96,36 @@ func TestValidateIP_InvalidIP(t *testing.T) {
 }
 
 // TestValidateIP_IPv6Rejected tests IPv6 rejection per D-09
-// Validates that IPv6 addresses are explicitly rejected as per decision D-09
+// Validates that IPv6 addresses are explicitly rejected as per decision D-09.
+// Phase 19 D8: 验证 sentinel 而非 string-match——避免"中文消息变更触发测试回归"
+// 这一 anti-pattern;errors.Is(err, ErrInvalidInput) 是稳定的契约。
 func TestValidateIP_IPv6Rejected(t *testing.T) {
 	validator := &IPValidator{}
 
 	tests := []struct {
-		name    string
-		ip      string
-		wantErr bool
-		errMsg  string
+		name string
+		ip   string
 	}{
 		{
-			name:    "IPv6 full format",
-			ip:      "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
-			wantErr: true,
-			errMsg:  "IPv6 is not supported",
+			name: "IPv6 full format",
+			ip:   "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
 		},
 		{
-			name:    "IPv6 compressed",
-			ip:      "2001:db8::1",
-			wantErr: true,
-			errMsg:  "IPv6 is not supported",
+			name: "IPv6 compressed",
+			ip:   "2001:db8::1",
 		},
 		{
-			name:    "IPv6 loopback",
-			ip:      "::1",
-			wantErr: true,
-			errMsg:  "IPv6 is not supported",
+			name: "IPv6 loopback",
+			ip:   "::1",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validator.ValidateIP(tt.ip)
-			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
-			} else {
-				assert.NoError(t, err)
-			}
+			assert.Error(t, err)
+			assert.True(t, apperrors.Is(err, apperrors.ErrInvalidInput),
+				"expected ErrInvalidInput sentinel, got %v", err)
 		})
 	}
 }
