@@ -101,8 +101,8 @@ type videoMetadata struct {
 }
 
 // ListFiles 获取文件列表
-func (s *VideoFileService) ListFiles(req *ListFilesRequest) (*ListFilesResponse, error) {
-	query := s.db.Model(&models.VideoFile{}).Preload("Task")
+func (s *VideoFileService) ListFiles(ctx context.Context, req *ListFilesRequest) (*ListFilesResponse, error) {
+	query := s.db.WithContext(ctx).Model(&models.VideoFile{}).Preload("Task")
 
 	// 应用筛选条件
 	s.applyFilters(query, req)
@@ -136,7 +136,7 @@ func (s *VideoFileService) ListFiles(req *ListFilesRequest) (*ListFilesResponse,
 			VideoFileID uint `gorm:"column:video_file_id"`
 		}
 
-		s.db.Table("ppt_files").
+		s.db.WithContext(ctx).Table("ppt_files").
 			Select("DISTINCT source_video_file_id as video_file_id").
 			Where("source_video_file_id IN ?", videoIDs).
 			Where("source_video_file_id IS NOT NULL").
@@ -254,9 +254,9 @@ func parseDate(dateStr string) (time.Time, error) {
 }
 
 // GetFileByID 根据ID获取文件
-func (s *VideoFileService) GetFileByID(id uint) (*models.VideoFile, error) {
+func (s *VideoFileService) GetFileByID(ctx context.Context, id uint) (*models.VideoFile, error) {
 	var file models.VideoFile
-	if err := s.db.Preload("Task").Where("id = ?", id).First(&file).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Task").Where("id = ?", id).First(&file).Error; err != nil {
 		return nil, err
 	}
 	return &file, nil
@@ -264,9 +264,9 @@ func (s *VideoFileService) GetFileByID(id uint) (*models.VideoFile, error) {
 
 // DeleteFile 删除文件（支持录制文件和孤立文件）
 // 返回 (oldFile, error): oldFile 是删除前的快照，handler 负责把 OldData 交给 audit.RecordChange
-func (s *VideoFileService) DeleteFile(id uint) (*models.VideoFile, error) {
+func (s *VideoFileService) DeleteFile(ctx context.Context, id uint) (*models.VideoFile, error) {
 	var file models.VideoFile
-	if err := s.db.First(&file, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&file, id).Error; err != nil {
 		return nil, errors.New("文件不存在")
 	}
 
@@ -281,14 +281,14 @@ func (s *VideoFileService) DeleteFile(id uint) (*models.VideoFile, error) {
 	taskID := file.TaskID
 	if taskID == nil {
 		// 孤立文件（用户上传文件等），使用孤立文件删除逻辑
-		if err := s.deleteOrphanFile(&file); err != nil {
+		if err := s.deleteOrphanFile(ctx, &file); err != nil {
 			return nil, err
 		}
 		return &oldFile, nil
 	}
 
 	// 使用事务删除数据库记录
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// 删除任务的所有视频文件记录
 		if err := tx.Where("task_id = ?", *taskID).Delete(&models.VideoFile{}).Error; err != nil {
 			return err
@@ -352,7 +352,7 @@ type BatchDeleteFilesResult struct {
 // 返回的 success/failed 计数是删除的文件数，而非任务数
 // 返回 (oldFiles, result, error): oldFiles 是请求删除的所有 ID 对应的旧记录（含 processing 跳过的），
 // handler 负责把 OldData=oldFiles 交给 audit.RecordChange 写一条 batch_delete 审计行
-func (s *VideoFileService) BatchDeleteFiles(ids []uint) ([]models.VideoFile, *BatchDeleteFilesResult, error) {
+func (s *VideoFileService) BatchDeleteFiles(ctx context.Context, ids []uint) ([]models.VideoFile, *BatchDeleteFilesResult, error) {
 	result := &BatchDeleteFilesResult{}
 
 	if len(ids) == 0 {
@@ -361,7 +361,7 @@ func (s *VideoFileService) BatchDeleteFiles(ids []uint) ([]models.VideoFile, *Ba
 
 	// ★ Snapshot OldData BEFORE any delete（含 processing 跳过的也记录——forensic 完整性）
 	var oldFiles []models.VideoFile
-	if err := s.db.Where("id IN ?", ids).Limit(5000).Find(&oldFiles).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Limit(5000).Find(&oldFiles).Error; err != nil {
 		return nil, result, err
 	}
 
@@ -395,7 +395,7 @@ func (s *VideoFileService) BatchDeleteFiles(ids []uint) ([]models.VideoFile, *Ba
 
 	// 处理孤立文件
 	for _, file := range orphanFiles {
-		if err := s.deleteOrphanFile(&file); err != nil {
+		if err := s.deleteOrphanFile(ctx, &file); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, fmt.Sprintf("删除孤立文件 %d 失败: %v", file.ID, err))
 		} else {
@@ -416,7 +416,7 @@ func (s *VideoFileService) BatchDeleteFiles(ids []uint) ([]models.VideoFile, *Ba
 	// 按任务删除
 	for taskID := range taskIDs {
 		fileCount := taskIDToFileCount[taskID]
-		if err := s.deleteByTaskID(taskID); err != nil {
+		if err := s.deleteByTaskID(ctx, taskID); err != nil {
 			result.Failed += fileCount
 			result.Errors = append(result.Errors, fmt.Sprintf("删除任务 %d（含 %d 个文件）失败: %v", taskID, fileCount, err))
 		} else {
@@ -436,9 +436,9 @@ func (s *VideoFileService) BatchDeleteFiles(ids []uint) ([]models.VideoFile, *Ba
 }
 
 // deleteOrphanFile 删除孤立文件（没有关联任务的文件）
-func (s *VideoFileService) deleteOrphanFile(file *models.VideoFile) error {
+func (s *VideoFileService) deleteOrphanFile(ctx context.Context, file *models.VideoFile) error {
 	// 使用事务删除数据库记录
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Delete(&models.VideoFile{}, file.ID).Error; err != nil {
 			return err
 		}
@@ -465,9 +465,9 @@ func (s *VideoFileService) deleteOrphanFile(file *models.VideoFile) error {
 }
 
 // deleteByTaskID 按任务 ID 删除（删除整个任务目录）
-func (s *VideoFileService) deleteByTaskID(taskID uint) error {
+func (s *VideoFileService) deleteByTaskID(ctx context.Context, taskID uint) error {
 	// 使用事务删除数据库记录
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// 删除任务的所有视频文件记录
 		if err := tx.Where("task_id = ?", taskID).Delete(&models.VideoFile{}).Error; err != nil {
 			return err
@@ -513,7 +513,7 @@ func (s *VideoFileService) deleteByTaskID(taskID uint) error {
 }
 
 // findCounterpartFile 查找对应格式的文件
-func (s *VideoFileService) findCounterpartFile(file *models.VideoFile) *models.VideoFile {
+func (s *VideoFileService) findCounterpartFile(ctx context.Context, file *models.VideoFile) *models.VideoFile {
 	if file.TaskID == nil {
 		return nil
 	}
@@ -524,7 +524,7 @@ func (s *VideoFileService) findCounterpartFile(file *models.VideoFile) *models.V
 		targetFormat = "mkv"
 	}
 
-	if err := s.db.Where("task_id = ? AND format = ? AND id != ?",
+	if err := s.db.WithContext(ctx).Where("task_id = ? AND format = ? AND id != ?",
 		*file.TaskID, targetFormat, file.ID).First(&counterpart).Error; err != nil {
 		return nil
 	}
@@ -552,7 +552,7 @@ func (s *VideoFileService) deletePhysicalFile(file *models.VideoFile) error {
 }
 
 // deleteCounterpartFile 删除对应格式的文件
-func (s *VideoFileService) deleteCounterpartFile(file *models.VideoFile) {
+func (s *VideoFileService) deleteCounterpartFile(ctx context.Context, file *models.VideoFile) {
 	if file.Status == models.FileStatusProcessing {
 		s.logger.Warn("对应格式文件正在处理中，跳过删除",
 			zap.Uint("counterpart_id", file.ID),
@@ -569,7 +569,7 @@ func (s *VideoFileService) deleteCounterpartFile(file *models.VideoFile) {
 		)
 	}
 
-	if err := s.db.Delete(&models.VideoFile{}, file.ID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Delete(&models.VideoFile{}, file.ID).Error; err != nil {
 		s.logger.Warn("删除对应格式数据库记录失败",
 			zap.Uint("counterpart_id", file.ID),
 			zap.Error(err),
@@ -583,9 +583,9 @@ func (s *VideoFileService) deleteCounterpartFile(file *models.VideoFile) {
 }
 
 // GetFilesByTaskID 根据任务ID获取文件列表
-func (s *VideoFileService) GetFilesByTaskID(taskID uint) ([]models.VideoFile, error) {
+func (s *VideoFileService) GetFilesByTaskID(ctx context.Context, taskID uint) ([]models.VideoFile, error) {
 	var files []models.VideoFile
-	if err := s.db.Where("task_id = ?", taskID).
+	if err := s.db.WithContext(ctx).Where("task_id = ?", taskID).
 		Order("created_at ASC").
 		Find(&files).Error; err != nil {
 		return nil, err
@@ -594,15 +594,15 @@ func (s *VideoFileService) GetFilesByTaskID(taskID uint) ([]models.VideoFile, er
 }
 
 // UpdateFileStatus 更新文件状态
-func (s *VideoFileService) UpdateFileStatus(id uint, status string) error {
-	return s.db.Model(&models.VideoFile{}).
+func (s *VideoFileService) UpdateFileStatus(ctx context.Context, id uint, status string) error {
+	return s.db.WithContext(ctx).Model(&models.VideoFile{}).
 		Where("id = ?", id).
 		Update("status", status).Error
 }
 
 // GetFileStats 获取文件统计信息（可按格式筛选）
-func (s *VideoFileService) GetFileStats(format string) (map[string]interface{}, error) {
-	query := s.db.Model(&models.VideoFile{})
+func (s *VideoFileService) GetFileStats(ctx context.Context, format string) (map[string]interface{}, error) {
+	query := s.db.WithContext(ctx).Model(&models.VideoFile{})
 
 	// 按格式筛选（默认只统计 mp4，忽略 mkv）
 	// 如果 format 为空，则默认只统计 mp4
@@ -774,7 +774,7 @@ func (s *VideoFileService) parseFFProbeOutput(output []byte) (*videoMetadata, er
 }
 
 // CreateFileFromTask 从录制任务创建文件记录
-func (s *VideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, format *string) (*models.VideoFile, error) {
+func (s *VideoFileService) CreateFileFromTask(ctx context.Context, task *models.VideoRecordingTask, format *string) (*models.VideoFile, error) {
 	if task == nil {
 		return nil, errors.New("创建文件记录失败：任务对象为 nil")
 	}
@@ -790,12 +790,12 @@ func (s *VideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, f
 	}
 
 	// 检查文件是否已存在
-	if existingFile, err := s.findExistingFile(filePath); err == nil {
+	if existingFile, err := s.findExistingFile(ctx, filePath); err == nil {
 		return existingFile, nil
 	}
 
 	// 创建新文件记录
-	return s.createNewFile(filePath, &task.ID, nil, formatStr, task.CreatedBy, models.SourceTypeRecording)
+	return s.createNewFile(ctx, filePath, &task.ID, nil, formatStr, task.CreatedBy, models.SourceTypeRecording)
 }
 
 // getTaskFilePath 获取任务文件路径
@@ -822,9 +822,9 @@ func (s *VideoFileService) getTaskFilePath(task *models.VideoRecordingTask, form
 }
 
 // findExistingFile 查找已存在的文件
-func (s *VideoFileService) findExistingFile(filePath string) (*models.VideoFile, error) {
+func (s *VideoFileService) findExistingFile(ctx context.Context, filePath string) (*models.VideoFile, error) {
 	var existingFile models.VideoFile
-	if err := s.db.Where("file_path = ?", filePath).First(&existingFile).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("file_path = ?", filePath).First(&existingFile).Error; err != nil {
 		return nil, err
 	}
 
@@ -837,7 +837,7 @@ func (s *VideoFileService) findExistingFile(filePath string) (*models.VideoFile,
 }
 
 // createNewFile 创建新的文件记录
-func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recordedAt *time.Time, format string, createdBy uint, sourceType string) (*models.VideoFile, error) {
+func (s *VideoFileService) createNewFile(ctx context.Context, filePath string, taskID *uint, recordedAt *time.Time, format string, createdBy uint, sourceType string) (*models.VideoFile, error) {
 	// 提取元数据
 	metadata, err := s.extractVideoMetadata(filePath)
 	if err != nil {
@@ -886,11 +886,11 @@ func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recorded
 		SourceType: sourceType,
 	}
 
-	if err := s.createWithDuplicateCheck(videoFile); err != nil {
+	if err := s.createWithDuplicateCheck(ctx, videoFile); err != nil {
 		// 如果是外键约束失败，尝试验证任务是否存在
 		if strings.Contains(err.Error(), "FOREIGN KEY") && taskID != nil {
 			var taskExists models.VideoRecordingTask
-			if checkErr := s.db.Select("id").First(&taskExists, *taskID).Error; checkErr != nil {
+			if checkErr := s.db.WithContext(ctx).Select("id").First(&taskExists, *taskID).Error; checkErr != nil {
 				s.logger.Error("外键约束失败：任务不存在",
 					zap.Uint("task_id", *taskID),
 					zap.Error(checkErr),
@@ -916,12 +916,12 @@ func (s *VideoFileService) createNewFile(filePath string, taskID *uint, recorded
 }
 
 // createWithDuplicateCheck 创建记录并处理重复
-func (s *VideoFileService) createWithDuplicateCheck(videoFile *models.VideoFile) error {
-	if err := s.db.Create(videoFile).Error; err != nil {
+func (s *VideoFileService) createWithDuplicateCheck(ctx context.Context, videoFile *models.VideoFile) error {
+	if err := s.db.WithContext(ctx).Create(videoFile).Error; err != nil {
 		if s.isDuplicateError(err) {
 			// 并发情况下，重新查询现有记录
 			var existingFile models.VideoFile
-			if err := s.db.Where("file_path = ?", videoFile.FilePath).First(&existingFile).Error; err == nil {
+			if err := s.db.WithContext(ctx).Where("file_path = ?", videoFile.FilePath).First(&existingFile).Error; err == nil {
 				*videoFile = existingFile
 				return nil
 			}
@@ -938,7 +938,7 @@ func (s *VideoFileService) isDuplicateError(err error) bool {
 }
 
 // CreateFile 从文件路径创建文件记录（通用方法）
-func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt *time.Time, sourceType ...string) (*models.VideoFile, error) {
+func (s *VideoFileService) CreateFile(ctx context.Context, filePath string, taskID *uint, recordedAt *time.Time, sourceType ...string) (*models.VideoFile, error) {
 	if filePath == "" {
 		return nil, errors.New("创建文件记录失败：文件路径为空")
 	}
@@ -948,7 +948,7 @@ func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt 
 	}
 
 	// 检查是否已存在
-	if existingFile, err := s.findExistingFile(filePath); err == nil {
+	if existingFile, err := s.findExistingFile(ctx, filePath); err == nil {
 		return existingFile, nil
 	}
 
@@ -958,7 +958,7 @@ func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt 
 	var createdBy uint = 1 // 默认系统用户
 	if taskID != nil {
 		var task models.VideoRecordingTask
-		if err := s.db.Select("created_by").First(&task, *taskID).Error; err == nil {
+		if err := s.db.WithContext(ctx).Select("created_by").First(&task, *taskID).Error; err == nil {
 			createdBy = task.CreatedBy
 		}
 	}
@@ -969,13 +969,13 @@ func (s *VideoFileService) CreateFile(filePath string, taskID *uint, recordedAt 
 		st = sourceType[0]
 	}
 
-	return s.createNewFile(filePath, taskID, recordedAt, format, createdBy, st)
+	return s.createNewFile(ctx, filePath, taskID, recordedAt, format, createdBy, st)
 }
 
 // CreateSegmentFile 创建分割段文件记录
-func (s *VideoFileService) CreateSegmentFile(segmentPath string, parentVideoID *uint, sourceType string, createdBy uint, snapshotOffset ...float64) (*models.VideoFile, error) {
+func (s *VideoFileService) CreateSegmentFile(ctx context.Context, segmentPath string, parentVideoID *uint, sourceType string, createdBy uint, snapshotOffset ...float64) (*models.VideoFile, error) {
 	// 1. 检查文件是否已存在（重复检查）
-	existing, err := s.findExistingFile(segmentPath)
+	existing, err := s.findExistingFile(ctx, segmentPath)
 	if err == nil && existing != nil {
 		s.logger.Warn("文件记录已存在", zap.String("path", segmentPath), zap.Uint("existing_id", existing.ID))
 		return existing, nil
@@ -1027,13 +1027,13 @@ func (s *VideoFileService) CreateSegmentFile(segmentPath string, parentVideoID *
 	// 8. 从父视频继承 RecordedAt
 	if parentVideoID != nil {
 		var parent models.VideoFile
-		if err := s.db.First(&parent, *parentVideoID).Error; err == nil {
+		if err := s.db.WithContext(ctx).First(&parent, *parentVideoID).Error; err == nil {
 			videoFile.RecordedAt = parent.RecordedAt
 		}
 	}
 
 	// 9. 保存到数据库
-	if err := s.createWithDuplicateCheck(videoFile); err != nil {
+	if err := s.createWithDuplicateCheck(ctx, videoFile); err != nil {
 		return nil, fmt.Errorf("创建文件记录失败: %w", err)
 	}
 
@@ -1041,9 +1041,9 @@ func (s *VideoFileService) CreateSegmentFile(segmentPath string, parentVideoID *
 }
 
 // GetSegmentsByParentID 根据父视频ID获取所有分割段
-func (s *VideoFileService) GetSegmentsByParentID(parentID uint) ([]models.VideoFile, error) {
+func (s *VideoFileService) GetSegmentsByParentID(ctx context.Context, parentID uint) ([]models.VideoFile, error) {
 	var segments []models.VideoFile
-	err := s.db.Where("parent_id = ?", parentID).Order("id ASC").Limit(1000).Find(&segments).Error
+	err := s.db.WithContext(ctx).Where("parent_id = ?", parentID).Order("id ASC").Limit(1000).Find(&segments).Error
 	return segments, err
 }
 

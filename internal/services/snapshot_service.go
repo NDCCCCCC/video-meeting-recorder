@@ -276,7 +276,7 @@ func (s *SnapshotService) GenerateSnapshot(ctx context.Context, taskID uint, cre
 
 	// 9. Register snapshot file via VideoFileService callback (D-10, D-13)
 	// Pass seekOffset as SnapshotOffset so it's stored on the VideoFile record
-	snapshotFile, err := s.videoFileService.CreateSegmentFile(outputMP4, parentID, models.SourceTypeSnapshot, createdBy, seekOffset)
+	snapshotFile, err := s.videoFileService.CreateSegmentFile(ctx, outputMP4, parentID, models.SourceTypeSnapshot, createdBy, seekOffset)
 	if err != nil {
 		return nil, fmt.Errorf("注册快照文件失败: %w", err)
 	}

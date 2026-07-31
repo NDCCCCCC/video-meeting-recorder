@@ -253,7 +253,7 @@ func (s *SplittingService) processSplit(ctx context.Context, task *SplitTask) {
 
 	// 5. Register segment files via VideoFileService callback (D-13)
 	for _, segPath := range createdFiles {
-		segmentFile, err := s.videoFileService.CreateSegmentFile(segPath, &parentID, models.SourceTypeSplit, task.CreatedBy)
+		segmentFile, err := s.videoFileService.CreateSegmentFile(s.ctx, segPath, &parentID, models.SourceTypeSplit, task.CreatedBy)
 		if err != nil {
 			s.logger.Error("注册分割段文件失败", zap.String("path", segPath), zap.Error(err))
 			continue

@@ -274,7 +274,7 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 	// 创建 MP4 文件记录，并获取实际视频时长
 	if s.videoFileService != nil {
 		mp4 := "mp4"
-		videoFile, err := s.videoFileService.CreateFileFromTask(&task, &mp4)
+		videoFile, err := s.videoFileService.CreateFileFromTask(ctx, &task, &mp4)
 		if err != nil {
 			s.logger.Error("创建MP4文件记录失败",
 				zap.Uint("task_id", taskID),
