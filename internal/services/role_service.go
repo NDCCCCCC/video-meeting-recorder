@@ -2,8 +2,8 @@ package services
 
 import (
 	"context"
-	"errors"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -103,7 +103,7 @@ func (s *RoleService) CreateRole(ctx context.Context, req *CreateRoleRequest) (*
 	// 检查角色名是否存在
 	var existing models.Role
 	if err := s.db.WithContext(ctx).Where("name = ?", req.Name).First(&existing).Error; err == nil {
-		return nil, errors.New("角色名称已存在")
+		return nil, apperrors.ErrRoleNameExists
 	}
 
 	// 创建角色
@@ -130,7 +130,7 @@ func (s *RoleService) CreateRole(ctx context.Context, req *CreateRoleRequest) (*
 func (s *RoleService) UpdateRole(ctx context.Context, id uint, req *UpdateRoleRequest) (*models.Role, *models.Role, error) {
 	var role models.Role
 	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, id).Error; err != nil {
-		return nil, nil, errors.New("角色不存在")
+		return nil, nil, apperrors.ErrRoleNotFound
 	}
 	oldRole := role
 
@@ -158,12 +158,12 @@ func (s *RoleService) UpdateRole(ctx context.Context, id uint, req *UpdateRoleRe
 func (s *RoleService) DeleteRole(ctx context.Context, id uint) (*models.Role, *models.Role, error) {
 	// 不允许删除ID为1-4的默认角色
 	if id <= 4 {
-		return nil, nil, errors.New("不允许删除系统默认角色")
+		return nil, nil, apperrors.ErrSystemRoleProtected
 	}
 
 	var role models.Role
 	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, id).Error; err != nil {
-		return nil, nil, errors.New("角色不存在")
+		return nil, nil, apperrors.ErrRoleNotFound
 	}
 	oldRole := role
 
@@ -173,7 +173,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, id uint) (*models.Role, *m
 		return nil, nil, err
 	}
 	if count > 0 {
-		return nil, nil, errors.New("该角色正在被使用，无法删除")
+		return nil, nil, apperrors.ErrRoleInUse
 	}
 
 	result := s.db.WithContext(ctx).Delete(&role)
@@ -181,7 +181,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, id uint) (*models.Role, *m
 		return nil, nil, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return nil, nil, errors.New("角色不存在")
+		return nil, nil, apperrors.ErrRoleNotFound
 	}
 
 	return &oldRole, nil, nil
@@ -191,7 +191,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, id uint) (*models.Role, *m
 func (s *RoleService) AssignPermissions(ctx context.Context, roleID uint, req *AssignPermissionsRequest) ([]models.Permission, []models.Permission, error) {
 	var role models.Role
 	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, roleID).Error; err != nil {
-		return nil, nil, errors.New("角色不存在")
+		return nil, nil, apperrors.ErrRoleNotFound
 	}
 	oldPermissions := append([]models.Permission(nil), role.Permissions...)
 
@@ -201,7 +201,7 @@ func (s *RoleService) AssignPermissions(ctx context.Context, roleID uint, req *A
 		return nil, nil, err
 	}
 	if len(permissions) != len(req.PermissionIDs) {
-		return nil, nil, errors.New("部分权限不存在")
+		return nil, nil, apperrors.ErrPermissionNotFound
 	}
 
 	// 使用 Clear + Append 方式来避免 Replace 的潜在问题
@@ -222,7 +222,7 @@ func (s *RoleService) AssignPermissions(ctx context.Context, roleID uint, req *A
 func (s *RoleService) GetRolePermissions(ctx context.Context, roleID uint) ([]models.Permission, error) {
 	var role models.Role
 	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, roleID).Error; err != nil {
-		return nil, errors.New("角色不存在")
+		return nil, apperrors.ErrRoleNotFound
 	}
 
 	return role.Permissions, nil

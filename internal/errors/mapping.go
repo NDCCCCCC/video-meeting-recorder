@@ -47,7 +47,8 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		errors.Is(err, ErrVideoFileNotFound),
 		errors.Is(err, ErrUserNotFound),
 		errors.Is(err, ErrRoleNotFound),
-		errors.Is(err, ErrADAccountNotFound):
+		errors.Is(err, ErrADAccountNotFound),
+		errors.Is(err, ErrPermissionNotFound):
 		return http.StatusNotFound, respCodeNotFound, "资源不存在"
 	case errors.Is(err, ErrUnauthorized),
 		errors.Is(err, ErrTokenInvalid),
@@ -57,6 +58,7 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		return http.StatusUnauthorized, respCodeUnauthorized, "未授权"
 	case errors.Is(err, ErrForbidden),
 		errors.Is(err, ErrSystemAdminProtected),
+		errors.Is(err, ErrSystemRoleProtected),
 		errors.Is(err, ErrUserDisabled):
 		return http.StatusForbidden, respCodeForbidden, "禁止访问"
 	case errors.Is(err, ErrInvalidInput),
@@ -65,7 +67,9 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 	case errors.Is(err, ErrAlreadyExists),
 		errors.Is(err, ErrTaskInProgress),
 		errors.Is(err, ErrUsernameExists),
-		errors.Is(err, ErrEmailExists):
+		errors.Is(err, ErrEmailExists),
+		errors.Is(err, ErrRoleNameExists),
+		errors.Is(err, ErrRoleInUse):
 		// 409 Conflict——GinError 的 switch 不识别 CodeDuplicateRecord，会落到默认 500，
 		// 故调用方必须用 GinErrorWithStatus 显式指定 409（HandleError 已如此）。
 		return http.StatusConflict, respCodeDuplicateRecord, "资源已存在或状态冲突"
@@ -123,10 +127,11 @@ func IsKnownError(err error) bool {
 	}
 	for _, sentinel := range []error{
 		ErrNotFound, ErrTaskNotFound, ErrVideoFileNotFound,
-		ErrUserNotFound, ErrRoleNotFound, ErrADAccountNotFound,
+		ErrUserNotFound, ErrRoleNotFound, ErrADAccountNotFound, ErrPermissionNotFound,
 		ErrUnauthorized, ErrForbidden, ErrInvalidInput, ErrInvalidFileType,
 		ErrAlreadyExists, ErrTaskInProgress, ErrUsernameExists, ErrEmailExists,
-		ErrSystemAdminProtected, ErrUserDisabled,
+		ErrRoleNameExists, ErrRoleInUse,
+		ErrSystemAdminProtected, ErrSystemRoleProtected, ErrUserDisabled,
 		ErrTokenInvalid, ErrTokenExpired, ErrTokenNotYetValid, ErrTokenReplayed,
 		ErrInsufficientQuota,
 		ErrServiceUnavailable, ErrADConfigError, ErrADUnreachable,

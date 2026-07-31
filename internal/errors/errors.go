@@ -57,6 +57,14 @@ var (
 	ErrTokenExpired     = errors.New("token expired")
 	ErrTokenNotYetValid = errors.New("token not yet valid")
 	ErrTokenReplayed    = errors.New("token reuse detected")
+
+	// Role sentinels（Phase 19 D9）：role_service admin 路径统一化。
+	// 与 D5/D6/D7 sentinel 设计对齐——ErrRoleNotFound (D5) 已在 404 case，
+	// 在此补充 role 特有状态。role_service 9 散点全部 sentinel 化。
+	ErrRoleNameExists        = errors.New("role name already exists")
+	ErrSystemRoleProtected   = errors.New("system role protected from deletion")
+	ErrRoleInUse             = errors.New("role still in use by users")
+	ErrPermissionNotFound    = errors.New("permission not found")
 )
 
 // Wrap 包装错误，添加上下文信息
