@@ -87,12 +87,15 @@ type VideoFileServiceInterface interface {
 }
 
 // TaskServiceInterface 任务服务接口
+// Phase 19 Wave 4 (PERF-003/BUG-005)：5 个业务方法均以 ctx context.Context 作首参，
+// 调用方透传 executeTask/cleanupCtx 的 ctx 以支持优雅关停时的查询取消。
+// GetDB() 保留无参（返回原始 *gorm.DB 供遗留调用方使用）。
 type TaskServiceInterface interface {
-	GetTask(id uint) (*models.VideoRecordingTask, error)
-	GetPendingTasks() ([]*models.VideoRecordingTask, error)
-	UpdateTaskStatus(id uint, status models.VideoRecordingTaskStatus, errorMsg string) error
-	UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error
-	GetInputConfig(id uint) (*models.InputConfig, error)
+	GetTask(ctx context.Context, id uint) (*models.VideoRecordingTask, error)
+	GetPendingTasks(ctx context.Context) ([]*models.VideoRecordingTask, error)
+	UpdateTaskStatus(ctx context.Context, id uint, status models.VideoRecordingTaskStatus, errorMsg string) error
+	UpdateRecordingPaths(ctx context.Context, id uint, mkvPath, hlsPath string) error
+	GetInputConfig(ctx context.Context, id uint) (*models.InputConfig, error)
 	GetDB() *gorm.DB
 }
 
@@ -293,7 +296,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	}()
 
 	// 加载任务
-	task, err := s.taskService.GetTask(taskID)
+	task, err := s.taskService.GetTask(ctx, taskID)
 	if err != nil {
 		s.logger.Error("加载任务失败",
 			zap.Uint("task_id", taskID),
@@ -317,12 +320,12 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 			zap.Uint("task_id", taskID),
 			zap.Time("end_time", task.EndTime),
 		)
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, "任务已过期")
+		s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, "任务已过期")
 		return
 	}
 
 	// 更新状态为连接中
-	if err := s.updateTaskStatus(taskID, models.VideoStatusConnecting, ""); err != nil {
+	if err := s.updateTaskStatus(ctx, taskID, models.VideoStatusConnecting, ""); err != nil {
 		s.logger.Error("更新任务状态失败", zap.Error(err))
 		return
 	}
@@ -331,7 +334,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	var taskConfigs []models.TaskInputConfig
 	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs).Error; err != nil {
 		s.logger.Error("加载任务关联配置失败", zap.Error(err))
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
+		s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, err.Error())
 		return
 	}
 
@@ -355,7 +358,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 				zap.Uint("task_id", taskID),
 				zap.Error(err),
 			)
-			s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
+			s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, err.Error())
 			return
 		}
 		s.logger.Info("华为会议连接成功",
@@ -387,7 +390,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	taskConfigs = nil
 	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs).Error; err != nil {
 		s.logger.Error("重新加载任务关联配置失败", zap.Error(err))
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, err.Error())
+		s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, err.Error())
 		return
 	}
 
@@ -396,7 +399,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		s.logger.Info("无录制配置，任务无法执行",
 			zap.Uint("task_id", taskID),
 		)
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, "无录制配置：请至少添加一个输入配置（USB/流媒体）")
+		s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, "无录制配置：请至少添加一个输入配置（USB/流媒体）")
 		return
 	}
 
@@ -427,7 +430,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 	if !hasValidInputSource {
 		s.logger.Error("配置中没有可用的输入源（USB或流媒体）")
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, "配置中没有可用的输入源（USB或流媒体）")
+		s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, "配置中没有可用的输入源（USB或流媒体）")
 		return
 	}
 
@@ -437,7 +440,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	)
 
 	// 更新状态为录制中
-	if err := s.updateTaskStatus(taskID, models.VideoStatusRecording, ""); err != nil {
+	if err := s.updateTaskStatus(ctx, taskID, models.VideoStatusRecording, ""); err != nil {
 		s.logger.Error("更新任务状态失败", zap.Error(err))
 		return
 	}
@@ -472,7 +475,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 	// 如果所有录制都失败，则返回错误
 	if len(recordingErrors) == len(inputConfigs) {
-		s.updateTaskStatus(taskID, models.VideoStatusFailed, "所有录制启动失败")
+		s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, "所有录制启动失败")
 		// 清理：断开华为会议连接，解锁终端
 		if s.connector != nil && len(taskConfigs) > 0 {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -497,7 +500,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 		zap.String("mkv_path", task.MKVFilePath),
 		zap.String("hls_path", task.HLSPreviewPath),
 	)
-	if err := s.taskService.UpdateRecordingPaths(taskID, task.MKVFilePath, task.HLSPreviewPath); err != nil {
+	if err := s.taskService.UpdateRecordingPaths(ctx, taskID, task.MKVFilePath, task.HLSPreviewPath); err != nil {
 		s.logger.Warn("更新录制文件路径失败",
 			zap.Uint("task_id", taskID),
 			zap.Error(err),
@@ -556,7 +559,7 @@ func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.Vid
 		case <-timer.C:
 			timer.Stop()
 			// 正常结束
-			s.completeTask(task.ID)
+			s.completeTask(ctx, task.ID)
 			return
 
 		case <-ctx.Done():
@@ -585,7 +588,7 @@ func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.Vid
 }
 
 // completeTask 完成任务
-func (s *VideoSimpleScheduler) completeTask(taskID uint) {
+func (s *VideoSimpleScheduler) completeTask(ctx context.Context, taskID uint) {
 	s.logger.Info("开始完成任务",
 		zap.Uint("task_id", taskID),
 	)
@@ -604,7 +607,7 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 	}
 
 	// 加载任务（用于断开华为会议连接）
-	task, err := s.taskService.GetTask(taskID)
+	task, err := s.taskService.GetTask(ctx, taskID)
 	if err != nil {
 		s.logger.Error("加载任务失败", zap.Error(err))
 	} else {
@@ -634,7 +637,7 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 	}
 
 	// 更新任务状态为转换中（而不是直接完成）
-	if err := s.updateTaskStatus(taskID, models.VideoStatusConverting, ""); err != nil {
+	if err := s.updateTaskStatus(ctx, taskID, models.VideoStatusConverting, ""); err != nil {
 		s.logger.Error("更新任务状态失败", zap.Error(err))
 	}
 
@@ -680,7 +683,7 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 				zap.Error(err),
 			)
 			// 转换提交失败，将任务状态改为失败
-			s.updateTaskStatus(taskID, models.VideoStatusFailed, "提交转换任务失败")
+			s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, "提交转换任务失败")
 		}
 	}
 
@@ -708,9 +711,9 @@ func (s *VideoSimpleScheduler) generateCronExpression(triggerTime time.Time) str
 }
 
 // updateTaskStatus 更新任务状态（带状态转换验证）
-func (s *VideoSimpleScheduler) updateTaskStatus(taskID uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
+func (s *VideoSimpleScheduler) updateTaskStatus(ctx context.Context, taskID uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
 	// 重新加载任务以获取最新状态
-	task, err := s.taskService.GetTask(taskID)
+	task, err := s.taskService.GetTask(ctx, taskID)
 	if err != nil {
 		return err
 	}
@@ -725,7 +728,7 @@ func (s *VideoSimpleScheduler) updateTaskStatus(taskID uint, status models.Video
 		return fmt.Errorf("非法状态转换: %s -> %s", task.Status, status)
 	}
 
-	return s.taskService.UpdateTaskStatus(taskID, status, errorMsg)
+	return s.taskService.UpdateTaskStatus(ctx, taskID, status, errorMsg)
 }
 
 // GetScheduledTasks 获取已调度的任务列表
@@ -783,7 +786,7 @@ func (s *VideoSimpleScheduler) Start() error {
 	s.cron.Start()
 
 	// 从数据库加载待执行的任务
-	tasks, err := s.taskService.GetPendingTasks()
+	tasks, err := s.taskService.GetPendingTasks(context.Background())
 	if err != nil {
 		return fmt.Errorf("加载待执行任务失败: %w", err)
 	}
@@ -876,7 +879,7 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 	s.logger.Info("开始同步待执行任务")
 
 	// 从数据库加载待执行的任务
-	tasks, err := s.taskService.GetPendingTasks()
+	tasks, err := s.taskService.GetPendingTasks(context.Background())
 	if err != nil {
 		s.logger.Error("加载待执行任务失败", zap.Error(err))
 		return fmt.Errorf("加载待执行任务失败: %w", err)
@@ -911,7 +914,7 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 		} else {
 			// 任务仍在待执行列表中，需要重新处理（因为Cron调度器在重启后会丢失任务）
 			// 加载任务详情
-			task, err := s.taskService.GetTask(taskID)
+			task, err := s.taskService.GetTask(context.Background(), taskID)
 			if err == nil {
 				// 重新计算触发时间
 				triggerTime := s.calculateTriggerTime(task.StartTime.UTC(), task.PreJoinMinutes)
@@ -940,8 +943,12 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 						zap.Uint("task_id", taskID),
 						zap.Time("end_time", task.EndTime.UTC()),
 					)
-					// 异步更新任务状态
-					go s.updateTaskStatus(taskID, models.VideoStatusFailed, "任务已过期")
+					// 异步更新任务状态（BUG-006：fire-and-forget goroutine 派生 bounded ctx）
+					go func() {
+						statusCtx, statusCancel := context.WithTimeout(context.Background(), 30*time.Second)
+						defer statusCancel()
+						s.updateTaskStatus(statusCtx, taskID, models.VideoStatusFailed, "任务已过期")
+					}()
 				} else if now.After(triggerTime) {
 					// 触发时间已过，立即执行
 					recheckCount++
@@ -1029,8 +1036,12 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 				zap.Time("end_time", endTimeUTC),
 				zap.Time("current_time", now),
 			)
-			// 异步更新任务状态
-			go s.updateTaskStatus(task.ID, models.VideoStatusFailed, "任务已过期")
+			// 异步更新任务状态（BUG-006：fire-and-forget goroutine 派生 bounded ctx）
+			go func() {
+				statusCtx, statusCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer statusCancel()
+				s.updateTaskStatus(statusCtx, task.ID, models.VideoStatusFailed, "任务已过期")
+			}()
 			continue
 		}
 
@@ -1119,7 +1130,7 @@ func (s *VideoSimpleScheduler) ExecuteTask(taskID uint) error {
 	s.mu.RUnlock()
 
 	// 加载任务
-	task, err := s.taskService.GetTask(taskID)
+	task, err := s.taskService.GetTask(context.Background(), taskID)
 	if err != nil {
 		return fmt.Errorf("加载任务失败: %w", err)
 	}
@@ -1235,6 +1246,11 @@ func (s *VideoSimpleScheduler) UpdateTaskEndTime(taskID uint, newEndTime time.Ti
 }
 
 func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
+	// Phase 19 Wave 4：派生 bounded ctx 供本流程内的 DB 查询与会议断开使用
+	// （releaseHuaweiDevice 由 CancelTaskExecution 调用，无请求 ctx 可透传）。
+	ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelCtx()
+
 	// 加载任务关联的输入配置
 	var taskConfigs []models.TaskInputConfig
 	s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
@@ -1249,7 +1265,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 	}
 
 	// 加载任务信息用于断开连接和提交转换
-	task, err := s.taskService.GetTask(taskID)
+	task, err := s.taskService.GetTask(ctx, taskID)
 
 	if err == nil && task != nil {
 		// 正常情况：成功获取任务信息，完整地断开连接（仅当有华为控制配置时）
@@ -1257,8 +1273,6 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 			s.logger.Info("取消任务时断开华为会议连接",
 				zap.Uint("task_id", taskID),
 			)
-			ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancelCtx()
 			if disconnectErr := s.connector.DisconnectFromConference(ctx, task); disconnectErr != nil {
 				s.logger.Warn("断开华为会议连接失败",
 					zap.Uint("task_id", taskID),

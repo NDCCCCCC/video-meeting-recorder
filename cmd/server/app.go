@@ -1163,18 +1163,18 @@ type taskServiceAdapter struct {
 }
 
 // GetTask 获取任务
-func (a *taskServiceAdapter) GetTask(id uint) (*models.VideoRecordingTask, error) {
+func (a *taskServiceAdapter) GetTask(ctx context.Context, id uint) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := a.db.Preload("InputConfig").Preload("TaskInputConfigs").First(&task, id).Error; err != nil {
+	if err := a.db.WithContext(ctx).Preload("InputConfig").Preload("TaskInputConfigs").First(&task, id).Error; err != nil {
 		return nil, err
 	}
 	return &task, nil
 }
 
 // GetPendingTasks 获取待执行任务
-func (a *taskServiceAdapter) GetPendingTasks() ([]*models.VideoRecordingTask, error) {
+func (a *taskServiceAdapter) GetPendingTasks(ctx context.Context) ([]*models.VideoRecordingTask, error) {
 	var tasks []*models.VideoRecordingTask
-	if err := a.db.Where("status = ?", models.VideoStatusPending).
+	if err := a.db.WithContext(ctx).Where("status = ?", models.VideoStatusPending).
 		Preload("InputConfig").Preload("TaskInputConfigs").
 		Order("start_time ASC").
 		Find(&tasks).Error; err != nil {
@@ -1184,7 +1184,7 @@ func (a *taskServiceAdapter) GetPendingTasks() ([]*models.VideoRecordingTask, er
 }
 
 // UpdateTaskStatus 更新任务状态
-func (a *taskServiceAdapter) UpdateTaskStatus(id uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
+func (a *taskServiceAdapter) UpdateTaskStatus(ctx context.Context, id uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
 	updates := map[string]interface{}{
 		"status": status,
 	}
@@ -1192,7 +1192,7 @@ func (a *taskServiceAdapter) UpdateTaskStatus(id uint, status models.VideoRecord
 		updates["error_msg"] = errorMsg
 	}
 
-	result := a.db.Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
+	result := a.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -1204,14 +1204,14 @@ func (a *taskServiceAdapter) UpdateTaskStatus(id uint, status models.VideoRecord
 
 // UpdateRecordingPaths 更新录制文件路径
 // 注意：这是适配器方法，将 TaskServiceInterface 接口映射到具体实现
-func (a *taskServiceAdapter) UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error {
+func (a *taskServiceAdapter) UpdateRecordingPaths(ctx context.Context, id uint, mkvPath, hlsPath string) error {
 	updates := map[string]interface{}{
 		"recording_file":   mkvPath,
 		"mkv_file_path":    mkvPath,
 		"hls_preview_path": hlsPath,
 	}
 
-	result := a.db.Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
+	result := a.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -1222,9 +1222,9 @@ func (a *taskServiceAdapter) UpdateRecordingPaths(id uint, mkvPath, hlsPath stri
 }
 
 // GetInputConfig 获取输入配置
-func (a *taskServiceAdapter) GetInputConfig(id uint) (*models.InputConfig, error) {
+func (a *taskServiceAdapter) GetInputConfig(ctx context.Context, id uint) (*models.InputConfig, error) {
 	var config models.InputConfig
-	if err := a.db.First(&config, id).Error; err != nil {
+	if err := a.db.WithContext(ctx).First(&config, id).Error; err != nil {
 		return nil, err
 	}
 	// Phase 18: scheduler / recorder 等调用方期望的是明文 password / stream_password。

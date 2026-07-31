@@ -73,7 +73,7 @@ func newMockTaskService() *mockTaskService {
 	}
 }
 
-func (m *mockTaskService) GetTask(id uint) (*models.VideoRecordingTask, error) {
+func (m *mockTaskService) GetTask(ctx context.Context, id uint) (*models.VideoRecordingTask, error) {
 	task, ok := m.tasks[id]
 	if !ok {
 		return nil, ErrTaskNotFound
@@ -81,7 +81,7 @@ func (m *mockTaskService) GetTask(id uint) (*models.VideoRecordingTask, error) {
 	return task, nil
 }
 
-func (m *mockTaskService) GetPendingTasks() ([]*models.VideoRecordingTask, error) {
+func (m *mockTaskService) GetPendingTasks(ctx context.Context) ([]*models.VideoRecordingTask, error) {
 	var result []*models.VideoRecordingTask
 	for _, task := range m.tasks {
 		if task.Status == models.VideoStatusPending {
@@ -91,7 +91,7 @@ func (m *mockTaskService) GetPendingTasks() ([]*models.VideoRecordingTask, error
 	return result, nil
 }
 
-func (m *mockTaskService) UpdateTaskStatus(id uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
+func (m *mockTaskService) UpdateTaskStatus(ctx context.Context, id uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
 	task, ok := m.tasks[id]
 	if !ok {
 		return ErrTaskNotFound
@@ -101,7 +101,7 @@ func (m *mockTaskService) UpdateTaskStatus(id uint, status models.VideoRecording
 	return nil
 }
 
-func (m *mockTaskService) GetInputConfig(id uint) (*models.InputConfig, error) {
+func (m *mockTaskService) GetInputConfig(ctx context.Context, id uint) (*models.InputConfig, error) {
 	return &models.InputConfig{
 		Base:            models.Base{ID: id},
 		Name:            "Test Config",
@@ -120,7 +120,7 @@ func (m *mockTaskService) GetInputConfig(id uint) (*models.InputConfig, error) {
 	}, nil
 }
 
-func (m *mockTaskService) UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error {
+func (m *mockTaskService) UpdateRecordingPaths(ctx context.Context, id uint, mkvPath, hlsPath string) error {
 	task, ok := m.tasks[id]
 	if !ok {
 		return ErrTaskNotFound
