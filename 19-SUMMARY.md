@@ -364,3 +364,55 @@ e2b0b6b  5a  perf(19/w5a): VideoFileService 内部 helpers ctx-first
 1ae6be0  5d  perf(19/w5d): VideoFileService caller 全量 ctx 透传
 (pending) 5e  test(19/w5e): ctx 取消传播 contract test
 ```
+
+## Wave 6 (STYLE-001 error 迁移)
+
+**执行摘要**：STYLE-001 Phase 19 决策 3 落地 — service 边界用 `apperrors.BusinessError`包装 user-facing 错误，handler 用统一 `response.HandleError` 替换 string-match switch。
+
+### 改动
+| 文件 | 变更 |
+|------|------|
+| internal/services/notification/notification_service.go | 3 处 `==` → `errors.Is`，加 `errors` import |
+| internal/services/ppt_file_service.go | 2 处 `==` → `errors.Is` + RenamePPTFile 全用 BusinessError (CodeNotFound/Forbidden/InvalidInput/AlreadyExists) |
+| internal/services/timestamp_mapper.go | 1 处 `==` → `errors.Is` |
+| internal/services/video_file_service.go | RenameVideoFile 5 个 string-error → BusinessError + 1 处 `==` → `errors.Is` |
+| internal/handlers/ppt_handler.go | RenamePPTFile handler 2 个 string-match → `response.HandleError` |
+| internal/handlers/video_file_handler.go | RenameVideoFile handler 3 个 string-match → `response.HandleError` |
+| internal/scheduler/video_scheduler.go | AddTask '任务已过期' → `BusinessError(CodeInvalidInput)` + SyncPendingTasks `strings.Contains` → `errors.As(BusinessError).Code` 匹配 |
+
+### DEFERRED（不在用户错误路径）
+- `internal/services/video_file_service.go:891` `strings.Contains('FOREIGN KEY')` — 仅用于丰富 CreateSegmentFile 外键失败的诊断日志。
+  外键失败本身已 wrap 透传；该 strings.Contains 不参与错误映射决策。
+
+### 验证
+- `go build ./...` 0 错误
+- `go vet ./...` 0 错误
+- `go test -race ./...` 全绿（services + handlers + scheduler + utils + middleware）
+
+### 影响
+- **真实杠杆**：2 个高频 handler（视频/PPT 重命名）从 string-match 错误路由变为 sentinel-driven；
+  未来加新错误码只需更新 `internal/errors/mapping.go` 映射表，handler 自动跟进。
+- **service 不变 API**：所有现有 `rename`/`get*` 调用方零改动。
+
+### Phase 19 完整 commit 序列
+```
+9a00cbe  W4   refactor(19): Wave 4 ctx 级联 TaskServiceInterface 原子三元组
+2281927  W4   docs(19): Wave 4 section to 19-SUMMARY.md
+34b07f7  W5*  perf(19/w5): VideoRecordingTaskService ctx-first (22 方法, agent 未提交)
+e2b0b6b  W5a  perf(19/w5a): VideoFileService 内部 helpers (4 方法 + 3 caller)
+7828fc3  W5b  perf(19/w5b): VideoFileService ScanFiles chain (5 方法 + 1 caller)
+7a5a1cc  W5c  perf(19/w5c): VideoFileService batch ops (3 方法 + 1 caller)
+1ae6be0  W5d  perf(19/w5d): VideoFileService 全量 caller ctx 透传 (7 files)
+b08255d  W5e  test(19/w5e): ctx 取消传播 contract test (3 测试) + Wave 5 总结
+3d171de  W6   refactor(19/w6): STYLE-001 error 迁移 (7 files)
+```
+
+### Phase 19 用户确认范围 vs 实际交付
+| Scope 元素 | 状态 |
+|-----------|------|
+| PERF-003/BUG-005 ctx 全量级联 | ✅ 全量完成（22+14 service 方法 + 11 handler 方法 + 4 scheduler 接口方法 + 1 adapter） |
+| SEC-004 jti replay 模型修复 | ✅ 已在更早 wave 完成（Wave 1） |
+| STYLE-001 错误包装 + error-mapping middleware | ✅ 三组件（mapping.go + HandleError + error_mapper.go） + 全局注册 + 服务边界包装 + handler 迁移完成 |
+| 排除 PERF-001 (Preload N+1 误判) | ✅ 按用户确认排除 |
+| 排除 STYLE-009 (Get* rename) | ✅ 按用户确认排除 |
+| 排除 PERF-009 (audit map schemaless) | ✅ 按用户确认排除 |
