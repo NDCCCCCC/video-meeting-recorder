@@ -4,11 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/tjfoc/gmsm/sm4"
 	"go.uber.org/zap"
 )
@@ -27,33 +27,35 @@ const (
 )
 
 // ValidateSM4Secret 验证 SM4 密钥的有效性
+// Phase 19 D18: 3 散点统一 -> apperrors.ErrInvalidInput (400 输入参数错)。
 func ValidateSM4Secret(secret string) error {
 	if secret == "" {
-		return errors.New("SM4 密钥不能为空")
+		return fmt.Errorf("SM4 密钥不能为空: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 验证密钥长度（建议至少 16 字符）
 	if len(secret) < 16 {
-		return errors.New("SM4 密钥长度不足，至少需要 16 字符")
+		return fmt.Errorf("SM4 密钥长度不足，至少需要 16 字符: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 验证密钥必须是可解码的 Base64（避免「无错误即视为通过」导致的 panic）
 	if _, err := base64.StdEncoding.DecodeString(secret); err != nil {
-		return fmt.Errorf("SM4 密钥不是有效的 Base64: %w", err)
+		return fmt.Errorf("SM4 密钥不是有效的 Base64: %w: %w", apperrors.ErrInvalidInput, err)
 	}
 
 	return nil
 }
 
 // ValidatePasswordInput 验证密码输入的有效性
+// Phase 19 D18: 2 散点统一 -> apperrors.ErrInvalidInput。
 func ValidatePasswordInput(password string) error {
 	if password == "" {
-		return errors.New("密码不能为空")
+		return fmt.Errorf("密码不能为空: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 防止过长的密码导致 DoS
 	if len(password) > 1024 {
-		return errors.New("密码长度超过限制")
+		return fmt.Errorf("密码长度超过限制: %w", apperrors.ErrInvalidInput)
 	}
 
 	return nil
@@ -89,10 +91,11 @@ func DeriveSM4Key(secret string) []byte {
 
 // DecryptPasswordECB 使用 SM4-ECB 模式解密密码
 // 密文格式: SM4: 前缀 + Base64 编码的 SM4-ECB 加密数据
+// Phase 19 D18: 6 散点统一 -> apperrors.ErrInvalidInput (格式错 -> 400 BadRequest)。
 func DecryptPasswordECB(ciphertext string, sm4Secret string) (string, error) {
 	// 1. 验证输入
 	if err := ValidatePasswordInput(ciphertext); err != nil {
-		return "", errors.New("密码格式错误")
+		return "", fmt.Errorf("密码格式错误: %w", apperrors.ErrInvalidInput)
 	}
 
 	if err := ValidateSM4Secret(sm4Secret); err != nil {
@@ -101,7 +104,7 @@ func DecryptPasswordECB(ciphertext string, sm4Secret string) (string, error) {
 
 	// 2. 移除前缀标记
 	if !strings.HasPrefix(ciphertext, ENCRYPTION_PREFIX) {
-		return "", errors.New("密码格式错误")
+		return "", fmt.Errorf("密码格式错误: 缺少 SM4: 前缀: %w", apperrors.ErrInvalidInput)
 	}
 	ciphertext = strings.TrimPrefix(ciphertext, ENCRYPTION_PREFIX)
 
@@ -111,18 +114,18 @@ func DecryptPasswordECB(ciphertext string, sm4Secret string) (string, error) {
 	// 4. Base64 解码
 	cipherData, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
-		return "", errors.New("密码格式错误")
+		return "", fmt.Errorf("密码格式错误: base64 解码失败: %w: %w", apperrors.ErrInvalidInput, err)
 	}
 
 	// 5. 验证密文长度
 	if len(cipherData)%sm4.BlockSize != 0 {
-		return "", errors.New("密码格式错误")
+		return "", fmt.Errorf("密码格式错误: 密文长度非块对齐: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 6. 创建 SM4 加密器
 	block, err := sm4.NewCipher(key)
 	if err != nil {
-		return "", errors.New("密码格式错误")
+		return "", fmt.Errorf("密码格式错误: 创建 SM4 cipher 失败: %w: %w", apperrors.ErrInvalidInput, err)
 	}
 
 	// 7. ECB 模式解密
@@ -134,7 +137,7 @@ func DecryptPasswordECB(ciphertext string, sm4Secret string) (string, error) {
 	// 8. 移除 PKCS7 填充
 	padding := int(plaintext[len(plaintext)-1])
 	if padding < 1 || padding > sm4.BlockSize {
-		return "", errors.New("密码格式错误")
+		return "", fmt.Errorf("密码格式错误: padding 非法: %w", apperrors.ErrInvalidInput)
 	}
 
 	plaintext = plaintext[:len(plaintext)-padding]
@@ -216,24 +219,29 @@ func DeriveCredentialSM4Key(secret string) []byte {
 // 会**就地修改**调用方传入的 IV slice 的 backing array。当 IV 来自更大的 buffer
 // （如我们 envelope 的 `nonce | ct | tag`），会污染 ct 段。本函数和 DecryptGCM
 // 都传入**拷贝**后的 nonce，避免污染。
+//
+// Phase 19 D18: 4 散点统一 sentinel 化——密钥长度/nonce 生成/加密失败 -> ErrInternal;
+//   tag 长度错 -> ErrInternal (gmsm 库 bug, 非用户输入)。
 func EncryptGCM(key []byte, plaintext []byte) ([]byte, error) {
 	if len(key) != sm4.BlockSize {
-		return nil, fmt.Errorf("SM4-GCM 密钥长度错误: %d (期望 %d)", len(key), sm4.BlockSize)
+		return nil, fmt.Errorf("SM4-GCM 密钥长度错误: %d (期望 %d): %w",
+			len(key), sm4.BlockSize, apperrors.ErrInternal)
 	}
 	padded := pkcs7Pad(plaintext, sm4.BlockSize)
 	nonceSrc := make([]byte, gcmNonceSize)
 	if _, err := io.ReadFull(rand.Reader, nonceSrc); err != nil {
-		return nil, fmt.Errorf("SM4-GCM nonce 生成失败: %w", err)
+		return nil, fmt.Errorf("SM4-GCM nonce 生成失败: %w: %w", apperrors.ErrInternal, err)
 	}
 	// 拷贝 nonce —— gmsm 会通过 append 把它就地扩展到 16 字节
 	nonceForGCM := make([]byte, len(nonceSrc))
 	copy(nonceForGCM, nonceSrc)
 	ct, tag, err := sm4.Sm4GCM(key, nonceForGCM, padded, nil, true)
 	if err != nil {
-		return nil, fmt.Errorf("SM4-GCM 加密失败: %w", err)
+		return nil, fmt.Errorf("SM4-GCM 加密失败: %w: %w", apperrors.ErrInternal, err)
 	}
 	if len(tag) != gcmTagSize {
-		return nil, fmt.Errorf("SM4-GCM tag 长度错误: %d (期望 %d)", len(tag), gcmTagSize)
+		return nil, fmt.Errorf("SM4-GCM tag 长度错误: %d (期望 %d): %w",
+			len(tag), gcmTagSize, apperrors.ErrInternal)
 	}
 	out := make([]byte, 0, len(nonceSrc)+len(ct)+len(tag))
 	out = append(out, nonceSrc...)
@@ -256,17 +264,20 @@ func pkcs7Pad(data []byte, blockSize int) []byte {
 }
 
 // pkcs7Unpad 还原 PKCS#7 padding。padding 非法时返回 error。
+// Phase 19 D18: 3 散点统一 -> apperrors.ErrInvalidInput (padding 非法视作输入错)。
 func pkcs7Unpad(padded []byte, blockSize int) ([]byte, error) {
 	if len(padded) == 0 || len(padded)%blockSize != 0 {
-		return nil, fmt.Errorf("PKCS#7 padding 长度非法: %d (blockSize=%d)", len(padded), blockSize)
+		return nil, fmt.Errorf("PKCS#7 padding 长度非法: %d (blockSize=%d): %w",
+			len(padded), blockSize, apperrors.ErrInvalidInput)
 	}
 	padLen := int(padded[len(padded)-1])
 	if padLen < 1 || padLen > blockSize {
-		return nil, fmt.Errorf("PKCS#7 padding 数值非法: %d (blockSize=%d)", padLen, blockSize)
+		return nil, fmt.Errorf("PKCS#7 padding 数值非法: %d (blockSize=%d): %w",
+			padLen, blockSize, apperrors.ErrInvalidInput)
 	}
 	for i := len(padded) - padLen; i < len(padded); i++ {
 		if padded[i] != byte(padLen) {
-			return nil, errors.New("PKCS#7 padding 字节不一致（密文可能损坏）")
+			return nil, fmt.Errorf("PKCS#7 padding 字节不一致（密文可能损坏）: %w", apperrors.ErrInvalidInput)
 		}
 	}
 	return padded[:len(padded)-padLen], nil
@@ -274,12 +285,16 @@ func pkcs7Unpad(padded []byte, blockSize int) ([]byte, error) {
 
 // DecryptGCM 解密 SM4-GCM ciphertext。失败时返回的 error 不暴露密钥。
 // 输入必须是 EncryptGCM 输出的原始字节（nonce | ct | tag）。
+// Phase 19 D18: 4 散点统一 sentinel——密钥错/cipher 长度 -> ErrInvalidInput
+//   (输入错); 解密失败 -> ErrInternal; tag 校验失败 -> ErrInvalidInput (密文被篡改)。
 func DecryptGCM(key []byte, data []byte) ([]byte, error) {
 	if len(key) != sm4.BlockSize {
-		return nil, fmt.Errorf("SM4-GCM 密钥长度错误: %d (期望 %d)", len(key), sm4.BlockSize)
+		return nil, fmt.Errorf("SM4-GCM 密钥长度错误: %d (期望 %d): %w",
+			len(key), sm4.BlockSize, apperrors.ErrInternal)
 	}
 	if len(data) < gcmNonceSize+gcmTagSize {
-		return nil, fmt.Errorf("SM4-GCM ciphertext 过短: %d 字节", len(data))
+		return nil, fmt.Errorf("SM4-GCM ciphertext 过短: %d 字节: %w",
+			len(data), apperrors.ErrInvalidInput)
 	}
 	nonce := data[:gcmNonceSize]
 	ct := data[gcmNonceSize : len(data)-gcmTagSize]
@@ -294,10 +309,10 @@ func DecryptGCM(key []byte, data []byte) ([]byte, error) {
 	//   - 我们必须自己把 expected tag 跟密文尾部的 tag 做常量时间比对
 	pt, expectedTag, err := sm4.Sm4GCM(key, nonceForGCM, ct, nil, false)
 	if err != nil {
-		return nil, fmt.Errorf("SM4-GCM 解密失败: %w", err)
+		return nil, fmt.Errorf("SM4-GCM 解密失败: %w: %w", apperrors.ErrInternal, err)
 	}
 	if !constantTimeEqual(tag, expectedTag) {
-		return nil, errors.New("SM4-GCM tag 校验失败：密文被篡改或密钥错误")
+		return nil, fmt.Errorf("SM4-GCM tag 校验失败：密文被篡改或密钥错误: %w", apperrors.ErrInvalidInput)
 	}
 	return pkcs7Unpad(pt, sm4.BlockSize)
 }
@@ -317,35 +332,37 @@ func constantTimeEqual(a, b []byte) bool {
 // ParseCredentialEnvelope 解析 "SM4:<version>:<base64>" envelope。
 // 返回值：version 段（如 "v1"）+ 已 base64 解码后的 payload。
 // envelope 格式错误时返回 error —— 永远不静默跳过。
+// Phase 19 D18: 4 散点统一 -> apperrors.ErrInvalidInput (envelope 格式错 400)。
 func ParseCredentialEnvelope(envelope string) (version string, payload []byte, err error) {
 	if !strings.HasPrefix(envelope, ENCRYPTION_PREFIX) {
-		return "", nil, errors.New("envelope 缺少 SM4: 前缀")
+		return "", nil, fmt.Errorf("envelope 缺少 SM4: 前缀: %w", apperrors.ErrInvalidInput)
 	}
 	rest := strings.TrimPrefix(envelope, ENCRYPTION_PREFIX)
 	// 期望格式: <version>:<base64> —— 至少一个冒号
 	idx := strings.Index(rest, ":")
 	if idx <= 0 {
-		return "", nil, errors.New("envelope 缺少 version 段")
+		return "", nil, fmt.Errorf("envelope 缺少 version 段: %w", apperrors.ErrInvalidInput)
 	}
 	version = rest[:idx]
 	encoded := rest[idx+1:]
 	if encoded == "" {
-		return "", nil, errors.New("envelope payload 为空")
+		return "", nil, fmt.Errorf("envelope payload 为空: %w", apperrors.ErrInvalidInput)
 	}
 	payload, err = base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return "", nil, fmt.Errorf("envelope base64 解码失败: %w", err)
+		return "", nil, fmt.Errorf("envelope base64 解码失败: %w: %w", apperrors.ErrInvalidInput, err)
 	}
 	return version, payload, nil
 }
 
 // EncodeCredentialEnvelope 把 version + raw payload 编码成 "SM4:<version>:<base64>" envelope。
+// Phase 19 D18: 2 散点统一 -> apperrors.ErrInvalidInput。
 func EncodeCredentialEnvelope(version string, payload []byte) (string, error) {
 	if version == "" {
-		return "", errors.New("version 不能为空")
+		return "", fmt.Errorf("version 不能为空: %w", apperrors.ErrInvalidInput)
 	}
 	if len(payload) == 0 {
-		return "", errors.New("payload 不能为空")
+		return "", fmt.Errorf("payload 不能为空: %w", apperrors.ErrInvalidInput)
 	}
 	encoded := base64.StdEncoding.EncodeToString(payload)
 	return ENCRYPTION_PREFIX + version + ":" + encoded, nil
