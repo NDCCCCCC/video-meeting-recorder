@@ -1263,6 +1263,12 @@ func (a *MinimalApp) Start() error {
 		}
 	}
 
+	// SEC-004 (Phase 19): 启动 HLS Token 的 jti 索引 sweeper（驱逐过期项）。
+	// 传入 background ctx——HLSToken.Start 内部派生可取消子 ctx，StopHLS 负责取消。
+	if a.handlers != nil && a.handlers.VideoTask != nil {
+		a.handlers.VideoTask.StartHLS(context.Background())
+	}
+
 	// 启动HTTP/HTTPS服务器
 	if a.config.Server.TLSEnabled {
 		return a.startHTTPSServer()
@@ -1323,6 +1329,11 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 	if a.handlers.Audit != nil {
 		a.logger.Info("正在停止审计日志服务...")
 		a.handlers.Audit.Stop()
+	}
+
+	// SEC-004 (Phase 19)：停止 HLS Token sweeper，等待 goroutine 退出。
+	if a.handlers != nil && a.handlers.VideoTask != nil {
+		a.handlers.VideoTask.StopHLS()
 	}
 
 	// 停止通知服务

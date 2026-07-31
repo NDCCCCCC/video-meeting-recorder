@@ -1,6 +1,7 @@
 package hlstoken
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -16,7 +17,14 @@ import (
 )
 
 // ErrTokenReplayed 表示同一 jti 的 token 已被使用过（防重放）。
+// SEC-004 (Phase 19): Verify 不再一次性拒绝已见过的 jti——多分片 HLS 共用同一 token
+// 需要多次 Verify 全部通过。此 error 保留用于未来按需启用严格一次性语义的调用点，
+// 当前 Verify 不会返回它。
 var ErrTokenReplayed = errors.New("token 已被使用（防重放）")
+
+// maxUsedJTIs 是 usedJTIs map 的硬上限。超过时强制驱逐全部过期项 + 最早过期项，
+// 防止 sweeper goroutine 死亡时 map 无限增长（SEC-004 决策 2）。
+const maxUsedJTIs = 100000
 
 // HLSTokenClaims HLS Token 声明
 type HLSTokenClaims struct {
@@ -31,10 +39,16 @@ type HLSTokenClaims struct {
 type HLSToken struct {
 	secret        string
 	tokenDuration time.Duration
-	// SEC-004: 进程内 jti 防重放集合。同一 jti 在进程生命周期内只能 Verify 通过一次。
+	// SEC-004 (Phase 19): jti → ExpiresAt 索引。Verify 幂等记录/覆盖（同 token 重验
+	// 只刷新过期时间）；真正阻止 post-TTL 重放的是 Verify 内 time.Now() > ExpiresAt
+	// 检查。map 角色从"一次性重放拒绝"转为"过期索引追踪"（启用驱逐 + 未来吊销）。
 	// 局限：进程重启后记录清零；服务端持久化 used_jtis（Redis/DB）留作下个独立 phase。
-	usedJTIs map[string]struct{}
+	usedJTIs map[string]int64
 	mu       sync.Mutex
+
+	// 生命周期管理：sweepLoop goroutine + Start/Stop（镜像 PERF-006 Huawei client Stop 模式）。
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // NewHLSToken 创建 HLS Token 管理器
@@ -46,7 +60,7 @@ func NewHLSToken(secret string, duration time.Duration) *HLSToken {
 	return &HLSToken{
 		secret:        secret,
 		tokenDuration: duration,
-		usedJTIs:      make(map[string]struct{}),
+		usedJTIs:      make(map[string]int64),
 	}
 }
 
@@ -125,18 +139,103 @@ func (h *HLSToken) Verify(token string) (*HLSTokenClaims, error) {
 		return nil, fmt.Errorf("token 已过期")
 	}
 
-	// SEC-004: jti 一次性防重放。同一 jti 在进程生命周期内只能验证通过一次。
+	// SEC-004 (Phase 19): jti 索引追踪（幂等）。不再一次性拒绝——同一 token 在其
+	// TTL 窗口内可多次 Verify（HLS 多分片共用同一 token，见 rewriteM3U8WithToken）。
+	// 真正阻止 post-TTL 重放的是上面的 time.Now() > ExpiresAt 检查（不变）。
+	// map 用于过期索引追踪（启用 evictExpired 驱逐 + 未来吊销扩展）。
 	if claims.Jti != "" {
 		h.mu.Lock()
-		if _, used := h.usedJTIs[claims.Jti]; used {
-			h.mu.Unlock()
-			return nil, ErrTokenReplayed
-		}
-		h.usedJTIs[claims.Jti] = struct{}{}
+		h.usedJTIs[claims.Jti] = claims.ExpiresAt
+		h.enforceCapLocked()
 		h.mu.Unlock()
 	}
 
 	return &claims, nil
+}
+
+// evictExpired 删除已过期（expiresAt < now）的 jti 索引项。
+func (h *HLSToken) evictExpired() {
+	now := time.Now().Unix()
+	h.mu.Lock()
+	for jti, exp := range h.usedJTIs {
+		if exp < now {
+			delete(h.usedJTIs, jti)
+		}
+	}
+	h.mu.Unlock()
+}
+
+// enforceCapLocked 在 usedJTIs 超过 maxUsedJTIs 时强制回收。调用方必须持有 h.mu。
+// 先驱逐全部过期项；若仍超限（极端：全部是未过期长 TTL 项），按最早 ExpiresAt
+// 逐项删除直至回到上限以下，避免 sweeper goroutine 死亡时 map 无限增长。
+func (h *HLSToken) enforceCapLocked() {
+	if len(h.usedJTIs) <= maxUsedJTIs {
+		return
+	}
+	now := time.Now().Unix()
+	for jti, exp := range h.usedJTIs {
+		if exp < now {
+			delete(h.usedJTIs, jti)
+		}
+	}
+	for len(h.usedJTIs) > maxUsedJTIs {
+		var oldestJti string
+		oldestExp := int64(1<<63 - 1)
+		for jti, exp := range h.usedJTIs {
+			if exp < oldestExp {
+				oldestExp = exp
+				oldestJti = jti
+			}
+		}
+		delete(h.usedJTIs, oldestJti)
+	}
+}
+
+// sweepLoop 周期性驱逐过期 jti 索引项。遵循 BUG-006 NewTicker+select 约定
+// （非裸 time.Sleep，可被 ctx 取消）。
+func (h *HLSToken) sweepLoop(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			h.evictExpired()
+		}
+	}
+}
+
+// Start 启动后台 sweeper goroutine，周期性驱逐过期 jti 索引项。
+// ctx 作为父生命周期；Stop 会取消派生的子 ctx 并等待 goroutine 退出。
+// 重复调用 Start 是 no-op。
+func (h *HLSToken) Start(ctx context.Context) {
+	h.mu.Lock()
+	if h.cancel != nil {
+		h.mu.Unlock()
+		return
+	}
+	childCtx, cancel := context.WithCancel(ctx)
+	h.cancel = cancel
+	h.mu.Unlock()
+
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+		h.sweepLoop(childCtx)
+	}()
+}
+
+// Stop 取消 sweeper goroutine 并等待其退出。重复调用是 no-op。
+func (h *HLSToken) Stop() {
+	h.mu.Lock()
+	cancel := h.cancel
+	h.cancel = nil
+	h.mu.Unlock()
+	if cancel != nil {
+		cancel()
+		h.wg.Wait()
+	}
 }
 
 // sign 生成签名（SEC-004/D-03.3: 新签发统一用 RawURLEncoding，去除尾部 padding）

@@ -1,11 +1,12 @@
 package hlstoken
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -97,18 +98,116 @@ func TestHLSVerify_BackwardCompat(t *testing.T) {
 	}
 }
 
-// TestHLSVerify_JtiReplayRejection 验证 SEC-004：同一 jti 的 token 在进程内只能验证一次，
-// 第二次验证返回 ErrTokenReplayed。
-func TestHLSVerify_JtiReplayRejection(t *testing.T) {
-	h := NewHLSToken(testSecret(), time.Minute)
+// TestVerify_MultiSegmentSameToken 验证 SEC-004 (Phase 19) 核心修复：同一 token
+// 在其 TTL 窗口内可多次 Verify 全部通过。这模拟 HLS 播放的真实场景——m3u8 请求
+// 与所有 .ts 分片共用 rewriteM3U8WithToken 注入的同一个 token。Phase 17 引入的
+// 一次性 jti 拒绝导致首个 .ts 分片即 ErrTokenReplayed，多分片播放完全损坏。
+func TestVerify_MultiSegmentSameToken(t *testing.T) {
+	h := NewHLSToken(testSecret(), 5*time.Minute)
 	tok := h.Generate(5, 6)
 
-	claims1, err1 := h.Verify(tok)
-	assert.NoError(t, err1, "首次验证应成功")
-	assert.NotEmpty(t, claims1.Jti, "新签发 token 应包含 jti")
+	var lastClaims *HLSTokenClaims
+	for i := 0; i < 4; i++ {
+		claims, err := h.Verify(tok)
+		assert.NoError(t, err, "第 %d 次 Verify 应成功（多分片共用 token）", i+1)
+		assert.NotNil(t, claims)
+		lastClaims = claims
+	}
+	// jti 非空且被幂等记录（覆盖，非一次性）。
+	assert.NotEmpty(t, lastClaims.Jti)
+	h.mu.Lock()
+	exp, ok := h.usedJTIs[lastClaims.Jti]
+	h.mu.Unlock()
+	assert.True(t, ok, "jti 应被记录到 usedJTIs")
+	assert.Equal(t, lastClaims.ExpiresAt, exp, "记录的 ExpiresAt 应与 claims 一致")
+}
 
-	_, err2 := h.Verify(tok)
-	assert.True(t, errors.Is(err2, ErrTokenReplayed), "第二次验证应被防重放拒绝，got: %v", err2)
+// TestVerify_ExpiredStillRejected 验证 SEC-004 (Phase 19)：post-TTL 重放仍被
+// Verify 内的 time.Now() > ExpiresAt 检查拦截（这才是真正的重放防线，不变）。
+func TestVerify_ExpiredStillRejected(t *testing.T) {
+	h := NewHLSToken(testSecret(), -time.Minute) // 负 duration → 立即过期
+	tok := h.Generate(7, 8)
+	_, err := h.Verify(tok)
+	assert.Error(t, err, "过期 token 必须被拒绝")
+	assert.NotContains(t, err.Error(), "已被使用", "拒绝原因应是过期而非一次性防重放")
+}
+
+// TestEvictExpired 验证 SEC-004 (Phase 19)：evictExpired 删除过期项、保留未过期项。
+func TestEvictExpired(t *testing.T) {
+	h := NewHLSToken(testSecret(), time.Minute)
+	now := time.Now().Unix()
+
+	h.mu.Lock()
+	h.usedJTIs["past-1"] = now - 60
+	h.usedJTIs["past-2"] = now - 1
+	h.usedJTIs["future-1"] = now + 60
+	h.usedJTIs["future-2"] = now + 3600
+	h.mu.Unlock()
+
+	h.evictExpired()
+
+	h.mu.Lock()
+	_, past1 := h.usedJTIs["past-1"]
+	_, past2 := h.usedJTIs["past-2"]
+	_, future1 := h.usedJTIs["future-1"]
+	_, future2 := h.usedJTIs["future-2"]
+	h.mu.Unlock()
+
+	assert.False(t, past1, "远期过期项应被删除")
+	assert.False(t, past2, "刚过期项应被删除")
+	assert.True(t, future1, "未过期近期项应保留")
+	assert.True(t, future2, "未过期远期项应保留")
+}
+
+// TestSweepLoop_StopsOnCtxCancel 验证 SEC-004 (Phase 19)：sweepLoop 在 ctx 取消时退出，
+// 不泄漏 goroutine（遵循 BUG-006 约定）。
+func TestSweepLoop_StopsOnCtxCancel(t *testing.T) {
+	h := NewHLSToken(testSecret(), time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+		h.sweepLoop(ctx)
+	}()
+
+	// 取消并等待 goroutine 退出。若 sweepLoop 不响应 ctx.Done，wg.Wait 会挂起。
+	cancel()
+	done := make(chan struct{})
+	go func() {
+		h.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		// 通过：goroutine 在 ctx 取消后及时退出。
+	case <-time.After(2 * time.Second):
+		t.Fatal("sweepLoop 在 ctx 取消后未退出（goroutine 泄漏）")
+	}
+}
+
+// TestEnforceCapHardLimit 验证 SEC-004 (Phase 19)：usedJTIs 超过 maxUsedJTIs 时
+// 强制驱逐过期项 + 最早过期项，防止 sweeper 死亡时无限增长。
+func TestEnforceCapHardLimit(t *testing.T) {
+	// 用临时实例 + 手动注入 > maxUsedJTIs 项验证逻辑（不真正构造 100k+ 项，
+	// 而是直接调用 enforceCapLocked 并断言收缩行为）。
+	h := NewHLSToken(testSecret(), time.Minute)
+	now := time.Now().Unix()
+
+	h.mu.Lock()
+	// 注入 maxUsedJTIs + 5 项：一半过期、一半未过期。
+	for i := 0; i < maxUsedJTIs+5; i++ {
+		if i%2 == 0 {
+			h.usedJTIs[string(rune('a'+i%26))+strconv.Itoa(i)] = now - 60 // 过期
+		} else {
+			h.usedJTIs[string(rune('a'+i%26))+strconv.Itoa(i)] = now + 3600 // 未过期
+		}
+	}
+	h.enforceCapLocked()
+	afterLen := len(h.usedJTIs)
+	h.mu.Unlock()
+
+	assert.LessOrEqual(t, afterLen, maxUsedJTIs, "enforce 后 usedJTIs 不应超过 maxUsedJTIs")
 }
 
 // TestHLSVerify_Expired 验证过期 token 被拒绝（回归路径）。

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -45,6 +46,22 @@ func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskServic
 // SetConversionService 设置转换服务
 func (h *VideoRecordingTaskHandler) SetConversionService(conversionService scheduler.ConversionService) {
 	h.conversionService = conversionService
+}
+
+// StartHLS 启动 HLS Token 的后台 sweeper（周期性驱逐过期 jti 索引项）。
+// SEC-004 (Phase 19)：在 app.Start 中调用，StopHLS 在 app.Stop 中调用，
+// 确保优雅关停不泄漏 sweeper goroutine。
+func (h *VideoRecordingTaskHandler) StartHLS(ctx context.Context) {
+	if h.hlsToken != nil {
+		h.hlsToken.Start(ctx)
+	}
+}
+
+// StopHLS 停止 HLS Token 的后台 sweeper 并等待 goroutine 退出。
+func (h *VideoRecordingTaskHandler) StopHLS() {
+	if h.hlsToken != nil {
+		h.hlsToken.Stop()
+	}
 }
 
 // ListTasks 获取录制任务列表
