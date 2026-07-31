@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
@@ -148,6 +149,9 @@ func (s *FileService) initDrivers() {
 }
 
 // Upload 上传文件
+// Phase 19 D15: 散点统一复用 apperrors sentinel (0 新增)。
+// validateFile -> ErrInvalidInput/ErrInsufficientQuota;
+// storage driver 错误 -> 包装 ErrInternal。
 func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadRequest) (*FileUploadResult, error) {
 	// 1. 验证文件
 	if err := s.validateFile(req.File); err != nil {
@@ -188,7 +192,7 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 	// 6. 上传文件
 	result, err := s.defaultDriver.Upload(ctx, req.File, relativePath)
 	if err != nil {
-		return nil, fmt.Errorf("上传文件失败: %w", err)
+		return nil, fmt.Errorf("上传文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 7. 生成访问令牌
@@ -230,7 +234,7 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 	if err := s.db.Create(uploadedFile).Error; err != nil {
 		// 回滚上传
 		s.defaultDriver.Delete(ctx, result.FilePath)
-		return nil, fmt.Errorf("保存文件记录失败: %w", err)
+		return nil, fmt.Errorf("保存文件记录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 10. 更新用户配额
@@ -254,53 +258,55 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 }
 
 // Download 下载文件
+// Phase 19 D15: 5 散点统一 sentinel 化——文件不存在/过期/无权限/存储类型/下载失败。
 func (s *FileService) Download(ctx context.Context, accessToken string, userID uint) (io.ReadCloser, string, error) {
 	var file models.UploadedFile
 	err := s.db.Where("access_token = ? OR is_public = ?", accessToken, true).
 		Where("status = ?", models.FileStatusActive).
 		First(&file).Error
 	if err != nil {
-		return nil, "", fmt.Errorf("文件不存在")
+		return nil, "", fmt.Errorf("文件不存在: %w", apperrors.ErrNotFound)
 	}
 
 	// 检查过期
 	if file.ExpiresAt != nil && time.Now().After(*file.ExpiresAt) {
-		return nil, "", fmt.Errorf("文件已过期")
+		return nil, "", fmt.Errorf("文件已过期: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 检查权限
 	if !file.IsPublic && file.UploadedBy != userID {
 		if !s.hasDownloadPermission(ctx, userID, &file) {
-			return nil, "", fmt.Errorf("无权限下载")
+			return nil, "", fmt.Errorf("无权限下载: %w", apperrors.ErrForbidden)
 		}
 	}
 
 	// 获取存储驱动
 	driver, ok := s.drivers[models.StorageType(file.StorageType)]
 	if !ok {
-		return nil, "", fmt.Errorf("不支持的存储类型")
+		return nil, "", fmt.Errorf("不支持的存储类型: %w", apperrors.ErrInternal)
 	}
 
 	// 下载文件
 	reader, err := driver.Download(ctx, file.FilePath)
 	if err != nil {
-		return nil, "", fmt.Errorf("下载文件失败: %w", err)
+		return nil, "", fmt.Errorf("下载文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	return reader, file.OriginalName, nil
 }
 
 // Delete 删除文件
+// Phase 19 D15: 2 散点 sentinel 化。
 func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*models.UploadedFile, error) {
 	var file models.UploadedFile
 	err := s.db.First(&file, fileID).Error
 	if err != nil {
-		return nil, fmt.Errorf("文件不存在")
+		return nil, fmt.Errorf("文件不存在: %w", apperrors.ErrNotFound)
 	}
 
 	// 检查权限
 	if file.UploadedBy != userID {
-		return nil, fmt.Errorf("无权限删除")
+		return nil, fmt.Errorf("无权限删除: %w", apperrors.ErrForbidden)
 	}
 
 	// Snapshot before soft-delete for audit OldData capture
@@ -346,16 +352,17 @@ func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*mo
 }
 
 // ShareFile 生成分享链接
+// Phase 19 D15: 2 散点 sentinel 化。
 func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, expiresIn time.Duration, password string) (*models.FileShare, *models.FileShare, string, error) {
 	var file models.UploadedFile
 	err := s.db.First(&file, fileID).Error
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("文件不存在")
+		return nil, nil, "", fmt.Errorf("文件不存在: %w", apperrors.ErrNotFound)
 	}
 
 	// 检查权限
 	if file.UploadedBy != userID && !file.IsPublic {
-		return nil, nil, "", fmt.Errorf("无权限分享")
+		return nil, nil, "", fmt.Errorf("无权限分享: %w", apperrors.ErrForbidden)
 	}
 
 	// Snapshot most recent existing share (same file + shared_by) before creating a new one.
@@ -388,26 +395,27 @@ func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, e
 }
 
 // GetShareDownload 通过分享链接下载
+// Phase 19 D15: 6 散点 sentinel 化——链接不存在/过期/密码错/达到上限/存储类型/下载失败。
 func (s *FileService) GetShareDownload(ctx context.Context, shareToken, password string) (io.ReadCloser, string, error) {
 	var share models.FileShare
 	err := s.db.Preload("File").Where("share_token = ?", shareToken).First(&share).Error
 	if err != nil {
-		return nil, "", fmt.Errorf("分享链接不存在")
+		return nil, "", fmt.Errorf("分享链接不存在: %w", apperrors.ErrNotFound)
 	}
 
 	// 检查过期
 	if time.Now().After(share.ExpiresAt) {
-		return nil, "", fmt.Errorf("分享链接已过期")
+		return nil, "", fmt.Errorf("分享链接已过期: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 检查密码
 	if share.Password != "" && share.Password != password {
-		return nil, "", fmt.Errorf("密码错误")
+		return nil, "", fmt.Errorf("密码错误: %w", apperrors.ErrUnauthorized)
 	}
 
 	// 检查访问次数
 	if share.MaxAccess > 0 && share.AccessCount >= share.MaxAccess {
-		return nil, "", fmt.Errorf("分享链接已达到最大访问次数")
+		return nil, "", fmt.Errorf("分享链接已达到最大访问次数: %w", apperrors.ErrInsufficientQuota)
 	}
 
 	// 更新访问次数
@@ -416,12 +424,12 @@ func (s *FileService) GetShareDownload(ctx context.Context, shareToken, password
 	// 获取文件
 	driver, ok := s.drivers[models.StorageType(share.File.StorageType)]
 	if !ok {
-		return nil, "", fmt.Errorf("不支持的存储类型")
+		return nil, "", fmt.Errorf("不支持的存储类型: %w", apperrors.ErrInternal)
 	}
 
 	reader, err := driver.Download(ctx, share.File.FilePath)
 	if err != nil {
-		return nil, "", fmt.Errorf("下载文件失败: %w", err)
+		return nil, "", fmt.Errorf("下载文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	return reader, share.File.OriginalName, nil
@@ -509,6 +517,9 @@ func (s *FileService) GetUserQuota(ctx context.Context, userID uint) (*QuotaInfo
 }
 
 // validateFile 验证文件
+// Phase 19 D15: 3 散点 sentinel 化——大小/类型/MIME 不匹配 -> ErrInvalidInput;
+//
+//	复用 D5 已有 ErrInvalidInput sentinel。
 func (s *FileService) validateFile(file *multipart.FileHeader) error {
 	// 检查文件大小
 	maxSize := int64(defaultMaxFileSize)
@@ -516,7 +527,7 @@ func (s *FileService) validateFile(file *multipart.FileHeader) error {
 		maxSize = s.config.Storage.MaxFileSize
 	}
 	if file.Size > maxSize {
-		return fmt.Errorf("文件大小超过限制")
+		return fmt.Errorf("文件大小超过限制: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 检查文件类型
@@ -536,7 +547,7 @@ func (s *FileService) validateFile(file *multipart.FileHeader) error {
 		}
 	}
 	if !allowed {
-		return fmt.Errorf("不支持的文件类型: %s", ext)
+		return fmt.Errorf("不支持的文件类型: %s: %w", ext, apperrors.ErrInvalidInput)
 	}
 
 	// SEC-012: 读取前 512 字节并按 MIME magic bytes 二次校验。
@@ -548,7 +559,8 @@ func (s *FileService) validateFile(file *multipart.FileHeader) error {
 		s.logger.Warn("MIME magic bytes 检测失败，跳过 MIME 校验",
 			zap.String("filename", file.Filename), zap.Error(err))
 	} else if !isAllowedMIME(mimeType, ext) {
-		return fmt.Errorf("文件 MIME 类型与扩展名不匹配: detected=%s ext=%s", mimeType, ext)
+		return fmt.Errorf("文件 MIME 类型与扩展名不匹配: detected=%s ext=%s: %w",
+			mimeType, ext, apperrors.ErrInvalidInput)
 	}
 
 	return nil
@@ -635,7 +647,9 @@ func (s *FileService) checkUserQuota(ctx context.Context, userID uint, fileSize 
 	}
 
 	if quota.UsedQuota+fileSize > quota.TotalQuota {
-		return fmt.Errorf("存储空间不足")
+		// Phase 19 D15: 复用 D5 已加的 ErrInsufficientQuota sentinel (429) —
+		// 配额不足语义直接对应 quota 类型 sentinel。
+		return fmt.Errorf("存储空间不足: %w", apperrors.ErrInsufficientQuota)
 	}
 
 	return nil
