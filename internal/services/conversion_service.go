@@ -312,7 +312,7 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 			default:
 			}
 
-			_, err := s.videoFileService.ScanFiles()
+			_, err := s.videoFileService.ScanFiles(scanCtx)
 			if err != nil {
 				// 只在非取消错误时记录警告
 				if scanCtx.Err() == nil {

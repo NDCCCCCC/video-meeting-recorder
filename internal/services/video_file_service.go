@@ -1055,7 +1055,7 @@ type fileInfoWithPath struct {
 }
 
 // ScanFiles 扫描录制目录和手动上传目录并导入未入库的文件
-func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
+func (s *VideoFileService) ScanFiles(ctx context.Context) (*ScanResult, error) {
 	result := &ScanResult{}
 
 	// 定义扫描路径及其对应的来源类型
@@ -1100,13 +1100,13 @@ func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 	)
 
 	// 批量查询已存在的文件
-	existingMap, err := s.getExistingFilesMap()
+	existingMap, err := s.getExistingFilesMap(ctx)
 	if err != nil {
 		return result, fmt.Errorf("批量查询现有文件失败: %w", err)
 	}
 
 	// 处理文件
-	s.processFiles(allFiles, existingMap, result)
+	s.processFiles(ctx, allFiles, existingMap, result)
 
 	s.logger.Info("文件扫描完成",
 		zap.Int("scanned", result.Scanned),
@@ -1120,10 +1120,10 @@ func (s *VideoFileService) ScanFiles() (*ScanResult, error) {
 }
 
 // getExistingFilesMap 获取已存在文件的映射
-func (s *VideoFileService) getExistingFilesMap() (map[string]bool, error) {
+func (s *VideoFileService) getExistingFilesMap(ctx context.Context) (map[string]bool, error) {
 	var existingFiles []models.VideoFile
 	// PERF-002: 清理路径加 Limit 上限（bounded cleanup）。
-	if err := s.db.Select("file_path").Limit(5000).Find(&existingFiles).Error; err != nil {
+	if err := s.db.WithContext(ctx).Select("file_path").Limit(5000).Find(&existingFiles).Error; err != nil {
 		return nil, err
 	}
 
@@ -1136,14 +1136,14 @@ func (s *VideoFileService) getExistingFilesMap() (map[string]bool, error) {
 }
 
 // processFiles 处理扫描的文件
-func (s *VideoFileService) processFiles(files []fileInfoWithPath, existingMap map[string]bool, result *ScanResult) {
+func (s *VideoFileService) processFiles(ctx context.Context, files []fileInfoWithPath, existingMap map[string]bool, result *ScanResult) {
 	for _, file := range files {
 		if existingMap[file.filePath] {
-			s.handleExistingFile(file, result)
+			s.handleExistingFile(ctx, file, result)
 			continue
 		}
 
-		if _, err := s.CreateFile(file.filePath, file.taskID, nil, file.sourceType); err != nil {
+		if _, err := s.CreateFile(ctx, file.filePath, file.taskID, nil, file.sourceType); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("创建记录 %s 失败: %v", file.filePath, err))
 			continue
 		}
@@ -1153,9 +1153,9 @@ func (s *VideoFileService) processFiles(files []fileInfoWithPath, existingMap ma
 }
 
 // handleExistingFile 处理已存在的文件
-func (s *VideoFileService) handleExistingFile(file fileInfoWithPath, result *ScanResult) {
+func (s *VideoFileService) handleExistingFile(ctx context.Context, file fileInfoWithPath, result *ScanResult) {
 	var existingFile models.VideoFile
-	if err := s.db.Where("file_path = ?", file.filePath).First(&existingFile).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("file_path = ?", file.filePath).First(&existingFile).Error; err != nil {
 		result.Skipped++
 		return
 	}
@@ -1171,7 +1171,7 @@ func (s *VideoFileService) handleExistingFile(file fileInfoWithPath, result *Sca
 	// 如果有任务ID，检查转换状态
 	if taskID > 0 {
 		var task models.VideoRecordingTask
-		if err := s.db.Select("id, "+
+		if err := s.db.WithContext(ctx).Select("id, "+
 			"conversion_status, "+
 			"status").First(&task, taskID).Error; err == nil {
 
@@ -1206,8 +1206,8 @@ func (s *VideoFileService) handleExistingFile(file fileInfoWithPath, result *Sca
 
 	// 如果 task_id 为空且可以推断出任务ID，则更新
 	if existingFile.TaskID == nil && file.taskID != nil {
-		if s.validateTaskID(*file.taskID) {
-			s.db.Model(&existingFile).Update("task_id", file.taskID)
+		if s.validateTaskID(ctx, *file.taskID) {
+			s.db.WithContext(ctx).Model(&existingFile).Update("task_id", file.taskID)
 			s.logger.Info("更新文件记录的task_id",
 				zap.Uint("file_id", existingFile.ID),
 				zap.Uint("task_id", *file.taskID),
@@ -1263,7 +1263,7 @@ func (s *VideoFileService) handleExistingFile(file fileInfoWithPath, result *Sca
 
 		// 如果需要更新，执行更新
 		if needsUpdate {
-			if err := s.db.Model(&existingFile).Updates(updates).Error; err != nil {
+			if err := s.db.WithContext(ctx).Model(&existingFile).Updates(updates).Error; err != nil {
 				s.logger.Error("更新文件元数据失败",
 					zap.Uint("file_id", existingFile.ID),
 					zap.Error(err),
@@ -1289,9 +1289,9 @@ func (s *VideoFileService) handleExistingFile(file fileInfoWithPath, result *Sca
 }
 
 // validateTaskID 验证任务ID是否存在
-func (s *VideoFileService) validateTaskID(taskID uint) bool {
+func (s *VideoFileService) validateTaskID(ctx context.Context, taskID uint) bool {
 	var taskExists models.VideoRecordingTask
-	return s.db.Select("id").First(&taskExists, taskID).Error == nil
+	return s.db.WithContext(ctx).Select("id").First(&taskExists, taskID).Error == nil
 }
 
 // findVideoFiles 查找目录下所有视频文件
