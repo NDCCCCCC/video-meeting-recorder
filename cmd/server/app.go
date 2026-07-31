@@ -328,7 +328,29 @@ func (a *MinimalApp) migrateDatabase() error {
 		return fmt.Errorf("AutoMigrate failed: %w", err)
 	}
 
+	// Phase 18: 列宽扩展（input_configs.password / stream_password 由 varchar(100) → text）
+	// 不能放进 dormant migration registry（runCustomMigrations 永远不会被调用），所以作为
+	// dedicated startup step 直接执行。GORM AutoMigrate 在已存在的列上不会变更类型。
+	if err := a.widenPasswordColumns(); err != nil {
+		return fmt.Errorf("widen password columns: %w", err)
+	}
+
 	a.logger.Info("数据库迁移完成")
+	return nil
+}
+
+// widenPasswordColumns 把 input_configs.password / stream_password 扩到 TEXT。
+// 幂等：SQLite 的 ALTER COLUMN TYPE 不可逆但重复执行无副作用。
+func (a *MinimalApp) widenPasswordColumns() error {
+	if !a.db.Migrator().HasColumn(&models.InputConfig{}, "Password") {
+		return nil // 表不存在（首次启动）由 AutoMigrate 直接建 TEXT，跳过扩列
+	}
+	if err := a.db.Migrator().AlterColumn(&models.InputConfig{}, "Password"); err != nil {
+		return fmt.Errorf("alter password column: %w", err)
+	}
+	if err := a.db.Migrator().AlterColumn(&models.InputConfig{}, "StreamPassword"); err != nil {
+		return fmt.Errorf("alter stream_password column: %w", err)
+	}
 	return nil
 }
 

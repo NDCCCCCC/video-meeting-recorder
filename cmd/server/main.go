@@ -30,6 +30,11 @@ func main() {
 	// SEC-001: 生产环境启动时强制校验 SM4/HLS Token 密钥（缺失或 < 32 字符则 logger.Fatal 退出）。
 	cfg.ValidateProductionSecrets(logger)
 
+	// Phase 18: 凭据静态加密密钥族校验（缺失 / 配对错 / 版本格式错 → 立即返回 error）。
+	if err := cfg.ValidateCredentialSM4Config(); err != nil {
+		logger.Fatal("凭据静态加密密钥配置不合法（Phase 18）", zap.Error(err))
+	}
+
 	logger.Info("Starting Record V2 Server",
 		zap.String("version", "2.0.0"),
 		zap.String("environment", cfg.Server.Environment),

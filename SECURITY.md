@@ -138,6 +138,68 @@ git reflog | head -20
 git show <old-commit-sha>:.env
 ```
 
+## 凭据静态加密 (Phase 18)
+
+Phase 18 引入 at-rest 凭据加密，与现有 SM4-ECB 传输加密严格分离：
+
+### 算法选择
+
+- **SM4-GCM (NIST SP 800-38D)** —— SM4 分组密码 + GCM 认证加密模式 (AEAD)。
+- 关键参数：12 字节 nonce（96 位，按 NIST 800-38D 推荐）+ 16 字节 tag（128 位）。
+- 输入明文先用 PKCS#7 补到 16 字节边界（gmsm v1.4.1 GCM 解密路径仅支持块对齐的密文）。
+- tag 由 gmsm 解密分支计算 expected tag，调用方做**常量时间比对**（防 timing attack）。
+
+### Envelope 格式
+
+```
+SM4:<version>:<base64(nonce_12B | ciphertext | tag_16B)>
+```
+
+- `version` 段（如 `v1`、`v2`）用于密钥轮换；
+- 解析失败 / 未知 version / tag 校验失败 → 立即报错（**永不静默跳过**）。
+
+### 密钥族分离
+
+| 用途 | 环境变量 | 用途范围 |
+|---|---|---|
+| 浏览器传输加密 | `SM4_SECRET` | 前端 `sm-crypto` SM4-ECB → 前后端 password transport |
+| HLS Token 签名 | `HLS_TOKEN_SECRET` | HLS URL 短期签名密钥 |
+| **凭据静态加密** | `CREDENTIAL_SM4_SECRET` | SQLite 中 `input_configs.password / stream_password` 等 at-rest 字段 |
+
+三组密钥**必须互不相同**，缺失或过短（< 32 字符）将触发生产环境 `logger.Fatal` 终止启动。
+
+### 启动期 fail-closed 流程
+
+`cmd/server/app.go:Initialize()` 严格按 10 步执行，任何一步失败立即返回 error、不进入 HTTP serve：
+
+1. `LoadConfig` + `ValidateCredentialSM4Config`（main.go）
+2. `initDatabase`（AutoMigrate + ALTER COLUMN 扩 password 列到 TEXT）
+3. 构造 `CredentialEncryptor`（含 current + optional previous 密钥）
+4. `MigratePlaintextToGCM`（事务内：plaintext/base64-stub → envelope；剥离 auth.ad JSON 的 password 字段；Unscoped 包含软删除行）
+5. 第一次 `InvariantScan`（所有密文为合法 envelope 且可解密；auth.ad JSON 不含 password）
+6. `RotateIfNeeded`（previous 版本 envelope → current 版本）
+7. 第二次 `InvariantScan`（确保轮换后全部为 current）
+8. `initRouter` → `checkPythonDependencies` → `initHandlers` → `registerRoutes` → `registerServices`
+9. 启动 HTTP
+
+### 威胁模型
+
+| 边界 | 在范围内 | 不在范围内 |
+|---|---|---|
+| **应用进程内** | DB 连接 / SQL 注入 / 数据备份导出 | 前端浏览器 JS 注入 |
+| **DB 文件**（at-rest） | **保护**：DB 文件泄露（含 backup）不会暴露明文凭据 | DB 内已解密运行中内存 |
+| **磁盘快照 / WAL** | **保护**：SQLite `.db` + `.db-wal` 拿走后仍为密文 | WAL checkpoint 期间（部分明文可能在 WAL 段；备份策略见 DEPLOYMENT.md） |
+| **网络传输** | 前端 → 后端 password transport 由 SM4-ECB 单独保护 | TLS 终止（部署侧责任） |
+
+### 轮换（密钥族升级）
+
+1. operator 设置 `CREDENTIAL_SM4_VERSION=v2`、`CREDENTIAL_SM4_SECRET=<new>`、
+   `CREDENTIAL_SM4_PREVIOUS_VERSION=v1`、`CREDENTIAL_SM4_PREVIOUS_SECRET=<old>`。
+2. 启动后 `RotateIfNeeded` 自动把所有 v1 envelope 改写成 v2。
+3. 下次启动移除 `*_PREVIOUS_*` 字段即可完成轮换。
+
+详见 `internal/services/credential_encryptor.go`、`internal/utils/sm4_password.go`。
+
 ## 报告安全问题
 
 发现新的安全风险，请勿在公开 issue 中暴露细节，联系仓库管理员。
