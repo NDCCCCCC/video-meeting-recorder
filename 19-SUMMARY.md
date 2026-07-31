@@ -209,3 +209,65 @@ BusinessError 按 `Code` 字段映射（同表逻辑）。
 - STYLE-009（130 Get* rename）/ PERF-001（Preload 非 N+1）/ PERF-009（audit map schemaless）——
   计划已排除。
 - error 迁移剩余 ~174 `errors.New` + ~224 非 `%w` `fmt.Errorf` —— Wave 6 部分迁移 + 建立模式。
+
+---
+
+## Wave 3: ctx 级联 leaf + mid 服务（PERF-003/BUG-005）
+
+**范围**：13 个 leaf/mid 服务结构体 + 4 个 partial 服务补全，共 16 个服务组。
+**提交**：8 个原子 commit（`213710c` → `a6c21b6`），每个 commit 编译 + 测试门控绿。
+
+### 已转换服务（ctx 首参 + `.WithContext(ctx)` 链首）
+
+| 服务 | 方法数（含 ctx） | commit |
+|------|------------------|--------|
+| ConfigService | 2 | `213710c` |
+| PPTMergeService | 1（签名已含 ctx，补 WithContext） | `213710c` |
+| SnapshotService | 1（+ FFmpeg ctx 从请求派生） | `24df855` |
+| SlideCacheService | 2 DB 方法 | `24df855` |
+| PPTEditorService | 6 DB 方法（事务用 `WithContext(ctx).Begin()`） | `24df855` |
+| PPTFileService | 6（事务用 `WithContext(ctx).Transaction`） | `557ffcd` |
+| SplittingService | SubmitSplit + processSplit（worker 透传 s.ctx） | `557ffcd` |
+| RoleService | 8 | `a165981` |
+| UserService | 9（内部 AssignRoles/UpdateRoles 透传） | `a165981` |
+| APIKeyService | 11（含私有 findAPIKeyForUser/buildUsageLogConditions） | `3494e61` |
+| InputConfigService | 5 DB + TestConnection/testStreamConnection（ffprobe ctx 从请求派生） | `3494e61` |
+| FFmpegConversionService | 3 公共 + 3 私有 + 接口/stub 同步 | `bb2b414` |
+| FrameCaptureService | ValidateTimestamp（ffprobe ctx 从请求派生） | `bb2b414` |
+| TranscriptionService | 5 公共 + 6 私有（worker 透传 s.ctx；超时 ctx 从入参派生） | `a6c21b6` |
+
+### 排除项（无 DB / 已完成）
+
+- **SimilarityDetector**：纯图像计算（SSIM/pHash/边缘检测），无 `s.db` 字段、无 GORM 调用 → 与金标准纯 helper 处理一致，不加 ctx。
+- **OSSService**：3 个 IO 方法（UploadFile/SetLifecycleRule/DeleteFile）在 Wave 0-2 前已有 ctx；`IsEnabled`/`IsStub` 为纯 bool 访问器 → 已是完成态，无残留。
+
+### 取消传播测试
+
+新增 `internal/services/ctx_cancellation_test.go`（4 个用例，全过）：
+- `TestRoleService_GetAllPermissions_PreCancelledCtx` / `TestRoleService_ListRoles_PreCancelledCtx`
+- `TestUserService_GetUserByID_PreCancelledCtx` / `TestUserService_ListUsers_PreCancelledCtx`
+
+验证：预先 `cancel()` 的 ctx → GORM 立即返回 `context.Canceled`（`errors.Is(err, context.Canceled)` 成立）。
+
+### 关键约定遵循
+
+- **ctx 首参**：所有签名 `func (s *X) Method(ctx context.Context, ...)`。
+- **`.WithContext(ctx)` 链首**：每个 `s.db.` 链均以 `s.db.WithContext(ctx)` 开头（grep 验证零裸 `s.db.` 查询方法）。
+- **事务**：`tx := s.db.WithContext(ctx).Begin()` 与 `s.db.WithContext(ctx).Transaction(...)` —— tx 继承 ctx。
+- **后台调用者**：scheduler `completeTask`/`releaseHuaweiDevice` 无请求 ctx → 派生 `context.WithTimeout(context.Background(), 30s)`（BUG-006）；worker goroutine 透传服务生命周期 `s.ctx`。
+- **FFmpeg/ffprobe 长时操作**：超时 ctx 从请求 ctx 派生（`context.WithTimeout(ctx, ...)`），使请求取消能级联中断转码/探测。
+- **纯 helper 不加 ctx**：loadImage/copyFile/SaveCapturedFrame/generateThumbnail/validateFile/ValidateConfig/getServerURL 等纯计算/文件 helper 保持无 ctx（与金标准 `file_service.go` 一致）。
+
+### 延后依赖（Wave 4/5 处理）
+
+- SnapshotService 调 `videoFileService.CreateSegmentFile` —— VideoFileService 属 Wave 5，该调用点暂未透传 ctx。
+- SplittingService 调 `videoFileService.{DeleteSplitSegmentsByParentID,CreateSegmentFile}` —— 同上。
+- FFmpegConversionService.processTask 调 `videoFileService.{CreateFileFromTask,ScanFiles}` —— 同上。
+- TranscriptionService 调 `videoFileService` / `ossService` / `tingwuClient` —— ossService/tingwuClient 已有 ctx 透传；videoFileService 调用点 Wave 5 补。
+
+### 验证
+
+- `go build ./...` 绿（每 commit 门控）。
+- `go vet ./...` 干净。
+- `gofmt -l` 在所有本 wave 触及文件上干净（`oss_service.go` 的 gofmt 标记为 HEAD 预存问题，本 wave 未修改该文件）。
+- `go test ./internal/services/ ./internal/handlers/ ./internal/scheduler/ ./cmd/server/` 全过，无回归。
