@@ -96,12 +96,12 @@ func (s *DashboardService) getTaskStats(ctx context.Context) (*TaskStats, error)
 	var stats TaskStats
 
 	// 总任务数
-	if err := s.db.Model(&models.VideoRecordingTask{}).Count(&stats.Total).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Count(&stats.Total).Error; err != nil {
 		return nil, err
 	}
 
 	// 进行中的任务数（connecting, recording, converting）
-	if err := s.db.Model(&models.VideoRecordingTask{}).
+	if err := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).
 		Where("status IN ?", []models.VideoRecordingTaskStatus{
 			models.VideoStatusConnecting,
 			models.VideoStatusRecording,
@@ -112,14 +112,14 @@ func (s *DashboardService) getTaskStats(ctx context.Context) (*TaskStats, error)
 	}
 
 	// 成功的任务数（completed）
-	if err := s.db.Model(&models.VideoRecordingTask{}).
+	if err := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).
 		Where("status = ?", models.VideoStatusCompleted).
 		Count(&stats.Success).Error; err != nil {
 		return nil, err
 	}
 
 	// 失败的任务数
-	if err := s.db.Model(&models.VideoRecordingTask{}).
+	if err := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).
 		Where("status = ?", models.VideoStatusFailed).
 		Count(&stats.Fail).Error; err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func (s *DashboardService) getTaskStats(ctx context.Context) (*TaskStats, error)
 		AvgTime float64
 	}
 	var result Result
-	if err := s.db.Model(&models.VideoRecordingTask{}).
+	if err := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).
 		Select("AVG(julianday(end_time) - julianday(start_time)) * 86400 as avg_time").
 		Where("status = ? AND end_time IS NOT NULL AND start_time IS NOT NULL", models.VideoStatusCompleted).
 		Scan(&result).Error; err != nil {
@@ -148,7 +148,7 @@ func (s *DashboardService) getFileStats(ctx context.Context) (*FileStats, error)
 	var stats FileStats
 
 	// 视频文件总数
-	if err := s.db.Model(&models.VideoFile{}).Count(&stats.TotalVideos).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&models.VideoFile{}).Count(&stats.TotalVideos).Error; err != nil {
 		return nil, err
 	}
 
@@ -157,7 +157,7 @@ func (s *DashboardService) getFileStats(ctx context.Context) (*FileStats, error)
 		TotalBytes int64
 	}
 	var storageResult StorageResult
-	if err := s.db.Model(&models.VideoFile{}).
+	if err := s.db.WithContext(ctx).Model(&models.VideoFile{}).
 		Select("COALESCE(SUM(file_size), 0) as total_bytes").
 		Scan(&storageResult).Error; err != nil {
 		return nil, err
@@ -165,7 +165,7 @@ func (s *DashboardService) getFileStats(ctx context.Context) (*FileStats, error)
 	stats.StorageMB = float64(storageResult.TotalBytes) / 1024 / 1024
 
 	// 转录文件数（从 transcription_tasks 表统计）
-	if err := s.db.Model(&models.TranscriptionTask{}).
+	if err := s.db.WithContext(ctx).Model(&models.TranscriptionTask{}).
 		Where("status = ?", "completed").
 		Count(&stats.Transcripts).Error; err != nil {
 		// 如果表不存在或查询失败，设置为0
@@ -173,7 +173,7 @@ func (s *DashboardService) getFileStats(ctx context.Context) (*FileStats, error)
 	}
 
 	// PPT文件数
-	if err := s.db.Model(&models.PPTFile{}).Count(&stats.Ppts).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&models.PPTFile{}).Count(&stats.Ppts).Error; err != nil {
 		return nil, err
 	}
 
@@ -186,14 +186,14 @@ func (s *DashboardService) getSystemStats(ctx context.Context) (*SystemStats, er
 
 	// 错误数量（从审计日志统计最近24小时的错误）
 	twentyFourHoursAgo := time.Now().UTC().Add(-24 * time.Hour)
-	if err := s.db.Model(&models.AuditLog{}).
+	if err := s.db.WithContext(ctx).Model(&models.AuditLog{}).
 		Where("status = ? AND created_at >= ?", models.StatusFailure, twentyFourHoursAgo).
 		Count(&stats.ErrorCount).Error; err != nil {
 		return nil, err
 	}
 
 	// API调用数量（从审计日志统计最近24小时的query操作）
-	if err := s.db.Model(&models.AuditLog{}).
+	if err := s.db.WithContext(ctx).Model(&models.AuditLog{}).
 		Where("action = ? AND created_at >= ?", models.ActionQuery, twentyFourHoursAgo).
 		Count(&stats.ApiCalls).Error; err != nil {
 		return nil, err

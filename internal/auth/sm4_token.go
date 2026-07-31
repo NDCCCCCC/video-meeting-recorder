@@ -321,7 +321,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 
 	// 步骤2: 查找当前 token 的 session
 	var session models.Session
-	result := s.db.Where("token = ?", refreshToken).First(&session)
+	result := s.db.WithContext(ctx).Where("token = ?", refreshToken).First(&session)
 
 	if result.Error != nil {
 		// session 不存在，可能是其他地方创建的 token
@@ -335,7 +335,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 				if timeSinceLastUse < GracePeriod {
 					// 在宽限期内，查找最近生成的新 token
 					var newSession models.Session
-					err := s.db.Where("user_id = ? AND created_at > ?",
+					err := s.db.WithContext(ctx).Where("user_id = ? AND created_at > ?",
 						claims.UserID,
 						now.Add(-GracePeriod),
 					).Order("created_at DESC").First(&newSession).Error
@@ -349,7 +349,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 						)
 
 						var user models.User
-						if err := s.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
+						if err := s.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
 							return nil, errors.New("user not found")
 						}
 						newTokenPair, err := s.GenerateTokenPair(&user)
@@ -385,7 +385,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 
 	// 步骤3: 正常流程 - 第一次使用此 refresh token
 	var user models.User
-	if err := s.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
 		return nil, errors.New("user not found")
 	}
 
@@ -400,7 +400,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 
 	// 关键修复：只更新 last_used_at，不立即撤销 token
 	// 这样在宽限期内重复使用时，session 仍然是 active 的
-	if err := s.db.Model(&models.Session{}).
+	if err := s.db.WithContext(ctx).Model(&models.Session{}).
 		Where("token = ?", refreshToken).
 		Update("last_used_at", now).Error; err != nil {
 		s.logger.Warn("更新session last_used_at失败", zap.Error(err))

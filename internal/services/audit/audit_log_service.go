@@ -19,6 +19,10 @@ type AuditLogService struct {
 	sanitizer  *Sanitizer
 	asyncQueue chan *models.AuditLog
 	stopCh     chan struct{}
+	// lifecycleCtx 绑定服务生命周期：批处理 goroutine 与 CleanupOldLogs 的后台调用
+	// 通过它接收取消信号，使优雅关停能中断挂起的 SQL（BUG-005 ctx 级联）。
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
 }
 
 // LogOperationRequest 操作日志请求
@@ -130,6 +134,9 @@ type StatisticsResponse struct {
 
 // NewAuditLogService 创建审计日志服务
 func NewAuditLogService(db *gorm.DB, logger *zap.Logger) *AuditLogService {
+	// BUG-005: 批处理 goroutine 与后台清理任务需要一个可取消的生命周期 ctx，
+	// 使优雅关停能级联中断挂起的 SQL。cancel 在 Stop() 中触发。
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	service := &AuditLogService{
 		db:         db,
 		logger:     logger,
@@ -137,7 +144,9 @@ func NewAuditLogService(db *gorm.DB, logger *zap.Logger) *AuditLogService {
 		asyncQueue: make(chan *models.AuditLog, 1000),
 		// PERF-014: 无缓冲 channel 仅用作 stop 信号 (close-only)
 		// — 关闭后 processQueue 在 select 中收到零值并退出。
-		stopCh: make(chan struct{}),
+		stopCh:          make(chan struct{}),
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
 	}
 
 	// 启动异步处理goroutine
@@ -149,6 +158,10 @@ func NewAuditLogService(db *gorm.DB, logger *zap.Logger) *AuditLogService {
 // Stop 停止服务
 func (s *AuditLogService) Stop() {
 	close(s.stopCh)
+	// BUG-005: 取消生命周期 ctx，中断批处理/清理任务中挂起的 SQL。
+	if s.lifecycleCancel != nil {
+		s.lifecycleCancel()
+	}
 }
 
 // LogOperation 记录操作日志（异步）
@@ -225,23 +238,23 @@ func (s *AuditLogService) processQueue() {
 			if !ok {
 				// 队列关闭，处理剩余数据
 				if len(batch) > 0 {
-					s.flushBatch(batch)
+					s.flushBatch(s.lifecycleCtx, batch)
 				}
 				return
 			}
 			batch = append(batch, log)
 			if len(batch) >= 100 {
-				s.flushBatch(batch)
+				s.flushBatch(s.lifecycleCtx, batch)
 				batch = make([]*models.AuditLog, 0, 100)
 			}
 		case <-ticker.C:
 			if len(batch) > 0 {
-				s.flushBatch(batch)
+				s.flushBatch(s.lifecycleCtx, batch)
 				batch = make([]*models.AuditLog, 0, 100)
 			}
 		case <-s.stopCh:
 			if len(batch) > 0 {
-				s.flushBatch(batch)
+				s.flushBatch(s.lifecycleCtx, batch)
 			}
 			return
 		}
@@ -249,8 +262,11 @@ func (s *AuditLogService) processQueue() {
 }
 
 // flushBatch 批量写入
-func (s *AuditLogService) flushBatch(batch []*models.AuditLog) {
-	if err := s.db.CreateInBatches(batch, 100).Error; err != nil {
+//
+// ctx 来自服务生命周期（processQueue 传入 s.lifecycleCtx），使优雅关停能中断
+// 挂起的批量写入 SQL（BUG-005 ctx 级联）。
+func (s *AuditLogService) flushBatch(ctx context.Context, batch []*models.AuditLog) {
+	if err := s.db.WithContext(ctx).CreateInBatches(batch, 100).Error; err != nil {
 		s.logger.Error("批量写入审计日志失败",
 			zap.Int("count", len(batch)),
 			zap.Error(err),
@@ -494,10 +510,17 @@ func (s *AuditLogService) GetStatistics(ctx context.Context, days int, userID ui
 }
 
 // CleanupOldLogs 清理旧日志
-func (s *AuditLogService) CleanupOldLogs(keepDays int) error {
+//
+// ctx 由调用方传入：HTTP handler 传 c.Request.Context()；后台 cron 无请求 ctx 时
+// 传 bounded context.WithTimeout(context.Background(), 30s)（BUG-006 约定），
+// 或 nil 以回退到服务生命周期 ctx（兼容无 ctx 的内部调用）。
+func (s *AuditLogService) CleanupOldLogs(ctx context.Context, keepDays int) error {
+	if ctx == nil {
+		ctx = s.lifecycleCtx
+	}
 	cutoffDate := time.Now().AddDate(0, 0, -keepDays)
 
-	result := s.db.Where("created_at < ?", cutoffDate).Delete(&models.AuditLog{})
+	result := s.db.WithContext(ctx).Where("created_at < ?", cutoffDate).Delete(&models.AuditLog{})
 	if result.Error != nil {
 		return result.Error
 	}
