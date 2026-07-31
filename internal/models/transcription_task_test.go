@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -203,7 +204,7 @@ func TestTranscriptionTask_SlideTimestamps(t *testing.T) {
 			validate: func(t *testing.T, task *TranscriptionTask) {
 				_, err := task.GetTimestampForSlide(5)
 				assert.Error(t, err)
-				assert.Equal(t, "slide not found", err.Error())
+				assert.True(t, apperrors.Is(err, apperrors.ErrNotFound))
 			},
 		},
 		{

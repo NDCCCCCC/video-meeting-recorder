@@ -5,6 +5,8 @@ import (
 	"log"
 
 	"gorm.io/gorm"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // MultiRoleMigration 创建 users_roles 关联表并迁移现有单角色数据
@@ -19,7 +21,7 @@ func (m *MultiRoleMigration) Up(db *gorm.DB) error {
 	var count int64
 	checkErr := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users_roles'").Scan(&count).Error
 	if checkErr != nil {
-		return fmt.Errorf("failed to check users_roles table existence: %w", checkErr)
+		return fmt.Errorf("failed to check users_roles table existence: %w: %w", apperrors.ErrInternal, checkErr)
 	}
 
 	// If exists, return nil (idempotent)
@@ -40,7 +42,7 @@ func (m *MultiRoleMigration) Up(db *gorm.DB) error {
 		)
 	`).Error
 	if err != nil {
-		return fmt.Errorf("failed to create users_roles table: %w", err)
+		return fmt.Errorf("failed to create users_roles table: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// Step 3: Migrate existing single-role data (D-08)

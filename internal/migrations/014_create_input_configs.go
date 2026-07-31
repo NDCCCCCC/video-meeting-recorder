@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // Migration014_CreateInputConfigs 创建 input_configs 和 task_input_configs 表
@@ -56,7 +58,7 @@ func (m *Migration014_CreateInputConfigs) Up(db *gorm.DB) error {
 			)
 		`).Error
 		if err != nil {
-			return fmt.Errorf("failed to create input_configs table: %w", err)
+			return fmt.Errorf("failed to create input_configs table: %w: %w", apperrors.ErrInternal, err)
 		}
 
 		// 创建索引
@@ -81,7 +83,7 @@ func (m *Migration014_CreateInputConfigs) Up(db *gorm.DB) error {
 			)
 		`).Error
 		if err != nil {
-			return fmt.Errorf("failed to create task_input_configs table: %w", err)
+			return fmt.Errorf("failed to create task_input_configs table: %w: %w", apperrors.ErrInternal, err)
 		}
 
 		// 创建索引

@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // AddVideoFileOwnerMigration 为 video_files 表添加 created_by 字段
@@ -123,7 +125,7 @@ func (m *AddStreamConfigMigration) Up(db *gorm.DB) error {
 			)
 		`).Error
 		if err != nil {
-			return fmt.Errorf("failed to create task_huawei_configs table: %w", err)
+			return fmt.Errorf("failed to create task_huawei_configs table: %w: %w", apperrors.ErrInternal, err)
 		}
 	}
 
@@ -236,7 +238,7 @@ func (m *CreateTranscriptionTasksMigration) Up(db *gorm.DB) error {
 	`).Error
 
 	if err != nil {
-		return fmt.Errorf("failed to create transcription_tasks table: %w", err)
+		return fmt.Errorf("failed to create transcription_tasks table: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 创建索引

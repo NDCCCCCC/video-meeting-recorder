@@ -3,7 +3,6 @@ package migrations
 import (
 	"fmt"
 	"log"
-
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"gorm.io/gorm"
 )

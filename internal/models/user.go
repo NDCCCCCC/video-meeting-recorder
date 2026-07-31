@@ -2,9 +2,10 @@ package models
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
 
 	"golang.org/x/crypto/bcrypt"
@@ -35,7 +36,7 @@ type User struct {
 // SetPassword 设置密码
 func (u *User) SetPassword(password string) error {
 	if len(password) < 8 {
-		return errors.New("密码长度至少为8位")
+		return fmt.Errorf("密码长度至少为8位: %w", apperrors.ErrInvalidInput)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

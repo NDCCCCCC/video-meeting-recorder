@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // PPT source type constants
@@ -71,7 +73,7 @@ func (p *PPTFile) GetDeletedSlides() ([]int, error) {
 	var slides []int
 	err := json.Unmarshal([]byte(p.DeletedSlides), &slides)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse deleted slides: %w", err)
+		return nil, fmt.Errorf("failed to parse deleted slides: %w: %w", apperrors.ErrInternal, err)
 	}
 	return slides, nil
 }
@@ -126,7 +128,7 @@ func (p *PPTFile) AddEditOperation(operation string, slides []int) error {
 	var history []EditOperation
 	if p.EditHistory != "" && p.EditHistory != "[]" {
 		if err := json.Unmarshal([]byte(p.EditHistory), &history); err != nil {
-			return fmt.Errorf("failed to parse edit history: %w", err)
+			return fmt.Errorf("failed to parse edit history: %w: %w", apperrors.ErrInternal, err)
 		}
 	}
 
@@ -141,7 +143,7 @@ func (p *PPTFile) AddEditOperation(operation string, slides []int) error {
 	history = append(history, newOp)
 	data, err := json.Marshal(history)
 	if err != nil {
-		return fmt.Errorf("failed to marshal edit history: %w", err)
+		return fmt.Errorf("failed to marshal edit history: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	p.EditHistory = string(data)

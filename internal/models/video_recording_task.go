@@ -1,8 +1,10 @@
 package models
 
 import (
-	"errors"
+	"fmt"
 	"time"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // VideoRecordingTask 视频录制任务模型
@@ -82,13 +84,13 @@ func (t *VideoRecordingTask) IsExpired() bool {
 // IsValid 验证任务数据
 func (t *VideoRecordingTask) IsValid() error {
 	if t.StartTime.After(t.EndTime) {
-		return errors.New("开始时间不能晚于结束时间")
+		return fmt.Errorf("开始时间不能晚于结束时间: %w", apperrors.ErrInvalidInput)
 	}
 	if t.PreJoinMinutes < 0 || t.PreJoinMinutes > 60 {
-		return errors.New("提前进入时间必须在0-60分钟之间")
+		return fmt.Errorf("提前进入时间必须在0-60分钟之间: %w", apperrors.ErrInvalidInput)
 	}
 	if t.ConferenceNumber == "" {
-		return errors.New("会议号不能为空")
+		return fmt.Errorf("会议号不能为空: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 至少需要指定一种输入配置
@@ -97,7 +99,7 @@ func (t *VideoRecordingTask) IsValid() error {
 	hasInputConfig := t.InputConfigID != nil && *t.InputConfigID > 0
 
 	if !hasInputConfig {
-		return errors.New("必须指定至少一种输入配置")
+		return fmt.Errorf("必须指定至少一种输入配置: %w", apperrors.ErrInvalidInput)
 	}
 
 	return nil

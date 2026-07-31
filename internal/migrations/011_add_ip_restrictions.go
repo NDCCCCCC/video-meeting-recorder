@@ -5,6 +5,8 @@ import (
 	"log"
 
 	"gorm.io/gorm"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // AddIPRestrictionsMigration 为用户和角色添加IP限制字段
@@ -18,11 +20,11 @@ func (m *AddIPRestrictionsMigration) Up(db *gorm.DB) error {
 	// Step 1: Add allowed_ips column to users table (if not exists)
 	exists, err := columnExists(db, "users", "allowed_ips")
 	if err != nil {
-		return fmt.Errorf("failed to check allowed_ips column in users: %w", err)
+		return fmt.Errorf("failed to check allowed_ips column in users: %w: %w", apperrors.ErrInternal, err)
 	}
 	if !exists {
 		if err := db.Exec("ALTER TABLE users ADD COLUMN allowed_ips TEXT").Error; err != nil {
-			return fmt.Errorf("failed to add allowed_ips column to users: %w", err)
+			return fmt.Errorf("failed to add allowed_ips column to users: %w: %w", apperrors.ErrInternal, err)
 		}
 		log.Println("INFO: Added allowed_ips column to users table")
 	} else {
@@ -32,11 +34,11 @@ func (m *AddIPRestrictionsMigration) Up(db *gorm.DB) error {
 	// Step 2: Add allowed_ips column to roles table (if not exists)
 	exists, err = columnExists(db, "roles", "allowed_ips")
 	if err != nil {
-		return fmt.Errorf("failed to check allowed_ips column in roles: %w", err)
+		return fmt.Errorf("failed to check allowed_ips column in roles: %w: %w", apperrors.ErrInternal, err)
 	}
 	if !exists {
 		if err := db.Exec("ALTER TABLE roles ADD COLUMN allowed_ips TEXT").Error; err != nil {
-			return fmt.Errorf("failed to add allowed_ips column to roles: %w", err)
+			return fmt.Errorf("failed to add allowed_ips column to roles: %w: %w", apperrors.ErrInternal, err)
 		}
 		log.Println("INFO: Added allowed_ips column to roles table")
 	} else {

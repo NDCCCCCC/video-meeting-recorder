@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/common"
@@ -45,7 +46,7 @@ func (a *APIKey) BeforeCreate(tx *gorm.DB) error {
 		// 但模型层保留错误路径，避免进程级 panic
 		key, err := generateAPIKey()
 		if err != nil {
-			return fmt.Errorf("生成API密钥失败: %w", err)
+			return fmt.Errorf("生成API密钥失败: %w: %w", apperrors.ErrInternal, err)
 		}
 		a.Key = key
 	}
@@ -99,7 +100,7 @@ func (a *APIKey) GenerateKey() string {
 func generateAPIKey() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("crypto/rand.Read 失败: %w", err)
+		return "", fmt.Errorf("crypto/rand.Read 失败: %w: %w", apperrors.ErrInternal, err)
 	}
 	return "rec_" + hex.EncodeToString(b), nil
 }

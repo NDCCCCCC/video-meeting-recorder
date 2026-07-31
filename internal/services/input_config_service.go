@@ -2,11 +2,11 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
@@ -357,7 +357,7 @@ func (s *InputConfigService) UpdateConfig(ctx context.Context, id uint, req *Upd
 		// Phase 18: 加密
 		enc, eerr := s.encryptPasswordField(*req.StreamPassword)
 		if eerr != nil {
-			return nil, nil, fmt.Errorf("加密 stream_password 失败: %w", eerr)
+			return nil, nil, fmt.Errorf("加密 stream_password 失败: %w: %w", apperrors.ErrInternal, eerr)
 		}
 		config.StreamPassword = enc
 	}
@@ -404,7 +404,7 @@ func (s *InputConfigService) DeleteConfig(ctx context.Context, id uint) (*models
 	var count int64
 	s.db.WithContext(ctx).Table("task_input_configs").Where("input_config_id = ?", id).Count(&count)
 	if count > 0 {
-		return nil, errors.New("配置正在被任务使用，无法删除")
+		return nil, fmt.Errorf("配置正在被任务使用，无法删除: %w", apperrors.ErrForbidden)
 	}
 
 	if err := s.db.WithContext(ctx).Delete(&models.InputConfig{}, id).Error; err != nil {
@@ -426,16 +426,16 @@ func (s *InputConfigService) ValidateConfig(config *models.InputConfig) error {
 	switch config.ConfigType {
 	case models.ConfigTypeUSB:
 		if config.USBCameraDevice == "" {
-			return errors.New("USB配置必须指定摄像头设备")
+			return fmt.Errorf("USB配置必须指定摄像头设备: %w", apperrors.ErrInvalidInput)
 		}
 
 	case models.ConfigTypeStream:
 		if config.StreamURL == "" {
-			return errors.New("流媒体配置必须指定流地址")
+			return fmt.Errorf("流媒体配置必须指定流地址: %w", apperrors.ErrInvalidInput)
 		}
 
 	default:
-		return fmt.Errorf("无效的配置类型: %s", config.ConfigType)
+		return fmt.Errorf("无效的配置类型: %s: %w", config.ConfigType, apperrors.ErrInvalidInput)
 	}
 
 	return nil
@@ -444,13 +444,13 @@ func (s *InputConfigService) ValidateConfig(config *models.InputConfig) error {
 // validateHuaweiFields 验证华为终端必填字段
 func (s *InputConfigService) validateHuaweiFields(config *models.InputConfig) error {
 	if config.Server == "" {
-		return errors.New("华为服务器地址不能为空")
+		return fmt.Errorf("华为服务器地址不能为空: %w", apperrors.ErrInvalidInput)
 	}
 	if config.Username == "" {
-		return errors.New("用户名不能为空")
+		return fmt.Errorf("用户名不能为空: %w", apperrors.ErrInvalidInput)
 	}
 	if config.TerminalNumber == "" {
-		return errors.New("终端号码不能为空")
+		return fmt.Errorf("终端号码不能为空: %w", apperrors.ErrInvalidInput)
 	}
 	return nil
 }
@@ -467,7 +467,7 @@ func (s *InputConfigService) TestConnection(ctx context.Context, req *TestConnec
 	case models.ConfigTypeStream:
 		return s.testStreamConnection(ctx, req)
 	default:
-		return errors.New("不支持的配置类型")
+		return fmt.Errorf("不支持的配置类型: %w", apperrors.ErrInvalidInput)
 	}
 }
 
@@ -480,14 +480,14 @@ func (s *InputConfigService) testUSBDevice(req *TestConnectionRequest) error {
 		if camera.DeviceID == req.USBCameraDevice {
 			deviceFound = true
 			if camera.Status != "available" {
-				return fmt.Errorf("USB设备不可用: %s", camera.Status)
+				return fmt.Errorf("USB设备不可用: %s: %w", camera.Status, apperrors.ErrInvalidInput)
 			}
 			break
 		}
 	}
 
 	if !deviceFound {
-		return errors.New("未找到指定的USB设备，请先扫描设备")
+		return fmt.Errorf("未找到指定的USB设备，请先扫描设备: %w", apperrors.ErrNotFound)
 	}
 
 	s.logger.Info("USB设备连接测试成功", zap.String("device", req.USBCameraDevice))
@@ -517,7 +517,7 @@ func (s *InputConfigService) testStreamConnection(ctx context.Context, req *Test
 	case "hls":
 		inputArgs = []string{"-i", req.StreamURL}
 	default:
-		return errors.New("不支持的流媒体协议")
+		return fmt.Errorf("不支持的流媒体协议: %w", apperrors.ErrInvalidInput)
 	}
 
 	// PERF-003/BUG-005: ffprobe 超时 ctx 从请求 ctx 派生，使请求取消能中断探测。
@@ -532,7 +532,7 @@ func (s *InputConfigService) testStreamConnection(ctx context.Context, req *Test
 	output, err := cmd.CombinedOutput()
 
 	if ctx.Err() == context.DeadlineExceeded {
-		return fmt.Errorf("连接超时（15秒），请检查网络和流媒体地址是否正确")
+		return fmt.Errorf("连接超时（15秒），请检查网络和流媒体地址是否正确: %w", apperrors.ErrServiceUnavailable)
 	}
 
 	if err != nil {
@@ -540,7 +540,7 @@ func (s *InputConfigService) testStreamConnection(ctx context.Context, req *Test
 			zap.Error(err),
 			zap.String("output", string(output)),
 		)
-		return fmt.Errorf("流媒体连接测试失败: %w", err)
+		return fmt.Errorf("流媒体连接测试失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	s.logger.Info("流媒体连接测试成功")
@@ -557,5 +557,5 @@ func (s *InputConfigService) testHuaweiConnection(req *TestConnectionRequest) er
 	// TODO: 实现实际的华为API连接测试
 	// 这应该与现有的 HuaweiConferenceConnector 集成
 
-	return errors.New("华为终端连接测试尚未实现")
+	return fmt.Errorf("华为终端连接测试尚未实现: %w", apperrors.ErrServiceUnavailable)
 }

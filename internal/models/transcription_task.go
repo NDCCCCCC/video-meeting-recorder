@@ -2,9 +2,10 @@ package models
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // SlideTimestamp represents a slide-to-timestamp mapping
@@ -107,7 +108,7 @@ func (t *TranscriptionTask) SetSlideTimestamps(timestamps []SlideTimestamp) erro
 
 	data, err := json.Marshal(validTimestamps)
 	if err != nil {
-		return fmt.Errorf("failed to marshal slide timestamps: %w", err)
+		return fmt.Errorf("failed to marshal slide timestamps: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	t.SlideTimestamps = string(data)
@@ -128,17 +129,17 @@ func (t *TranscriptionTask) GetTimestampForSlide(slideNumber int) (float64, erro
 		}
 	}
 
-	return 0, errors.New("slide not found")
+	return 0, fmt.Errorf("slide not found: %w", apperrors.ErrNotFound)
 }
 
 // AddSlideTimestamp adds or updates a timestamp for a specific slide number
 func (t *TranscriptionTask) AddSlideTimestamp(slideNumber int, timestamp float64) error {
 	// Validate inputs
 	if slideNumber <= 0 {
-		return fmt.Errorf("slide number must be positive, got %d", slideNumber)
+		return fmt.Errorf("slide number must be positive, got %d: %w", slideNumber, apperrors.ErrInvalidInput)
 	}
 	if timestamp < 0 {
-		return fmt.Errorf("timestamp must be non-negative, got %f", timestamp)
+		return fmt.Errorf("timestamp must be non-negative, got %f: %w", timestamp, apperrors.ErrInvalidInput)
 	}
 
 	timestamps, err := t.GetSlideTimestamps()

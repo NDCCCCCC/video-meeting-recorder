@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // Migration015_AddTranscriptionJobGroups 添加转录任务组表
@@ -32,7 +34,7 @@ func (m *Migration015_AddTranscriptionJobGroups) Up(db *gorm.DB) error {
 			)
 		`).Error
 		if err != nil {
-			return fmt.Errorf("failed to create transcription_job_groups table: %w", err)
+			return fmt.Errorf("failed to create transcription_job_groups table: %w: %w", apperrors.ErrInternal, err)
 		}
 
 		// 创建索引
@@ -45,7 +47,7 @@ func (m *Migration015_AddTranscriptionJobGroups) Up(db *gorm.DB) error {
 	db.Raw("SELECT COUNT(*) > 0 FROM pragma_table_info('transcription_tasks') WHERE name='job_group_id'").Scan(&columnExists)
 	if !columnExists {
 		if err := db.Exec("ALTER TABLE transcription_tasks ADD COLUMN job_group_id INTEGER").Error; err != nil {
-			return fmt.Errorf("failed to add job_group_id column: %w", err)
+			return fmt.Errorf("failed to add job_group_id column: %w: %w", apperrors.ErrInternal, err)
 		}
 
 		// 创建外键索引（SQLite 的外键约束需要手动创建）

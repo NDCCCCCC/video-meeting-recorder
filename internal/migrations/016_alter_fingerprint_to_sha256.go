@@ -3,6 +3,7 @@ package migrations
 import (
 	"fmt"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"gorm.io/gorm"
 )
@@ -22,7 +23,7 @@ func (m *Migration016AlterFingerprintToSHA256) Up(db *gorm.DB) error {
 		return nil
 	}
 	if err := db.Migrator().AlterColumn(&models.UploadedFile{}, "FileMD5"); err != nil {
-		return fmt.Errorf("widen uploaded file fingerprint: %w", err)
+		return fmt.Errorf("widen uploaded file fingerprint: %w: %w", apperrors.ErrInternal, err)
 	}
 	return nil
 }
