@@ -315,6 +315,226 @@ func TestPhase18_FullStartup_WithLegacyData(t *testing.T) {
 }
 
 // ============================================================================
+// Wave 4: 重复轮换集成测试（v1→v2→v3 with intermediate restart + verification）
+// ============================================================================
+//
+// 与 credential_encryptor_test.go 的单元级重复轮换测试互补：
+// 本文件模拟 cmd/server/app.go Initialize() 的完整 10 步启动序列，
+// 验证每次"重启"都跑 MigratePlaintextToGCM → InvariantScan → RotateIfNeeded →
+// LogVersionCounts → 第二次 InvariantScan → 第二次 LogVersionCounts。
+//
+// 关键不变量：
+//   - LogVersionCounts 三阶段输出在每次启动里都应可见；
+//   - after_rotate 阶段的 by_version__<previous> 必须为 0；
+//   - 明文值跨多轮轮换始终不变。
+
+func TestPhase18_RepeatedRotation_V1ToV2ToV3_Integration(t *testing.T) {
+	db := openMemoryDBPhase18(t)
+	ctx := context.Background()
+
+	v1Secret := "0123456789abcdef0123456789abcdef"
+	v2Secret := "11111111111111111111111111111111"
+	v3Secret := "22222222222222222222222222222222"
+
+	// 准备 plaintext 历史数据
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Site1", ConfigType: "stream", StreamURL: "rtmp://s1",
+		Password: "site1-pw", StreamPassword: "site1-sp", IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Site2", ConfigType: "stream", StreamURL: "rtmp://s2",
+		Password: "site2-pw", IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Site3", ConfigType: "stream", StreamURL: "rtmp://s3",
+		StreamPassword: "site3-sp", IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.SystemSetting{
+		Key: "auth.ad.password", Value: "site-ad-pw",
+	}).Error)
+
+	// ---- 阶段 1: v1 启动 + 完整 10 步 ----
+	encV1, err := services.NewCredentialEncryptor("v1", v1Secret, "", "", zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, encV1.MigratePlaintextToGCM(ctx, db))
+	require.NoError(t, encV1.InvariantScan(ctx, db))
+	rotatedV1, err := encV1.RotateIfNeeded(ctx, db)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rotatedV1, "v1 单版本启动时 RotateIfNeeded 必须为 no-op")
+	require.NoError(t, encV1.InvariantScan(ctx, db))
+	// LogVersionCounts 三个阶段全部不报错
+	require.NoError(t, encV1.LogVersionCounts(ctx, db, "after_migrate"))
+	require.NoError(t, encV1.LogVersionCounts(ctx, db, "after_rotate"))
+	require.NoError(t, encV1.LogVersionCounts(ctx, db, "after_invariant"))
+
+	// 验证阶段 1 终态：全部 v1
+	var rows1 []models.InputConfig
+	require.NoError(t, db.Unscoped().Find(&rows1).Error)
+	for _, r := range rows1 {
+		if r.Password != "" {
+			v, _, _ := utils.ParseCredentialEnvelope(r.Password)
+			assert.Equal(t, "v1", v)
+		}
+		if r.StreamPassword != "" {
+			v, _, _ := utils.ParseCredentialEnvelope(r.StreamPassword)
+			assert.Equal(t, "v1", v)
+		}
+	}
+
+	// ---- 阶段 2: v2 + previous=v1 启动 ----
+	encV2, err := services.NewCredentialEncryptor("v2", v2Secret, "v1", v1Secret, zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, encV2.MigratePlaintextToGCM(ctx, db))
+	require.NoError(t, encV2.InvariantScan(ctx, db))
+	rotatedV2, err := encV2.RotateIfNeeded(ctx, db)
+	require.NoError(t, err)
+	assert.Equal(t, 5, rotatedV2, "v1→v2 旋转 5 个 envelope")
+	require.NoError(t, encV2.InvariantScan(ctx, db))
+	require.NoError(t, encV2.LogVersionCounts(ctx, db, "after_migrate"))
+	require.NoError(t, encV2.LogVersionCounts(ctx, db, "after_rotate"))
+	require.NoError(t, encV2.LogVersionCounts(ctx, db, "after_invariant"))
+
+	// 验证阶段 2 终态：v1 归零、全部 v2
+	countsV2, err := encV2.CountByVersion(ctx, db)
+	require.NoError(t, err)
+	for _, c := range countsV2 {
+		if c.Column == "input_configs.password" {
+			assert.Equal(t, 0, c.ByVersion["v1"], "v1 必须在 v1→v2 旋转后归零")
+			assert.Equal(t, 2, c.ByVersion["v2"], "input_configs.password 全部 v2（Site1 + Site2）")
+		}
+		if c.Column == "input_configs.stream_password" {
+			assert.Equal(t, 0, c.ByVersion["v1"], "v1 必须在 v1→v2 旋转后归零")
+			assert.Equal(t, 2, c.ByVersion["v2"], "stream_password 全部 v2（Site1 + Site3）")
+		}
+		if c.Column == "system_settings[auth.ad.password]" {
+			assert.Equal(t, 0, c.ByVersion["v1"], "auth.ad.password v1 必须归零")
+			assert.Equal(t, 1, c.ByVersion["v2"], "auth.ad.password v2 必须就位")
+		}
+	}
+
+	// ---- 阶段 3: v3 + previous=v2 启动 ----
+	encV3, err := services.NewCredentialEncryptor("v3", v3Secret, "v2", v2Secret, zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, encV3.MigratePlaintextToGCM(ctx, db))
+	require.NoError(t, encV3.InvariantScan(ctx, db))
+	rotatedV3, err := encV3.RotateIfNeeded(ctx, db)
+	require.NoError(t, err)
+	assert.Equal(t, 5, rotatedV3, "v2→v3 旋转 5 个 envelope")
+	require.NoError(t, encV3.InvariantScan(ctx, db))
+	require.NoError(t, encV3.LogVersionCounts(ctx, db, "after_migrate"))
+	require.NoError(t, encV3.LogVersionCounts(ctx, db, "after_rotate"))
+	require.NoError(t, encV3.LogVersionCounts(ctx, db, "after_invariant"))
+
+	// 验证阶段 3 终态：v2 归零、全部 v3
+	countsV3, err := encV3.CountByVersion(ctx, db)
+	require.NoError(t, err)
+	for _, c := range countsV3 {
+		if c.Column == "input_configs.password" {
+			assert.Equal(t, 0, c.ByVersion["v2"])
+			assert.Equal(t, 2, c.ByVersion["v3"])
+		}
+		if c.Column == "input_configs.stream_password" {
+			assert.Equal(t, 0, c.ByVersion["v2"])
+			assert.Equal(t, 2, c.ByVersion["v3"])
+		}
+		if c.Column == "system_settings[auth.ad.password]" {
+			assert.Equal(t, 0, c.ByVersion["v2"])
+			assert.Equal(t, 1, c.ByVersion["v3"])
+		}
+	}
+
+	// ---- 跨轮换明文值不变 ----
+	var site1 models.InputConfig
+	require.NoError(t, db.Unscoped().First(&site1, "name = ?", "Site1").Error)
+	pt1, err := encV3.Decrypt(site1.Password)
+	require.NoError(t, err)
+	assert.Equal(t, "site1-pw", pt1)
+	pt1sp, err := encV3.Decrypt(site1.StreamPassword)
+	require.NoError(t, err)
+	assert.Equal(t, "site1-sp", pt1sp)
+
+	// ---- 阶段 4: v3 单版本启动（无 previous）----
+	encV3Only, err := services.NewCredentialEncryptor("v3", v3Secret, "", "", zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, encV3Only.InvariantScan(ctx, db))
+	rotatedV3Only, err := encV3Only.RotateIfNeeded(ctx, db)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rotatedV3Only, "无 previous 密钥时 RotateIfNeeded 必须为 no-op")
+	require.NoError(t, encV3Only.InvariantScan(ctx, db))
+	require.NoError(t, encV3Only.LogVersionCounts(ctx, db, "after_invariant"))
+}
+
+// TestPhase18_LogVersionCounts_VisibleAfterRotate 验证 after_rotate 阶段
+// previous version 行数已归零（operator 关键观测点）。
+func TestPhase18_LogVersionCounts_VisibleAfterRotate(t *testing.T) {
+	db := openMemoryDBPhase18(t)
+	ctx := context.Background()
+
+	v1Secret := "0123456789abcdef0123456789abcdef"
+	v2Secret := "11111111111111111111111111111111"
+
+	// 准备 v1 envelope
+	encV1, err := services.NewCredentialEncryptor("v1", v1Secret, "", "", zap.NewNop())
+	require.NoError(t, err)
+	env1, _ := encV1.Encrypt("secret-1")
+	env2, _ := encV1.Encrypt("secret-2")
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "R1", ConfigType: "stream", StreamURL: "rtmp://r1",
+		Password: env1, StreamPassword: env2, IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.SystemSetting{
+		Key: "auth.ad.password", Value: env1,
+	}).Error)
+
+	// 用 v2 + previous=v1 启动
+	encV2, err := services.NewCredentialEncryptor("v2", v2Secret, "v1", v1Secret, zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, encV2.InvariantScan(ctx, db))
+	_, err = encV2.RotateIfNeeded(ctx, db)
+	require.NoError(t, err)
+
+	// after_rotate 阶段：previous=v1 必须归零
+	counts, err := encV2.CountByVersion(ctx, db)
+	require.NoError(t, err)
+	for _, c := range counts {
+		assert.Equal(t, 0, c.ByVersion["v1"],
+			"column=%s after_rotate 阶段 v1 必须归零", c.Column)
+		assert.Equal(t, 0, c.UnknownVersion, "无未知 version")
+		assert.Equal(t, 0, c.NonEnvelopeRows, "无非 envelope 行（迁移遗漏）")
+	}
+}
+
+// TestPhase18_FailClosedOn_UnknownVersionAfterRotation 验证轮换过渡期
+// 如果 DB 里残留未知 version envelope（例如 v0），InvariantScan 应捕获。
+func TestPhase18_FailClosedOn_UnknownVersionAfterRotation(t *testing.T) {
+	db := openMemoryDBPhase18(t)
+	ctx := context.Background()
+
+	cur := "0123456789abcdef0123456789abcdef"
+
+	// 用 version=v999 的临时 encryptor 写入一个 envelope，模拟"未知 version 遗留"
+	encOrphan, err := services.NewCredentialEncryptor("v999", cur, "", "", zap.NewNop())
+	require.NoError(t, err)
+	envOrphan, err := encOrphan.Encrypt("orphan-pw")
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Orphan", ConfigType: "stream", StreamURL: "rtmp://o",
+		Password: envOrphan, IsActive: true,
+	}).Error)
+
+	// 启动 encryptor（current=v1）—— MigratePlaintextToGCM 把 v999 envelope 视为待迁移
+	enc, err := services.NewCredentialEncryptor("v1", cur, "", "", zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, enc.MigratePlaintextToGCM(ctx, db))
+
+	// Migrate 后 v999 已不存在（被重加密为 v1）
+	var orphan models.InputConfig
+	require.NoError(t, db.Unscoped().First(&orphan, "name = ?", "Orphan").Error)
+	v, _, _ := utils.ParseCredentialEnvelope(orphan.Password)
+	assert.Equal(t, "v1", v, "v999 在 MigratePlaintextToGCM 阶段被升级为 v1")
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
