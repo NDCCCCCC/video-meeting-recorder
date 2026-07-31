@@ -640,6 +640,11 @@ func (a *MinimalApp) initRouter() error {
 	// CORS中间件
 	a.router.Use(corsMiddleware(a.config.CORS.AllowedOrigins))
 
+	// STYLE-001 (Phase 19) 决策 3 组件 C：backstop 错误映射中间件。
+	// 在所有路由组注册前挂载，使 c.Next() 后能兜底处理任何 handler 通过 c.Error(err)
+	// 记录但未写入响应的错误。c.Writer.Written() 守卫保证不与 handler 自身响应双写。
+	a.router.Use(middleware.ErrorMapper(a.logger))
+
 	return nil
 }
 

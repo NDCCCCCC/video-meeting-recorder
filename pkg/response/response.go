@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -155,4 +156,25 @@ func GinCreated(c *gin.Context, data interface{}) {
 		Message: "创建成功",
 		Data:    data,
 	})
+}
+
+// HandleError 把 err 通过 errors.MapToHTTPStatus 映射为 HTTP 响应并写入。
+//
+// STYLE-001 (Phase 19) 决策 3 组件 B：handler 把内联 switch 换成
+// `if response.HandleError(c, err) { return }`——命中已知 sentinel 即写入响应并返回 true；
+// 未识别的错误也写入（保守 500，永不 200）但返回 false，调用方可选择继续自行处理。
+//
+// 守卫：
+//   - err==nil → no-op，返回 false。
+//   - c.Writer.Written() 已为 true（handler 已写响应）→ no-op，返回 false（防双写）。
+//
+// 用 GinErrorWithStatus 显式指定 httpStatus，因为 GinError 的 switch 不识别
+// CodeDuplicateRecord（会落到默认 500，而 409 Conflict 需要显式状态码）。
+func HandleError(c *gin.Context, err error) bool {
+	if err == nil || c.Writer.Written() {
+		return false
+	}
+	httpStatus, respCode, message := errors.MapToHTTPStatus(err)
+	GinErrorWithStatus(c, httpStatus, respCode, message)
+	return errors.IsKnownError(err)
 }
