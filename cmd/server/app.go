@@ -337,6 +337,7 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.TranscriptionTask{},
 		&models.TranscriptionText{},
 		&models.SystemSetting{},
+		&models.HLSJtiRecord{}, // Phase 19 D3: HLS token 一次性 jti 持久化记录
 	)
 
 	if err != nil {
@@ -837,7 +838,7 @@ func (a *MinimalApp) initHandlers() error {
 		User:          handlers.NewUserHandler(userService, auditService, a.logger),
 		Role:          handlers.NewRoleHandler(roleService, auditService, a.logger),
 		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db, a.credentialEncryptor),
-		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, auditService, a.logger, a.config),
+		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, auditService, a.logger, a.config, a.db),
 		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, auditService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, auditService, a.logger),
 		File:          fileHandler,

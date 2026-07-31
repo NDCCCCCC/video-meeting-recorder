@@ -14,6 +14,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrTokenReplayed 表示同一 jti 的 token 已被使用过（防重放）。
@@ -46,12 +51,18 @@ type HLSToken struct {
 	usedJTIs map[string]int64
 	mu       sync.Mutex
 
+	// Phase 19 D3: 可选 DB 持久化。db!=nil 时 jti 索引写入 hls_jti_records 表（跨实例/重启
+	// 保留）；db==nil 时回退到 in-memory map（保持向后兼容与轻量测试）。
+	db *gorm.DB
+	// logger 可选；DB 错误时输出。nil 时静默。
+	logger *zap.Logger
+
 	// 生命周期管理：sweepLoop goroutine + Start/Stop（镜像 PERF-006 Huawei client Stop 模式）。
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
-// NewHLSToken 创建 HLS Token 管理器
+// NewHLSToken 创建 HLS Token 管理器（in-memory 模式，仅 db==nil 时使用——向后兼容）。
 func NewHLSToken(secret string, duration time.Duration) *HLSToken {
 	// SEC-004: 密钥长度校验（防御性兜底；启动期 config.ValidateProductionSecrets 已先行 Fatal）。
 	if len(secret) < 32 {
@@ -62,6 +73,22 @@ func NewHLSToken(secret string, duration time.Duration) *HLSToken {
 		tokenDuration: duration,
 		usedJTIs:      make(map[string]int64),
 	}
+}
+
+// NewHLSTokenWithDB 创建 DB-backed HLS Token 管理器（Phase 19 D3）。
+//
+// jti → ExpiresAt 索引持久化到 hls_jti_records 表，跨实例/进程重启保留重放窗口。
+// 该模式下 in-memory usedJTIs map 不使用——所有读写均通过 DB。
+//
+// 启动期调用方应保证 hls_jti_records 表已 AutoMigrate（见 cmd/server/app.go）。
+// 注入 db 为 nil 时回退到 NewHLSToken 等价行为。logger 可选传 nil（静默）。
+func NewHLSTokenWithDB(secret string, duration time.Duration, db *gorm.DB, logger *zap.Logger) *HLSToken {
+	h := NewHLSToken(secret, duration)
+	h.db = db
+	if logger != nil {
+		h.logger = logger
+	}
+	return h
 }
 
 // Generate 生成访问 Token
@@ -143,18 +170,47 @@ func (h *HLSToken) Verify(token string) (*HLSTokenClaims, error) {
 	// TTL 窗口内可多次 Verify（HLS 多分片共用同一 token，见 rewriteM3U8WithToken）。
 	// 真正阻止 post-TTL 重放的是上面的 time.Now() > ExpiresAt 检查（不变）。
 	// map 用于过期索引追踪（启用 evictExpired 驱逐 + 未来吊销扩展）。
+	//
+	// Phase 19 D3: db!=nil 时走 DB 持久化分支（INSERT OR IGNORE 幂等）。
 	if claims.Jti != "" {
-		h.mu.Lock()
-		h.usedJTIs[claims.Jti] = claims.ExpiresAt
-		h.enforceCapLocked()
-		h.mu.Unlock()
+		if h.db != nil {
+			// DB-backed: 幂等写入。失败仅记录日志——record 是 best-effort，主防线仍是
+			// 上面的 ExpiresAt 检查 + HMAC 完整性校验。
+			rec := &models.HLSJtiRecord{
+				Jti:       claims.Jti,
+				ExpiresAt: claims.ExpiresAt,
+				CreatedAt: time.Now(),
+			}
+			// clause.OnConflict{DoNothing} → SQLite/MySQL/PostgreSQL 跨方言生成
+			// INSERT OR IGNORE / INSERT IGNORE / ON CONFLICT DO NOTHING；jti 已存在
+			// 时不报错（幂等）。
+			if err := h.db.Clauses(clause.OnConflict{DoNothing: true}).Create(rec).Error; err != nil {
+				// 不阻断 Verify（主防线未破），但保留日志能力排查 DB 异常。
+				if h.logger != nil {
+					h.logger.Warn("HLS jti 记录写入失败（Verify 不阻断，仅日志）",
+						zap.String("jti", claims.Jti),
+						zap.Error(err),
+					)
+				}
+			}
+		} else {
+			h.mu.Lock()
+			h.usedJTIs[claims.Jti] = claims.ExpiresAt
+			h.enforceCapLocked()
+			h.mu.Unlock()
+		}
 	}
 
 	return &claims, nil
 }
 
 // evictExpired 删除已过期（expiresAt < now）的 jti 索引项。
+// Phase 19 D3: db!=nil 时调用 pruneExpiredDB，否则回退到 in-memory map 驱逐。
 func (h *HLSToken) evictExpired() {
+	if h.db != nil {
+		h.pruneExpiredDB()
+		return
+	}
 	now := time.Now().Unix()
 	h.mu.Lock()
 	for jti, exp := range h.usedJTIs {
@@ -163,6 +219,25 @@ func (h *HLSToken) evictExpired() {
 		}
 	}
 	h.mu.Unlock()
+}
+
+// pruneExpiredDB 删除 DB 中 expires_at < now 的所有记录（Phase 19 D3）。
+// 失败仅记录日志——sweeper 进程将在下一 tick 重试。
+func (h *HLSToken) pruneExpiredDB() {
+	now := time.Now().Unix()
+	result := h.db.Where("expires_at < ?", now).Delete(&models.HLSJtiRecord{})
+	if result.Error != nil {
+		if h.logger != nil {
+			h.logger.Warn("hls_jti_records prune 失败（下一 tick 重试）", zap.Error(result.Error))
+		}
+		return
+	}
+	if result.RowsAffected > 0 && h.logger != nil {
+		h.logger.Info("hls_jti_records 已清理过期记录",
+			zap.Int64("rows_deleted", result.RowsAffected),
+			zap.Int64("cutoff", now),
+		)
+	}
 }
 
 // enforceCapLocked 在 usedJTIs 超过 maxUsedJTIs 时强制回收。调用方必须持有 h.mu。

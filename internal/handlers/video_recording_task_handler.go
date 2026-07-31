@@ -20,6 +20,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // VideoRecordingTaskHandler 视频录制任务处理器
@@ -33,13 +34,15 @@ type VideoRecordingTaskHandler struct {
 }
 
 // NewVideoRecordingTaskHandler 创建视频录制任务处理器
-func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskService, auditService *audit.AuditLogService, logger *zap.Logger, cfg *config.Config) *VideoRecordingTaskHandler {
+func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskService, auditService *audit.AuditLogService, logger *zap.Logger, cfg *config.Config, db *gorm.DB) *VideoRecordingTaskHandler {
 	return &VideoRecordingTaskHandler{
 		taskService:  taskService,
 		auditService: auditService,
 		logger:       logger,
 		config:       cfg,
-		hlsToken:     hlstoken.NewHLSToken(cfg.Auth.HLSTokenSecret, cfg.Auth.HLSTokenDuration),
+		// Phase 19 D3: db!=nil 时 jti 索引持久化到 hls_jti_records 表（跨实例/重启
+		// 保留重放窗口）；db==nil 时回退到 in-memory map。生产路径 db 不为 nil。
+		hlsToken:     hlstoken.NewHLSTokenWithDB(cfg.Auth.HLSTokenSecret, cfg.Auth.HLSTokenDuration, db, logger),
 	}
 }
 

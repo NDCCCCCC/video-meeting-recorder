@@ -11,7 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // testSecret 返回长度 ≥ 32 的测试密钥。
@@ -216,4 +221,81 @@ func TestHLSVerify_Expired(t *testing.T) {
 	tok := h.Generate(7, 8)
 	_, err := h.Verify(tok)
 	assert.Error(t, err)
+}
+
+// ============================================================================
+// Phase 19 D3: HLSJtiRecord DB 持久化测试
+// ============================================================================
+
+// TestHLSVerify_DB_PersistsJti 验证 db!=nil 模式下 Verify 把 jti 写入 hls_jti_records 表。
+func TestHLSVerify_DB_PersistsJti(t *testing.T) {
+	h := setupDBBackedHLS(t)
+	tok := h.Generate(99, 100)
+
+	claims, err := h.Verify(tok)
+	require.NoError(t, err)
+	assert.NotEmpty(t, claims.Jti, "新 Generate 的 token 必须有 jti")
+
+	// 直接查 DB 验证记录存在
+	var rec models.HLSJtiRecord
+	err = h.db.Where("jti = ?", claims.Jti).First(&rec).Error
+	require.NoError(t, err, "Verify 后应能在 hls_jti_records 查到 jti 记录")
+	assert.Equal(t, claims.Jti, rec.Jti)
+	assert.Equal(t, claims.ExpiresAt, rec.ExpiresAt)
+}
+
+// TestHLSVerify_DB_Idempotent 验证同 jti 重复 Verify 不报错（OnConflict DoNothing）。
+func TestHLSVerify_DB_Idempotent(t *testing.T) {
+	h := setupDBBackedHLS(t)
+	tok := h.Generate(99, 100)
+
+	for i := 0; i < 5; i++ {
+		_, err := h.Verify(tok)
+		require.NoError(t, err, "第 %d 次 Verify 不应报错", i+1)
+	}
+
+	// DB 中仍只有一行（不重复插入）
+	var count int64
+	h.db.Model(&models.HLSJtiRecord{}).Count(&count)
+	assert.Equal(t, int64(1), count, "同 jti 多次 Verify 应只产生一行记录")
+}
+
+// TestHLSVerify_DB_SurvivesRecreate 验证 DB 模式跨实例化保留 jti 记录
+// （与 in-memory 模式的核心区别——后者进程重启清空）。
+func TestHLSVerify_DB_SurvivesRecreate(t *testing.T) {
+	h1 := setupDBBackedHLS(t)
+	tok := h1.Generate(99, 100)
+
+	claims1, err := h1.Verify(tok)
+	require.NoError(t, err)
+	jti := claims1.Jti
+
+	// 模拟"进程重启"——重新构造 HLSToken 共享同一 db
+	h2 := NewHLSTokenWithDB(testSecret(), time.Minute, h1.db, nil)
+	claims2, err := h2.Verify(tok)
+	require.NoError(t, err)
+	assert.Equal(t, jti, claims2.Jti, "新实例化后 jti 应仍可验证（HLS 多分片共用同一 token 场景）")
+
+	// DB 中确实有记录
+	var rec models.HLSJtiRecord
+	h1.db.Where("jti = ?", jti).First(&rec)
+	assert.Equal(t, jti, rec.Jti)
+}
+
+// setupDBBackedHLS 是 DB-backed HLS 测试夹具：in-memory sqlite + AutoMigrate + 5min TTL。
+// 返回的 *HLSToken 的 db 字段对测试代码可见以便直接 query。
+func setupDBBackedHLS(t *testing.T) *HLSToken {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&models.HLSJtiRecord{}))
+	t.Cleanup(func() {
+		sqlDB, _ := db.DB()
+		if sqlDB != nil {
+			sqlDB.Close()
+		}
+	})
+	h := NewHLSTokenWithDB(testSecret(), 5*time.Minute, db, zap.NewNop())
+	// h.db 字段未导出（package 内可见——test 同包 OK；外部无法直接访问）
+	return h
 }
