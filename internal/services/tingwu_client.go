@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"go.uber.org/zap"
 )
@@ -91,28 +92,30 @@ func (c *TingwuClient) SetOutboundURLAllowlist(allowlist []string, environment s
 }
 
 // guardOutboundURL 校验 baseURL 是否在出站白名单。SEC-013 SSRF 防御。
+// Phase 19 D14: 4 URL config 错误全部包装 ErrTranscriptionUnavailable (503);
+// 这些是配置/环境问题而非传输问题，应区分于 ErrTranscriptionFailed (500)。
 func (c *TingwuClient) guardOutboundURL() error {
 	u, err := url.Parse(c.baseURL)
 	if err != nil {
-		return fmt.Errorf("baseURL 解析失败: %w", err)
+		return fmt.Errorf("baseURL 解析失败: %w", apperrors.ErrTranscriptionUnavailable)
 	}
 	host := u.Hostname()
 	if host == "" {
-		return fmt.Errorf("baseURL 缺少 host: %s", c.baseURL)
+		return fmt.Errorf("baseURL 缺少 host: %s: %w", c.baseURL, apperrors.ErrTranscriptionUnavailable)
 	}
 	// 开发环境绕过白名单
 	if c.environment == "development" {
 		return nil
 	}
 	if len(c.outboundURLAllowlist) == 0 {
-		return fmt.Errorf("outbound URL allowlist 为空且非开发环境，禁止访问: %s", host)
+		return fmt.Errorf("outbound URL allowlist 为空且非开发环境，禁止访问: %s: %w", host, apperrors.ErrTranscriptionUnavailable)
 	}
 	for _, suffix := range c.outboundURLAllowlist {
 		if strings.HasSuffix(host, suffix) {
 			return nil
 		}
 	}
-	return fmt.Errorf("URL 不在出站白名单: %s", host)
+	return fmt.Errorf("URL 不在出站白名单: %s: %w", host, apperrors.ErrTranscriptionUnavailable)
 }
 
 // IsEnabled returns whether Tingwu is configured and enabled
@@ -121,9 +124,11 @@ func (c *TingwuClient) IsEnabled() bool {
 }
 
 // SubmitTask submits a transcription task to Tingwu (per TRAN-01)
+// Phase 19 D14: 8 散点统一分类——未启用/配置 -> ErrTranscriptionUnavailable;
+// HTTP/parse/状态码 -> 包装 ErrTranscriptionFailed (复用 D5)。
 func (c *TingwuClient) SubmitTask(ctx context.Context, fileURL string) (string, error) {
 	if !c.enabled {
-		return "", fmt.Errorf("Tingwu服务未启用")
+		return "", fmt.Errorf("Tingwu服务未启用: %w", apperrors.ErrTranscriptionUnavailable)
 	}
 
 	body := map[string]interface{}{
@@ -133,32 +138,32 @@ func (c *TingwuClient) SubmitTask(ctx context.Context, fileURL string) (string, 
 
 	req, err := c.buildRequest(ctx, "POST", "/openapi/tingwu/v4/tasks", body)
 	if err != nil {
-		return "", fmt.Errorf("构建请求失败: %w", err)
+		return "", fmt.Errorf("构建请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("提交任务请求失败: %w", err)
+		return "", fmt.Errorf("提交任务请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("读取响应失败: %w", err)
+		return "", fmt.Errorf("读取响应失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		// Sanitize error: never expose appKey or appSecret in error messages
-		return "", fmt.Errorf("提交任务失败: HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("提交任务失败: HTTP %d: %w", resp.StatusCode, apperrors.ErrTranscriptionFailed)
 	}
 
 	var result TingwuSubmitResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", fmt.Errorf("解析响应失败: %w", err)
+		return "", fmt.Errorf("解析响应失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 
 	if result.TaskID == "" {
-		return "", fmt.Errorf("Tingwu返回空TaskId")
+		return "", fmt.Errorf("Tingwu返回空TaskId: %w", apperrors.ErrTranscriptionFailed)
 	}
 
 	c.logger.Info("Tingwu任务已提交", zap.String("task_id", result.TaskID))
@@ -166,64 +171,66 @@ func (c *TingwuClient) SubmitTask(ctx context.Context, fileURL string) (string, 
 }
 
 // GetStatus queries the current status of a Tingwu task
+// Phase 19 D14: 6 散点统一分类（与 SubmitTask 同模式）。
 func (c *TingwuClient) GetStatus(ctx context.Context, taskID string) (*TingwuTaskStatus, error) {
 	if !c.enabled {
-		return nil, fmt.Errorf("Tingwu服务未启用")
+		return nil, fmt.Errorf("Tingwu服务未启用: %w", apperrors.ErrTranscriptionUnavailable)
 	}
 
 	path := fmt.Sprintf("/openapi/tingwu/v4/tasks/%s", taskID)
 	req, err := c.buildRequest(ctx, "GET", path, nil)
 	if err != nil {
-		return nil, fmt.Errorf("构建请求失败: %w", err)
+		return nil, fmt.Errorf("构建请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("查询状态请求失败: %w", err)
+		return nil, fmt.Errorf("查询状态请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("查询状态失败: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("查询状态失败: HTTP %d: %w", resp.StatusCode, apperrors.ErrTranscriptionFailed)
 	}
 
 	var result struct {
 		Data TingwuTaskStatus `json:"Data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析状态响应失败: %w", err)
+		return nil, fmt.Errorf("解析状态响应失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 
 	return &result.Data, nil
 }
 
 // GetResult retrieves the transcription result for a completed task (per TRAN-05)
+// Phase 19 D14: 6 散点统一分类（与 SubmitTask 同模式）。
 func (c *TingwuClient) GetResult(ctx context.Context, taskID string) (*TingwuTaskResult, error) {
 	if !c.enabled {
-		return nil, fmt.Errorf("Tingwu服务未启用")
+		return nil, fmt.Errorf("Tingwu服务未启用: %w", apperrors.ErrTranscriptionUnavailable)
 	}
 
 	path := fmt.Sprintf("/openapi/tingwu/v4/tasks/%s/result", taskID)
 	req, err := c.buildRequest(ctx, "GET", path, nil)
 	if err != nil {
-		return nil, fmt.Errorf("构建请求失败: %w", err)
+		return nil, fmt.Errorf("构建请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("获取结果请求失败: %w", err)
+		return nil, fmt.Errorf("获取结果请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("获取结果失败: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("获取结果失败: HTTP %d: %w", resp.StatusCode, apperrors.ErrTranscriptionFailed)
 	}
 
 	var result struct {
 		Data TingwuTaskResult `json:"Data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析结果响应失败: %w", err)
+		return nil, fmt.Errorf("解析结果响应失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 
 	return &result.Data, nil
@@ -242,7 +249,7 @@ func (c *TingwuClient) buildRequest(ctx context.Context, method, path string, bo
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("序列化请求体失败: %w", err)
+			return nil, fmt.Errorf("序列化请求体失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 		}
 		bodyReader = bytes.NewReader(jsonBody)
 		hash := md5.Sum(jsonBody)
@@ -251,7 +258,7 @@ func (c *TingwuClient) buildRequest(ctx context.Context, method, path string, bo
 
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+		return nil, fmt.Errorf("创建请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
 
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05Z")

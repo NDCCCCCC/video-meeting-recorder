@@ -83,7 +83,8 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		return http.StatusTooManyRequests, respCodeTooManyRequests, "配额不足"
 	case errors.Is(err, ErrServiceUnavailable),
 		errors.Is(err, ErrADConfigError),
-		errors.Is(err, ErrADUnreachable):
+		errors.Is(err, ErrADUnreachable),
+		errors.Is(err, ErrTranscriptionUnavailable):
 		return http.StatusServiceUnavailable, respCodeInternalError, "服务暂不可用"
 	case errors.Is(err, ErrFFmpegFailed),
 		errors.Is(err, ErrTranscriptionFailed),
@@ -144,6 +145,7 @@ func IsKnownError(err error) bool {
 		ErrAPIKeyInvalid, ErrAPIKeyExpired,
 		ErrInsufficientQuota,
 		ErrServiceUnavailable, ErrADConfigError, ErrADUnreachable,
+		ErrTranscriptionUnavailable,
 		ErrFFmpegFailed, ErrTranscriptionFailed,
 		ErrSplitFailed, ErrInternal,
 		ErrDuplicateRecord, ErrForeignKeyConstraint,

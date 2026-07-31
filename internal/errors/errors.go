@@ -80,6 +80,12 @@ var (
 	// 或 BusinessError（D4 已迁移）；ppt_handler.go 的 10+ 处 "PPT文件不存在"
 	// GinError 切到 HandleError 后经 sentinel 链识别为 404。
 	ErrPPTFileNotFound = errors.New("PPT file not found")
+
+	// Transcription sentinels（Phase 19 D14）：tingwu_client.go 外部 API 错误隔离。
+	// ErrTranscriptionFailed (D5, 500 兜底) 复用覆盖 HTTP/parse 类错误;
+	// ErrTranscriptionUnavailable (503) 用于 service 未启用 / URL 白名单错
+	// ——这些是配置/环境问题而非传输问题。
+	ErrTranscriptionUnavailable = errors.New("transcription service unavailable")
 )
 
 // Wrap 包装错误，添加上下文信息
