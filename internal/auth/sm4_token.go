@@ -8,12 +8,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/tjfoc/gmsm/sm4"
 	"go.uber.org/zap"
@@ -217,23 +217,23 @@ func (s *SM4TokenService) encryptToken(claims *Claims) (string, error) {
 func (s *SM4TokenService) decryptToken(tokenString string) (*Claims, error) {
 	data, err := base64.RawURLEncoding.DecodeString(tokenString)
 	if err != nil {
-		return nil, errors.New("invalid token")
+		return nil, apperrors.ErrTokenInvalid
 	}
 
 	nonceSize := s.gcm.NonceSize()
 	if len(data) < nonceSize+s.gcm.Overhead() {
-		return nil, errors.New("invalid token")
+		return nil, apperrors.ErrTokenInvalid
 	}
 
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
 	plaintext, err := s.gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, errors.New("invalid token")
+		return nil, apperrors.ErrTokenInvalid
 	}
 
 	var claims Claims
 	if err := json.Unmarshal(plaintext, &claims); err != nil {
-		return nil, errors.New("invalid token")
+		return nil, apperrors.ErrTokenInvalid
 	}
 
 	return &claims, nil
@@ -270,15 +270,15 @@ func (s *SM4TokenService) ValidateRefreshToken(tokenString string) (*Claims, err
 // validateClaims 校验claims的通用逻辑
 func (s *SM4TokenService) validateClaims(claims *Claims, expectedType string) error {
 	if claims.TokenType != expectedType {
-		return errors.New("invalid token type")
+		return apperrors.ErrTokenInvalid
 	}
 
 	now := time.Now().Unix()
 	if now > claims.ExpiresAt {
-		return errors.New("token已过期")
+		return apperrors.ErrTokenExpired
 	}
 	if now < claims.NotBefore {
-		return errors.New("token未生效")
+		return apperrors.ErrTokenNotYetValid
 	}
 	return nil
 }
@@ -350,7 +350,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 
 						var user models.User
 						if err := s.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
-							return nil, errors.New("user not found")
+							return nil, apperrors.ErrUserNotFound
 						}
 						newTokenPair, err := s.GenerateTokenPair(&user)
 						if err != nil {
@@ -379,18 +379,18 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 			if err := s.RevokeUserSessions(claims.UserID); err != nil {
 				s.logger.Warn("撤销用户会话失败", zap.Uint("user_id", claims.UserID), zap.Error(err))
 			}
-			return nil, errors.New("token reuse detected")
+			return nil, apperrors.ErrTokenReplayed
 		}
 	}
 
 	// 步骤3: 正常流程 - 第一次使用此 refresh token
 	var user models.User
 	if err := s.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
-		return nil, errors.New("user not found")
+		return nil, apperrors.ErrUserNotFound
 	}
 
 	if !user.IsActive {
-		return nil, errors.New("user is inactive")
+		return nil, apperrors.ErrUserDisabled
 	}
 
 	newTokenPair, err := s.GenerateTokenPair(&user)

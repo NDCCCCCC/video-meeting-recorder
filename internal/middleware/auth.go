@@ -94,10 +94,10 @@ func SM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 		// 验证token
 		claims, err := tokenService.ValidateToken(tokenString)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    response.CodeInvalidToken,
-				"message": "Token无效或已过期",
-			})
+			// Phase 19 D7: 走 response.HandleError 让 sentinel 决定 HTTP 状态码；
+			// 4 token sentinel 全部映射 401 + 中文化 message，frontend 由 respCode 1002 + 业务
+			// 上下文分辨具体原因。Abort 在写响应之后调用，保证后续 handler 不再触发。
+			response.HandleError(c, err)
 			c.Abort()
 			return
 		}

@@ -49,7 +49,11 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		errors.Is(err, ErrRoleNotFound),
 		errors.Is(err, ErrADAccountNotFound):
 		return http.StatusNotFound, respCodeNotFound, "资源不存在"
-	case errors.Is(err, ErrUnauthorized):
+	case errors.Is(err, ErrUnauthorized),
+		errors.Is(err, ErrTokenInvalid),
+		errors.Is(err, ErrTokenExpired),
+		errors.Is(err, ErrTokenNotYetValid),
+		errors.Is(err, ErrTokenReplayed):
 		return http.StatusUnauthorized, respCodeUnauthorized, "未授权"
 	case errors.Is(err, ErrForbidden),
 		errors.Is(err, ErrSystemAdminProtected),
@@ -123,6 +127,7 @@ func IsKnownError(err error) bool {
 		ErrUnauthorized, ErrForbidden, ErrInvalidInput, ErrInvalidFileType,
 		ErrAlreadyExists, ErrTaskInProgress, ErrUsernameExists, ErrEmailExists,
 		ErrSystemAdminProtected, ErrUserDisabled,
+		ErrTokenInvalid, ErrTokenExpired, ErrTokenNotYetValid, ErrTokenReplayed,
 		ErrInsufficientQuota,
 		ErrServiceUnavailable, ErrADConfigError, ErrADUnreachable,
 		ErrFFmpegFailed, ErrTranscriptionFailed,

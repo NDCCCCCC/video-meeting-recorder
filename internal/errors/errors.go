@@ -47,6 +47,16 @@ var (
 	ErrUserDisabled          = errors.New("user disabled")
 	ErrADConfigError         = errors.New("AD configuration error")
 	ErrADUnreachable         = errors.New("AD server unreachable")
+
+	// Token sentinels（Phase 19 D7）：sm4_token.go 高频 token 校验路径统一化。
+	// middleware/auth.go 调 SM4TokenService.ValidateToken 时返回 sentinel；
+	// mapping 全部走 401（与 ErrUnauthorized 同 status），但 message 区分供 frontend UX。
+	// Invalid 覆盖 base64 解码、SM4-GCM Open 失败、JSON 反序列化失败、Token 类型不匹配；
+	// Expired / NotYetValid 区分时间窗口；Replayed 检测 Refresh Token 宽限期外的重用。
+	ErrTokenInvalid     = errors.New("token invalid")
+	ErrTokenExpired     = errors.New("token expired")
+	ErrTokenNotYetValid = errors.New("token not yet valid")
+	ErrTokenReplayed    = errors.New("token reuse detected")
 )
 
 // Wrap 包装错误，添加上下文信息
