@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +37,7 @@ func (d *LocalStorageDriver) Upload(ctx context.Context, file *multipart.FileHea
 	// 打开上传的文件
 	src, err := file.Open()
 	if err != nil {
-		return nil, fmt.Errorf("打开文件失败: %w", err)
+		return nil, fmt.Errorf("打开文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
 	defer src.Close()
 
@@ -44,18 +45,18 @@ func (d *LocalStorageDriver) Upload(ctx context.Context, file *multipart.FileHea
 	fullPath := filepath.Join(d.basePath, path)
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("创建目录失败: %w", err)
+		return nil, fmt.Errorf("创建目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	dst, err := os.Create(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("创建文件失败: %w", err)
+		return nil, fmt.Errorf("创建文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
 	defer dst.Close()
 
 	// 复制文件
 	if _, err := io.Copy(dst, src); err != nil {
-		return nil, fmt.Errorf("写入文件失败: %w", err)
+		return nil, fmt.Errorf("写入文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	return &UploadResult{
@@ -71,7 +72,7 @@ func (d *LocalStorageDriver) Download(ctx context.Context, path string) (io.Read
 	fullPath := filepath.Join(d.basePath, path)
 	file, err := os.Open(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("打开文件失败: %w", err)
+		return nil, fmt.Errorf("打开文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
 	return file, nil
 }

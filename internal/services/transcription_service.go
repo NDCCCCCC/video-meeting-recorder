@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
@@ -117,7 +118,7 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(ctx context.Context, 
 	// Validate mode
 	validModes := map[string]bool{models.TranscriptionModeLocal: true, models.TranscriptionModeCloud: true}
 	if !validModes[mode] {
-		return fmt.Errorf("无效的转录模式: %s, 必须是 local 或 cloud", mode)
+		return fmt.Errorf("无效的转录模式: %s, 必须是 local 或 cloud: %w", mode, apperrors.ErrInvalidInput)
 	}
 
 	// For cloud mode, verify cloud services are available
@@ -139,7 +140,7 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(ctx context.Context, 
 	if mode == models.TranscriptionModeLocal {
 		validRates := map[float64]bool{1.0: true, 0.5: true, 0.2: true, 0.1: true, 0.05: true}
 		if !validRates[samplingRate] {
-			return fmt.Errorf("无效的采样率: %.2f (支持: 0.05, 0.1, 0.2, 0.5, 1.0)", samplingRate)
+			return fmt.Errorf("无效的采样率: %.2f (支持: 0.05, 0.1, 0.2, 0.5, 1.0): %w", samplingRate, apperrors.ErrInvalidInput)
 		}
 	}
 
@@ -148,7 +149,7 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(ctx context.Context, 
 	existing, exists := s.statusMap[videoFileID]
 	s.statusMu.RUnlock()
 	if exists && existing.Status == models.TranscriptionStatusProcessing {
-		return fmt.Errorf("该视频已有正在进行的转录任务")
+		return fmt.Errorf("该视频已有正在进行的转录任务: %w", apperrors.ErrTaskInProgress)
 	}
 
 	// Create task with mode
@@ -160,7 +161,7 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(ctx context.Context, 
 		CreatedBy:    createdBy,
 	}
 	if err := s.db.WithContext(ctx).Create(task).Error; err != nil {
-		return fmt.Errorf("创建转录任务失败: %w", err)
+		return fmt.Errorf("创建转录任务失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// Initialize status map
@@ -187,7 +188,7 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(ctx context.Context, 
 			ErrorMessage: "任务队列已满",
 		}
 		s.statusMu.Unlock()
-		return fmt.Errorf("转录任务队列已满")
+		return fmt.Errorf("转录任务队列已满: %w", apperrors.ErrInsufficientQuota)
 	}
 }
 
@@ -896,7 +897,7 @@ func (s *TranscriptionService) saveTextContent(ctx context.Context, task *models
 	}
 
 	if err := s.db.WithContext(ctx).Create(&texts).Error; err != nil {
-		return fmt.Errorf("保存文字内容失败: %w", err)
+		return fmt.Errorf("保存文字内容失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	s.logger.Info("文字内容已保存",
@@ -1007,7 +1008,7 @@ type BatchTranscriptionResult struct {
 func (s *TranscriptionService) SubmitBatchTranscription(ctx context.Context, req *BatchTranscriptionRequest) (*BatchTranscriptionResult, error) {
 	// 验证转录模式
 	if req.Mode != models.TranscriptionModeLocal && req.Mode != models.TranscriptionModeCloud {
-		return nil, fmt.Errorf("无效的转录模式: %s", req.Mode)
+		return nil, fmt.Errorf("无效的转录模式: %s: %w", req.Mode, apperrors.ErrInvalidInput)
 	}
 
 	// 对于本地转录，验证采样率
@@ -1017,7 +1018,7 @@ func (s *TranscriptionService) SubmitBatchTranscription(ctx context.Context, req
 			req.SamplingRate = 0.5 // 默认值
 		}
 		if !validRates[req.SamplingRate] {
-			return nil, fmt.Errorf("无效的采样率: %.2f (支持: 0.05, 0.1, 0.2, 0.5, 1.0)", req.SamplingRate)
+			return nil, fmt.Errorf("无效的采样率: %.2f (支持: 0.05, 0.1, 0.2, 0.5, 1.0): %w", req.SamplingRate, apperrors.ErrInvalidInput)
 		}
 	}
 
@@ -1028,7 +1029,7 @@ func (s *TranscriptionService) SubmitBatchTranscription(ctx context.Context, req
 		TotalCount: len(req.VideoFileIDs),
 	}
 	if err := s.db.WithContext(ctx).Create(jobGroup).Error; err != nil {
-		return nil, fmt.Errorf("创建任务组失败: %w", err)
+		return nil, fmt.Errorf("创建任务组失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 结果统计
@@ -1103,7 +1104,7 @@ func (s *TranscriptionService) GetJobGroupStatus(ctx context.Context, jobGroupID
 
 	// 验证权限
 	if !isAdmin && jobGroup.UserID != userID {
-		return nil, fmt.Errorf("无权访问此任务组")
+		return nil, fmt.Errorf("无权访问此任务组: %w", apperrors.ErrForbidden)
 	}
 
 	// 重新计算进度

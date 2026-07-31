@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
@@ -104,12 +105,12 @@ func (s *NotificationService) SendNotification(ctx context.Context, req *SendNot
 
 	// 3. 检查频率限制
 	if !s.checkRateLimit(req.UserID, setting) {
-		return fmt.Errorf("超过频率限制")
+		return fmt.Errorf("超过频率限制: %w", apperrors.ErrInsufficientQuota)
 	}
 
 	// 4. 检查通知类型是否启用
 	if !s.isTypeEnabled(setting, req.Type) {
-		return fmt.Errorf("通知类型已禁用")
+		return fmt.Errorf("通知类型已禁用: %w", apperrors.ErrServiceUnavailable)
 	}
 
 	// 5. 构建消息
@@ -133,7 +134,7 @@ func (s *NotificationService) SendNotification(ctx context.Context, req *SendNot
 
 	// 6. 保存到数据库
 	if err := s.db.Create(message).Error; err != nil {
-		return fmt.Errorf("保存消息失败: %w", err)
+		return fmt.Errorf("保存消息失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 7. 放入发送队列（异步处理）
@@ -253,7 +254,7 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, messageID, userID 
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("消息不存在")
+		return fmt.Errorf("消息不存在: %w", apperrors.ErrNotFound)
 	}
 
 	return nil

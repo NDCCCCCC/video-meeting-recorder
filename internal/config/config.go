@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -334,21 +335,21 @@ func Load() (*Config, error) {
 		// 配置文件不存在时，创建默认配置文件
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			if err := createDefaultConfigFile(); err != nil {
-				return nil, fmt.Errorf("failed to create default config: %w", err)
+				return nil, fmt.Errorf("failed to create default config: %w: %w", apperrors.ErrInternal, err)
 			}
 			// 重新读取配置文件
 			if err := v.ReadInConfig(); err != nil {
-				return nil, fmt.Errorf("failed to read config after creation: %w", err)
+				return nil, fmt.Errorf("failed to read config after creation: %w: %w", apperrors.ErrInternal, err)
 			}
 		} else {
-			return nil, fmt.Errorf("failed to read config: %w", err)
+			return nil, fmt.Errorf("failed to read config: %w: %w", apperrors.ErrInternal, err)
 		}
 	}
 
 	// 获取原始配置
 	var rawCfg map[string]interface{}
 	if err := v.Unmarshal(&rawCfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal raw config: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal raw config: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 展开环境变量
@@ -358,7 +359,7 @@ func Load() (*Config, error) {
 	v = viper.New()
 	v.SetConfigType("yaml")
 	if err := v.MergeConfigMap(expandedCfg.(map[string]interface{})); err != nil {
-		return nil, fmt.Errorf("failed to merge expanded config: %w", err)
+		return nil, fmt.Errorf("failed to merge expanded config: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// SEC-001: 显式绑定部署文档中的环境变量名（无 RECORD 前缀），使运维设置的
@@ -367,7 +368,7 @@ func Load() (*Config, error) {
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal config: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 设置默认值
@@ -382,7 +383,7 @@ func Load() (*Config, error) {
 
 	// 创建必要的目录
 	if err := ensureDirectories(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to create directories: %w", err)
+		return nil, fmt.Errorf("failed to create directories: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	return &cfg, nil
@@ -660,7 +661,7 @@ func ensureDirectories(cfg *Config) error {
 
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+			return fmt.Errorf("failed to create directory %s: %w: %w", dir, apperrors.ErrInternal, err)
 		}
 	}
 
@@ -790,7 +791,7 @@ python:
 
 	// 写入配置文件
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		return fmt.Errorf("failed to write config file: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	return nil
