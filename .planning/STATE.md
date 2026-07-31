@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
 status: executing
-last_updated: "2026-07-31T00:00:00.000Z"
+last_updated: "2026-07-31T02:00:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 21
-  completed_phases: 17
+  completed_phases: 18
   total_plans: 83
-  completed_plans: 80
-  percent: 81
+  completed_plans: 81
+  percent: 86
 ---
 
 # STATE.md - Project Memory
@@ -40,15 +40,15 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 
 ## Current Position
 
-Phase: 18 (凭据静态加密 + 密钥轮换 — SEC-003b 修复) — EXECUTING
-Plan: Phase 18 single plan with 4 waves (W1+2+3 done; W4 pending)
+Phase: 18 (凭据静态加密 + 密钥轮换 — SEC-003b 修复) — ✅ COMPLETE
+Plan: Phase 18 single plan with 4 waves (all done)
 **Phase:** 18
-**Status:** Executing (Waves 1+2+3 verified; Wave 4 pending)
-**Progress:** [███████░░░] 75%
+**Status:** Complete
+**Progress:** [██████████] 100%
 
 ### Phase Summary
 
-按 Phase 17 延后项处理：审计 SEC-003b 修复 + 用户加码"自动密钥轮换"。算法 SM4-GCM（AEAD），envelope 格式 `SM4:<version>:<base64(nonce|ciphertext|tag)>`，密钥族与浏览器传输密钥完全隔离（`CREDENTIAL_SM4_*` vs `SM4_SECRET`），启动 fail-closed 10 步不变量扫描。
+按 Phase 17 延后项处理：审计 SEC-003b 修复 + 用户加码"自动密钥轮换"。算法 SM4-GCM（AEAD），envelope 格式 `SM4:<version>:<base64(nonce|ciphertext|tag)>`，密钥族与浏览器传输密钥完全隔离（`CREDENTIAL_SM4_*` vs `SM4_SECRET`），启动 fail-closed 10 步不变量扫描，操作员轮换手册 + 物理残留（WAL/vacuum/备份）边界文档。
 
 ### Wave Status
 
@@ -57,27 +57,36 @@ Plan: Phase 18 single plan with 4 waves (W1+2+3 done; W4 pending)
 | W1a | ✅ | SM4-GCM envelope + PKCS7 padding + tamper 检测 |
 | W1b | ✅ | AuthConfig.CredentialSM4* + BindEnv + ValidateCredentialSM4Config |
 | W1c | ✅ | CredentialEncryptor service + 列宽扩 + 集成测试 |
-| W2  | ✅ | encrypt-on-write + decrypt-on-read 接入业务层 |
+| W2  | ✅ | encrypt-on-write + decrypt-on-read 接入业务层 + admin 端点修复 + 删除 base64 stubs 死代码 |
 | W3  | ✅ | fail-closed 启动 + 列宽扩展 + 集成测试 + 文档 |
-| W4  | 🔄 In progress | DEPLOYMENT.md 操作员手册 + 重复轮换测试 + per-site/version 计数日志 + WAL/vacuum/备份文档 |
+| W4  | ✅ | DEPLOYMENT.md 操作员手册 + 重复轮换测试（v1→v2→v3）+ per-site/version 计数日志 + 物理残留章节 |
 
 ### Base HEAD for Phase 18
 
 - Base: `e294ae9` (Phase 17 cross-AI review)
-- After W3: `bd84fe2` (W3 fail-closed)
-- After W3 docs: `3b1cb79` (18-SUMMARY.md)
-- Final HEAD pending Wave 4
+- After W3: `bd84fe2`
+- After W3 docs: `3b1cb79`
+- After W1+2+3 state: `8c69e33`
+- After W4: `7e9baaf`
 
-### To Resume
+### Notes — Phase 18 Deviations (all accepted)
 
-Wave 4 (独立 agent)：operator runbook + 重复轮换测试 + 物理残留（WAL/vacuum/备份）文档。然后 Phase 18 关闭。
+- **gmsm v1.4.1 nonce mutation** — GCM 内部修改 nonce slice backing array → 实现层做 defensive copy（已注释）
+- **gmsm v1.4.1 GCMDecrypt block alignment** — 需先 PKCS#7 补到 16B 边界（tag 覆盖完整 plaintext）
+- **No `migrations/017_*` file** — 列宽扩展直接由 `cmd/server/app.go:widenPasswordColumns()` 在 Initialize() 内执行，避开 dormant registry
+- **18-SUMMARY.md at project root** — 与 Phase 17 `.planning/` 模式略有偏离，但保留在 git 历史便于追溯
+- **Wave 4 test expected 4 envelopes rotated, actually 5** — Live3.stream_password 初次 Migrate 时是 v1，也被覆盖；测试预期已修正
+- **GORM `.Scan(&rows)` 不支持 → `db.Raw(...).Rows()` + manual scan** — 在 `CountByVersion` 中已 workaround
 
-### Notes — Phase 18 Deviations
+### Out-of-Scope 列表（与 Phase 17 review §5 一致，仍未处理）
 
-- gmsm v1.4.1 GCM 内部修改 nonce slice backing array → 实现层做 defensive copy
-- gmsm v1.4.1 GCMDecrypt 仅支持块对齐密文 → EncryptGCM/DecryptGCM 内部统一 PKCS#7 补到 16B 边界
-- 17 计划 migrations/017 不创建：列宽扩展直接由 `cmd/server/app.go:widenPasswordColumns()` 在 Initialize() 内执行，避开 dormant registry
-- 18-SUMMARY.md 在项目根（`18-SUMMARY.md`），不入 `.planning/`（与 Phase 17 模式略有偏离，但保留在 git 历史中便于追溯）
+- `models.FileShare.Password`（共享链接密码需 salted hash，独立 phase）
+- `models.APIKey.Key` / `Session.Token` / `AccessToken` / `ShareToken`（按值查找）
+- 遗留 `huawei_configs` 表清理
+- `StreamURL` URL-embedded 凭据拒绝
+- dormant migration registry 清理
+- 前端 transport GCM 迁移
+- KMS / 真实生产数据 post-audit
 
 ---
 
