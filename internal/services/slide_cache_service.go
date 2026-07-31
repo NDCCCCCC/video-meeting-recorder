@@ -50,10 +50,10 @@ func NewSlideCacheService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, e
 }
 
 // GetOrExtractSlides retrieves slide images from cache or extracts them if not cached
-func (s *SlideCacheService) GetOrExtractSlides(pptFileID uint) ([]SlideImageData, error) {
+func (s *SlideCacheService) GetOrExtractSlides(ctx context.Context, pptFileID uint) ([]SlideImageData, error) {
 	// Load PPTFile from DB
 	var pptFile models.PPTFile
-	if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&pptFile, pptFileID).Error; err != nil {
 		return nil, fmt.Errorf("PPT file not found: %w", err)
 	}
 
@@ -84,13 +84,13 @@ func (s *SlideCacheService) GetOrExtractSlides(pptFileID uint) ([]SlideImageData
 		zap.String("pptx_path", pptFile.FilePath))
 
 	// Extract slides using SlideExtractor
-	slideCount, err := s.slideExtractor.ExtractSlides(context.Background(), pptFile.FilePath, cacheDir)
+	slideCount, err := s.slideExtractor.ExtractSlides(ctx, pptFile.FilePath, cacheDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract slides: %w", err)
 	}
 
 	// Update PPTFile with cache path
-	if err := s.db.Model(&pptFile).Update("slide_cache_path", cacheDir).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&pptFile).Update("slide_cache_path", cacheDir).Error; err != nil {
 		s.logger.Warn("Failed to update PPTFile cache path",
 			zap.Uint("ppt_file_id", pptFileID),
 			zap.Error(err))
@@ -181,10 +181,10 @@ func (s *SlideCacheService) extractSlideNumber(filename string) (int, error) {
 }
 
 // InvalidateCache removes cached slide images for a PPT file
-func (s *SlideCacheService) InvalidateCache(pptFileID uint) error {
+func (s *SlideCacheService) InvalidateCache(ctx context.Context, pptFileID uint) error {
 	// Load PPTFile to get cache path
 	var pptFile models.PPTFile
-	if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&pptFile, pptFileID).Error; err != nil {
 		return fmt.Errorf("PPT file not found: %w", err)
 	}
 
@@ -198,7 +198,7 @@ func (s *SlideCacheService) InvalidateCache(pptFileID uint) error {
 	}
 
 	// Clear cache path in database
-	if err := s.db.Model(&pptFile).Update("slide_cache_path", "").Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&pptFile).Update("slide_cache_path", "").Error; err != nil {
 		return fmt.Errorf("failed to clear cache path: %w", err)
 	}
 

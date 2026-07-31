@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"os"
@@ -103,7 +104,7 @@ func TestPPTEditorService_CreateBackup_Success(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.CreateBackup(pptFile.ID)
+	err := service.CreateBackup(context.Background(), pptFile.ID)
 	assert.NoError(t, err)
 
 	var updated models.PPTFile
@@ -132,7 +133,7 @@ func TestPPTEditorService_CreateBackup_AlreadyExists(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	err := service.CreateBackup(pptFile.ID)
+	err := service.CreateBackup(context.Background(), pptFile.ID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 }
@@ -140,7 +141,7 @@ func TestPPTEditorService_CreateBackup_AlreadyExists(t *testing.T) {
 func TestPPTEditorService_CreateBackup_PPTNotFound(t *testing.T) {
 	service, _, _ := setupPPTEditorServiceTest(t)
 
-	err := service.CreateBackup(999)
+	err := service.CreateBackup(context.Background(), 999)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -180,7 +181,7 @@ func TestPPTEditorService_DeleteSlides_Success(t *testing.T) {
 	require.NoError(t, db.Create(pptFile).Error)
 
 	// Delete slides 2 and 4
-	oldPPT, newPPT, err := service.DeleteSlides(pptFile.ID, []int{2, 4})
+	oldPPT, newPPT, err := service.DeleteSlides(context.Background(), pptFile.ID, []int{2, 4})
 	assert.NoError(t, err)
 
 	// Verify pre-mutation snapshot retains original state
@@ -217,7 +218,7 @@ func TestPPTEditorService_DeleteSlides_EmptySlideArray(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	_, _, err := service.DeleteSlides(pptFile.ID, []int{})
+	_, _, err := service.DeleteSlides(context.Background(), pptFile.ID, []int{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no slides specified")
 }
@@ -237,7 +238,7 @@ func TestPPTEditorService_DeleteSlides_AllSlides(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	_, _, err := service.DeleteSlides(pptFile.ID, []int{1, 2, 3})
+	_, _, err := service.DeleteSlides(context.Background(), pptFile.ID, []int{1, 2, 3})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot delete all slides")
 }
@@ -257,7 +258,7 @@ func TestPPTEditorService_DeleteSlides_InvalidSlideNumber(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	_, _, err := service.DeleteSlides(pptFile.ID, []int{1, 10}) // 10 is out of range
+	_, _, err := service.DeleteSlides(context.Background(), pptFile.ID, []int{1, 10}) // 10 is out of range
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid slide number")
 }
@@ -284,7 +285,7 @@ func TestPPTEditorService_Rollback_Success(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	_, _, err := service.Rollback(pptFile.ID)
+	_, _, err := service.Rollback(context.Background(), pptFile.ID)
 	assert.NoError(t, err)
 
 	var updated models.PPTFile
@@ -314,7 +315,7 @@ func TestPPTEditorService_Rollback_NoBackup(t *testing.T) {
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	_, _, err := service.Rollback(pptFile.ID)
+	_, _, err := service.Rollback(context.Background(), pptFile.ID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no backup exists")
 }
@@ -322,7 +323,7 @@ func TestPPTEditorService_Rollback_NoBackup(t *testing.T) {
 func TestPPTEditorService_Rollback_PPTNotFound(t *testing.T) {
 	service, _, _ := setupPPTEditorServiceTest(t)
 
-	_, _, err := service.Rollback(999)
+	_, _, err := service.Rollback(context.Background(), 999)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -343,7 +344,7 @@ func TestPPTEditorService_DetectDuplicateSlides_LessThanTwoSlides(t *testing.T) 
 	}
 	require.NoError(t, db.Create(pptFile).Error)
 
-	groups, err := service.DetectDuplicateSlides(pptFile.ID)
+	groups, err := service.DetectDuplicateSlides(context.Background(), pptFile.ID)
 	assert.NoError(t, err)
 	assert.Empty(t, groups)
 }
@@ -351,7 +352,7 @@ func TestPPTEditorService_DetectDuplicateSlides_LessThanTwoSlides(t *testing.T) 
 func TestPPTEditorService_DetectDuplicateSlides_PPTNotFound(t *testing.T) {
 	service, _, _ := setupPPTEditorServiceTest(t)
 
-	groups, err := service.DetectDuplicateSlides(999)
+	groups, err := service.DetectDuplicateSlides(context.Background(), 999)
 	assert.Error(t, err)
 	assert.Nil(t, groups)
 	assert.Contains(t, err.Error(), "not found")

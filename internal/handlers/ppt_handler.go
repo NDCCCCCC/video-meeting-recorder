@@ -113,7 +113,7 @@ func (h *PPThandler) GetSlides(c *gin.Context) {
 	}
 
 	// Get slides from cache (extracts if needed)
-	slides, err := h.slideCacheService.GetOrExtractSlides(uint(id))
+	slides, err := h.slideCacheService.GetOrExtractSlides(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to get slides",
 			zap.String("ppt_id", idStr),
@@ -596,7 +596,7 @@ func (h *PPThandler) DetectDuplicatesHandler(c *gin.Context) {
 	}
 
 	// Call service to detect duplicates
-	groups, err := h.pptEditorService.DetectDuplicateSlides(uint(id))
+	groups, err := h.pptEditorService.DetectDuplicateSlides(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to detect duplicate slides",
 			zap.String("ppt_id", idStr),
@@ -662,7 +662,7 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 	}
 
 	// Call service to delete slides
-	oldPPT, _, err := h.pptEditorService.DeleteSlides(uint(id), req.Slides)
+	oldPPT, _, err := h.pptEditorService.DeleteSlides(c.Request.Context(), uint(id), req.Slides)
 	if err != nil {
 		h.logger.Error("Failed to delete slides",
 			zap.String("ppt_id", idStr),
@@ -745,7 +745,7 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 	}
 
 	// Call service to rollback
-	oldPPT, _, err := h.pptEditorService.Rollback(uint(id))
+	oldPPT, _, err := h.pptEditorService.Rollback(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to rollback PPT",
 			zap.String("ppt_id", idStr),
@@ -905,7 +905,7 @@ func (h *PPThandler) InsertSlideHandler(c *gin.Context) {
 	}
 
 	// Insert captured frame
-	if err := h.pptEditorService.InsertCapturedFrame(uint(id), frameBytes, req.InsertPosition, req.Timestamp); err != nil {
+	if err := h.pptEditorService.InsertCapturedFrame(c.Request.Context(), uint(id), frameBytes, req.InsertPosition, req.Timestamp); err != nil {
 		h.logger.Error("Failed to insert slide",
 			zap.String("ppt_id", idStr),
 			zap.Int("insert_position", req.InsertPosition),
@@ -1071,7 +1071,7 @@ func (h *PPThandler) ReorderSlidesHandler(c *gin.Context) {
 	}
 
 	// Reorder slides
-	newOrder, oldPPT, newPPT, err := h.pptEditorService.ReorderSlides(uint(id), req.SlideOrder)
+	newOrder, oldPPT, newPPT, err := h.pptEditorService.ReorderSlides(c.Request.Context(), uint(id), req.SlideOrder)
 	if err != nil {
 		h.logger.Error("Failed to reorder slides",
 			zap.String("ppt_id", idStr),

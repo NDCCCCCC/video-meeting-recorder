@@ -80,7 +80,7 @@ func (s *SnapshotService) generateSnapshotFilename(task models.VideoRecordingTas
 // GenerateSnapshot generates an MP4 snapshot from an active recording task's MKV file.
 // Per D-08/D-09: copies the partial MKV to temp, converts to MP4, registers via callback.
 // Per D-15: Incremental — each snapshot starts from the end of the previous snapshot.
-func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasSharedViewer bool) (*models.VideoFile, error) {
+func (s *SnapshotService) GenerateSnapshot(ctx context.Context, taskID uint, createdBy uint, hasSharedViewer bool) (*models.VideoFile, error) {
 	// Acquire mutex for this task to prevent concurrent snapshots
 	mutex := s.getMutex(taskID)
 	mutex.Lock()
@@ -88,7 +88,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasShare
 
 	// 1. Load recording task
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, taskID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
 		return nil, fmt.Errorf("录制任务不存在: %w", err)
 	}
 
@@ -113,7 +113,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasShare
 	// 4. D-15: Find the last snapshot for this task to determine incremental offset
 	var lastSnapshot models.VideoFile
 	seekOffset := 0.0
-	if err := s.db.Where("task_id = ? AND source_type = ?", taskID, models.SourceTypeSnapshot).
+	if err := s.db.WithContext(ctx).Where("task_id = ? AND source_type = ?", taskID, models.SourceTypeSnapshot).
 		Order("created_at DESC").First(&lastSnapshot).Error; err == nil {
 		// Last snapshot found — calculate its end offset (snapshot_offset + duration)
 		if lastSnapshot.SnapshotOffset > 0 || lastSnapshot.Duration > 0 {
@@ -183,7 +183,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasShare
 
 	// Count existing snapshots for this task to determine sequence number
 	var snapshotCount int64
-	s.db.Model(&models.VideoFile{}).
+	s.db.WithContext(ctx).Model(&models.VideoFile{}).
 		Where("task_id = ? AND source_type = ?", taskID, models.SourceTypeSnapshot).
 		Count(&snapshotCount)
 	sequence := int(snapshotCount) + 1
@@ -211,7 +211,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasShare
 
 	// Re-validate task status before starting FFmpeg to catch race conditions
 	var currentTask models.VideoRecordingTask
-	if err := s.db.First(&currentTask, taskID).Error; err == nil {
+	if err := s.db.WithContext(ctx).First(&currentTask, taskID).Error; err == nil {
 		if currentTask.Status != models.VideoStatusRecording {
 			s.logger.Warn("录制任务状态变更，无法生成快照",
 				zap.Uint("task_id", taskID),
@@ -221,7 +221,9 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasShare
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// PERF-003/BUG-005: derive FFmpeg ctx from request ctx so request cancellation
+	// also interrupts the long-running transcode (cascade).
+	ffmpegCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
 	// recordingDuration is already validated above (line 86-88)
@@ -242,7 +244,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasShare
 		outputMP4,
 	)
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
+	cmd := exec.CommandContext(ffmpegCtx, s.ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		s.logger.Error("FFmpeg快照转换失败",
@@ -263,7 +265,7 @@ func (s *SnapshotService) GenerateSnapshot(taskID uint, createdBy uint, hasShare
 	// 8. Find the parent VideoFile for this task
 	var parentFile models.VideoFile
 	var parentID *uint // Use pointer to allow nil when no parent exists
-	if err := s.db.Where("task_id = ? AND source_type = ?", taskID, models.SourceTypeRecording).First(&parentFile).Error; err == nil {
+	if err := s.db.WithContext(ctx).Where("task_id = ? AND source_type = ?", taskID, models.SourceTypeRecording).First(&parentFile).Error; err == nil {
 		parentID = &parentFile.ID
 	} else {
 		s.logger.Warn("快照未找到父录制文件，将创建无父级的快照记录",
