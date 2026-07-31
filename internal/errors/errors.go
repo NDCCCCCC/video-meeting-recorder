@@ -30,6 +30,14 @@ var (
 	// ErrForeignKeyConstraint 外键约束失败（如 taskID 不存在于 VideoRecordingTask 表）。
 	// 用于 diagnostic-only 路径：service 检测到外键违反时区分 duplicate 与 FK 失败做差异化日志。
 	ErrForeignKeyConstraint = errors.New("foreign key constraint failed")
+
+	// 用户/角色管理 sentinels（Phase 19 D5）：user_service 高频错误路径统一化。
+	// handler 改用 response.HandleError 后，这些 sentinel 决定 HTTP 状态码（404/409/403）。
+	ErrUserNotFound          = errors.New("user not found")
+	ErrUsernameExists        = errors.New("username already taken")
+	ErrEmailExists           = errors.New("email already in use")
+	ErrRoleNotFound          = errors.New("role not found")
+	ErrSystemAdminProtected  = errors.New("system admin protected from modification")
 )
 
 // Wrap 包装错误，添加上下文信息
