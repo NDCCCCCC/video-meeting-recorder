@@ -97,7 +97,7 @@ func (h *TranscriptionHandler) SubmitTranscription(c *gin.Context) {
 		return
 	}
 
-	if err := h.transcriptionService.SubmitTranscriptionWithMode(uint(id), req.SamplingRate, req.Mode, userID); err != nil {
+	if err := h.transcriptionService.SubmitTranscriptionWithMode(c.Request.Context(), uint(id), req.SamplingRate, req.Mode, userID); err != nil {
 		response.GinError(c, response.CodeInternalError, "提交转录任务失败: "+err.Error())
 		return
 	}
@@ -227,7 +227,7 @@ func (h *TranscriptionHandler) ListActiveTasks(c *gin.Context) {
 		return
 	}
 
-	tasks, err := h.transcriptionService.GetActiveTasks()
+	tasks, err := h.transcriptionService.GetActiveTasks(c.Request.Context())
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "获取活跃任务失败")
 		return
@@ -431,7 +431,7 @@ func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
 		Mode:         req.Mode,
 		UserID:       userID,
 	}
-	result, err := h.transcriptionService.SubmitBatchTranscription(batchReq)
+	result, err := h.transcriptionService.SubmitBatchTranscription(c.Request.Context(), batchReq)
 	if err != nil {
 		h.logger.Error("批量转录失败",
 			zap.Uint("user_id", userID),
@@ -473,7 +473,7 @@ func (h *TranscriptionHandler) GetBatchTranscriptionStatus(c *gin.Context) {
 	}
 	isAdmin := middleware.CanAccessAllData(c)
 
-	jobGroup, err := h.transcriptionService.GetJobGroupStatus(uint(id), userID, isAdmin)
+	jobGroup, err := h.transcriptionService.GetJobGroupStatus(c.Request.Context(), uint(id), userID, isAdmin)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "任务组不存在")
 		return

@@ -108,12 +108,12 @@ func (s *TranscriptionService) Stop() {
 }
 
 // SubmitTranscription submits a transcription task (backward compatible - defaults to local mode)
-func (s *TranscriptionService) SubmitTranscription(videoFileID uint, samplingRate float64, createdBy uint) error {
-	return s.SubmitTranscriptionWithMode(videoFileID, samplingRate, models.TranscriptionModeLocal, createdBy)
+func (s *TranscriptionService) SubmitTranscription(ctx context.Context, videoFileID uint, samplingRate float64, createdBy uint) error {
+	return s.SubmitTranscriptionWithMode(ctx, videoFileID, samplingRate, models.TranscriptionModeLocal, createdBy)
 }
 
 // SubmitTranscriptionWithMode submits a transcription task with specified mode (local or cloud)
-func (s *TranscriptionService) SubmitTranscriptionWithMode(videoFileID uint, samplingRate float64, mode string, createdBy uint) error {
+func (s *TranscriptionService) SubmitTranscriptionWithMode(ctx context.Context, videoFileID uint, samplingRate float64, mode string, createdBy uint) error {
 	// Validate mode
 	validModes := map[string]bool{models.TranscriptionModeLocal: true, models.TranscriptionModeCloud: true}
 	if !validModes[mode] {
@@ -159,7 +159,7 @@ func (s *TranscriptionService) SubmitTranscriptionWithMode(videoFileID uint, sam
 		Mode:         mode,
 		CreatedBy:    createdBy,
 	}
-	if err := s.db.Create(task).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(task).Error; err != nil {
 		return fmt.Errorf("创建转录任务失败: %w", err)
 	}
 
@@ -223,7 +223,7 @@ func (s *TranscriptionService) worker(id int) {
 				s.logger.Info("Worker exiting", zap.Int("worker_id", id))
 				return
 			}
-			s.processTranscription(task)
+			s.processTranscription(s.ctx, task)
 		case <-s.ctx.Done():
 			return
 		}
@@ -231,7 +231,7 @@ func (s *TranscriptionService) worker(id int) {
 }
 
 // processTranscription processes a single transcription task
-func (s *TranscriptionService) processTranscription(task *models.TranscriptionTask) {
+func (s *TranscriptionService) processTranscription(ctx context.Context, task *models.TranscriptionTask) {
 	// Defer recover to prevent panics from crashing the worker
 	defer func() {
 		if r := recover(); r != nil {
@@ -240,29 +240,29 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 				zap.Uint("video_file_id", task.VideoFileID),
 				zap.Any("panic", r))
 			s.updateProgress(task.VideoFileID, "", 0, 0, 0, "panic: "+fmt.Sprint(r), nil)
-			s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "panic: "+fmt.Sprint(r), 0, nil)
+			s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, "panic: "+fmt.Sprint(r), 0, nil)
 			// 更新任务组进度
 			if task.JobGroupID != nil {
-				s.updateJobGroupProgress(*task.JobGroupID)
+				s.updateJobGroupProgress(ctx, *task.JobGroupID)
 			}
 		}
 	}()
 
 	// Reload task to check mode
-	if err := s.db.Preload("VideoFile").First(task, task.ID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("VideoFile").First(task, task.ID).Error; err != nil {
 		s.logger.Error("Failed to load task", zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
 
 	// Route to appropriate pipeline based on mode
 	if task.Mode == models.TranscriptionModeCloud {
-		s.processCloudTranscription(task)
+		s.processCloudTranscription(ctx, task)
 		return
 	}
 
@@ -273,10 +273,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Uint("video_file_id", task.VideoFileID),
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
@@ -284,27 +284,27 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 	defer s.frameExtractor.CleanupTempDir(tempDir)
 
 	// Create cancellable context with timeout
-	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
 	// Load video file
 	var videoFile models.VideoFile
-	if err := s.db.First(&videoFile, task.VideoFileID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&videoFile, task.VideoFileID).Error; err != nil {
 		s.logger.Error("加载视频文件失败",
 			zap.Uint("video_file_id", task.VideoFileID),
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
 
 	// Stage 1: Frame Extraction per D-01
 	s.updateProgress(task.VideoFileID, models.TranscriptionStageExtracting, 0, 0, 0, "", nil)
-	s.updateTaskStatus(task.ID, models.TranscriptionStatusProcessing, "", 0, nil)
+	s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusProcessing, "", 0, nil)
 
 	samplingRateSeconds := 1.0 / task.SamplingRate
 	frames, err := s.frameExtractor.ExtractFrames(ctx, videoFile.FilePath, tempDir, samplingRateSeconds)
@@ -313,10 +313,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Uint("video_file_id", task.VideoFileID),
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
@@ -330,16 +330,16 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		s.logger.Error("帧提取返回空结果",
 			zap.Uint("video_file_id", task.VideoFileID))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, "帧提取返回空结果", nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "帧提取返回空结果", 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, "帧提取返回空结果", 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
 
 	// Update task with total frames
-	s.updateTaskStatus(task.ID, models.TranscriptionStatusProcessing, "", len(frames), nil)
+	s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusProcessing, "", len(frames), nil)
 
 	// Stage 2: Similarity Detection per D-01, D-07
 	s.updateProgress(task.VideoFileID, models.TranscriptionStageDetecting, 0, len(frames), 0, "", nil)
@@ -368,7 +368,7 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.String("file_path", frames[0].FilePath),
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		return
 	}
 
@@ -443,7 +443,7 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		// Don't fail the task for timestamp recording errors
 	} else {
 		// Update task in database
-		if err := s.db.Model(task).Update("slide_timestamps", task.SlideTimestamps).Error; err != nil {
+		if err := s.db.WithContext(ctx).Model(task).Update("slide_timestamps", task.SlideTimestamps).Error; err != nil {
 			s.logger.Warn("保存时间戳到数据库失败",
 				zap.Uint("video_file_id", task.VideoFileID),
 				zap.Error(err))
@@ -463,10 +463,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Int("total_frames", len(frames)),
 			zap.Int("black_frames", blackFrameCount))
 		s.updateProgress(task.VideoFileID, "", len(frames), len(frames), 100, "", nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "视频无有效内容，无法生成PPT", 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, "视频无有效内容，无法生成PPT", 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
@@ -484,10 +484,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 				zap.Float64("timestamp", frame.Timestamp),
 				zap.Error(err))
 			s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
-			s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+			s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 			// 更新任务组进度
 			if task.JobGroupID != nil {
-				s.updateJobGroupProgress(*task.JobGroupID)
+				s.updateJobGroupProgress(ctx, *task.JobGroupID)
 			}
 			return
 		}
@@ -507,10 +507,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Uint("video_file_id", task.VideoFileID),
 			zap.Int("unique_frames", len(uniqueFrames)))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, "所有帧提取失败", nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, "所有帧提取失败", 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, "所有帧提取失败", 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
@@ -529,10 +529,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.Uint("video_file_id", task.VideoFileID),
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
@@ -549,10 +549,10 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 			zap.String("path", pptxOutputPath),
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
 		if task.JobGroupID != nil {
-			s.updateJobGroupProgress(*task.JobGroupID)
+			s.updateJobGroupProgress(ctx, *task.JobGroupID)
 		}
 		return
 	}
@@ -567,26 +567,26 @@ func (s *TranscriptionService) processTranscription(task *models.TranscriptionTa
 		SourceVideoFileID:   &task.VideoFileID,
 		TranscriptionTaskID: &task.ID,
 	}
-	if err := s.db.Create(pptFile).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(pptFile).Error; err != nil {
 		s.logger.Error("创建PPT文件记录失败",
 			zap.Uint("video_file_id", task.VideoFileID),
 			zap.Error(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		return
 	}
 
 	// 更新任务组进度
 	if task.JobGroupID != nil {
-		s.updateJobGroupProgress(*task.JobGroupID)
+		s.updateJobGroupProgress(ctx, *task.JobGroupID)
 	}
 	// Update task as completed
 	s.updateProgress(task.VideoFileID, "", len(frames), len(frames), 100, "", &pptFile.ID)
-	s.updateTaskStatus(task.ID, models.TranscriptionStatusCompleted, "", 0, &pptFile.ID)
+	s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusCompleted, "", 0, &pptFile.ID)
 
 	// 更新任务组进度
 	if task.JobGroupID != nil {
-		s.updateJobGroupProgress(*task.JobGroupID)
+		s.updateJobGroupProgress(ctx, *task.JobGroupID)
 	}
 	s.logger.Info("转录任务完成",
 		zap.Uint("task_id", task.ID),
@@ -646,6 +646,7 @@ func (s *TranscriptionService) updateProgress(
 
 // updateTaskStatus updates the task status in database
 func (s *TranscriptionService) updateTaskStatus(
+	ctx context.Context,
 	taskID uint,
 	status string,
 	errorMsg string,
@@ -666,7 +667,7 @@ func (s *TranscriptionService) updateTaskStatus(
 		updates["percentage"] = 100
 	}
 
-	result := s.db.Model(&models.TranscriptionTask{}).Where("id = ?", taskID).Updates(updates)
+	result := s.db.WithContext(ctx).Model(&models.TranscriptionTask{}).Where("id = ?", taskID).Updates(updates)
 	if result.Error != nil {
 		s.logger.Error("更新转录任务状态失败",
 			zap.Uint("task_id", taskID),
@@ -677,31 +678,31 @@ func (s *TranscriptionService) updateTaskStatus(
 }
 
 // processCloudTranscription handles cloud transcription pipeline (OSS upload, Tingwu submit, polling, result retrieval)
-func (s *TranscriptionService) processCloudTranscription(task *models.TranscriptionTask) {
+func (s *TranscriptionService) processCloudTranscription(ctx context.Context, task *models.TranscriptionTask) {
 	// Load video file
 	var videoFile models.VideoFile
-	if err := s.db.First(&videoFile, task.VideoFileID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&videoFile, task.VideoFileID).Error; err != nil {
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 
 	// Stage 1: Upload to OSS (0-20%)
 	s.updateProgress(task.VideoFileID, models.TranscriptionStageUploading, 0, 0, 5, "", nil)
-	s.updateTaskStatus(task.ID, models.TranscriptionStatusProcessing, "", 0, nil)
+	s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusProcessing, "", 0, nil)
 
 	objectKey := fmt.Sprintf("transcriptions/%d/%d.mp4", task.VideoFileID, task.ID)
 	ossURL, err := s.ossService.UploadFile(ctx, videoFile.FilePath, objectKey)
 	if err != nil {
-		s.handleCloudFailure(task, err, true) // Auto-fallback per D-07
+		s.handleCloudFailure(ctx, task, err, true) // Auto-fallback per D-07
 		return
 	}
 
 	// Save OSS URL
-	s.db.Model(task).Updates(map[string]interface{}{
+	s.db.WithContext(ctx).Model(task).Updates(map[string]interface{}{
 		"oss_url": ossURL,
 	})
 
@@ -712,12 +713,12 @@ func (s *TranscriptionService) processCloudTranscription(task *models.Transcript
 
 	cloudTaskID, err := s.tingwuClient.SubmitTask(ctx, ossURL)
 	if err != nil {
-		s.handleCloudFailure(task, err, true) // Auto-fallback per D-07
+		s.handleCloudFailure(ctx, task, err, true) // Auto-fallback per D-07
 		return
 	}
 
 	// Save CloudTaskID
-	s.db.Model(task).Update("cloud_task_id", cloudTaskID)
+	s.db.WithContext(ctx).Model(task).Update("cloud_task_id", cloudTaskID)
 
 	// Stage 3: Poll Tingwu status with exponential backoff (25-90%)
 	if !s.pollTingwuStatus(ctx, task, cloudTaskID) {
@@ -729,12 +730,12 @@ func (s *TranscriptionService) processCloudTranscription(task *models.Transcript
 
 	result, err := s.tingwuClient.GetResult(ctx, cloudTaskID)
 	if err != nil {
-		s.handleCloudFailure(task, err, false) // No auto-fallback per D-07
+		s.handleCloudFailure(ctx, task, err, false) // No auto-fallback per D-07
 		return
 	}
 
 	// Save text content to TranscriptionText table
-	if err := s.saveTextContent(task, result); err != nil {
+	if err := s.saveTextContent(ctx, task, result); err != nil {
 		s.logger.Error("保存文字内容失败", zap.Error(err))
 		// Don't fail the task for text save errors -- text is optional
 	}
@@ -761,7 +762,7 @@ func (s *TranscriptionService) processCloudTranscription(task *models.Transcript
 
 	// Mark completed (cloud transcription does NOT generate PPT -- text is the output)
 	s.updateProgress(task.VideoFileID, "", 0, 0, 100, "", nil)
-	s.updateTaskStatus(task.ID, models.TranscriptionStatusCompleted, "", 0, nil)
+	s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusCompleted, "", 0, nil)
 
 	s.logger.Info("云端转录完成",
 		zap.Uint("task_id", task.ID),
@@ -782,7 +783,7 @@ func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *model
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			s.handleCloudFailure(task, ctx.Err(), false)
+			s.handleCloudFailure(ctx, task, ctx.Err(), false)
 			return false
 		case <-timer.C:
 		}
@@ -815,7 +816,7 @@ func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *model
 		case "Completed":
 			return true // Done!
 		case "Failed":
-			s.handleCloudFailure(task,
+			s.handleCloudFailure(ctx, task,
 				fmt.Errorf("Tingwu处理失败: %s", status.ErrorMessage), false)
 			return false
 		default:
@@ -826,12 +827,12 @@ func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *model
 	}
 
 	// Exhausted attempts
-	s.handleCloudFailure(task, fmt.Errorf("轮询超时: 超过最大尝试次数"), false)
+	s.handleCloudFailure(ctx, task, fmt.Errorf("轮询超时: 超过最大尝试次数"), false)
 	return false
 }
 
 // handleCloudFailure handles cloud transcription failures with auto-fallback logic (per D-07, D-08)
-func (s *TranscriptionService) handleCloudFailure(task *models.TranscriptionTask, cloudErr error, isInitialStage bool) {
+func (s *TranscriptionService) handleCloudFailure(ctx context.Context, task *models.TranscriptionTask, cloudErr error, isInitialStage bool) {
 	s.logger.Error("云端转录失败",
 		zap.Uint("task_id", task.ID),
 		zap.Uint("video_file_id", task.VideoFileID),
@@ -844,7 +845,7 @@ func (s *TranscriptionService) handleCloudFailure(task *models.TranscriptionTask
 			zap.Uint("video_file_id", task.VideoFileID))
 
 		// Update task mode atomically
-		s.db.Model(task).Updates(map[string]interface{}{
+		s.db.WithContext(ctx).Model(task).Updates(map[string]interface{}{
 			"mode":          models.TranscriptionModeLocal,
 			"cloud_task_id": "",
 			"oss_url":       "",
@@ -864,23 +865,23 @@ func (s *TranscriptionService) handleCloudFailure(task *models.TranscriptionTask
 		s.statusMu.Unlock()
 
 		// Start local transcription
-		s.processTranscription(task)
+		s.processTranscription(ctx, task)
 	} else {
 		// Mid-processing failure: mark as failed, no auto-fallback per D-07
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, cloudErr.Error(), nil)
-		s.updateTaskStatus(task.ID, models.TranscriptionStatusFailed, cloudErr.Error(), 0, nil)
+		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, cloudErr.Error(), 0, nil)
 	}
 }
 
 // saveTextContent saves Tingwu transcription result to TranscriptionText table
-func (s *TranscriptionService) saveTextContent(task *models.TranscriptionTask, result *TingwuTaskResult) error {
+func (s *TranscriptionService) saveTextContent(ctx context.Context, task *models.TranscriptionTask, result *TingwuTaskResult) error {
 	if result == nil || len(result.Segments) == 0 {
 		s.logger.Info("没有文字内容需要保存")
 		return nil
 	}
 
 	// Delete any existing text content for this task (idempotent)
-	s.db.Where("transcription_task_id = ?", task.ID).Delete(&models.TranscriptionText{})
+	s.db.WithContext(ctx).Where("transcription_task_id = ?", task.ID).Delete(&models.TranscriptionText{})
 
 	// Create text segment records
 	texts := make([]models.TranscriptionText, 0, len(result.Segments))
@@ -894,7 +895,7 @@ func (s *TranscriptionService) saveTextContent(task *models.TranscriptionTask, r
 		})
 	}
 
-	if err := s.db.Create(&texts).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(&texts).Error; err != nil {
 		return fmt.Errorf("保存文字内容失败: %w", err)
 	}
 
@@ -926,7 +927,7 @@ func (s *TranscriptionService) StartOSSCleanupScheduler() {
 			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
-				s.cleanupOrphanedOSSFiles()
+				s.cleanupOrphanedOSSFiles(s.ctx)
 			}
 		}
 	}()
@@ -935,11 +936,11 @@ func (s *TranscriptionService) StartOSSCleanupScheduler() {
 }
 
 // cleanupOrphanedOSSFiles deletes OSS files for completed/failed tasks older than 24 hours
-func (s *TranscriptionService) cleanupOrphanedOSSFiles() {
+func (s *TranscriptionService) cleanupOrphanedOSSFiles(ctx context.Context) {
 	cutoff := time.Now().Add(-24 * time.Hour)
 
 	var tasks []models.TranscriptionTask
-	if err := s.db.Where(
+	if err := s.db.WithContext(ctx).Where(
 		"mode = ? AND status IN ? AND oss_url != '' AND updated_at < ?",
 		models.TranscriptionModeCloud,
 		[]string{models.TranscriptionStatusCompleted, models.TranscriptionStatusFailed},
@@ -962,7 +963,7 @@ func (s *TranscriptionService) cleanupOrphanedOSSFiles() {
 				zap.Error(err))
 		} else {
 			// Clear the OSSURL to avoid re-processing
-			s.db.Model(&task).Update("oss_url", "")
+			s.db.WithContext(ctx).Model(&task).Update("oss_url", "")
 			s.logger.Info("已清理过期OSS文件",
 				zap.Uint("task_id", task.ID),
 				zap.String("object_key", objectKey))
@@ -977,9 +978,9 @@ func (s *TranscriptionService) GetDB() *gorm.DB {
 }
 
 // GetActiveTasks returns all active transcription tasks (pending or processing)
-func (s *TranscriptionService) GetActiveTasks() ([]models.TranscriptionTask, error) {
+func (s *TranscriptionService) GetActiveTasks(ctx context.Context) ([]models.TranscriptionTask, error) {
 	var tasks []models.TranscriptionTask
-	err := s.db.Where("status IN ?", []string{models.TranscriptionStatusPending, models.TranscriptionStatusProcessing}).
+	err := s.db.WithContext(ctx).Where("status IN ?", []string{models.TranscriptionStatusPending, models.TranscriptionStatusProcessing}).
 		Order("created_at DESC").
 		Find(&tasks).Error
 	return tasks, err
@@ -1003,7 +1004,7 @@ type BatchTranscriptionResult struct {
 }
 
 // SubmitBatchTranscription 批量提交转录任务
-func (s *TranscriptionService) SubmitBatchTranscription(req *BatchTranscriptionRequest) (*BatchTranscriptionResult, error) {
+func (s *TranscriptionService) SubmitBatchTranscription(ctx context.Context, req *BatchTranscriptionRequest) (*BatchTranscriptionResult, error) {
 	// 验证转录模式
 	if req.Mode != models.TranscriptionModeLocal && req.Mode != models.TranscriptionModeCloud {
 		return nil, fmt.Errorf("无效的转录模式: %s", req.Mode)
@@ -1026,7 +1027,7 @@ func (s *TranscriptionService) SubmitBatchTranscription(req *BatchTranscriptionR
 		Status:     models.JobGroupStatusPending,
 		TotalCount: len(req.VideoFileIDs),
 	}
-	if err := s.db.Create(jobGroup).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(jobGroup).Error; err != nil {
 		return nil, fmt.Errorf("创建任务组失败: %w", err)
 	}
 
@@ -1049,7 +1050,7 @@ func (s *TranscriptionService) SubmitBatchTranscription(req *BatchTranscriptionR
 			CreatedBy:    req.UserID,
 		}
 
-		if err := s.db.Create(task).Error; err != nil {
+		if err := s.db.WithContext(ctx).Create(task).Error; err != nil {
 			result.FailedCount++
 			result.Errors = append(result.Errors, fmt.Sprintf("文件 %d 创建任务失败: %v", videoFileID, err))
 			s.logger.Warn("批量转录创建任务失败",
@@ -1084,16 +1085,16 @@ func (s *TranscriptionService) SubmitBatchTranscription(req *BatchTranscriptionR
 		jobGroup.CompletedCount = result.SubmittedCount
 		jobGroup.FailedCount = result.FailedCount
 		jobGroup.UpdateStatus()
-		s.db.Save(jobGroup)
+		s.db.WithContext(ctx).Save(jobGroup)
 	}
 
 	return result, nil
 }
 
 // GetJobGroupStatus 获取批量转录任务组状态
-func (s *TranscriptionService) GetJobGroupStatus(jobGroupID uint, userID uint, isAdmin bool) (*models.TranscriptionJobGroup, error) {
+func (s *TranscriptionService) GetJobGroupStatus(ctx context.Context, jobGroupID uint, userID uint, isAdmin bool) (*models.TranscriptionJobGroup, error) {
 	var jobGroup models.TranscriptionJobGroup
-	err := s.db.Where("id = ?", jobGroupID).
+	err := s.db.WithContext(ctx).Where("id = ?", jobGroupID).
 		Preload("Tasks").
 		First(&jobGroup).Error
 	if err != nil {
@@ -1117,15 +1118,15 @@ func (s *TranscriptionService) GetJobGroupStatus(jobGroupID uint, userID uint, i
 	jobGroup.CompletedCount = completedCount
 	jobGroup.FailedCount = failedCount
 	jobGroup.UpdateStatus()
-	s.db.Save(&jobGroup)
+	s.db.WithContext(ctx).Save(&jobGroup)
 
 	return &jobGroup, nil
 }
 
 // updateJobGroupProgress 更新任务组进度
-func (s *TranscriptionService) updateJobGroupProgress(jobGroupID uint) {
+func (s *TranscriptionService) updateJobGroupProgress(ctx context.Context, jobGroupID uint) {
 	var jobGroup models.TranscriptionJobGroup
-	if err := s.db.Preload("Tasks").First(&jobGroup, jobGroupID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Tasks").First(&jobGroup, jobGroupID).Error; err != nil {
 		s.logger.Error("更新任务组进度失败", zap.Uint("job_group_id", jobGroupID), zap.Error(err))
 		return
 	}
@@ -1142,5 +1143,5 @@ func (s *TranscriptionService) updateJobGroupProgress(jobGroupID uint) {
 	jobGroup.CompletedCount = completedCount
 	jobGroup.FailedCount = failedCount
 	jobGroup.UpdateStatus()
-	s.db.Save(&jobGroup)
+	s.db.WithContext(ctx).Save(&jobGroup)
 }
