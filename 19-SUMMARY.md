@@ -271,3 +271,57 @@ BusinessError 按 `Code` 字段映射（同表逻辑）。
 - `go vet ./...` 干净。
 - `gofmt -l` 在所有本 wave 触及文件上干净（`oss_service.go` 的 gofmt 标记为 HEAD 预存问题，本 wave 未修改该文件）。
 - `go test ./internal/services/ ./internal/handlers/ ./internal/scheduler/ ./cmd/server/` 全过，无回归。
+
+---
+
+## Wave 4: ctx 级联结构性阻塞 — TaskServiceInterface 原子三元组（PERF-003/BUG-005）
+
+**范围**：`scheduler.TaskServiceInterface` 5 方法加 `ctx context.Context` 首参 → 同步改
+`taskServiceAdapter`（生产实现）+ `mockTaskService`（测试实现）+ scheduler 全部 10 处调用点。
+**这是 ctx 全量级联的结构性阻塞——三元组必须原子改动，否则 build 断（interface 与实现不同步）。**
+
+**提交**：`9a00cbe`（单原子 commit，4 文件 +151 / -50）。
+**Base**：`a3197fa`（Wave 3 final）→ **HEAD**：`9a00cbe`。
+
+### 原子三元组改动
+
+| 组件 | 文件 | 改动 |
+|------|------|------|
+| **Interface** | `internal/scheduler/video_scheduler.go:90-101` | `GetTask` / `GetPendingTasks` / `UpdateTaskStatus` / `UpdateRecordingPaths` / `GetInputConfig` 均以 `ctx context.Context` 首参；`GetDB()` 保留无参（返回原始 `*gorm.DB` 供遗留调用方） |
+| **生产实现** | `cmd/server/app.go:1166-1249` `taskServiceAdapter` | 同 5 方法加 ctx 首参 + 全部 `a.db.` 链补 `.WithContext(ctx)` **链首**（金标准规则）；**Phase-18 凭据解密逻辑原样保留**（仅 GORM 读 +解密，零行为变更） |
+| **测试实现** | `internal/scheduler/video_scheduler_test.go:76-131` `mockTaskService` | 同 5 方法加 ctx 首参；mock 忽略 ctx（内存 map，不触 DB） |
+
+### scheduler 调用点透传（10 处，grep 穷举零遗漏）
+
+| 调用点 | 方法 | ctx 来源 |
+|--------|------|----------|
+| `executeTask` 内 `GetTask` / `UpdateRecordingPaths` + 9 处 `updateTaskStatus` | 私有流程 | **executeTask ctx**（`context.WithCancel(context.Background())` L274）—— 优雅关停关键 ctx，**未替换为 `context.Background()`** |
+| `completeTask` 内 `GetTask` + 2 处 `updateTaskStatus` | 任务正常完成 | 由 `monitorTask(ctx, ...)` 透传 executeTask ctx（加 ctx 首参级联） |
+| `updateTaskStatus` helper 内 `GetTask` / `UpdateTaskStatus` | 状态转换 | 加 ctx 首参，由全部调用方透传 |
+| `releaseHuaweiDevice` 内 `GetTask` + 会议断开 | 取消时清理 | 提升 bounded `context.WithTimeout(context.Background(), 30s)` 复用于 GetTask + Disconnect（原 ctx 仅覆盖断开，现统一） |
+| `Start` / `SyncPendingTasks` 内 `GetPendingTasks` / `GetTask` | 启动/同步 | `context.Background()`（服务生命周期操作，非请求作用域） |
+| `ExecuteTask`（公共）内 `GetTask` 预检 | 手动触发 | `context.Background()`（无请求 ctx 可透传） |
+| `SyncPendingTasks` 2 处 `go updateTaskStatus` | fire-and-forget | bounded `context.WithTimeout(context.Background(), 30s)`（BUG-006 约定） |
+
+### 调用方穷举（全库 grep 验证）
+`grep -rn "taskService\.\(GetTask\|GetPendingTasks\|UpdateTaskStatus\|UpdateRecordingPaths\|GetInputConfig\)([^c]" --include="*.go"` → **零命中**（所有调用均以 ctx 首参）。唯一不在此三元组的 `.GetPendingTasks()` 是 `cmd/server/app.go:1545` 的 `a.videoTaskService.GetPendingTasks()`——那是 `*services.VideoRecordingTaskService`（异类型，非 `TaskServiceInterface` 实现），属 Wave 5 范围，本 wave 不动。
+
+### 取消传播测试（计划要求的 3 个负载测试之一）
+新增 `cmd/server/taskservice_adapter_ctx_test.go`：`TestTaskServiceAdapter_CancellationPropagation`。
+- 内存 sqlite 预置 task + InputConfig，构造 `taskServiceAdapter{db, logger}`。
+- pre-cancelled ctx → 5 个接口方法（GetTask / GetPendingTasks / UpdateTaskStatus / UpdateRecordingPaths / GetInputConfig）**全部返回 error**（GORM 经 `.WithContext(ctx)` → `database/sql` 连接获取前检查 `ctx.Done()` → `context.Canceled`）。
+- 对照：正常 ctx 下 GetTask 成功 + 任务状态未被错误改写（证明错误源自 ctx 取消而非查询缺陷）。
+
+### 关键约定遵循
+- **`.WithContext(ctx)` 链首**：adapter 全部 5 处 GORM 链均为 `a.db.WithContext(ctx).Model(...)` / `.First(...)` / `.Where(...)`（grep 验证零裸 `a.db.`）。
+- **executeTask/cleanupCtx 透传**：未偷换 `context.Background()`——这正是优雅关停依赖的 ctx。
+- **fire-and-forget bounded ctx**：SyncPendingTasks 2 处 goroutine 遵循 BUG-006 的 `NewTimer+select` / `WithTimeout(30s)` 约定。
+- **Phase-18 解密保留**：`GetInputConfig` 内 `encryptor.Decrypt` 逻辑零改动（仅 GORM 读链补 WithContext）。
+- **未合并 adapter**：保留 `taskServiceAdapter`（计划标为技术债，含 Phase-18 解密非纯重复）；仅使其 ctx-aware。
+
+### 验证 Gate
+- `go build ./...` 绿。
+- `go vet ./...` 干净。
+- `gofmt -l` 在 4 个触及文件上干净。
+- `go test ./internal/scheduler/... ./cmd/server/...` 全过（含新增取消传播测试）。
+- `go test ./...` 全库回归**零失败**。
