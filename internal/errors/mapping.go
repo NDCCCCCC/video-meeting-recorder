@@ -46,12 +46,14 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		errors.Is(err, ErrTaskNotFound),
 		errors.Is(err, ErrVideoFileNotFound),
 		errors.Is(err, ErrUserNotFound),
-		errors.Is(err, ErrRoleNotFound):
+		errors.Is(err, ErrRoleNotFound),
+		errors.Is(err, ErrADAccountNotFound):
 		return http.StatusNotFound, respCodeNotFound, "资源不存在"
 	case errors.Is(err, ErrUnauthorized):
 		return http.StatusUnauthorized, respCodeUnauthorized, "未授权"
 	case errors.Is(err, ErrForbidden),
-		errors.Is(err, ErrSystemAdminProtected):
+		errors.Is(err, ErrSystemAdminProtected),
+		errors.Is(err, ErrUserDisabled):
 		return http.StatusForbidden, respCodeForbidden, "禁止访问"
 	case errors.Is(err, ErrInvalidInput),
 		errors.Is(err, ErrInvalidFileType):
@@ -65,7 +67,9 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		return http.StatusConflict, respCodeDuplicateRecord, "资源已存在或状态冲突"
 	case errors.Is(err, ErrInsufficientQuota):
 		return http.StatusTooManyRequests, respCodeTooManyRequests, "配额不足"
-	case errors.Is(err, ErrServiceUnavailable):
+	case errors.Is(err, ErrServiceUnavailable),
+		errors.Is(err, ErrADConfigError),
+		errors.Is(err, ErrADUnreachable):
 		return http.StatusServiceUnavailable, respCodeInternalError, "服务暂不可用"
 	case errors.Is(err, ErrFFmpegFailed),
 		errors.Is(err, ErrTranscriptionFailed),
@@ -115,12 +119,13 @@ func IsKnownError(err error) bool {
 	}
 	for _, sentinel := range []error{
 		ErrNotFound, ErrTaskNotFound, ErrVideoFileNotFound,
-		ErrUserNotFound, ErrRoleNotFound,
+		ErrUserNotFound, ErrRoleNotFound, ErrADAccountNotFound,
 		ErrUnauthorized, ErrForbidden, ErrInvalidInput, ErrInvalidFileType,
 		ErrAlreadyExists, ErrTaskInProgress, ErrUsernameExists, ErrEmailExists,
-		ErrSystemAdminProtected,
+		ErrSystemAdminProtected, ErrUserDisabled,
 		ErrInsufficientQuota,
-		ErrServiceUnavailable, ErrFFmpegFailed, ErrTranscriptionFailed,
+		ErrServiceUnavailable, ErrADConfigError, ErrADUnreachable,
+		ErrFFmpegFailed, ErrTranscriptionFailed,
 		ErrSplitFailed, ErrInternal,
 		ErrDuplicateRecord, ErrForeignKeyConstraint,
 	} {

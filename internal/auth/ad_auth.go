@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
@@ -63,7 +64,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	conn, err := a.connectAD()
 	if err != nil {
 		a.logger.Error("AD connection failed", zap.Error(err))
-		return nil, fmt.Errorf("无法连接到域控服务器，请检查网络和配置") // per D-18
+		return nil, fmt.Errorf("无法连接到域控服务器，请检查网络和配置: %w", apperrors.ErrADUnreachable) // per D-18, D6
 	}
 	// STYLE-008: nil 防御——connectAD 失败时 conn 为 nil，defer Close 会 panic
 	if conn != nil {
@@ -74,7 +75,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	err = conn.Bind(a.adConfig.BindDN, a.adConfig.Password)
 	if err != nil {
 		a.logger.Error("AD admin bind failed", zap.Error(err))
-		return nil, fmt.Errorf("域控管理员认证失败")
+		return nil, fmt.Errorf("域控管理员认证失败: %w", apperrors.ErrADConfigError)
 	}
 
 	// Step 3: Search for user DN (prevent LDAP injection - use EscapeFilter)
@@ -91,11 +92,11 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	sr, err := conn.Search(searchRequest)
 	if err != nil {
 		a.logger.Error("AD user search failed", zap.Error(err))
-		return nil, fmt.Errorf("搜索用户失败")
+		return nil, fmt.Errorf("搜索用户失败: %w", apperrors.ErrADUnreachable)
 	}
 
 	if len(sr.Entries) == 0 {
-		return nil, errors.New("域控账号不存在，请联系管理员确认") // per D-20
+		return nil, fmt.Errorf("域控账号不存在，请联系管理员确认: %w", apperrors.ErrADAccountNotFound) // per D-20, D6
 	}
 
 	userDN := sr.Entries[0].DN
@@ -103,32 +104,32 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 
 	// Step 4: Check if account is disabled
 	if adUser.IsDisabled() {
-		return nil, errors.New("域控账号已禁用")
+		return nil, fmt.Errorf("域控账号已禁用: %w", apperrors.ErrUserDisabled)
 	}
 
 	// Step 4.5: AD authentication requires SM4-encrypted password only (no plaintext support)
 	if !utils.IsEncryptedPassword(req.Password) {
 		a.logger.Warn("Plaintext password rejected for AD authentication", zap.String("username", req.Username))
-		return nil, errors.New("域控密码错误")
+		return nil, fmt.Errorf("域控密码错误: %w", apperrors.ErrUnauthorized)
 	}
 
 	// SM4 secret must be configured for AD authentication
 	if a.sm4Secret == "" {
 		a.logger.Error("SM4_SECRET not configured for AD authentication")
-		return nil, errors.New("系统配置错误")
+		return nil, fmt.Errorf("系统配置错误: %w", apperrors.ErrADConfigError)
 	}
 
 	// Validate SM4 secret configuration
 	if err := utils.ValidateSM4Secret(a.sm4Secret); err != nil {
 		a.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
-		return nil, errors.New("系统配置错误")
+		return nil, fmt.Errorf("系统配置错误: %w", apperrors.ErrADConfigError)
 	}
 
 	// Decrypt SM4 password
 	passwordForBind, err := utils.DecryptPasswordECB(req.Password, a.sm4Secret)
 	if err != nil {
 		a.logger.Warn("Failed to decrypt SM4 password", zap.String("username", req.Username))
-		return nil, errors.New("域控密码错误")
+		return nil, fmt.Errorf("域控密码错误: %w", apperrors.ErrUnauthorized)
 	}
 
 	a.logger.Debug("SM4 password decrypted for AD login", zap.String("username", req.Username))
@@ -137,7 +138,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	err = conn.Bind(userDN, passwordForBind)
 	if err != nil {
 		a.logger.Warn("AD user bind failed", zap.String("username", req.Username))
-		return nil, errors.New("域控密码错误") // per D-20
+		return nil, fmt.Errorf("域控密码错误: %w", apperrors.ErrUnauthorized) // per D-20, D6
 	}
 
 	// Step 6: Find or create local user (transparent mapping per D-06, D-08)
@@ -148,14 +149,16 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 		if IsADUserNotRegistered(err) {
 			return nil, err
 		}
-		return nil, errors.New("用户映射失败")
+		// Phase 19 D6: 保留底层 err 上下文（errors.Is 链上仍可分类），不再用
+		// errors.New("用户映射失败") 把它丢掉。
+		return nil, fmt.Errorf("用户映射失败: %w", err)
 	}
 
 	// Step 7: Generate token using existing token service
 	tokenPair, err := a.tokenService.GenerateTokenPair(localUser)
 	if err != nil {
 		a.logger.Error("AD token generation failed", zap.Error(err))
-		return nil, errors.New("登录失败，请稍后重试")
+		return nil, fmt.Errorf("登录失败，请稍后重试: %w", apperrors.ErrInternal)
 	}
 
 	// Step 8: Update last login times
@@ -281,7 +284,7 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 	err = a.db.Where("name = ?", models.RoleViewer).First(&defaultRole).Error
 	if err != nil {
 		a.logger.Error("Default viewer role not found", zap.Error(err))
-		return nil, fmt.Errorf("系统配置错误：默认角色不存在")
+		return nil, fmt.Errorf("默认角色不存在: %w", apperrors.ErrADConfigError)
 	}
 
 	// Create user first
@@ -331,13 +334,13 @@ func (a *ADAuthenticator) ValidateToken(token string) (*UserDTO, error) {
 	var user models.User
 	if err := a.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("用户不存在")
+			return nil, apperrors.ErrUserNotFound
 		}
 		return nil, err
 	}
 
 	if !user.IsActive {
-		return nil, errors.New("用户已被禁用")
+		return nil, apperrors.ErrUserDisabled
 	}
 
 	return a.toUserDTO(&user), nil
@@ -388,7 +391,7 @@ func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, erro
 	conn, err := a.connectAD()
 	if err != nil {
 		a.logger.Error("AD connection failed during lookup", zap.Error(err))
-		return nil, fmt.Errorf("无法连接到域控服务器")
+		return nil, fmt.Errorf("无法连接到域控服务器: %w", apperrors.ErrADUnreachable)
 	}
 	// STYLE-008: nil 防御——connectAD 失败时 conn 为 nil，defer Close 会 panic
 	if conn != nil {
@@ -399,7 +402,7 @@ func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, erro
 	err = conn.Bind(a.adConfig.BindDN, a.adConfig.Password)
 	if err != nil {
 		a.logger.Error("AD admin bind failed during lookup", zap.Error(err))
-		return nil, fmt.Errorf("域控管理员认证失败")
+		return nil, fmt.Errorf("域控管理员认证失败: %w", apperrors.ErrADConfigError)
 	}
 
 	// Search for user DN (prevent LDAP injection - use EscapeFilter)
@@ -416,7 +419,7 @@ func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, erro
 	sr, err := conn.Search(searchRequest)
 	if err != nil {
 		a.logger.Error("AD user search failed during lookup", zap.Error(err))
-		return nil, fmt.Errorf("搜索用户失败")
+		return nil, fmt.Errorf("搜索用户失败: %w", apperrors.ErrADUnreachable)
 	}
 
 	// Check if user was found

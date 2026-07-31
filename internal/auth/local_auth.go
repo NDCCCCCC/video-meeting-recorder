@@ -3,9 +3,11 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
@@ -53,10 +55,10 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			a.logger.Warn("Login failed: user not found", zap.String("username", req.Username))
 			a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "用户不存在")
-			return nil, errors.New("用户名或密码错误")
+			return nil, fmt.Errorf("用户名或密码错误: %w", apperrors.ErrUnauthorized)
 		}
 		a.logger.Error("Login failed: database error", zap.Error(err))
-		return nil, errors.New("登录失败，请稍后重试")
+		return nil, fmt.Errorf("登录失败，请稍后重试: %w", apperrors.ErrInternal)
 	}
 
 	// 2. 检查解密失败速率限制
@@ -73,7 +75,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 		if a.cfg.SM4Secret != "" {
 			if err := utils.ValidateSM4Secret(a.cfg.SM4Secret); err != nil {
 				a.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
-				return nil, errors.New("系统配置错误")
+				return nil, fmt.Errorf("系统配置错误: %w", apperrors.ErrADConfigError)
 			}
 		}
 	}
@@ -90,7 +92,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 
 			a.logger.Warn("Failed to decrypt password")
 			a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "密码解密失败")
-			return nil, errors.New("用户名或密码错误")
+			return nil, fmt.Errorf("用户名或密码错误: %w", apperrors.ErrUnauthorized)
 		}
 		passwordToCheck = decrypted
 		a.logger.Debug("Password decrypted for login")
@@ -104,7 +106,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 		}
 		a.logger.Warn("Login failed: invalid password", zap.String("username", req.Username))
 		a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "密码错误")
-		return nil, errors.New("用户名或密码错误")
+		return nil, fmt.Errorf("用户名或密码错误: %w", apperrors.ErrUnauthorized)
 	}
 
 	// 登录成功，清除失败记录
@@ -116,7 +118,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 	if !user.IsActive {
 		a.logger.Warn("Login failed: user inactive", zap.String("username", req.Username))
 		a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "用户已被禁用")
-		return nil, errors.New("用户已被禁用")
+		return nil, fmt.Errorf("用户已被禁用: %w", apperrors.ErrUserDisabled)
 	}
 
 	// 7. 检查IP限制
@@ -129,7 +131,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 	tokenPair, err := a.tokenService.GenerateTokenPair(&user)
 	if err != nil {
 		a.logger.Error("Login failed: token generation", zap.Error(err))
-		return nil, errors.New("登录失败，请稍后重试")
+		return nil, fmt.Errorf("登录失败，请稍后重试: %w", apperrors.ErrInternal)
 	}
 
 	// 9. 更新最后登录时间
@@ -183,13 +185,13 @@ func (a *LocalAuthenticator) ValidateToken(token string) (*UserDTO, error) {
 	var user models.User
 	if err := a.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("用户不存在")
+			return nil, apperrors.ErrUserNotFound
 		}
 		return nil, err
 	}
 
 	if !user.IsActive {
-		return nil, errors.New("用户已被禁用")
+		return nil, apperrors.ErrUserDisabled
 	}
 
 	return a.toUserDTO(&user), nil
@@ -257,7 +259,7 @@ func (a *LocalAuthenticator) checkIPRestrictions(ctx context.Context, user *mode
 				ErrorMsg:  "您的IP地址不在允许列表中",
 			})
 		}
-		return errors.New("您的IP地址不在允许列表中")
+		return fmt.Errorf("您的IP地址不在允许列表中: %w", apperrors.ErrForbidden)
 	}
 
 	return nil

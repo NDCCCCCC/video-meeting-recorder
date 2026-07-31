@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -37,6 +38,43 @@ func TestClassifyAuthLoginError(t *testing.T) {
 			err:        fmt.Errorf("用户映射失败: %w", auth.ErrADUserNotRegistered),
 			wantCode:   response.CodeForbidden,
 			wantStatus: http.StatusForbidden,
+		},
+		// Phase 19 D6: new sentinel coverage added by classifying all auth-chain errors.
+		{
+			name:       "AD account not found maps to 404",
+			err:        apperrors.ErrADAccountNotFound,
+			wantCode:   response.CodeNotFound,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "user disabled maps to 403",
+			err:        apperrors.ErrUserDisabled,
+			wantCode:   response.CodeForbidden,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "invalid credentials map to 401",
+			err:        apperrors.ErrUnauthorized,
+			wantCode:   response.CodeUnauthorized,
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "AD configuration error maps to 500",
+			err:        apperrors.ErrADConfigError,
+			wantCode:   response.CodeInternalError,
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:       "AD unreachable maps to 500",
+			err:        apperrors.ErrADUnreachable,
+			wantCode:   response.CodeInternalError,
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:       "wrapped ErrUnauthorized via fmt.Errorf maps to 401",
+			err:        fmt.Errorf("登录失败: %w", apperrors.ErrUnauthorized),
+			wantCode:   response.CodeUnauthorized,
+			wantStatus: http.StatusUnauthorized,
 		},
 	}
 
