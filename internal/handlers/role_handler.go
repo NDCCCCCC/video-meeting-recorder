@@ -52,7 +52,7 @@ func (h *RoleHandler) ListRoles(c *gin.Context) {
 		req.PageSize = 20
 	}
 
-	result, err := h.roleService.ListRoles(&req)
+	result, err := h.roleService.ListRoles(c.Request.Context(), &req)
 	if err != nil {
 		h.logger.Error("Failed to list roles", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取角色列表失败")
@@ -77,7 +77,7 @@ func (h *RoleHandler) GetRole(c *gin.Context) {
 		return
 	}
 
-	role, err := h.roleService.GetRoleByID(id)
+	role, err := h.roleService.GetRoleByID(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "角色不存在")
 		return
@@ -103,7 +103,7 @@ func (h *RoleHandler) CreateRole(c *gin.Context) {
 		return
 	}
 
-	role, err := h.roleService.CreateRole(&req)
+	role, err := h.roleService.CreateRole(c.Request.Context(), &req)
 	if err != nil {
 		response.GinError(c, response.CodeDuplicateRecord, err.Error())
 		return
@@ -137,7 +137,7 @@ func (h *RoleHandler) UpdateRole(c *gin.Context) {
 		return
 	}
 
-	oldRole, role, err := h.roleService.UpdateRole(id, &req)
+	oldRole, role, err := h.roleService.UpdateRole(c.Request.Context(), id, &req)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -174,7 +174,7 @@ func (h *RoleHandler) DeleteRole(c *gin.Context) {
 		return
 	}
 
-	oldRole, _, err := h.roleService.DeleteRole(id)
+	oldRole, _, err := h.roleService.DeleteRole(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -211,7 +211,7 @@ func (h *RoleHandler) GetRolePermissions(c *gin.Context) {
 		return
 	}
 
-	permissions, err := h.roleService.GetRolePermissions(id)
+	permissions, err := h.roleService.GetRolePermissions(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, err.Error())
 		return
@@ -243,7 +243,7 @@ func (h *RoleHandler) AssignPermissions(c *gin.Context) {
 		return
 	}
 
-	oldPermissions, newPermissions, err := h.roleService.AssignPermissions(id, &req)
+	oldPermissions, newPermissions, err := h.roleService.AssignPermissions(c.Request.Context(), id, &req)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -273,7 +273,7 @@ func (h *RoleHandler) AssignPermissions(c *gin.Context) {
 // @Success 200 {object} response.Response{data=[]models.Permission}
 // @Router /api/v1/permissions [get]
 func (h *RoleHandler) GetAllPermissions(c *gin.Context) {
-	permissions, err := h.roleService.GetAllPermissions()
+	permissions, err := h.roleService.GetAllPermissions(c.Request.Context())
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "获取权限列表失败")
 		return

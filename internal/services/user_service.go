@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -66,11 +67,11 @@ type AssignRolesRequest struct {
 }
 
 // ListUsers 获取用户列表
-func (s *UserService) ListUsers(req *ListUsersRequest) (*ListUsersResponse, error) {
+func (s *UserService) ListUsers(ctx context.Context, req *ListUsersRequest) (*ListUsersResponse, error) {
 	var users []models.User
 	var total int64
 
-	query := s.db.Model(&models.User{})
+	query := s.db.WithContext(ctx).Model(&models.User{})
 
 	// 关键词搜索
 	if req.Keyword != "" {
@@ -105,25 +106,25 @@ func (s *UserService) ListUsers(req *ListUsersRequest) (*ListUsersResponse, erro
 }
 
 // GetUserByID 根据ID获取用户
-func (s *UserService) GetUserByID(id uint) (*models.User, error) {
+func (s *UserService) GetUserByID(ctx context.Context, id uint) (*models.User, error) {
 	var user models.User
-	if err := s.db.Preload("Roles").First(&user, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Roles").First(&user, id).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
 }
 
 // CreateUser 创建用户
-func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
+func (s *UserService) CreateUser(ctx context.Context, req *CreateUserRequest) (*models.User, error) {
 	// 检查用户名是否存在
 	var existing models.User
-	if err := s.db.Where("username = ?", req.Username).First(&existing).Error; err == nil {
+	if err := s.db.WithContext(ctx).Where("username = ?", req.Username).First(&existing).Error; err == nil {
 		return nil, errors.New("用户名已存在")
 	}
 
 	// 检查邮箱是否存在
 	if req.Email != "" {
-		if err := s.db.Where("email = ?", req.Email).First(&existing).Error; err == nil {
+		if err := s.db.WithContext(ctx).Where("email = ?", req.Email).First(&existing).Error; err == nil {
 			return nil, errors.New("邮箱已被使用")
 		}
 	}
@@ -140,7 +141,7 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 		return nil, err
 	}
 
-	if err := s.db.Create(user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(user).Error; err != nil {
 		return nil, err
 	}
 
@@ -148,7 +149,7 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 	if len(req.RoleIDs) > 0 {
 		// 验证角色ID是否存在
 		var roles []models.Role
-		if err := s.db.Find(&roles, req.RoleIDs).Error; err != nil {
+		if err := s.db.WithContext(ctx).Find(&roles, req.RoleIDs).Error; err != nil {
 			return nil, err
 		}
 		if len(roles) != len(req.RoleIDs) {
@@ -156,7 +157,7 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 		}
 
 		// 使用 AssignRoles 分配角色
-		if err := s.AssignRoles(user.ID, &AssignRolesRequest{
+		if err := s.AssignRoles(ctx, user.ID, &AssignRolesRequest{
 			RoleIDs:       req.RoleIDs,
 			CurrentUserID: 0, // 系统创建
 		}); err != nil {
@@ -169,21 +170,21 @@ func (s *UserService) CreateUser(req *CreateUserRequest) (*models.User, error) {
 		if err := user.SetAllowedIPs(req.AllowedIPs); err != nil {
 			return nil, err
 		}
-		if err := s.db.Save(user).Error; err != nil {
+		if err := s.db.WithContext(ctx).Save(user).Error; err != nil {
 			return nil, err
 		}
 	}
 
 	// 重新加载用户信息
-	s.db.Preload("Roles").First(user, user.ID)
+	s.db.WithContext(ctx).Preload("Roles").First(user, user.ID)
 
 	return user, nil
 }
 
 // UpdateUser 更新用户
-func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID uint) (*models.User, *models.User, error) {
+func (s *UserService) UpdateUser(ctx context.Context, id uint, req *UpdateUserRequest, currentUserID uint) (*models.User, *models.User, error) {
 	var user models.User
-	if err := s.db.Preload("Roles").First(&user, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Roles").First(&user, id).Error; err != nil {
 		return nil, nil, errors.New("用户不存在")
 	}
 	oldUser := user
@@ -191,7 +192,7 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID 
 	// 检查邮箱是否被其他用户使用
 	if req.Email != "" && req.Email != user.Email {
 		var existing models.User
-		if err := s.db.Where("email = ? AND id != ?", req.Email, id).First(&existing).Error; err == nil {
+		if err := s.db.WithContext(ctx).Where("email = ? AND id != ?", req.Email, id).First(&existing).Error; err == nil {
 			return nil, nil, errors.New("邮箱已被其他用户使用")
 		}
 		user.Email = req.Email
@@ -199,7 +200,7 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID 
 
 	// 更新角色
 	if len(req.RoleIDs) > 0 {
-		if err := s.UpdateRoles(id, req.RoleIDs, currentUserID); err != nil {
+		if err := s.UpdateRoles(ctx, id, req.RoleIDs, currentUserID); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -218,12 +219,12 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID 
 		return nil, nil, err
 	}
 
-	if err := s.db.Save(&user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
 		return nil, nil, err
 	}
 
 	// 重新加载用户信息
-	if err := s.db.Preload("Roles").First(&user, user.ID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Roles").First(&user, user.ID).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -231,19 +232,19 @@ func (s *UserService) UpdateUser(id uint, req *UpdateUserRequest, currentUserID 
 }
 
 // DeleteUser 删除用户
-func (s *UserService) DeleteUser(id uint) (*models.User, *models.User, error) {
+func (s *UserService) DeleteUser(ctx context.Context, id uint) (*models.User, *models.User, error) {
 	// 不允许删除ID为1的管理员
 	if id == 1 {
 		return nil, nil, errors.New("不允许删除系统管理员")
 	}
 
 	var user models.User
-	if err := s.db.Preload("Roles").First(&user, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Roles").First(&user, id).Error; err != nil {
 		return nil, nil, errors.New("用户不存在")
 	}
 	oldUser := user
 
-	result := s.db.Delete(&user)
+	result := s.db.WithContext(ctx).Delete(&user)
 	if result.Error != nil {
 		return nil, nil, result.Error
 	}
@@ -255,9 +256,9 @@ func (s *UserService) DeleteUser(id uint) (*models.User, *models.User, error) {
 }
 
 // ResetPassword 重置用户密码
-func (s *UserService) ResetPassword(id uint, newPassword string) (map[string]interface{}, map[string]interface{}, error) {
+func (s *UserService) ResetPassword(ctx context.Context, id uint, newPassword string) (map[string]interface{}, map[string]interface{}, error) {
 	var user models.User
-	if err := s.db.First(&user, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&user, id).Error; err != nil {
 		return nil, nil, errors.New("用户不存在")
 	}
 
@@ -271,7 +272,7 @@ func (s *UserService) ResetPassword(id uint, newPassword string) (map[string]int
 	if err := user.SetPassword(newPassword); err != nil {
 		return nil, nil, err
 	}
-	if err := s.db.Save(&user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -285,9 +286,9 @@ func (s *UserService) ResetPassword(id uint, newPassword string) (map[string]int
 }
 
 // ToggleUserStatus 切换用户状态
-func (s *UserService) ToggleUserStatus(id uint) (*models.User, error) {
+func (s *UserService) ToggleUserStatus(ctx context.Context, id uint) (*models.User, error) {
 	var user models.User
-	if err := s.db.First(&user, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&user, id).Error; err != nil {
 		return nil, errors.New("用户不存在")
 	}
 
@@ -297,7 +298,7 @@ func (s *UserService) ToggleUserStatus(id uint) (*models.User, error) {
 	}
 
 	user.IsActive = !user.IsActive
-	if err := s.db.Save(&user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
 		return nil, err
 	}
 
@@ -305,15 +306,15 @@ func (s *UserService) ToggleUserStatus(id uint) (*models.User, error) {
 }
 
 // AssignRoles 分配多个角色给用户
-func (s *UserService) AssignRoles(userID uint, req *AssignRolesRequest) error {
+func (s *UserService) AssignRoles(ctx context.Context, userID uint, req *AssignRolesRequest) error {
 	var user models.User
-	if err := s.db.First(&user, userID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
 		return errors.New("用户不存在")
 	}
 
 	// 验证角色ID是否存在
 	var roles []models.Role
-	if err := s.db.Find(&roles, req.RoleIDs).Error; err != nil {
+	if err := s.db.WithContext(ctx).Find(&roles, req.RoleIDs).Error; err != nil {
 		return err
 	}
 	if len(roles) != len(req.RoleIDs) {
@@ -321,11 +322,11 @@ func (s *UserService) AssignRoles(userID uint, req *AssignRolesRequest) error {
 	}
 
 	// 使用 Clear + Append 方式（参考 RoleService.AssignPermissions）
-	if err := s.db.Model(&user).Association("Roles").Clear(); err != nil {
+	if err := s.db.WithContext(ctx).Model(&user).Association("Roles").Clear(); err != nil {
 		return err
 	}
 
-	if err := s.db.Model(&user).Association("Roles").Append(roles); err != nil {
+	if err := s.db.WithContext(ctx).Model(&user).Association("Roles").Append(roles); err != nil {
 		return err
 	}
 
@@ -333,9 +334,9 @@ func (s *UserService) AssignRoles(userID uint, req *AssignRolesRequest) error {
 }
 
 // UpdateRoles 更新用户角色（带审计日志）
-func (s *UserService) UpdateRoles(userID uint, roleIDs []uint, currentUserID uint) error {
+func (s *UserService) UpdateRoles(ctx context.Context, userID uint, roleIDs []uint, currentUserID uint) error {
 	var user models.User
-	if err := s.db.Preload("Roles").First(&user, userID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Roles").First(&user, userID).Error; err != nil {
 		return errors.New("用户不存在")
 	}
 
@@ -345,7 +346,7 @@ func (s *UserService) UpdateRoles(userID uint, roleIDs []uint, currentUserID uin
 		CurrentUserID: currentUserID,
 	}
 
-	if err := s.AssignRoles(userID, req); err != nil {
+	if err := s.AssignRoles(ctx, userID, req); err != nil {
 		return err
 	}
 

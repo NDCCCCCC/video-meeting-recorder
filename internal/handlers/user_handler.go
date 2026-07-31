@@ -55,7 +55,7 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 		req.PageSize = 20
 	}
 
-	result, err := h.userService.ListUsers(&req)
+	result, err := h.userService.ListUsers(c.Request.Context(), &req)
 	if err != nil {
 		h.logger.Error("Failed to list users", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取用户列表失败")
@@ -80,7 +80,7 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.GetUserByID(id)
+	user, err := h.userService.GetUserByID(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "用户不存在")
 		return
@@ -106,7 +106,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.CreateUser(&req)
+	user, err := h.userService.CreateUser(c.Request.Context(), &req)
 	if err != nil {
 		response.GinError(c, response.CodeDuplicateRecord, err.Error())
 		return
@@ -147,7 +147,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	oldUser, user, err := h.userService.UpdateUser(id, &req, currentUserID)
+	oldUser, user, err := h.userService.UpdateUser(c.Request.Context(), id, &req, currentUserID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -184,7 +184,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	oldUser, _, err := h.userService.DeleteUser(id)
+	oldUser, _, err := h.userService.DeleteUser(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -231,7 +231,7 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	oldSnapshot, newSnapshot, err := h.userService.ResetPassword(id, req.Password)
+	oldSnapshot, newSnapshot, err := h.userService.ResetPassword(c.Request.Context(), id, req.Password)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -268,7 +268,7 @@ func (h *UserHandler) ToggleUserStatus(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.ToggleUserStatus(id)
+	user, err := h.userService.ToggleUserStatus(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -286,7 +286,7 @@ func (h *UserHandler) GetCurrentProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.GetUserByID(userID)
+	user, err := h.userService.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "用户不存在")
 		return
@@ -318,7 +318,7 @@ func (h *UserHandler) UpdateCurrentProfile(c *gin.Context) {
 		FullName: req.FullName,
 	}
 
-	_, user, err := h.userService.UpdateUser(userID, updateReq, userID)
+	_, user, err := h.userService.UpdateUser(c.Request.Context(), userID, updateReq, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return

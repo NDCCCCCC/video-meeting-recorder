@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -54,11 +55,11 @@ type AssignPermissionsRequest struct {
 }
 
 // ListRoles 获取角色列表
-func (s *RoleService) ListRoles(req *ListRolesRequest) (*ListRolesResponse, error) {
+func (s *RoleService) ListRoles(ctx context.Context, req *ListRolesRequest) (*ListRolesResponse, error) {
 	var roles []models.Role
 	var total int64
 
-	query := s.db.Model(&models.Role{})
+	query := s.db.WithContext(ctx).Model(&models.Role{})
 
 	// 关键词搜索
 	if req.Keyword != "" {
@@ -89,19 +90,19 @@ func (s *RoleService) ListRoles(req *ListRolesRequest) (*ListRolesResponse, erro
 }
 
 // GetRoleByID 根据ID获取角色
-func (s *RoleService) GetRoleByID(id uint) (*models.Role, error) {
+func (s *RoleService) GetRoleByID(ctx context.Context, id uint) (*models.Role, error) {
 	var role models.Role
-	if err := s.db.Preload("Permissions").First(&role, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, id).Error; err != nil {
 		return nil, err
 	}
 	return &role, nil
 }
 
 // CreateRole 创建角色
-func (s *RoleService) CreateRole(req *CreateRoleRequest) (*models.Role, error) {
+func (s *RoleService) CreateRole(ctx context.Context, req *CreateRoleRequest) (*models.Role, error) {
 	// 检查角色名是否存在
 	var existing models.Role
-	if err := s.db.Where("name = ?", req.Name).First(&existing).Error; err == nil {
+	if err := s.db.WithContext(ctx).Where("name = ?", req.Name).First(&existing).Error; err == nil {
 		return nil, errors.New("角色名称已存在")
 	}
 
@@ -118,7 +119,7 @@ func (s *RoleService) CreateRole(req *CreateRoleRequest) (*models.Role, error) {
 		}
 	}
 
-	if err := s.db.Create(role).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(role).Error; err != nil {
 		return nil, err
 	}
 
@@ -126,9 +127,9 @@ func (s *RoleService) CreateRole(req *CreateRoleRequest) (*models.Role, error) {
 }
 
 // UpdateRole 更新角色
-func (s *RoleService) UpdateRole(id uint, req *UpdateRoleRequest) (*models.Role, *models.Role, error) {
+func (s *RoleService) UpdateRole(ctx context.Context, id uint, req *UpdateRoleRequest) (*models.Role, *models.Role, error) {
 	var role models.Role
-	if err := s.db.Preload("Permissions").First(&role, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, id).Error; err != nil {
 		return nil, nil, errors.New("角色不存在")
 	}
 	oldRole := role
@@ -143,10 +144,10 @@ func (s *RoleService) UpdateRole(id uint, req *UpdateRoleRequest) (*models.Role,
 		return nil, nil, err
 	}
 
-	if err := s.db.Save(&role).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&role).Error; err != nil {
 		return nil, nil, err
 	}
-	if err := s.db.Preload("Permissions").First(&role, role.ID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, role.ID).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -154,28 +155,28 @@ func (s *RoleService) UpdateRole(id uint, req *UpdateRoleRequest) (*models.Role,
 }
 
 // DeleteRole 删除角色
-func (s *RoleService) DeleteRole(id uint) (*models.Role, *models.Role, error) {
+func (s *RoleService) DeleteRole(ctx context.Context, id uint) (*models.Role, *models.Role, error) {
 	// 不允许删除ID为1-4的默认角色
 	if id <= 4 {
 		return nil, nil, errors.New("不允许删除系统默认角色")
 	}
 
 	var role models.Role
-	if err := s.db.Preload("Permissions").First(&role, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, id).Error; err != nil {
 		return nil, nil, errors.New("角色不存在")
 	}
 	oldRole := role
 
 	// 检查是否有用户使用该角色
 	var count int64
-	if err := s.db.Model(&models.User{}).Where("role_id = ?", id).Count(&count).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&models.User{}).Where("role_id = ?", id).Count(&count).Error; err != nil {
 		return nil, nil, err
 	}
 	if count > 0 {
 		return nil, nil, errors.New("该角色正在被使用，无法删除")
 	}
 
-	result := s.db.Delete(&role)
+	result := s.db.WithContext(ctx).Delete(&role)
 	if result.Error != nil {
 		return nil, nil, result.Error
 	}
@@ -187,16 +188,16 @@ func (s *RoleService) DeleteRole(id uint) (*models.Role, *models.Role, error) {
 }
 
 // AssignPermissions 分配权限
-func (s *RoleService) AssignPermissions(roleID uint, req *AssignPermissionsRequest) ([]models.Permission, []models.Permission, error) {
+func (s *RoleService) AssignPermissions(ctx context.Context, roleID uint, req *AssignPermissionsRequest) ([]models.Permission, []models.Permission, error) {
 	var role models.Role
-	if err := s.db.Preload("Permissions").First(&role, roleID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, roleID).Error; err != nil {
 		return nil, nil, errors.New("角色不存在")
 	}
 	oldPermissions := append([]models.Permission(nil), role.Permissions...)
 
 	// 验证权限ID是否存在
 	var permissions []models.Permission
-	if err := s.db.Limit(1000).Find(&permissions, req.PermissionIDs).Error; err != nil {
+	if err := s.db.WithContext(ctx).Limit(1000).Find(&permissions, req.PermissionIDs).Error; err != nil {
 		return nil, nil, err
 	}
 	if len(permissions) != len(req.PermissionIDs) {
@@ -205,12 +206,12 @@ func (s *RoleService) AssignPermissions(roleID uint, req *AssignPermissionsReque
 
 	// 使用 Clear + Append 方式来避免 Replace 的潜在问题
 	// 先清除现有权限关联
-	if err := s.db.Model(&role).Association("Permissions").Clear(); err != nil {
+	if err := s.db.WithContext(ctx).Model(&role).Association("Permissions").Clear(); err != nil {
 		return nil, nil, err
 	}
 
 	// 再添加新的权限关联
-	if err := s.db.Model(&role).Association("Permissions").Append(permissions); err != nil {
+	if err := s.db.WithContext(ctx).Model(&role).Association("Permissions").Append(permissions); err != nil {
 		return nil, nil, err
 	}
 
@@ -218,9 +219,9 @@ func (s *RoleService) AssignPermissions(roleID uint, req *AssignPermissionsReque
 }
 
 // GetRolePermissions 获取角色权限列表
-func (s *RoleService) GetRolePermissions(roleID uint) ([]models.Permission, error) {
+func (s *RoleService) GetRolePermissions(ctx context.Context, roleID uint) ([]models.Permission, error) {
 	var role models.Role
-	if err := s.db.Preload("Permissions").First(&role, roleID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Permissions").First(&role, roleID).Error; err != nil {
 		return nil, errors.New("角色不存在")
 	}
 
@@ -228,10 +229,10 @@ func (s *RoleService) GetRolePermissions(roleID uint) ([]models.Permission, erro
 }
 
 // GetAllPermissions 获取所有权限
-func (s *RoleService) GetAllPermissions() ([]models.Permission, error) {
+func (s *RoleService) GetAllPermissions(ctx context.Context) ([]models.Permission, error) {
 	var permissions []models.Permission
 	// PERF-002: 列表查询加 Limit 上限。
-	if err := s.db.Order("resource, action").Limit(1000).Find(&permissions).Error; err != nil {
+	if err := s.db.WithContext(ctx).Order("resource, action").Limit(1000).Find(&permissions).Error; err != nil {
 		return nil, err
 	}
 	return permissions, nil
