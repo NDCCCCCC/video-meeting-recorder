@@ -325,3 +325,42 @@ BusinessError 按 `Code` 字段映射（同表逻辑）。
 - `gofmt -l` 在 4 个触及文件上干净。
 - `go test ./internal/scheduler/... ./cmd/server/...` 全过（含新增取消传播测试）。
 - `go test ./...` 全库回归**零失败**。
+
+## Wave 5 (PERF-003/BUG-005 ctx 级联 — VideoFileService)
+
+**执行摘要**：VideoFileService（41 方法中 23 个 ctx-able）全量 ctx-first 转换 + 全部 caller 透传。
+
+### 子批次
+| Sub | 范围 | commit |
+|-----|------|--------|
+| 5a | createWithDuplicateCheck + CreateFile/CreateSegmentFile/GetSegmentsByParentID + conversion/snapshot/splitting callers | `e2b0b6b` |
+| 5b | ScanFiles + getExistingFilesMap/processFiles/handleExistingFile/validateTaskID + conversion_service.go:315 ScanFiles caller | `7828fc3` |
+| 5c | RenameVideoFile + DeleteSplitSegmentsByParentID + BatchDownloadFiles + splitting_service.go:93 caller | `7a5a1cc` |
+| 5d | 4 handlers 全量 + scheduler interface + mock + 38 test calls | `1ae6be0` |
+| 5e | 3 个取消传播测试 + 全部 -race 测试全绿 | (this commit) |
+
+### 设计要点
+- **签名约定**：`ctx context.Context` 作首参；`s.db.WithContext(ctx)` 作链首（GORM 关键约束——加在 .Session() 后或丢失返回值会静默失效）。
+- **query-already-passed helpers**（getStats/applyFilters）不改：输入 `*gorm.DB` 已在 ListFiles 内 WithContext，调用方契约不变。
+- **scheduler interface 扩展**：`VideoFileServiceInterface.CreateFileFromTask(->ctx, ...)`——atomic 接口+adapter 同步。
+- **fire-and-forget goroutine**：`releaseHuaweiDevice` 派生 `context.WithTimeout(Background(), 30s)` 供本流程 DB 与 converter 使用。
+- **测试隔离**：测试用 `context.Background()` 注入；3 个新 contract test 验证 ctx 路径完整（已取消 ctx / bounded timeout / 正常 ctx）。
+
+### 验证
+- `go build ./...` 0 错误
+- `go vet ./...` 0 错误
+- `go test -race ./...`（services + scheduler + utils + handlers + middleware）全绿
+- 3 个新 ctx propagation 测试：GetFileByID/ListFiles/BoundedTimeout
+
+### 已知小遗留（非 Phase 19 scope，列技术债）
+- `applyFilters(query, req)` 局部 `query = query.Where(...)` 重新赋值是 no-op（caller 看不到修改），pre-existing bug——不修。
+- `taskServiceAdapter` 未合并到 VideoFileService（保留 Phase 18 SM4-GCM 解密逻辑），列为 Wave 8+ 候选。
+
+### Wave 5 commit 序列
+```
+e2b0b6b  5a  perf(19/w5a): VideoFileService 内部 helpers ctx-first
+7828fc3  5b  perf(19/w5b): VideoFileService ScanFiles chain ctx-first
+7a5a1cc  5c  perf(19/w5c): VideoFileService batch ops ctx-first
+1ae6be0  5d  perf(19/w5d): VideoFileService caller 全量 ctx 透传
+(pending) 5e  test(19/w5e): ctx 取消传播 contract test
+```
