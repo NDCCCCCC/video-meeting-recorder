@@ -24,7 +24,7 @@ func newMockVideoFileService() *mockVideoFileService {
 	return &mockVideoFileService{}
 }
 
-func (m *mockVideoFileService) CreateFileFromTask(task *models.VideoRecordingTask, format *string) (*models.VideoFile, error) {
+func (m *mockVideoFileService) CreateFileFromTask(ctx context.Context, task *models.VideoRecordingTask, format *string) (*models.VideoFile, error) {
 	// 处理 format 参数：如果为 nil 或空字符串，使用默认值 "mp4"
 	formatStr := "mp4"
 	if format != nil && *format != "" {

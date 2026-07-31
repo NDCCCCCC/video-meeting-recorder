@@ -87,7 +87,7 @@ func (h *TranscriptionHandler) SubmitTranscription(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(uint(id))
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "视频文件不存在")
 		return
@@ -125,7 +125,7 @@ func (h *TranscriptionHandler) GetTranscriptionStatus(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(uint(id))
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -168,7 +168,7 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(uint(id))
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -309,7 +309,7 @@ func (h *TranscriptionHandler) GetTimestampMapHandler(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(videoFileID)
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(),videoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -396,7 +396,7 @@ func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
 						zap.Any("recover", r), zap.Stack("stack"))
 				}
 			}()
-			file, err := h.videoFileService.GetFileByID(id)
+			file, err := h.videoFileService.GetFileByID(c.Request.Context(),id)
 			if err != nil {
 				checkMu.Lock()
 				if checkErr == "" {

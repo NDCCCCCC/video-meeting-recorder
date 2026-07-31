@@ -65,7 +65,7 @@ func (h *PPThandler) verifyPPTOwnership(c *gin.Context, pptFile *models.PPTFile)
 		return fmt.Errorf("PPT文件没有关联视频")
 	}
 
-	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),*pptFile.SourceVideoFileID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("关联视频不存在")
@@ -179,7 +179,7 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 	isAdmin := middleware.GetIsAdmin(c)
 	roleIDs := middleware.GetRoleIDs(c)
 
-	videoFile, err := h.videoFileService.GetFileByID(uint(id))
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -253,7 +253,7 @@ func (h *PPThandler) BatchGetPptsByVideos(c *gin.Context) {
 		}
 
 		// 权限检查
-		videoFile, err := h.videoFileService.GetFileByID(videoID)
+		videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),videoID)
 		if err != nil {
 			results[videoID] = gin.H{
 				"has_ppt": false,
@@ -346,7 +346,7 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 	}
 
 	// Load video file to check ownership
-	videoFile, err := h.videoFileService.GetFileByID(req.VideoFileID)
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),req.VideoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -403,7 +403,7 @@ func (h *PPThandler) DownloadPPT(c *gin.Context) {
 	// Determine download filename - use video name if available
 	downloadFilename := pptFile.FileName
 	if pptFile.SourceVideoFileID != nil {
-		videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+		videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),*pptFile.SourceVideoFileID)
 		if err == nil && videoFile != nil {
 			// Use video filename without extension + .pptx
 			videoName := strings.TrimSuffix(videoFile.FileName, filepath.Ext(videoFile.FileName))
@@ -824,7 +824,7 @@ func (h *PPThandler) CaptureFrameHandler(c *gin.Context) {
 		return
 	}
 
-	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),*pptFile.SourceVideoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "关联视频不存在")
 		return
@@ -981,7 +981,7 @@ func (h *PPThandler) CapturedPreviewHandler(c *gin.Context) {
 		return
 	}
 
-	videoFile, err := h.videoFileService.GetFileByID(*pptFile.SourceVideoFileID)
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),*pptFile.SourceVideoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "关联视频不存在")
 		return

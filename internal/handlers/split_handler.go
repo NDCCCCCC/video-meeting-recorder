@@ -70,7 +70,7 @@ func (h *SplitHandler) SubmitSplit(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(uint(id))
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "视频文件不存在")
 		return
@@ -140,7 +140,7 @@ func (h *SplitHandler) GetSplitStatus(c *gin.Context) {
 	// If completed or empty, also return segment list
 	result := gin.H{"status": status}
 	if status == "completed" || status == "" {
-		segments, _ := h.videoFileService.GetSegmentsByParentID(uint(id))
+		segments, _ := h.videoFileService.GetSegmentsByParentID(c.Request.Context(),uint(id))
 		result["segments"] = segments
 	}
 
@@ -156,7 +156,7 @@ func (h *SplitHandler) GetSegments(c *gin.Context) {
 		return
 	}
 
-	segments, err := h.videoFileService.GetSegmentsByParentID(uint(id))
+	segments, err := h.videoFileService.GetSegmentsByParentID(c.Request.Context(),uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "获取分割段落失败")
 		return

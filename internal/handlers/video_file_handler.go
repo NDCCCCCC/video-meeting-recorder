@@ -65,7 +65,7 @@ func (h *VideoFileHandler) ListFiles(c *gin.Context) {
 	req.ApplyDataScope = true
 	req.RoleIDs = middleware.GetRoleIDs(c)
 
-	result, err := h.fileService.ListFiles(&req)
+	result, err := h.fileService.ListFiles(c.Request.Context(), &req)
 	if err != nil {
 		h.logger.Error("获取文件列表失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取文件列表失败")
@@ -83,7 +83,7 @@ func (h *VideoFileHandler) GetFile(c *gin.Context) {
 		return
 	}
 
-	file, err := h.fileService.GetFileByID(id)
+	file, err := h.fileService.GetFileByID(c.Request.Context(),id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "文件不存在")
 		return
@@ -102,7 +102,7 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 
 	// 注意：token 验证由 SM4Auth 中间件处理（支持 Authorization 头和 token 查询参数）
 
-	file, err := h.fileService.GetFileByID(id)
+	file, err := h.fileService.GetFileByID(c.Request.Context(),id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "文件不存在")
 		return
@@ -192,7 +192,7 @@ func (h *VideoFileHandler) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	oldFile, err := h.fileService.DeleteFile(id)
+	oldFile, err := h.fileService.DeleteFile(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -228,7 +228,7 @@ func (h *VideoFileHandler) BatchDeleteFiles(c *gin.Context) {
 		return
 	}
 
-	oldFiles, result, err := h.fileService.BatchDeleteFiles(req.IDs)
+	oldFiles, result, err := h.fileService.BatchDeleteFiles(c.Request.Context(), req.IDs)
 	if err != nil {
 		h.logger.Error("批量删除文件失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "批量删除失败")
@@ -271,7 +271,7 @@ func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
 	// 获取格式参数，默认只统计 mp4
 	format := c.DefaultQuery("format", "mp4")
 
-	stats, err := h.fileService.GetFileStats(format)
+	stats, err := h.fileService.GetFileStats(c.Request.Context(), format)
 	if err != nil {
 		h.logger.Error("获取统计信息失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取统计信息失败")
@@ -283,7 +283,7 @@ func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
 
 // ScanFiles 扫描并导入未入库的视频文件
 func (h *VideoFileHandler) ScanFiles(c *gin.Context) {
-	result, err := h.fileService.ScanFiles()
+	result, err := h.fileService.ScanFiles(c.Request.Context())
 	if err != nil {
 		h.logger.Error("扫描文件失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "扫描文件失败")
@@ -333,7 +333,7 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 	}
 
 	// Load file to check ownership
-	file, err := h.fileService.GetFileByID(id)
+	file, err := h.fileService.GetFileByID(c.Request.Context(),id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "文件不存在")
 		return
@@ -347,7 +347,7 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 
 	// Call service to rename
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
-	if err := h.fileService.RenameVideoFile(id, newName, userID, hasSharedViewer); err != nil {
+	if err := h.fileService.RenameVideoFile(c.Request.Context(), id, newName, userID, hasSharedViewer); err != nil {
 		h.logger.Warn("重命名视频文件失败",
 			zap.Uint("file_id", id),
 			zap.String("new_name", newName),
@@ -370,7 +370,7 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 	}
 
 	// Get updated file info
-	file, err = h.fileService.GetFileByID(id)
+	file, err = h.fileService.GetFileByID(c.Request.Context(),id)
 	if err != nil {
 		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err))
 		response.GinSuccess(c, gin.H{
@@ -410,7 +410,7 @@ func (h *VideoFileHandler) BatchDownloadFiles(c *gin.Context) {
 	isAdmin := middleware.GetIsAdmin(c)
 
 	// 调用服务层
-	resp, err := h.fileService.BatchDownloadFiles(req.IDs, userID, isAdmin)
+	resp, err := h.fileService.BatchDownloadFiles(c.Request.Context(), req.IDs, userID, isAdmin)
 	if err != nil {
 		h.logger.Error("批量下载文件失败",
 			zap.Uint("user_id", userID),

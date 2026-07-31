@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -102,7 +103,7 @@ func TestCreateFileFromTask(t *testing.T) {
 
 		// 创建文件记录
 		mkv := "mkv"
-		file, err := service.CreateFileFromTask(task, &mkv)
+		file, err := service.CreateFileFromTask(context.Background(),task, &mkv)
 
 		// 验证
 		assert.NoError(t, err)
@@ -127,7 +128,7 @@ func TestCreateFileFromTask(t *testing.T) {
 
 		// 创建文件记录
 		mp4 := "mp4"
-		file, err := service.CreateFileFromTask(task, &mp4)
+		file, err := service.CreateFileFromTask(context.Background(),task, &mp4)
 
 		// 验证
 		assert.NoError(t, err)
@@ -144,7 +145,7 @@ func TestCreateFileFromTask(t *testing.T) {
 
 		// 尝试创建文件记录
 		mkv := "mkv"
-		file, err := service.CreateFileFromTask(task, &mkv)
+		file, err := service.CreateFileFromTask(context.Background(),task, &mkv)
 
 		// 验证
 		assert.Error(t, err)
@@ -156,7 +157,7 @@ func TestCreateFileFromTask(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
 		// 尝试使用nil任务创建文件
-		file, err := service.CreateFileFromTask(nil, nil)
+		file, err := service.CreateFileFromTask(context.Background(),nil, nil)
 
 		// 验证
 		assert.Error(t, err)
@@ -172,7 +173,7 @@ func TestCreateFileFromTask(t *testing.T) {
 
 		// 尝试使用不支持的格式
 		avi := "avi"
-		file, err := service.CreateFileFromTask(task, &avi)
+		file, err := service.CreateFileFromTask(context.Background(),task, &avi)
 
 		// 验证
 		assert.Error(t, err)
@@ -187,7 +188,7 @@ func TestCreateFileFromTask(t *testing.T) {
 
 		// 尝试创建文件记录
 		mkv := "mkv"
-		file, err := service.CreateFileFromTask(task, &mkv)
+		file, err := service.CreateFileFromTask(context.Background(),task, &mkv)
 
 		// 验证
 		assert.Error(t, err)
@@ -204,12 +205,12 @@ func TestCreateFileFromTask(t *testing.T) {
 
 		// 第一次创建
 		mkv := "mkv"
-		file1, err1 := service.CreateFileFromTask(task, &mkv)
+		file1, err1 := service.CreateFileFromTask(context.Background(),task, &mkv)
 		assert.NoError(t, err1)
 		assert.NotNil(t, file1)
 
 		// 第二次创建（应该返回相同的记录）
-		file2, err2 := service.CreateFileFromTask(task, &mkv)
+		file2, err2 := service.CreateFileFromTask(context.Background(),task, &mkv)
 		assert.NoError(t, err2)
 		assert.NotNil(t, file2)
 		assert.Equal(t, file1.ID, file2.ID)
@@ -228,7 +229,7 @@ func TestCreateFile(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
 		// 尝试创建不存在的文件
-		file, err := service.CreateFile("/nonexistent/path/video.mp4", nil, nil)
+		file, err := service.CreateFile(context.Background(),"/nonexistent/path/video.mp4", nil, nil)
 
 		// 验证
 		assert.Error(t, err)
@@ -240,7 +241,7 @@ func TestCreateFile(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
 		// 尝试使用空路径创建文件
-		_, err := service.CreateFile("", nil, nil)
+		_, err := service.CreateFile(context.Background(),"", nil, nil)
 
 		// 验证
 		assert.Error(t, err)
@@ -254,7 +255,7 @@ func TestCreateFile(t *testing.T) {
 		expectedTime := time.Now().Add(-1 * time.Hour)
 
 		// 创建文件记录并设置录制时间
-		file, err := service.CreateFile(filePath, nil, &expectedTime)
+		file, err := service.CreateFile(context.Background(),filePath, nil, &expectedTime)
 
 		// 验证
 		assert.NoError(t, err)
@@ -268,13 +269,13 @@ func TestCreateFile(t *testing.T) {
 
 		// 测试MKV格式
 		mkvPath := createTestVideoFile(t, tempDir, "video.mkv", "fake mkv content")
-		mkvFile, err := service.CreateFile(mkvPath, nil, nil)
+		mkvFile, err := service.CreateFile(context.Background(),mkvPath, nil, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "mkv", mkvFile.Format)
 
 		// 测试MP4格式
 		mp4Path := createTestVideoFile(t, tempDir, "video.mp4", "fake mp4 content")
-		mp4File, err := service.CreateFile(mp4Path, nil, nil)
+		mp4File, err := service.CreateFile(context.Background(),mp4Path, nil, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "mp4", mp4File.Format)
 	})
@@ -379,7 +380,7 @@ func TestListFiles(t *testing.T) {
 			Page:     1,
 			PageSize: 2,
 		}
-		resp1, err := service.ListFiles(req1)
+		resp1, err := service.ListFiles(context.Background(),req1)
 		assert.NoError(t, err)
 		assert.Len(t, resp1.Items, 2)
 		assert.Equal(t, int64(5), resp1.Total)
@@ -389,7 +390,7 @@ func TestListFiles(t *testing.T) {
 			Page:     2,
 			PageSize: 2,
 		}
-		resp2, err := service.ListFiles(req2)
+		resp2, err := service.ListFiles(context.Background(),req2)
 		assert.NoError(t, err)
 		assert.Len(t, resp2.Items, 2)
 		assert.Equal(t, int64(5), resp2.Total)
@@ -403,11 +404,11 @@ func TestListFiles(t *testing.T) {
 		filePath2 := createTestVideoFile(t, tempDir, "meeting_002.mp4", "content 2")
 		filePath3 := createTestVideoFile(t, tempDir, "training_video.mp4", "content 3")
 
-		_, err := service.CreateFile(filePath1, nil, nil)
+		_, err := service.CreateFile(context.Background(),filePath1, nil, nil)
 		require.NoError(t, err)
-		_, err = service.CreateFile(filePath2, nil, nil)
+		_, err = service.CreateFile(context.Background(),filePath2, nil, nil)
 		require.NoError(t, err)
-		_, err = service.CreateFile(filePath3, nil, nil)
+		_, err = service.CreateFile(context.Background(),filePath3, nil, nil)
 		require.NoError(t, err)
 
 		// 搜索包含"meeting"的文件
@@ -416,7 +417,7 @@ func TestListFiles(t *testing.T) {
 			PageSize: 10,
 			Keyword:  "meeting",
 		}
-		resp, err := service.ListFiles(req)
+		resp, err := service.ListFiles(context.Background(),req)
 
 		// 验证
 		assert.NoError(t, err)
@@ -434,11 +435,11 @@ func TestListFiles(t *testing.T) {
 		mp4Path := createTestVideoFile(t, tempDir, "video2.mp4", "mp4 content")
 		mp4Path2 := createTestVideoFile(t, tempDir, "video3.mp4", "mp4 content 2")
 
-		_, err := service.CreateFile(mkvPath, nil, nil)
+		_, err := service.CreateFile(context.Background(),mkvPath, nil, nil)
 		require.NoError(t, err)
-		_, err = service.CreateFile(mp4Path, nil, nil)
+		_, err = service.CreateFile(context.Background(),mp4Path, nil, nil)
 		require.NoError(t, err)
-		_, err = service.CreateFile(mp4Path2, nil, nil)
+		_, err = service.CreateFile(context.Background(),mp4Path2, nil, nil)
 		require.NoError(t, err)
 
 		// 筛选MP4格式
@@ -447,7 +448,7 @@ func TestListFiles(t *testing.T) {
 			PageSize: 10,
 			Format:   "mp4",
 		}
-		resp, err := service.ListFiles(req)
+		resp, err := service.ListFiles(context.Background(),req)
 
 		// 验证
 		assert.NoError(t, err)
@@ -464,7 +465,7 @@ func TestListFiles(t *testing.T) {
 		filePath1 := createTestVideoFile(t, tempDir, "video1.mp4", "content 1")
 		filePath2 := createTestVideoFile(t, tempDir, "video2.mp4", "content 2")
 
-		_, err := service.CreateFile(filePath1, nil, nil)
+		_, err := service.CreateFile(context.Background(),filePath1, nil, nil)
 		require.NoError(t, err)
 
 		// 创建一个processing状态的文件
@@ -484,7 +485,7 @@ func TestListFiles(t *testing.T) {
 			PageSize: 10,
 			Status:   models.FileStatusReady,
 		}
-		resp, err := service.ListFiles(req)
+		resp, err := service.ListFiles(context.Background(),req)
 
 		// 验证
 		assert.NoError(t, err)
@@ -503,9 +504,9 @@ func TestListFiles(t *testing.T) {
 		filePath1 := createTestVideoFile(t, tempDir, "video1.mp4", "content 1")
 		filePath2 := createTestVideoFile(t, tempDir, "video2.mp4", "content 2")
 
-		_, err := service.CreateFile(filePath1, &task1.ID, nil)
+		_, err := service.CreateFile(context.Background(),filePath1, &task1.ID, nil)
 		require.NoError(t, err)
-		_, err = service.CreateFile(filePath2, &task2.ID, nil)
+		_, err = service.CreateFile(context.Background(),filePath2, &task2.ID, nil)
 		require.NoError(t, err)
 
 		// 筛选任务1的文件
@@ -514,7 +515,7 @@ func TestListFiles(t *testing.T) {
 			PageSize: 10,
 			TaskID:   &task1.ID,
 		}
-		resp, err := service.ListFiles(req)
+		resp, err := service.ListFiles(context.Background(),req)
 
 		// 验证
 		assert.NoError(t, err)
@@ -530,7 +531,7 @@ func TestListFiles(t *testing.T) {
 			Page:     1,
 			PageSize: 10,
 		}
-		resp, err := service.ListFiles(req)
+		resp, err := service.ListFiles(context.Background(),req)
 
 		// 验证
 		assert.NoError(t, err)
@@ -546,11 +547,11 @@ func TestGetFileByID(t *testing.T) {
 
 		// 创建测试文件
 		filePath := createTestVideoFile(t, tempDir, "video.mp4", "fake video content")
-		createdFile, err := service.CreateFile(filePath, nil, nil)
+		createdFile, err := service.CreateFile(context.Background(),filePath, nil, nil)
 		require.NoError(t, err)
 
 		// 根据ID获取文件
-		file, err := service.GetFileByID(createdFile.ID)
+		file, err := service.GetFileByID(context.Background(), createdFile.ID)
 
 		// 验证
 		assert.NoError(t, err)
@@ -563,7 +564,7 @@ func TestGetFileByID(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
 		// 尝试获取不存在的文件
-		file, err := service.GetFileByID(99999)
+		file, err := service.GetFileByID(context.Background(), 99999)
 
 		// 验证
 		assert.Error(t, err)
@@ -598,7 +599,7 @@ func TestDeleteFile(t *testing.T) {
 		assert.Equal(t, int64(1), countBefore)
 
 		// 删除文件
-		_, err = service.DeleteFile(file.ID)
+		_, err = service.DeleteFile(context.Background(),file.ID)
 		assert.NoError(t, err)
 
 		// 验证数据库记录已删除
@@ -611,7 +612,7 @@ func TestDeleteFile(t *testing.T) {
 		service, _, _ := setupTestService(t)
 
 		// 尝试删除不存在的文件
-		_, err := service.DeleteFile(99999)
+		_, err := service.DeleteFile(context.Background(),99999)
 
 		// 验证
 		assert.Error(t, err)
@@ -634,7 +635,7 @@ func TestDeleteFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// 尝试删除processing状态的文件
-		_, err = service.DeleteFile(processingFile.ID)
+		_, err = service.DeleteFile(context.Background(),processingFile.ID)
 
 		// 验证
 		assert.Error(t, err)
@@ -661,7 +662,7 @@ func TestDeleteFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// 删除文件记录（物理文件不存在应该也能删除记录）
-		_, err = service.DeleteFile(file.ID)
+		_, err = service.DeleteFile(context.Background(),file.ID)
 
 		// 验证 - 应该成功删除数据库记录
 		assert.NoError(t, err)
@@ -706,7 +707,7 @@ func TestDeleteFile(t *testing.T) {
 		filePath1 := filepath.Join(recordingsDir, "video1.mp4")
 		err = os.WriteFile(filePath1, []byte("fake mp4 1"), 0644)
 		require.NoError(t, err)
-		_, err = service.CreateFile(filePath1, nil, nil)
+		_, err = service.CreateFile(context.Background(),filePath1, nil, nil)
 		require.NoError(t, err)
 
 		// 创建第二个 mp4 文件但未入库
@@ -720,12 +721,12 @@ func TestDeleteFile(t *testing.T) {
 		assert.Len(t, files, 2)
 
 		// 创建未入库的文件
-		file, err := service.CreateFile(filePath2, nil, nil)
+		file, err := service.CreateFile(context.Background(),filePath2, nil, nil)
 		assert.NoError(t, err)
 		assert.NotNil(t, file)
 
 		// 验证幂等性 - 再次创建应该返回相同记录
-		file2, err := service.CreateFile(filePath2, nil, nil)
+		file2, err := service.CreateFile(context.Background(),filePath2, nil, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, file.ID, file2.ID)
 	})
@@ -807,11 +808,11 @@ func TestListFilesWithDateFilter(t *testing.T) {
 		filePath3 := createTestVideoFile(t, tempDir, "video3.mp4", "content 3")
 
 		// 设置不同的创建时间（通过直接操作数据库）
-		_, err := service.CreateFile(filePath1, nil, &twoDaysAgo)
+		_, err := service.CreateFile(context.Background(),filePath1, nil, &twoDaysAgo)
 		require.NoError(t, err)
-		_, err = service.CreateFile(filePath2, nil, &yesterday)
+		_, err = service.CreateFile(context.Background(),filePath2, nil, &yesterday)
 		require.NoError(t, err)
-		_, err = service.CreateFile(filePath3, nil, &now)
+		_, err = service.CreateFile(context.Background(),filePath3, nil, &now)
 		require.NoError(t, err)
 
 		// 筛选最近2天的文件
@@ -820,7 +821,7 @@ func TestListFilesWithDateFilter(t *testing.T) {
 			PageSize:  10,
 			StartDate: yesterday.Format("2006-01-02"),
 		}
-		resp, err := service.ListFiles(req)
+		resp, err := service.ListFiles(context.Background(),req)
 
 		// 验证
 		assert.NoError(t, err)
@@ -874,7 +875,7 @@ func BenchmarkListFiles(b *testing.B) {
 			Page:     1,
 			PageSize: 20,
 		}
-		service.ListFiles(req)
+		service.ListFiles(context.Background(),req)
 	}
 }
 
@@ -953,7 +954,7 @@ func TestVideoFileService_RenameVideoFile_Success(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	// Rename the file
-	err := service.RenameVideoFile(videoFile.ID, "new_video_name", userID, false)
+	err := service.RenameVideoFile(context.Background(),videoFile.ID, "new_video_name", userID, false)
 	assert.NoError(t, err)
 
 	// Verify database was updated
@@ -991,7 +992,7 @@ func TestVideoFileService_RenameVideoFile_PreservesExtension(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	// Try to rename with custom extension (should be ignored)
-	err := service.RenameVideoFile(videoFile.ID, "new_name.mkv", userID, false)
+	err := service.RenameVideoFile(context.Background(),videoFile.ID, "new_name.mkv", userID, false)
 	assert.NoError(t, err)
 
 	var updated models.VideoFile
@@ -1018,7 +1019,7 @@ func TestVideoFileService_RenameVideoFile_OriginalRecordingImmutable(t *testing.
 	require.NoError(t, db.Create(videoFile).Error)
 
 	// Try to rename original recording
-	err := service.RenameVideoFile(videoFile.ID, "new_name", userID, false)
+	err := service.RenameVideoFile(context.Background(),videoFile.ID, "new_name", userID, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "不能重命名原始录制")
 }
@@ -1043,7 +1044,7 @@ func TestVideoFileService_RenameVideoFile_OwnershipValidation(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	// Try to rename as different user
-	err := service.RenameVideoFile(videoFile.ID, "new_name", otherUserID, false)
+	err := service.RenameVideoFile(context.Background(),videoFile.ID, "new_name", otherUserID, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "无权重命名")
 }
@@ -1070,7 +1071,7 @@ func TestVideoFileService_RenameVideoFile_RollbackOnFilesystemError(t *testing.T
 	require.NoError(t, os.Remove(videoFile.FilePath))
 
 	// Try to rename (should fail due to missing source file)
-	err := service.RenameVideoFile(videoFile.ID, "new_name", userID, false)
+	err := service.RenameVideoFile(context.Background(),videoFile.ID, "new_name", userID, false)
 	assert.Error(t, err)
 
 	// Verify database was NOT updated (transaction rolled back)
@@ -1113,7 +1114,7 @@ func TestVideoFileService_RenameVideoFile_DuplicateDetection(t *testing.T) {
 	require.NoError(t, db.Create(file2).Error)
 
 	// Rename file2 to the same name as file1
-	err := service.RenameVideoFile(file2.ID, "existing_video", userID, false)
+	err := service.RenameVideoFile(context.Background(),file2.ID, "existing_video", userID, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "已存在")
 }
@@ -1178,7 +1179,7 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		require.NoError(t, db.Create(seg3).Error)
 
 		// Delete segments
-		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		count, err := service.DeleteSplitSegmentsByParentID(context.Background(),parent.ID, userID)
 
 		// Verify
 		assert.NoError(t, err)
@@ -1248,7 +1249,7 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		require.NoError(t, err)
 
 		// Delete segments
-		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		count, err := service.DeleteSplitSegmentsByParentID(context.Background(),parent.ID, userID)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, count)
 
@@ -1300,7 +1301,7 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		require.NoError(t, db.Create(seg2).Error)
 
 		// Delete segments
-		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		count, err := service.DeleteSplitSegmentsByParentID(context.Background(),parent.ID, userID)
 		assert.NoError(t, err)
 		assert.Greater(t, count, 0)
 
@@ -1359,7 +1360,7 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		require.NoError(t, err)
 
 		// Delete segment
-		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		count, err := service.DeleteSplitSegmentsByParentID(context.Background(),parent.ID, userID)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, count)
 
@@ -1413,7 +1414,7 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		require.NoError(t, db.Create(snap).Error)
 
 		// Delete segments
-		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		count, err := service.DeleteSplitSegmentsByParentID(context.Background(),parent.ID, userID)
 
 		// Verify count matches
 		assert.NoError(t, err)
@@ -1463,7 +1464,7 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		require.NoError(t, err)
 
 		// Delete segments (should not fail even though files don't exist)
-		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		count, err := service.DeleteSplitSegmentsByParentID(context.Background(),parent.ID, userID)
 
 		// Verify success
 		assert.NoError(t, err)
@@ -1528,7 +1529,7 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		require.NoError(t, db.Create(seg3).Error)
 
 		// Delete segments for userID only
-		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		count, err := service.DeleteSplitSegmentsByParentID(context.Background(),parent.ID, userID)
 
 		// Verify only user's segments are deleted
 		assert.NoError(t, err)
@@ -1560,7 +1561,7 @@ func TestVideoFileService_DeleteSplitSegmentsByParentID(t *testing.T) {
 		require.NoError(t, db.Create(parent).Error)
 
 		// Try to delete when no segments exist
-		count, err := service.DeleteSplitSegmentsByParentID(parent.ID, userID)
+		count, err := service.DeleteSplitSegmentsByParentID(context.Background(),parent.ID, userID)
 
 		// Verify
 		assert.NoError(t, err)
@@ -1611,7 +1612,7 @@ func TestListFiles_SharedViewerHasNoOperationPermissions(t *testing.T) {
 	// Setup: Create user with shared_viewer role (but no admin/operator roles)
 	//   Create a file owned by another user
 
-	// Action: Attempt to delete the file using service.DeleteFile()
+	// Action: Attempt to delete the file using service.DeleteFile(context.Background(),)
 
 	// Assert: Verify deletion fails with permission error
 	//         Verify file still exists in database after deletion attempt

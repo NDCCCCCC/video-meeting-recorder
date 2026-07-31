@@ -82,8 +82,9 @@ type VideoSimpleScheduler struct {
 }
 
 // VideoFileServiceInterface 视频文件服务接口
+// Phase 19 Wave 5：CreateFileFromTask 以 ctx context.Context 作首参（PERF-003/BUG-005 级联）
 type VideoFileServiceInterface interface {
-	CreateFileFromTask(task *models.VideoRecordingTask, format *string) (*models.VideoFile, error)
+	CreateFileFromTask(ctx context.Context, task *models.VideoRecordingTask, format *string) (*models.VideoFile, error)
 }
 
 // TaskServiceInterface 任务服务接口
@@ -649,7 +650,7 @@ func (s *VideoSimpleScheduler) completeTask(ctx context.Context, taskID uint) {
 		// 为 MKV 文件创建记录
 		if task.MKVFilePath != "" {
 			mkv := "mkv"
-			if _, err := s.videoFileService.CreateFileFromTask(task, &mkv); err != nil {
+			if _, err := s.videoFileService.CreateFileFromTask(ctx, task, &mkv); err != nil {
 				s.logger.Error("创建MKV文件记录失败",
 					zap.Uint("task_id", taskID),
 					zap.Error(err),
@@ -659,7 +660,7 @@ func (s *VideoSimpleScheduler) completeTask(ctx context.Context, taskID uint) {
 		// 如果 MP4 已存在，也为它创建记录
 		if task.MP4FilePath != "" {
 			mp4 := "mp4"
-			if _, err := s.videoFileService.CreateFileFromTask(task, &mp4); err != nil {
+			if _, err := s.videoFileService.CreateFileFromTask(ctx, task, &mp4); err != nil {
 				s.logger.Error("创建MP4文件记录失败",
 					zap.Uint("task_id", taskID),
 					zap.Error(err),
@@ -1291,7 +1292,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 			// 为 MKV 文件创建记录
 			if task.MKVFilePath != "" {
 				mkv := "mkv"
-				if _, err := s.videoFileService.CreateFileFromTask(task, &mkv); err != nil {
+				if _, err := s.videoFileService.CreateFileFromTask(ctx, task, &mkv); err != nil {
 					s.logger.Warn("创建MKV文件记录失败",
 						zap.Uint("task_id", taskID),
 						zap.Error(err),
@@ -1305,7 +1306,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 			// 如果 MP4 已存在，也为它创建记录
 			if task.MP4FilePath != "" {
 				mp4 := "mp4"
-				if _, err := s.videoFileService.CreateFileFromTask(task, &mp4); err != nil {
+				if _, err := s.videoFileService.CreateFileFromTask(ctx, task, &mp4); err != nil {
 					s.logger.Warn("创建MP4文件记录失败",
 						zap.Uint("task_id", taskID),
 						zap.Error(err),
