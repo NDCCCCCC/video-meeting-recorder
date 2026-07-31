@@ -641,3 +641,164 @@ func TestLogVersionCounts_NoPrevious(t *testing.T) {
 	assert.Equal(t, 1, pw.UnknownVersion, "无 previous 密钥时 v2 应算 unknown")
 	assert.Equal(t, 1, pw.ByVersion["v2"])
 }
+
+// ============================================================================
+// Wave 4: 重复轮换（v1 → v2 → v3）端到端测试
+// ============================================================================
+//
+// 模拟真实运维场景的密钥升级：
+//  1. 用 v1 密钥写入若干 envelope；
+//  2. 模拟第一次"重启"——构造 v2 加密器（previous=v1），执行 RotateIfNeeded；
+//  3. 验证 v1 全部归零，v2 全部就位，InvariantScan 通过；
+//  4. 模拟第二次"重启"——构造 v3 加密器（previous=v2），执行 RotateIfNeeded；
+//  5. 验证 v2 全部归零，v3 全部就位，InvariantScan 通过；
+//  6. 第三次"重启"——只带 v3（无 previous），RotateIfNeeded 应为 no-op，
+//     InvariantScan 仍通过，所有 envelope 都是 v3。
+//
+// 每一阶段的"重启"独立构造 encryptor（模拟新进程），不共享内存状态。
+
+func TestRepeatedRotation_V1ToV2ToV3(t *testing.T) {
+	v1Secret := "0123456789abcdef0123456789abcdef"
+	v2Secret := "11111111111111111111111111111111"
+	v3Secret := "22222222222222222222222222222222"
+
+	// 准备：3 行明文 + 1 个 auth.ad.password + 1 个 auth.ad JSON
+	db := openInMemoryDB(t)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Live1", ConfigType: "stream", StreamURL: "rtmp://a",
+		Password: "live-pw-1", StreamPassword: "live-sp-1", IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Live2", ConfigType: "stream", StreamURL: "rtmp://b",
+		Password: "live-pw-2", IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "Live3", ConfigType: "stream", StreamURL: "rtmp://c",
+		StreamPassword: "live-sp-3", IsActive: true,
+	}).Error)
+	require.NoError(t, db.Create(&models.SystemSetting{
+		Key: "auth.ad.password", Value: "ad-live-pw",
+	}).Error)
+
+	// ----- 第一次启动：v1 写入 + Migrate -----
+	encV1, err := NewCredentialEncryptor("v1", v1Secret, "", "", zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, encV1.MigratePlaintextToGCM(ctx, db))
+	require.NoError(t, encV1.InvariantScan(ctx, db))
+	// input_configs.password 列应有 2 个 v1 envelope（Live1.Password + Live2.Password）
+	require.Equal(t, 2, mustCount(t, encV1, db, "v1"),
+		"首次迁移后 input_configs.password 应全部是 v1")
+
+	// ----- 第二次启动：v2 + previous=v1（轮换过渡期）-----
+	encV2, err := NewCredentialEncryptor("v2", v2Secret, "v1", v1Secret, zap.NewNop())
+	require.NoError(t, err)
+	// MigratePlaintextToGCM 应该是 no-op（行已是 envelope）
+	require.NoError(t, encV2.MigratePlaintextToGCM(ctx, db))
+	// 第一次 invariant：v1 + v2 都能解（v1 走 previous 密钥）
+	require.NoError(t, encV2.InvariantScan(ctx, db))
+	// RotateIfNeeded：v1 → v2
+	rotated, err := encV2.RotateIfNeeded(ctx, db)
+	require.NoError(t, err)
+	assert.Equal(t, 5, rotated,
+		"5 个 envelope 全部 v1→v2：Live1.password + Live1.stream_password + Live2.password + Live3.stream_password + auth.ad.password")
+	// 第二次 invariant：v1 必须归零
+	require.NoError(t, encV2.InvariantScan(ctx, db))
+	require.Equal(t, 0, mustCount(t, encV2, db, "v1"), "v1 必须在轮换后归零")
+	require.Equal(t, 2, mustCount(t, encV2, db, "v2"), "input_configs.password 全部 v2")
+
+	// ----- 第三次启动：v3 + previous=v2（第二轮轮换过渡期）-----
+	encV3, err := NewCredentialEncryptor("v3", v3Secret, "v2", v2Secret, zap.NewNop())
+	require.NoError(t, err)
+	// 无 plaintext 行 → MigratePlaintextToGCM no-op
+	require.NoError(t, encV3.MigratePlaintextToGCM(ctx, db))
+	// 第一次 invariant：v2 + v3 都能解
+	require.NoError(t, encV3.InvariantScan(ctx, db))
+	// RotateIfNeeded：v2 → v3
+	rotated2, err := encV3.RotateIfNeeded(ctx, db)
+	require.NoError(t, err)
+	assert.Equal(t, 5, rotated2, "第二轮轮换：5 个 envelope 全部 v2 → v3")
+	// 第二次 invariant：v2 必须归零
+	require.NoError(t, encV3.InvariantScan(ctx, db))
+	require.Equal(t, 0, mustCount(t, encV3, db, "v2"), "v2 必须在第二轮轮换后归零")
+	require.Equal(t, 2, mustCount(t, encV3, db, "v3"), "input_configs.password 全部 v3")
+
+	// ----- 第四次启动：只带 v3（无 previous） -----
+	encV3Only, err := NewCredentialEncryptor("v3", v3Secret, "", "", zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, encV3Only.MigratePlaintextToGCM(ctx, db))
+	require.NoError(t, encV3Only.InvariantScan(ctx, db))
+	// RotateIfNeeded 无 previous → no-op
+	rotated3, err := encV3Only.RotateIfNeeded(ctx, db)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rotated3, "无 previous 密钥时 RotateIfNeeded 必须为 no-op")
+	// 最终 invariant：4 个 envelope 全部 v3
+	require.NoError(t, encV3Only.InvariantScan(ctx, db))
+	require.Equal(t, 2, mustCount(t, encV3Only, db, "v3"))
+
+	// 验证明文值经过两轮轮换后未变化
+	var row1 models.InputConfig
+	require.NoError(t, db.Unscoped().First(&row1, "name = ?", "Live1").Error)
+	pt, err := encV3Only.Decrypt(row1.Password)
+	require.NoError(t, err)
+	assert.Equal(t, "live-pw-1", pt, "两轮轮换后明文值不变")
+	pt2, err := encV3Only.Decrypt(row1.StreamPassword)
+	require.NoError(t, err)
+	assert.Equal(t, "live-sp-1", pt2)
+}
+
+func TestRepeatedRotation_IntermediateInvariantScan(t *testing.T) {
+	// 验证每次"重启"后的 InvariantScan 都是 fail-closed 屏障：
+	// 即便轮换过渡期，v1 + v2 都能解，但任何中间状态异常都应被捕获。
+	v1Secret := "0123456789abcdef0123456789abcdef"
+	v2Secret := "11111111111111111111111111111111"
+
+	db := openInMemoryDB(t)
+	ctx := context.Background()
+
+	// 用 v1 写入
+	encV1, err := NewCredentialEncryptor("v1", v1Secret, "", "", zap.NewNop())
+	require.NoError(t, err)
+	env1, _ := encV1.Encrypt("secret-1")
+	env2, _ := encV1.Encrypt("secret-2")
+	require.NoError(t, db.Create(&models.InputConfig{
+		Name: "R1", ConfigType: "stream", StreamURL: "rtmp://r1",
+		Password: env1, StreamPassword: env2, IsActive: true,
+	}).Error)
+
+	// 用 v1 + v2（previous=v1）验证中间 invariant
+	encV2, err := NewCredentialEncryptor("v2", v2Secret, "v1", v1Secret, zap.NewNop())
+	require.NoError(t, err)
+	require.NoError(t, encV2.InvariantScan(ctx, db))
+
+	// 注入一个损坏的 v1 envelope（篡改 ciphertext tag）
+	var row models.InputConfig
+	require.NoError(t, db.Unscoped().First(&row, "name = ?", "R1").Error)
+	tampered := row.Password[:len(row.Password)-1] + "X"
+	if tampered[len(tampered)-1] == row.Password[len(row.Password)-1] {
+		tampered = row.Password[:len(row.Password)-1] + "Y"
+	}
+	require.NoError(t, db.Unscoped().Model(&models.InputConfig{}).
+		Where("id = ?", row.ID).Update("password", tampered).Error)
+
+	// InvariantScan 应捕获篡改
+	err = encV2.InvariantScan(ctx, db)
+	assert.Error(t, err, "篡改的 v1 envelope 在过渡期 invariant 应被拒绝")
+	assert.Contains(t, err.Error(), "previous 版本解密失败",
+		"应明确指出 previous 解密失败（envelope 路由为 v1 → previous 密钥 → tag 校验失败）")
+}
+
+// mustCount 是一个测试辅助：直接调用 CountByVersion 并返回指定 version 的行数。
+// 断言失败由 require.NoError / require.NotNil 触发 test fatal。
+func mustCount(t *testing.T, enc *CredentialEncryptor, db *gorm.DB, version string) int {
+	t.Helper()
+	counts, err := enc.CountByVersion(context.Background(), db)
+	require.NoError(t, err)
+	for _, c := range counts {
+		if c.Column == "input_configs.password" {
+			return c.ByVersion[version]
+		}
+	}
+	return 0
+}
