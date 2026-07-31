@@ -416,3 +416,104 @@ b08255d  W5e  test(19/w5e): ctx 取消传播 contract test (3 测试) + Wave 5 �
 | 排除 PERF-001 (Preload N+1 误判) | ✅ 按用户确认排除 |
 | 排除 STYLE-009 (Get* rename) | ✅ 按用户确认排除 |
 | 排除 PERF-009 (audit map schemaless) | ✅ 按用户确认排除 |
+
+---
+
+## Phase 19 收尾 D1-D4（4 项 deferred 全部交付）
+
+### D1: video_file_service.go:891 FOREIGN KEY strings.Contains → sentinel
+
+**触发**: Phase 19 收尾列表第 4 项。
+**改动**:
+- internal/errors/errors.go: 新增 `ErrForeignKeyConstraint` + `ErrDuplicateRecord` sentinel + `CodeForeignKeyConstraint` 常量
+- internal/errors/mapping.go: `IsKnownError` 加入两个新 sentinel
+- internal/errors/mapping_test.go: 2 个测试（双 %w wrap 兼容性 + sentinel 识别）
+- internal/services/video_file_service.go: `createWithDuplicateCheck` 区分 duplicate / FK / 其他，FK 用 `fmt.Errorf("%w: %w", apperrors.ErrForeignKeyConstraint, err)` 包装；`CreateSegmentFile` 改 `errors.Is(err, apperrors.ErrForeignKeyConstraint)`
+
+**技术亮点**: Go 1.20+ `fmt.Errorf` multi-`%w` 支持双错误链匹配——`errors.Is(doubleErr, ErrForeignKeyConstraint)` 和 `errors.Is(doubleErr, inner)` 同时为 true。
+
+**commit**: `20ee289`
+
+### D2: taskServiceAdapter 与 VideoRecordingTaskService 合并（消除 ctx 双层签名级联）
+
+**触发**: Phase 19 收尾列表第 1 项（高风险，含 Phase 18 SM4-GCM 解密逻辑）。
+**改动**:
+- internal/services/video_recording_task_service.go:
+  - struct + NewVideoRecordingTaskService 新增可变 `*CredentialEncryptor` 参数（向后兼容）
+  - `GetInputConfig` 末尾集成原 adapter 的 password/stream_password 解密逻辑（encryptor!=nil 时解密；nil 透传）
+  - 新增 `GetTask(ctx, id)` 方法（带 Preload InputConfig/TaskInputConfigs）满足 scheduler.TaskServiceInterface
+- internal/scheduler/video_scheduler.go: `TaskServiceInterface.GetPendingTasks` 返回类型由 `[]*VideoRecordingTask` → `[]VideoRecordingTask`（对齐 service API）
+- internal/scheduler/video_scheduler_test.go: mockTaskService.GetPendingTasks 同步
+- cmd/server/app.go: 删除 adapter 实例化，直接传 `a.videoTaskService`；删除 97 行 adapter struct + 6 方法
+- cmd/server/taskservice_adapter_ctx_test.go: 重写为测试 VideoRecordingTaskService 自身 + 新增 `TestVideoRecordingTaskService_SatisfiesTaskServiceInterface`（编译期断言接口满足）
+
+**消除副作用**:
+- scheduler ↔ service 双层 ctx 级联现在是单层（每 ctx 调用直接贯穿）
+- Phase 18 SM4-GCM 解密逻辑进入 service test 范畴（之前仅在 cmd/server 包内）
+
+**commit**: `3b2d41f`
+
+### D3: HMAC jti 从内存 map 升级为 hls_jti_records DB 表
+
+**触发**: Phase 19 收尾列表第 2 项（架构 future work）。
+**改动**:
+- internal/models/hls_jti_record.go（新）: `HLSJtiRecord` 模型（jti PK + expires_at + created_at）
+- cmd/server/app.go: `HLSJtiRecord` 加入 AutoMigrate
+- internal/auth/hlstoken/hls_token.go:
+  - struct 新增 `db *gorm.DB` + `logger *zap.Logger` 字段
+  - 新增 `NewHLSTokenWithDB(secret, duration, db, logger)` 构造函数
+  - `Verify` 在 db!=nil 时 `INSERT OR IGNORE`（`gorm.io/gorm/clause.OnConflict{DoNothing}`）幂等写入；跨 SQLite/MySQL/PostgreSQL 方言
+  - sweepLoop 调 `pruneExpiredDB` 删除 `WHERE expires_at < now`
+  - 失败仅日志，不阻断 Verify（主防线仍是 ExpiresAt + HMAC 完整性）
+- internal/handlers/video_recording_task_handler.go: NewVideoRecordingTaskHandler 追加 `db *gorm.DB` 参数
+- internal/auth/hlstoken/hls_token_test.go: 3 个新测试
+  - `TestHLSVerify_DB_PersistsJti`
+  - `TestHLSVerify_DB_Idempotent`
+  - `TestHLSVerify_DB_SurvivesRecreate`（**核心差异** vs in-memory：跨实例化保留记录）
+
+**commit**: `1f0ec35`
+
+### D4: internal/errors 增量迁移（service boundary）
+
+**触发**: Phase 19 收尾列表第 3 项（大 churn）。
+**改动**:
+- video_file_service.go `DeleteFile`: gorm.ErrRecordNotFound → `BusinessError(CodeNotFound)`；文件正在处理中 → `BusinessError(CodeInvalidInput)`
+- handlers/video_file_handler.go `DeleteFile` handler: `err.Error()` → `response.HandleError(c, err)`（替代总落 400 的 GinError，handler 不知 404/409/422 区分）
+- credential_encryptor.go `NewCredentialEncryptor`: 4 处 config 验证错误用 `BusinessError(CodeInvalidInput)` 包装（避免启动期 500）
+
+**未触达（剩余 ~80%）**:
+- 散点 `errors.New` / `fmt.Errorf` 在 services/handlers（高频路径已迁移，余下增量低价值）
+- 当前已迁移: DeleteFile + RenameVideoFile + RenamePPTFile + NYCodecryptor + 5+ 个 == → errors.Is 修复 + 2 handler string-match
+- 余下：ad_auth.go / local_auth.go / ppt_file_service.go remaining / dashboard 等
+
+**commit**: `f4291f5`
+
+### D1-D4 总验证
+
+| 指标 | 结果 |
+|------|------|
+| build + vet | ✅ 0 错误 |
+| -race 测试 (10 包) | ✅ 全绿（services + handlers + scheduler + auth + utils + middleware + errors + cmd/server + storage + auth/hlstoken） |
+| Phase 19 范围 <deferred> 列表 | ✅ 全部 4 项清除 |
+
+### Phase 19 最终 commit 序列（合并 D1-D4 后 15 commits）
+
+```
+6edb772  W6   docs(19): Wave 6 summary + 范围对账
+3d171de  W6   refactor(19/w6): STYLE-001 error 迁移
+b08255d  W5e  test(19/w5e): ctx 取消传播 contract test
+1ae6be0  W5d  perf(19/w5d): VideoFileService caller 全量 ctx 透传
+7a5a1cc  W5c  perf(19/w5c): VideoFileService batch ops ctx-first
+7828fc3  W5b  perf(19/w5b): VideoFileService ScanFiles chain ctx-first
+e2b0b6b  W5a  perf(19/w5a): VideoFileService 内部 helpers ctx-first
+34b07f7  W5   perf(19/w5): VideoRecordingTaskService ctx-first
+2281927  W4   docs(19): Wave 4 section to 19-SUMMARY.md
+9a00cbe  W4   refactor(19): Wave 4 ctx 级联 TaskServiceInterface 原子三元组
+─────────────────────────────────────────────────────
+20ee289  D1   refactor(19/d1): FOREIGN KEY strings.Contains → sentinel
+3b2d41f  D2   refactor(19/d2): taskServiceAdapter 与 VideoRecordingTaskService 合并
+1f0ec35  D3   refactor(19/d3): HLS jti 升级为 hls_jti_records 表
+f4291f5  D4   refactor(19/d4): errors 包增量迁移 + DeleteFile/NYCodecryptor
+```
+
+最终 HEAD：`f4291f5`
