@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -1328,39 +1329,39 @@ func (s *VideoFileService) RenameVideoFile(ctx context.Context, id uint, newName
 	// Validation: load video file
 	var videoFile models.VideoFile
 	if err := s.db.WithContext(ctx).First(&videoFile, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("视频文件不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewBusinessError(apperrors.CodeNotFound, "视频文件不存在", err)
 		}
 		return fmt.Errorf("查询视频文件失败: %w", err)
 	}
 
 	// Validation: check ownership (admin or shared_viewer can rename any file)
 	if !hasSharedViewer && videoFile.CreatedBy != userID {
-		return fmt.Errorf("无权重命名此文件")
+		return apperrors.NewBusinessError(apperrors.CodeForbidden, "无权重命名此文件", nil)
 	}
 
 	// Validation: check immutability (original recordings cannot be renamed)
 	if videoFile.SourceType == models.SourceTypeRecording && videoFile.ParentID == nil {
-		return fmt.Errorf("不能重命名原始录制文件")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "不能重命名原始录制文件", nil)
 	}
 
 	// Validation: sanitize new name
 	newName = strings.TrimSpace(newName)
 	if newName == "" {
-		return fmt.Errorf("新文件名不能为空")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "新文件名不能为空", nil)
 	}
 	if len(newName) > 200 {
-		return fmt.Errorf("新文件名过长（最大200字符）")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "新文件名过长（最大200字符）", nil)
 	}
 	// Reject path separators to prevent path traversal attacks
 	if strings.ContainsAny(newName, "/\\") {
-		return fmt.Errorf("文件名不能包含路径分隔符")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "文件名不能包含路径分隔符", nil)
 	}
 
 	// Preserve file extension
 	newName = strings.TrimSuffix(newName, filepath.Ext(newName))
 	if newName == "" {
-		return fmt.Errorf("新文件名不能为空")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "新文件名不能为空", nil)
 	}
 	ext := filepath.Ext(videoFile.FilePath)
 	if ext == "" {

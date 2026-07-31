@@ -530,15 +530,12 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 			zap.String("new_name", newName),
 			zap.Error(err))
 
-		// Map service errors to HTTP status codes
-		switch {
-		case err.Error() == "文件不存在" || errors.Is(err, gorm.ErrRecordNotFound):
-			response.GinError(c, response.CodeNotFound, "PPT文件不存在")
-		case err.Error() == "无权操作此文件":
-			response.GinError(c, response.CodeForbidden, "无权操作此文件")
-		default:
-			response.GinError(c, response.CodeInternalError, "重命名失败: "+err.Error())
+		// STYLE-001 Phase 19 Wave 6：service 返回 BusinessError，handler 用统一 HandleError 映射。
+		if response.HandleError(c, err) {
+			return
 		}
+		// 未识别的兜底错误（理论不可达）
+		response.GinError(c, response.CodeInternalError, "重命名失败: "+err.Error())
 		return
 	}
 

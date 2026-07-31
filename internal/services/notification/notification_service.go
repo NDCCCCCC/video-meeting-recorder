@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -283,7 +284,7 @@ func (s *NotificationService) GetUserSetting(ctx context.Context, userID uint) (
 	var setting models.UserNotificationSetting
 	err := s.db.Where("user_id = ?", userID).First(&setting).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 返回默认配置
 			return s.getDefaultSetting(userID), nil
 		}
@@ -297,7 +298,7 @@ func (s *NotificationService) UpdateUserSetting(ctx context.Context, userID uint
 	// Snapshot pre-update state for audit OldData capture
 	var oldSetting models.UserNotificationSetting
 	if err := s.db.Where("user_id = ?", userID).First(&oldSetting).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Use default setting snapshot when no existing row
 			defaultSetting := s.getDefaultSetting(userID)
 			oldSetting = *defaultSetting
@@ -325,7 +326,7 @@ func (s *NotificationService) getUserSetting(userID uint) (*models.UserNotificat
 	var setting models.UserNotificationSetting
 	err := s.db.Where("user_id = ?", userID).First(&setting).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return s.getDefaultSetting(userID), nil
 		}
 		return nil, err

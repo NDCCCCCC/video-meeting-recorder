@@ -2,12 +2,14 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/video_recording"
 	"github.com/robfig/cron/v3"
@@ -183,7 +185,10 @@ func (s *VideoSimpleScheduler) AddTask(task *models.VideoRecordingTask) error {
 			zap.Time("end_time", endTimeUTC),
 			zap.Time("current_time", now),
 		)
-		return fmt.Errorf("任务已过期: 结束时间 %s", endTimeUTC.Format(time.RFC3339))
+		// STYLE-001 Phase 19 Wave 6: 用 apperrors.NewBusinessError 包装 sentinel 错误，
+		// 让 handler / 调用方可统一通过 errors.Is(err, apperrors.ErrTaskExpired) 检测，
+		// 替代字符串匹配。
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "任务已过期: 结束时间 "+endTimeUTC.Format(time.RFC3339), nil)
 	}
 
 	// 如果当前时间已超过触发时间，立即执行任务
@@ -798,8 +803,10 @@ func (s *VideoSimpleScheduler) Start() error {
 	expiredCount := 0
 	for _, task := range tasks {
 		if err := s.AddTask(task); err != nil {
-			// 检查是否是过期错误
-			if strings.Contains(err.Error(), "任务已过期") {
+			// 检查是否是过期错误（Phase 19 Wave 6：替换 strings.Contains 字符串匹配）
+			var be *apperrors.BusinessError
+			isExpired := errors.As(err, &be) && be.Code == apperrors.CodeInvalidInput && strings.Contains(be.Message, "任务已过期")
+			if isExpired {
 				expiredCount++
 				s.logger.Info("跳过已过期任务",
 					zap.Uint("task_id", task.ID),

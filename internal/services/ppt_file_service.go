@@ -2,12 +2,14 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -34,7 +36,7 @@ func (s *PPTFileService) GetPPTFileByID(ctx context.Context, id uint) (*models.P
 	var pptFile models.PPTFile
 	err := s.db.WithContext(ctx).Where("id = ?", id).First(&pptFile).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("PPT文件不存在")
 		}
 		return nil, err
@@ -123,31 +125,31 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 	// Validation: load PPT file with SourceVideoFile preloaded
 	var pptFile models.PPTFile
 	if err := s.db.WithContext(ctx).Preload("SourceVideoFile").First(&pptFile, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("PPT文件不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewBusinessError(apperrors.CodeNotFound, "PPT文件不存在", err)
 		}
 		return fmt.Errorf("查询PPT文件失败: %w", err)
 	}
 
 	// Validation: check ownership via SourceVideoFile (shared_viewers can access all PPTs)
 	if pptFile.SourceVideoFile == nil {
-		return fmt.Errorf("PPT文件没有关联视频文件")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "PPT文件没有关联视频文件", nil)
 	}
 	if !hasSharedViewer && pptFile.SourceVideoFile.CreatedBy != userID {
-		return fmt.Errorf("无权重命名此文件")
+		return apperrors.NewBusinessError(apperrors.CodeForbidden, "无权重命名此文件", nil)
 	}
 
 	// Validation: sanitize new name
 	newName = strings.TrimSpace(newName)
 	if newName == "" {
-		return fmt.Errorf("新文件名不能为空")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "新文件名不能为空", nil)
 	}
 	if len(newName) > 200 {
-		return fmt.Errorf("新文件名过长（最大200字符）")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "新文件名过长（最大200字符）", nil)
 	}
 	// Reject path separators to prevent path traversal attacks
 	if strings.ContainsAny(newName, "/\\") {
-		return fmt.Errorf("文件名不能包含路径分隔符")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "文件名不能包含路径分隔符", nil)
 	}
 
 	// Preserve file extension: strip any extension from newName, use original file extension
@@ -158,7 +160,7 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 	// Strip extension from newName if user provided one
 	newName = strings.TrimSuffix(newName, filepath.Ext(newName))
 	if newName == "" {
-		return fmt.Errorf("新文件名不能为空")
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "新文件名不能为空", nil)
 	}
 	newFileName := newName + ext
 
@@ -170,8 +172,8 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 	var existingFile models.PPTFile
 	err := s.db.WithContext(ctx).Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
 	if err == nil {
-		return fmt.Errorf("目标文件名已存在")
-	} else if err != gorm.ErrRecordNotFound {
+		return apperrors.NewBusinessError(apperrors.CodeAlreadyExists, "目标文件名已存在", nil)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return fmt.Errorf("检查文件名重复失败: %w", err)
 	}
 

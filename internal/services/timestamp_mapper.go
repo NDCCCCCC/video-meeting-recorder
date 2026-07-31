@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -70,7 +71,7 @@ func (m *TimestampMapper) GetTimestampMap(videoFileID uint) ([]models.SlideTimes
 		First(&task).Error
 
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("transcription task not found for video file %d", videoFileID)
 		}
 		return nil, fmt.Errorf("failed to query transcription task: %w", err)

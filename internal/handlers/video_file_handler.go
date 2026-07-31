@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // VideoFileHandler 视频文件处理器
@@ -353,19 +351,13 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 			zap.String("new_name", newName),
 			zap.Error(err))
 
-		// Map service errors to HTTP status codes
-		// STYLE-001 partial: err == gorm.ErrRecordNotFound 改 errors.Is 守卫
-		// （保持字符串匹配作为兼容路径；新代码应改为 sentinel 错误。W6a 全库迁移 DEFERRED）
-		switch {
-		case err.Error() == "文件不存在" || errors.Is(err, gorm.ErrRecordNotFound):
-			response.GinError(c, response.CodeNotFound, "文件不存在")
-		case err.Error() == "无权操作此文件":
-			response.GinError(c, response.CodeForbidden, "无权操作此文件")
-		case err.Error() == "不能重命名原始录制文件":
-			response.GinError(c, response.CodeInvalidRequest, "不能重命名原始录制文件")
-		default:
-			response.GinError(c, response.CodeInternalError, "重命名失败: "+err.Error())
+		// STYLE-001 Phase 19 Wave 6：service 返回 BusinessError，handler 用统一 HandleError 映射。
+		// 不再需要手写字符串匹配 switch。
+		if response.HandleError(c, err) {
+			return
 		}
+		// 未识别的兜底错误（理论不可达，因为 HandleError 对未知 err 也写 500）
+		response.GinError(c, response.CodeInternalError, "重命名失败: "+err.Error())
 		return
 	}
 
