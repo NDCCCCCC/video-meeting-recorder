@@ -761,7 +761,7 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 			zap.Uint("task_id", id),
 			zap.String("error", err.Error()),
 		)
-		response.GinError(c, response.CodeUnauthorized, "无效或已过期的访问 token")
+		response.HandleError(c, err)
 		return
 	}
 

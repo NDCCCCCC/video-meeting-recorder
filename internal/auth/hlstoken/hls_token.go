@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -119,10 +120,16 @@ func (h *HLSToken) Generate(taskID, userID uint) string {
 }
 
 // Verify 验证 Token
+// Phase 19 D11: 7 散点统一复用 apperrors 已有 token sentinel（D7 添加的 4 个）。
+// HLSToken 与 SM4Token 错误模式对称——共用 ErrTokenInvalid / ErrTokenExpired
+// 即可；不复用 ErrTokenNotYetValid（Verify 不实施 nbf 检查）和 ErrTokenReplayed
+// （Verify 已切幂等模式，不再一次性拒绝）。
+// 复用而不是新增：保持 sentinel 数量精简；handler 侧 apperrors.Is 链统一识别
+// "token 失效" 一类错误。
 func (h *HLSToken) Verify(token string) (*HLSTokenClaims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("无效的 token 格式")
+		return nil, apperrors.ErrTokenInvalid
 	}
 
 	encodedData := parts[0]
@@ -141,29 +148,29 @@ func (h *HLSToken) Verify(token string) (*HLSTokenClaims, error) {
 		if err != nil {
 			providedMAC, err = base64.StdEncoding.DecodeString(signature)
 			if err != nil {
-				return nil, fmt.Errorf("token 签名无效")
+				return nil, apperrors.ErrTokenInvalid
 			}
 		}
 	}
 	if !hmac.Equal(expectedMAC, providedMAC) {
-		return nil, fmt.Errorf("token 签名无效")
+		return nil, apperrors.ErrTokenInvalid
 	}
 
 	// 解码数据
 	data, err := base64.URLEncoding.DecodeString(encodedData)
 	if err != nil {
-		return nil, fmt.Errorf("token 解码失败: %w", err)
+		return nil, fmt.Errorf("token 解码失败: %w", apperrors.ErrTokenInvalid)
 	}
 
 	// 解析 JSON
 	var claims HLSTokenClaims
 	if err := json.Unmarshal(data, &claims); err != nil {
-		return nil, fmt.Errorf("token 解析失败: %w", err)
+		return nil, fmt.Errorf("token 解析失败: %w", apperrors.ErrTokenInvalid)
 	}
 
 	// 检查过期时间
 	if time.Now().Unix() > claims.ExpiresAt {
-		return nil, fmt.Errorf("token 已过期")
+		return nil, apperrors.ErrTokenExpired
 	}
 
 	// SEC-004 (Phase 19): jti 索引追踪（幂等）。不再一次性拒绝——同一 token 在其
