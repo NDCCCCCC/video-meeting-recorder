@@ -23,13 +23,13 @@ import (
 // impl: services.FFmpegConversionService（在 services 包实现此接口）。
 type ConversionService interface {
 	// SubmitConversion 提交转换任务
-	SubmitConversion(taskID uint) error
+	SubmitConversion(ctx context.Context, taskID uint) error
 
 	// GetConversionStatus 获取转换状态
-	GetConversionStatus(taskID uint) (models.ConversionStatus, error)
+	GetConversionStatus(ctx context.Context, taskID uint) (models.ConversionStatus, error)
 
 	// RetryConversion 重试失败任务
-	RetryConversion(taskID uint) error
+	RetryConversion(ctx context.Context, taskID uint) error
 
 	// Start 启动服务
 	Start() error
@@ -671,7 +671,10 @@ func (s *VideoSimpleScheduler) completeTask(taskID uint) {
 			zap.Uint("task_id", taskID),
 			zap.String("mkv_file", task.MKVFilePath),
 		)
-		if err := s.conversionService.SubmitConversion(taskID); err != nil {
+		// BUG-006: completeTask 无请求 ctx（后台完成流程），派生 30s bounded ctx。
+		convCtx, convCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer convCancel()
+		if err := s.conversionService.SubmitConversion(convCtx, taskID); err != nil {
 			s.logger.Error("提交转换任务失败",
 				zap.Uint("task_id", taskID),
 				zap.Error(err),
@@ -1307,7 +1310,10 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 				zap.Uint("task_id", taskID),
 				zap.String("mkv_file", task.MKVFilePath),
 			)
-			if convertErr := s.conversionService.SubmitConversion(taskID); convertErr != nil {
+			// BUG-006: 此处无请求 ctx（后台释放设备流程），派生 30s bounded ctx。
+			convCtx, convCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer convCancel()
+			if convertErr := s.conversionService.SubmitConversion(convCtx, taskID); convertErr != nil {
 				s.logger.Warn("提交转换任务失败",
 					zap.Uint("task_id", taskID),
 					zap.Error(convertErr),

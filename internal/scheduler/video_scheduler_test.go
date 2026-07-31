@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -441,13 +442,13 @@ var ErrTaskNotFound = fmt.Errorf("task not found")
 // 同名 _test 形式覆盖（避免 import cycle：services → scheduler → services）。
 type stubConversionService struct{}
 
-func (stubConversionService) SubmitConversion(uint) error { return nil }
-func (stubConversionService) GetConversionStatus(uint) (models.ConversionStatus, error) {
+func (stubConversionService) SubmitConversion(context.Context, uint) error { return nil }
+func (stubConversionService) GetConversionStatus(context.Context, uint) (models.ConversionStatus, error) {
 	return "", nil
 }
-func (stubConversionService) RetryConversion(uint) error { return nil }
-func (stubConversionService) Start() error               { return nil }
-func (stubConversionService) Stop()                      {}
+func (stubConversionService) RetryConversion(context.Context, uint) error { return nil }
+func (stubConversionService) Start() error                                { return nil }
+func (stubConversionService) Stop()                                       {}
 
 // TestConversionService_InterfaceCompilationCheck 验证接口契约。
 func TestConversionService_InterfaceCompilationCheck(t *testing.T) {

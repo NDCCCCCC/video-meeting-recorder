@@ -75,7 +75,7 @@ func TestFrameCaptureService_ValidateTimestamp(t *testing.T) {
 			// This test would need an actual video file to work properly
 			// For now, we test the negative timestamp case
 			if tt.timestamp < 0 {
-				_, err := service.ValidateTimestamp("dummy.mp4", tt.timestamp)
+				_, err := service.ValidateTimestamp(context.Background(), "dummy.mp4", tt.timestamp)
 				if err == nil {
 					t.Error("Expected error for negative timestamp")
 				}

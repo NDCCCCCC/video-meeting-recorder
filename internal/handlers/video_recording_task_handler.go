@@ -591,7 +591,7 @@ func (h *VideoRecordingTaskHandler) GetConversionStatus(c *gin.Context) {
 		return
 	}
 
-	status, err := h.conversionService.GetConversionStatus(id)
+	status, err := h.conversionService.GetConversionStatus(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "任务不存在")
 		return
@@ -623,7 +623,7 @@ func (h *VideoRecordingTaskHandler) RetryConversion(c *gin.Context) {
 		return
 	}
 
-	if err := h.conversionService.RetryConversion(id); err != nil {
+	if err := h.conversionService.RetryConversion(c.Request.Context(), id); err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
 	}

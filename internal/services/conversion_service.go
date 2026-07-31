@@ -81,7 +81,7 @@ func (s *FFmpegConversionService) Start() error {
 	}
 
 	// 加载待转换的任务
-	if err := s.loadPendingTasks(); err != nil {
+	if err := s.loadPendingTasks(s.ctx); err != nil {
 		s.logger.Error("加载待转换任务失败", zap.Error(err))
 	}
 
@@ -114,10 +114,10 @@ func (s *FFmpegConversionService) Stop() {
 }
 
 // SubmitConversion 提交转换任务
-func (s *FFmpegConversionService) SubmitConversion(taskID uint) error {
+func (s *FFmpegConversionService) SubmitConversion(ctx context.Context, taskID uint) error {
 	// 加载任务
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, taskID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
 		return fmt.Errorf("任务不存在: %w", err)
 	}
 
@@ -143,7 +143,7 @@ func (s *FFmpegConversionService) SubmitConversion(taskID uint) error {
 		"conversion_error_msg":   "",
 		"conversion_retry_count": 0,
 	}
-	if err := s.db.Model(&task).Updates(updates).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&task).Updates(updates).Error; err != nil {
 		return fmt.Errorf("更新任务状态失败: %w", err)
 	}
 
@@ -163,23 +163,23 @@ func (s *FFmpegConversionService) SubmitConversion(taskID uint) error {
 }
 
 // GetConversionStatus 获取转换状态
-func (s *FFmpegConversionService) GetConversionStatus(taskID uint) (models.ConversionStatus, error) {
+func (s *FFmpegConversionService) GetConversionStatus(ctx context.Context, taskID uint) (models.ConversionStatus, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, taskID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
 		return "", err
 	}
 	return task.ConversionStatus, nil
 }
 
 // RetryConversion 重试失败任务
-func (s *FFmpegConversionService) RetryConversion(taskID uint) error {
+func (s *FFmpegConversionService) RetryConversion(ctx context.Context, taskID uint) error {
 	// 重置重试计数并重新提交
 	updates := map[string]interface{}{
 		"conversion_status":      models.ConversionStatusPending,
 		"conversion_error_msg":   "",
 		"conversion_retry_count": 0,
 	}
-	if err := s.db.Model(&models.VideoRecordingTask{}).Where("id = ?", taskID).Updates(updates).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Where("id = ?", taskID).Updates(updates).Error; err != nil {
 		return err
 	}
 
@@ -207,7 +207,7 @@ func (s *FFmpegConversionService) worker(id int) {
 				s.logger.Debug("转换worker正在停止", zap.Int("worker_id", id))
 				return
 			}
-			s.processTask(taskID)
+			s.processTask(s.ctx, taskID)
 
 		case <-s.ctx.Done():
 			s.logger.Debug("转换worker停止中", zap.Int("worker_id", id))
@@ -217,18 +217,18 @@ func (s *FFmpegConversionService) worker(id int) {
 }
 
 // processTask 处理单个转换任务
-func (s *FFmpegConversionService) processTask(taskID uint) {
+func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) {
 	s.logger.Info("正在处理转换任务", zap.Uint("task_id", taskID))
 
 	// 加载任务
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, taskID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
 		s.logger.Error("加载任务失败", zap.Uint("task_id", taskID), zap.Error(err))
 		return
 	}
 
 	// 创建可取消的context
-	ctx, cancel := context.WithCancel(s.ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	s.mu.Lock()
 	s.cancelFuncs[taskID] = cancel
 	s.mu.Unlock()
@@ -250,13 +250,13 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 		"conversion_started_at": &now,
 		"conversion_error_msg":  "",
 	}
-	s.db.Model(&task).Updates(updates)
+	s.db.WithContext(ctx).Model(&task).Updates(updates)
 
 	// 执行转换
 	outputPath, err := s.convertMKVToMP4(ctx, &task)
 
 	if err != nil {
-		s.handleConversionError(&task, err)
+		s.handleConversionError(ctx, &task, err)
 		return
 	}
 
@@ -286,7 +286,7 @@ func (s *FFmpegConversionService) processTask(taskID uint) {
 		}
 	}
 
-	s.db.Model(&task).Updates(updates)
+	s.db.WithContext(ctx).Model(&task).Updates(updates)
 
 	s.logger.Info("转换完成，任务已结束",
 		zap.Uint("task_id", taskID),
@@ -407,13 +407,13 @@ func (s *FFmpegConversionService) generateMP4Path(mkvPath string) string {
 }
 
 // handleConversionError 处理转换错误
-func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecordingTask, err error) {
+func (s *FFmpegConversionService) handleConversionError(ctx context.Context, task *models.VideoRecordingTask, err error) {
 	task.ConversionRetryCount++
 
 	// 检查是否超过最大重试次数
 	if task.ConversionRetryCount >= s.maxRetries {
 		// 标记为失败，同时更新任务状态为失败
-		s.db.Model(task).Updates(map[string]interface{}{
+		s.db.WithContext(ctx).Model(task).Updates(map[string]interface{}{
 			"conversion_status":    models.ConversionStatusFailed,
 			"conversion_error_msg": err.Error(),
 			// 同时更新任务状态为失败
@@ -439,7 +439,7 @@ func (s *FFmpegConversionService) handleConversionError(task *models.VideoRecord
 	)
 
 	// 保存错误信息
-	s.db.Model(task).Updates(map[string]interface{}{
+	s.db.WithContext(ctx).Model(task).Updates(map[string]interface{}{
 		"conversion_error_msg": err.Error(),
 	})
 
@@ -487,12 +487,12 @@ func (s *FFmpegConversionService) calculateBackoff(retryCount int) time.Duration
 }
 
 // loadPendingTasks 加载待转换的任务
-func (s *FFmpegConversionService) loadPendingTasks() error {
+func (s *FFmpegConversionService) loadPendingTasks(ctx context.Context) error {
 	var tasks []models.VideoRecordingTask
 
 	// 查找所有有MKV文件但未完成转换的任务
 	// 包括：pending、failed、processing（服务重启后需要重置）
-	if err := s.db.Where("mkv_file_path != ? AND (conversion_status = ? OR conversion_status = ? OR conversion_status = ? OR conversion_status = '' OR conversion_status IS NULL)",
+	if err := s.db.WithContext(ctx).Where("mkv_file_path != ? AND (conversion_status = ? OR conversion_status = ? OR conversion_status = ? OR conversion_status = '' OR conversion_status IS NULL)",
 		"",
 		models.ConversionStatusPending,
 		models.ConversionStatusFailed,
@@ -511,7 +511,7 @@ func (s *FFmpegConversionService) loadPendingTasks() error {
 				zap.Uint("task_id", task.ID),
 				zap.String("mkv_file", task.MKVFilePath),
 			)
-			s.db.Model(&task).Updates(map[string]interface{}{
+			s.db.WithContext(ctx).Model(&task).Updates(map[string]interface{}{
 				"conversion_status":      models.ConversionStatusPending,
 				"conversion_error_msg":   "",
 				"conversion_retry_count": 0,

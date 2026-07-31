@@ -66,7 +66,7 @@ func (s *FrameCaptureService) CaptureFrame(ctx context.Context, videoPath string
 	}
 
 	// Validate timestamp
-	validatedTimestamp, err := s.ValidateTimestamp(videoPath, timestamp)
+	validatedTimestamp, err := s.ValidateTimestamp(ctx, videoPath, timestamp)
 	if err != nil {
 		return fmt.Errorf("invalid timestamp: %w", err)
 	}
@@ -154,13 +154,14 @@ func (s *FrameCaptureService) CaptureFrameToBytes(ctx context.Context, videoPath
 
 // ValidateTimestamp checks if timestamp is within video duration
 // Returns clamped timestamp if out of bounds
-func (s *FrameCaptureService) ValidateTimestamp(videoPath string, timestamp float64) (float64, error) {
+func (s *FrameCaptureService) ValidateTimestamp(ctx context.Context, videoPath string, timestamp float64) (float64, error) {
 	if timestamp < 0 {
 		return 0, fmt.Errorf("timestamp cannot be negative: %.3f", timestamp)
 	}
 
 	// WR-04: Add context timeout for GetVideoDuration call
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// PERF-003/BUG-005: 超时 ctx 从请求 ctx 派生，使请求取消能中断 ffprobe 探测。
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	duration, err := s.GetVideoDuration(ctx, videoPath)
 	if err != nil {
