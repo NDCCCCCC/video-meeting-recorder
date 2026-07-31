@@ -121,3 +121,169 @@ func TestCSRFEnabledEnvBinding(t *testing.T) {
 		t.Fatal("CSRF_ENABLED=true was not bound")
 	}
 }
+
+// ============================================================================
+// Phase 18: 凭据静态加密密钥族校验
+// ============================================================================
+
+func TestValidateCredentialSM4Config_AcceptValid(t *testing.T) {
+	cur := strings.Repeat("a", 32)
+	prev := strings.Repeat("b", 32)
+	cases := []struct {
+		name string
+		cfg  Config
+	}{
+		{
+			name: "current only (最常见启动态)",
+			cfg: Config{
+				Auth: AuthConfig{
+					CredentialSM4Version: "v1",
+					CredentialSM4Secret:  cur,
+				},
+			},
+		},
+		{
+			name: "current + previous 配对",
+			cfg: Config{
+				Auth: AuthConfig{
+					CredentialSM4Version:         "v2",
+					CredentialSM4Secret:          cur,
+					CredentialSM4PreviousVersion: "v1",
+					CredentialSM4PreviousSecret:  prev,
+				},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.NoError(t, tc.cfg.ValidateCredentialSM4Config(), "合法配置应通过")
+		})
+	}
+}
+
+func TestValidateCredentialSM4Config_Reject(t *testing.T) {
+	cur := strings.Repeat("a", 32)
+	prev := strings.Repeat("b", 32)
+	cases := []struct {
+		name        string
+		cfg         Config
+		wantContain string
+	}{
+		{
+			name:        "缺失 version",
+			cfg:         Config{Auth: AuthConfig{CredentialSM4Secret: cur}},
+			wantContain: "CREDENTIAL_SM4_VERSION 必须显式设置",
+		},
+		{
+			name:        "version 格式非法（v0）",
+			cfg:         Config{Auth: AuthConfig{CredentialSM4Version: "v0", CredentialSM4Secret: cur}},
+			wantContain: "格式非法",
+		},
+		{
+			name:        "version 格式非法（version）",
+			cfg:         Config{Auth: AuthConfig{CredentialSM4Version: "version", CredentialSM4Secret: cur}},
+			wantContain: "格式非法",
+		},
+		{
+			name:        "version 格式非法（数字无 v 前缀）",
+			cfg:         Config{Auth: AuthConfig{CredentialSM4Version: "1", CredentialSM4Secret: cur}},
+			wantContain: "格式非法",
+		},
+		{
+			name:        "secret 缺失",
+			cfg:         Config{Auth: AuthConfig{CredentialSM4Version: "v1"}},
+			wantContain: "≥ 32 字符",
+		},
+		{
+			name:        "secret 过短 (31)",
+			cfg:         Config{Auth: AuthConfig{CredentialSM4Version: "v1", CredentialSM4Secret: strings.Repeat("a", 31)}},
+			wantContain: "≥ 32 字符",
+		},
+		{
+			name: "Previous 配对缺失 (仅 version)",
+			cfg: Config{Auth: AuthConfig{
+				CredentialSM4Version:         "v1",
+				CredentialSM4Secret:          cur,
+				CredentialSM4PreviousVersion: "v0",
+			}},
+			wantContain: "同时设置或同时缺失",
+		},
+		{
+			name: "Previous 配对缺失 (仅 secret)",
+			cfg: Config{Auth: AuthConfig{
+				CredentialSM4Version:         "v1",
+				CredentialSM4Secret:          cur,
+				CredentialSM4PreviousSecret:  prev,
+			}},
+			wantContain: "同时设置或同时缺失",
+		},
+		{
+			name: "Previous == Current version",
+			cfg: Config{Auth: AuthConfig{
+				CredentialSM4Version:         "v1",
+				CredentialSM4Secret:          cur,
+				CredentialSM4PreviousVersion: "v1",
+				CredentialSM4PreviousSecret:  prev,
+			}},
+			wantContain: "必须不等于",
+		},
+		{
+			name: "Previous == Current secret",
+			cfg: Config{Auth: AuthConfig{
+				CredentialSM4Version:         "v2",
+				CredentialSM4Secret:          cur,
+				CredentialSM4PreviousVersion: "v1",
+				CredentialSM4PreviousSecret:  cur,
+			}},
+			wantContain: "必须不等于",
+		},
+		{
+			name: "Previous secret 过短",
+			cfg: Config{Auth: AuthConfig{
+				CredentialSM4Version:         "v2",
+				CredentialSM4Secret:          cur,
+				CredentialSM4PreviousVersion: "v1",
+				CredentialSM4PreviousSecret:  strings.Repeat("b", 31),
+			}},
+			wantContain: "≥ 32 字符",
+		},
+		{
+			name: "Previous version 格式非法",
+			cfg: Config{Auth: AuthConfig{
+				CredentialSM4Version:         "v2",
+				CredentialSM4Secret:          cur,
+				CredentialSM4PreviousVersion: "v0",
+				CredentialSM4PreviousSecret:  prev,
+			}},
+			wantContain: "格式非法",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cfg.ValidateCredentialSM4Config()
+			assert.Error(t, err, "非法配置应被拒绝")
+			if err != nil {
+				assert.Contains(t, err.Error(), tc.wantContain, "错误信息应指明失败原因")
+			}
+		})
+	}
+}
+
+func TestBindEnvCredentialSM4(t *testing.T) {
+	cur := strings.Repeat("a", 40)
+	prev := strings.Repeat("b", 40)
+	t.Setenv("CREDENTIAL_SM4_VERSION", "v2")
+	t.Setenv("CREDENTIAL_SM4_SECRET", cur)
+	t.Setenv("CREDENTIAL_SM4_PREVIOUS_VERSION", "v1")
+	t.Setenv("CREDENTIAL_SM4_PREVIOUS_SECRET", prev)
+
+	v := viper.New()
+	bindSecretEnv(v)
+	var cfg Config
+	assert.NoError(t, v.Unmarshal(&cfg))
+
+	assert.Equal(t, "v2", cfg.Auth.CredentialSM4Version, "CREDENTIAL_SM4_VERSION 应通过 BindEnv 加载")
+	assert.Equal(t, cur, cfg.Auth.CredentialSM4Secret, "CREDENTIAL_SM4_SECRET 应通过 BindEnv 加载")
+	assert.Equal(t, "v1", cfg.Auth.CredentialSM4PreviousVersion, "CREDENTIAL_SM4_PREVIOUS_VERSION 应通过 BindEnv 加载")
+	assert.Equal(t, prev, cfg.Auth.CredentialSM4PreviousSecret, "CREDENTIAL_SM4_PREVIOUS_SECRET 应通过 BindEnv 加载")
+}

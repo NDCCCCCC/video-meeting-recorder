@@ -98,6 +98,27 @@ type AuthConfig struct {
 
 	// AD configuration
 	AD ADAuthConfig `mapstructure:"ad" json:"ad" yaml:"ad"`
+
+	// Phase 18: 凭据静态加密密钥族（与传输密钥 SM4Secret 严格分离）
+	//
+	// CredentialSM4Version / CredentialSM4Secret 是**当前生效**的凭据加密版本与密钥，
+	// 对应 envelope "SM4:<version>:<base64>" 的 version 段。
+	//
+	// CredentialSM4PreviousVersion / CredentialSM4PreviousSecret 是**轮换过渡期**保留的旧版本
+	// 密钥对（可为空）。当有正在轮换的旧版本密文时，operator 通过这两个字段提供旧密钥，
+	// RotateIfNeeded 会自动把旧版本 envelope 改写成当前版本。
+	//
+	// 启动期校验（ValidateCredentialSM4Config）要求：
+	//   - CredentialSM4Version 必须匹配 ^v[1-9][0-9]*$
+	//   - CredentialSM4Secret ≥ 32 字符（与 SM4Secret/HLSTokenSecret 一致；生产环境 ≥ 32 即足够，
+	//     DeriveSM4Key 取前 16 字节作为 SM4 密钥；但保留 32 字符下限以保持与 HLS token 密钥同强度）
+	//   - CredentialSM4PreviousVersion 与 CredentialSM4PreviousSecret 必须同时存在或同时缺失
+	//   - CredentialSM4Secret != CredentialSM4PreviousSecret（强制轮换）
+	//   - CredentialSM4Version != CredentialSM4PreviousVersion
+	CredentialSM4Version         string `mapstructure:"credential_sm4_version" json:"credential_sm4_version" yaml:"credential_sm4_version"`
+	CredentialSM4Secret         string `mapstructure:"credential_sm4_secret" json:"credential_sm4_secret" yaml:"credential_sm4_secret"`
+	CredentialSM4PreviousVersion string `mapstructure:"credential_sm4_previous_version" json:"credential_sm4_previous_version" yaml:"credential_sm4_previous_version"`
+	CredentialSM4PreviousSecret string `mapstructure:"credential_sm4_previous_secret" json:"credential_sm4_previous_secret" yaml:"credential_sm4_previous_secret"`
 }
 
 // ADAuthConfig AD域控配置
@@ -790,6 +811,11 @@ func bindSecretEnv(v *viper.Viper) {
 	_ = v.BindEnv("admin.migration_concurrency", "ADMIN_MIGRATION_CONCURRENCY")
 	_ = v.BindEnv("transcription.batch_concurrency", "TRANSCRIPTION_BATCH_CONCURRENCY")
 	_ = v.BindEnv("ffmpeg.hls_rewrite_concurrency", "FFMPEG_HLS_REWRITE_CONCURRENCY")
+	// Phase 18: 凭据静态加密密钥族（与传输密钥 SM4_SECRET 解耦，独立 env 名）
+	_ = v.BindEnv("auth.credential_sm4_version", "CREDENTIAL_SM4_VERSION")
+	_ = v.BindEnv("auth.credential_sm4_secret", "CREDENTIAL_SM4_SECRET")
+	_ = v.BindEnv("auth.credential_sm4_previous_version", "CREDENTIAL_SM4_PREVIOUS_VERSION")
+	_ = v.BindEnv("auth.credential_sm4_previous_secret", "CREDENTIAL_SM4_PREVIOUS_SECRET")
 }
 
 // ValidateProductionSecrets 在生产环境强制校验 SM4/HLS Token 密钥：
@@ -825,4 +851,58 @@ func (c *Config) ValidateProductionSecrets(logger *zap.Logger) {
 			logger.Warn("HLS_TOKEN_SECRET 长度不足 32 字符（非生产环境仅警告）", zap.Int("length", len(hls)))
 		}
 	}
+}
+
+// CredentialSM4VersionPattern 是 envelope version 段的合法正则：v1, v2, ...
+var CredentialSM4VersionPattern = regexp.MustCompile(`^v[1-9][0-9]*$`)
+
+// ValidateCredentialSM4Config 校验凭据静态加密密钥族配置。
+//
+// 规则（全部失败条件 → 返回 error，调用方决定如何处理；当前 cmd/server/app.go
+// 的 Initialize() 把它作为 fail-closed 步骤）：
+//   - CredentialSM4Version 必须非空且匹配 ^v[1-9][0-9]*$
+//   - CredentialSM4Secret 必须 ≥ 32 字符
+//   - CredentialSM4PreviousVersion 与 CredentialSM4PreviousSecret 必须同时存在或同时缺失
+//   - 当 PreviousVersion 存在时：必须匹配 ^v[1-9][0-9]*$，且必须 != CurrentVersion
+//   - 当 PreviousSecret 存在时：必须 ≥ 32 字符，且必须 != CurrentSecret
+//
+// 非生产环境下不阻断启动，但返回 error 让 caller 决定日志级别；
+// 生产环境下 cmd/server/app.go 直接 Fatal。
+func (c *Config) ValidateCredentialSM4Config() error {
+	cur := c.Auth.CredentialSM4Version
+	sec := c.Auth.CredentialSM4Secret
+	prevVer := c.Auth.CredentialSM4PreviousVersion
+	prevSec := c.Auth.CredentialSM4PreviousSecret
+
+	if cur == "" {
+		return fmt.Errorf("CREDENTIAL_SM4_VERSION 必须显式设置（Phase 18 凭据静态加密要求）")
+	}
+	if !CredentialSM4VersionPattern.MatchString(cur) {
+		return fmt.Errorf("CREDENTIAL_SM4_VERSION 格式非法: %q（必须匹配 ^v[1-9][0-9]*$）", cur)
+	}
+	if len(sec) < 32 {
+		return fmt.Errorf("CREDENTIAL_SM4_SECRET 必须 ≥ 32 字符（当前长度=%d）", len(sec))
+	}
+
+	// Previous 必须配对出现
+	if (prevVer == "") != (prevSec == "") {
+		return fmt.Errorf("CREDENTIAL_SM4_PREVIOUS_VERSION 与 CREDENTIAL_SM4_PREVIOUS_SECRET 必须同时设置或同时缺失")
+	}
+	// 全部缺失 → 跳过轮换校验（正常启动场景）
+	if prevVer == "" && prevSec == "" {
+		return nil
+	}
+	if !CredentialSM4VersionPattern.MatchString(prevVer) {
+		return fmt.Errorf("CREDENTIAL_SM4_PREVIOUS_VERSION 格式非法: %q", prevVer)
+	}
+	if prevVer == cur {
+		return fmt.Errorf("CREDENTIAL_SM4_PREVIOUS_VERSION 必须不等于 CREDENTIAL_SM4_VERSION（否则轮换无意义）")
+	}
+	if len(prevSec) < 32 {
+		return fmt.Errorf("CREDENTIAL_SM4_PREVIOUS_SECRET 必须 ≥ 32 字符（当前长度=%d）", len(prevSec))
+	}
+	if prevSec == sec {
+		return fmt.Errorf("CREDENTIAL_SM4_PREVIOUS_SECRET 必须不等于 CREDENTIAL_SM4_SECRET（强制轮换）")
+	}
+	return nil
 }
