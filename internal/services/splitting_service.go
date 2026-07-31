@@ -90,7 +90,7 @@ func (s *SplittingService) Stop() {
 // SubmitSplit submits a split task
 func (s *SplittingService) SubmitSplit(ctx context.Context, videoFileID uint, markers []float64, reEncode bool, createdBy uint) error {
 	// 1. Smart cleanup: delete existing segments before creating new ones
-	deletedCount, err := s.videoFileService.DeleteSplitSegmentsByParentID(videoFileID, createdBy)
+	deletedCount, err := s.videoFileService.DeleteSplitSegmentsByParentID(ctx, videoFileID, createdBy)
 	if err != nil {
 		s.logger.Error("清理旧分割段失败",
 			zap.Uint("video_file_id", videoFileID),

@@ -1324,10 +1324,10 @@ func (s *VideoFileService) findVideoFiles(dir string, sourceType string) ([]file
 //   - id: video file ID
 //   - newName: new filename without extension (extension will be preserved)
 //   - userID: user ID requesting the rename (for ownership validation)
-func (s *VideoFileService) RenameVideoFile(id uint, newName string, userID uint, hasSharedViewer bool) error {
+func (s *VideoFileService) RenameVideoFile(ctx context.Context, id uint, newName string, userID uint, hasSharedViewer bool) error {
 	// Validation: load video file
 	var videoFile models.VideoFile
-	if err := s.db.First(&videoFile, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&videoFile, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("视频文件不存在")
 		}
@@ -1374,7 +1374,7 @@ func (s *VideoFileService) RenameVideoFile(id uint, newName string, userID uint,
 
 	// Check if another file with the same path already exists
 	var existingFile models.VideoFile
-	err := s.db.Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
+	err := s.db.WithContext(ctx).Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
 	if err == nil {
 		return fmt.Errorf("目标文件名已存在")
 	} else if err != gorm.ErrRecordNotFound {
@@ -1382,7 +1382,7 @@ func (s *VideoFileService) RenameVideoFile(id uint, newName string, userID uint,
 	}
 
 	// Atomic rename: database transaction + filesystem rename
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Step 1: Rename physical file
 		if err := os.Rename(videoFile.FilePath, newFilePath); err != nil {
 			s.logger.Warn("重命名物理文件失败",
@@ -1454,10 +1454,10 @@ func (s *VideoFileService) extractTaskIDFromPath(path string) *uint {
 // 3. Filters by source_type IN ('split', 'snapshot') - never deletes original recordings
 // 4. Deletes physical files and thumbnails
 // 5. Deletes database records atomically
-func (s *VideoFileService) DeleteSplitSegmentsByParentID(parentID uint, userID uint) (int, error) {
+func (s *VideoFileService) DeleteSplitSegmentsByParentID(ctx context.Context, parentID uint, userID uint) (int, error) {
 	// 1. Query segments with ownership and source type validation
 	var segments []models.VideoFile
-	err := s.db.Where("parent_id = ? AND created_by = ? AND source_type IN ?", parentID, userID, []string{"split", "snapshot"}).Limit(1000).Find(&segments).Error
+	err := s.db.WithContext(ctx).Where("parent_id = ? AND created_by = ? AND source_type IN ?", parentID, userID, []string{"split", "snapshot"}).Limit(1000).Find(&segments).Error
 	if err != nil {
 		return 0, fmt.Errorf("failed to query segments: %w", err)
 	}
@@ -1475,7 +1475,7 @@ func (s *VideoFileService) DeleteSplitSegmentsByParentID(parentID uint, userID u
 
 	// 2. Delete in transaction
 	deletedCount := 0
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, segment := range segments {
 			// Delete physical file
 			if segment.FilePath != "" {
@@ -1546,10 +1546,10 @@ type BatchDownloadFilesResponse struct {
 }
 
 // BatchDownloadFiles 批量下载文件（打包为ZIP）
-func (s *VideoFileService) BatchDownloadFiles(ids []uint, userID uint, isAdmin bool) (*BatchDownloadFilesResponse, error) {
+func (s *VideoFileService) BatchDownloadFiles(ctx context.Context, ids []uint, userID uint, isAdmin bool) (*BatchDownloadFilesResponse, error) {
 	// 查询所有文件
 	var files []models.VideoFile
-	if err := s.db.Where("id IN ?", ids).Limit(5000).Find(&files).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Limit(5000).Find(&files).Error; err != nil {
 		return nil, fmt.Errorf("查询文件失败: %w", err)
 	}
 
