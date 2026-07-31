@@ -827,7 +827,7 @@ func (a *MinimalApp) initHandlers() error {
 	// 配置服务 - 用于持久化系统配置到数据库
 	configService := services.NewConfigService(a.db, a.logger, a.config, a.credentialEncryptor)
 	// 从数据库加载持久化的认证配置（覆盖 YAML 默认值）
-	if err := configService.LoadAuthConfig(); err != nil {
+	if err := configService.LoadAuthConfig(context.Background()); err != nil {
 		a.logger.Warn("Failed to load persisted auth config, using YAML defaults", zap.Error(err))
 	}
 

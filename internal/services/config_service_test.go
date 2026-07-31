@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestConfigService_SaveAuthConfig_StripsPasswordFromADJSON(t *testing.T) {
 		BaseDN:   "dc=ex",
 		UseTLS:   true,
 	}
-	require.NoError(t, svc.SaveAuthConfig("ad", ad))
+	require.NoError(t, svc.SaveAuthConfig(context.Background(), "ad", ad))
 
 	// 读回 auth.ad：JSON 不含 password 字段
 	var adSetting models.SystemSetting
@@ -56,7 +57,7 @@ func TestConfigService_SaveAuthConfig_PasswordStoredAsEnvelope(t *testing.T) {
 		Server:   "ad.example.com",
 		Password: "secret-pw-123",
 	}
-	require.NoError(t, svc.SaveAuthConfig("ad", ad))
+	require.NoError(t, svc.SaveAuthConfig(context.Background(), "ad", ad))
 
 	var pwdSetting models.SystemSetting
 	require.NoError(t, svc.db.Where("`key` = ?", "auth.ad.password").First(&pwdSetting).Error)
@@ -71,7 +72,7 @@ func TestConfigService_SaveAuthConfig_NilEncryptor_Fails(t *testing.T) {
 	svc, _ := newTestConfigService(t, false)
 
 	ad := &auth.ADAuthConfig{Server: "x", Password: "pw"}
-	err := svc.SaveAuthConfig("local", ad)
+	err := svc.SaveAuthConfig(context.Background(), "local", ad)
 	assert.Error(t, err, "无 encryptor 时应拒绝 SaveAuthConfig")
 	assert.Contains(t, err.Error(), "CredentialEncryptor")
 }
@@ -87,12 +88,12 @@ func TestConfigService_LoadAuthConfig_DecryptsPassword(t *testing.T) {
 		BaseDN:   "dc=test",
 		UseTLS:   true,
 	}
-	require.NoError(t, svc.SaveAuthConfig("ad", ad))
+	require.NoError(t, svc.SaveAuthConfig(context.Background(), "ad", ad))
 
 	// 重置 cfg（模拟重启）
 	cfg.Auth.AD = config.ADAuthConfig{}
 
-	require.NoError(t, svc.LoadAuthConfig())
+	require.NoError(t, svc.LoadAuthConfig(context.Background()))
 	assert.Equal(t, "ad", cfg.Auth.Mode)
 	assert.Equal(t, "ad.example.com", cfg.Auth.AD.Server)
 	assert.Equal(t, "cn=admin", cfg.Auth.AD.BindDN)
@@ -103,7 +104,7 @@ func TestConfigService_LoadAuthConfig_DecryptsPassword(t *testing.T) {
 
 func TestConfigService_LoadAuthConfig_NilEncryptor_Fails(t *testing.T) {
 	svc, _ := newTestConfigService(t, false)
-	err := svc.LoadAuthConfig()
+	err := svc.LoadAuthConfig(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "CredentialEncryptor")
 }
@@ -112,7 +113,7 @@ func TestConfigService_SaveAuthConfig_EmptyPassword_NoEnvelopeWritten(t *testing
 	svc, _ := newTestConfigService(t, true)
 
 	ad := &auth.ADAuthConfig{Server: "x"} // 无密码
-	require.NoError(t, svc.SaveAuthConfig("ad", ad))
+	require.NoError(t, svc.SaveAuthConfig(context.Background(), "ad", ad))
 
 	// auth.ad.password 行不应被写入（或保留空）
 	var pwdSetting models.SystemSetting

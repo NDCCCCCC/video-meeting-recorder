@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,21 +76,21 @@ func NewConfigService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, encry
 }
 
 // LoadAuthConfig loads auth config from database, overriding YAML defaults
-func (s *ConfigService) LoadAuthConfig() error {
+func (s *ConfigService) LoadAuthConfig(ctx context.Context) error {
 	if s.encryptor == nil {
 		return errors.New("ConfigService.encryptor 未注入；LoadAuthConfig 需要 CredentialEncryptor（Phase 18 强制要求）")
 	}
 
 	// Load mode
 	var modeSetting models.SystemSetting
-	if err := s.db.Where("`key` = ?", keyAuthMode).First(&modeSetting).Error; err == nil {
+	if err := s.db.WithContext(ctx).Where("`key` = ?", keyAuthMode).First(&modeSetting).Error; err == nil {
 		s.cfg.Auth.Mode = modeSetting.Value
 		s.logger.Info("Loaded auth mode from database", zap.String("mode", s.cfg.Auth.Mode))
 	}
 
 	// Load AD config（JSON 不含 password 字段——Phase 18 invariant 已强制保证）
 	var adSetting models.SystemSetting
-	if err := s.db.Where("`key` = ?", keyAuthAD).First(&adSetting).Error; err == nil {
+	if err := s.db.WithContext(ctx).Where("`key` = ?", keyAuthAD).First(&adSetting).Error; err == nil {
 		var adConfig auth.ADAuthConfig
 		if err := json.Unmarshal([]byte(adSetting.Value), &adConfig); err != nil {
 			s.logger.Error("Failed to unmarshal AD config from database", zap.Error(err))
@@ -110,7 +111,7 @@ func (s *ConfigService) LoadAuthConfig() error {
 	// Load and decrypt AD password
 	// Phase 18: 解密失败 → logger.Fatal 终止启动（不能 warn-and-continue）
 	var pwdSetting models.SystemSetting
-	if err := s.db.Where("`key` = ?", keyAuthADPassword).First(&pwdSetting).Error; err == nil {
+	if err := s.db.WithContext(ctx).Where("`key` = ?", keyAuthADPassword).First(&pwdSetting).Error; err == nil {
 		decrypted, err := s.encryptor.Decrypt(pwdSetting.Value)
 		if err != nil {
 			// Per Phase 18 spec: decrypt error → logger.Fatal（不是 warn-and-continue）
@@ -132,14 +133,14 @@ func (s *ConfigService) LoadAuthConfig() error {
 // Phase 18 关键变化：
 //   - system_settings['auth.ad'] JSON 行**必须不包含 password 字段** → 使用 authADForDB DTO
 //   - system_settings['auth.ad.password'] 独立一行存密文 envelope
-func (s *ConfigService) SaveAuthConfig(mode string, adConfig *auth.ADAuthConfig) error {
+func (s *ConfigService) SaveAuthConfig(ctx context.Context, mode string, adConfig *auth.ADAuthConfig) error {
 	if s.encryptor == nil {
 		return errors.New("ConfigService.encryptor 未注入；SaveAuthConfig 需要 CredentialEncryptor（Phase 18 强制要求）")
 	}
 
 	// Save mode
 	modeSetting := models.SystemSetting{Key: keyAuthMode, Value: mode}
-	s.db.Where("`key` = ?", keyAuthMode).Assign(&modeSetting).Save(&modeSetting)
+	s.db.WithContext(ctx).Where("`key` = ?", keyAuthMode).Assign(&modeSetting).Save(&modeSetting)
 
 	// Save AD config — 用专用 DTO 显式剥离 password 字段
 	adDB := toADAuthConfigForDB(adConfig)
@@ -148,7 +149,7 @@ func (s *ConfigService) SaveAuthConfig(mode string, adConfig *auth.ADAuthConfig)
 		return fmt.Errorf("序列化 AD config JSON 失败: %w", err)
 	}
 	adSetting := models.SystemSetting{Key: keyAuthAD, Value: string(adConfigJSON)}
-	s.db.Where("`key` = ?", keyAuthAD).Assign(&adSetting).Save(&adSetting)
+	s.db.WithContext(ctx).Where("`key` = ?", keyAuthAD).Assign(&adSetting).Save(&adSetting)
 
 	// Encrypt and save password (envelope)
 	if adConfig.Password != "" {
@@ -158,7 +159,7 @@ func (s *ConfigService) SaveAuthConfig(mode string, adConfig *auth.ADAuthConfig)
 			return err
 		}
 		pwdSetting := models.SystemSetting{Key: keyAuthADPassword, Value: encrypted}
-		s.db.Where("`key` = ?", keyAuthADPassword).Assign(&pwdSetting).Save(&pwdSetting)
+		s.db.WithContext(ctx).Where("`key` = ?", keyAuthADPassword).Assign(&pwdSetting).Save(&pwdSetting)
 	}
 
 	s.logger.Info("Saved auth config to database")

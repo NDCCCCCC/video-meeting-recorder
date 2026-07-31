@@ -54,7 +54,7 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 
 	// 2. Validate ownership: Load VideoFile and verify user owns it
 	var videoFile models.VideoFile
-	if err := s.db.First(&videoFile, req.VideoFileID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&videoFile, req.VideoFileID).Error; err != nil {
 		return nil, fmt.Errorf("video file not found")
 	}
 
@@ -83,7 +83,7 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 
 	for pptFileID := range sourcePptMap {
 		var pptFile models.PPTFile
-		if err := s.db.First(&pptFile, pptFileID).Error; err != nil {
+		if err := s.db.WithContext(ctx).First(&pptFile, pptFileID).Error; err != nil {
 			return nil, fmt.Errorf("source PPT file %d not found", pptFileID)
 		}
 
@@ -207,7 +207,7 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 		SourceVideoFileID: &req.VideoFileID,
 	}
 
-	if err := s.db.Create(pptFile).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(pptFile).Error; err != nil {
 		s.logger.Error("Failed to create merged PPT file record",
 			zap.Uint("video_file_id", req.VideoFileID),
 			zap.Error(err))

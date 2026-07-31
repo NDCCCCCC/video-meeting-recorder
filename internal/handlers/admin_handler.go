@@ -141,7 +141,7 @@ func (h *AdminHandler) UpdateAuthConfig(c *gin.Context) {
 
 	// Persist to database
 	if h.configService != nil {
-		if err := h.configService.SaveAuthConfig(req.Mode, &req.AD); err != nil {
+		if err := h.configService.SaveAuthConfig(c.Request.Context(), req.Mode, &req.AD); err != nil {
 			h.logger.Error("Failed to save auth config to database", zap.Error(err))
 			response.GinError(c, response.CodeInternalError, "配置保存失败")
 			return
