@@ -159,7 +159,7 @@ func (s *VideoSimpleScheduler) AddTask(task *models.VideoRecordingTask) error {
 
 	// 检查任务是否已存在
 	if _, exists := s.taskEntries[task.ID]; exists {
-		return fmt.Errorf("任务已在调度器中: %d", task.ID)
+		return fmt.Errorf("任务已在调度器中: %d: %w", task.ID, apperrors.ErrAlreadyExists)
 	}
 
 	// 确保任务时间在 UTC 时区
@@ -233,7 +233,7 @@ func (s *VideoSimpleScheduler) AddTask(task *models.VideoRecordingTask) error {
 			zap.String("cron_expr", cronExpr),
 			zap.Error(err),
 		)
-		return fmt.Errorf("添加Cron任务失败: %w", err)
+		return fmt.Errorf("添加Cron任务失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 保存映射关系
@@ -260,7 +260,7 @@ func (s *VideoSimpleScheduler) RemoveTask(taskID uint) error {
 
 	entryID, exists := s.taskEntries[taskID]
 	if !exists {
-		return fmt.Errorf("任务不在调度器中: %d", taskID)
+		return fmt.Errorf("任务不在调度器中: %d: %w", taskID, apperrors.ErrTaskNotFound)
 	}
 
 	// 从Cron调度器移除
@@ -735,7 +735,7 @@ func (s *VideoSimpleScheduler) updateTaskStatus(ctx context.Context, taskID uint
 			zap.String("from", string(task.Status)),
 			zap.String("to", string(status)),
 		)
-		return fmt.Errorf("非法状态转换: %s -> %s", task.Status, status)
+		return fmt.Errorf("非法状态转换: %s -> %s: %w", task.Status, status, apperrors.ErrInvalidInput)
 	}
 
 	return s.taskService.UpdateTaskStatus(ctx, taskID, status, errorMsg)
@@ -780,7 +780,7 @@ func (s *VideoSimpleScheduler) GetStats() map[string]interface{} {
 // HealthCheck 健康检查
 func (s *VideoSimpleScheduler) HealthCheck() error {
 	if err := s.coordinator.HealthCheck(); err != nil {
-		return fmt.Errorf("录制协调器异常: %w", err)
+		return fmt.Errorf("录制协调器异常: %w: %w", apperrors.ErrInternal, err)
 	}
 	return nil
 }
@@ -798,7 +798,7 @@ func (s *VideoSimpleScheduler) Start() error {
 	// 从数据库加载待执行的任务
 	tasks, err := s.taskService.GetPendingTasks(context.Background())
 	if err != nil {
-		return fmt.Errorf("加载待执行任务失败: %w", err)
+		return fmt.Errorf("加载待执行任务失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 添加到调度器
@@ -895,7 +895,7 @@ func (s *VideoSimpleScheduler) SyncPendingTasks() error {
 	tasks, err := s.taskService.GetPendingTasks(context.Background())
 	if err != nil {
 		s.logger.Error("加载待执行任务失败", zap.Error(err))
-		return fmt.Errorf("加载待执行任务失败: %w", err)
+		return fmt.Errorf("加载待执行任务失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	s.logger.Info("从数据库加载待执行任务",
@@ -1138,24 +1138,24 @@ func (s *VideoSimpleScheduler) ExecuteTask(taskID uint) error {
 	s.mu.RLock()
 	if s.executing[taskID] {
 		s.mu.RUnlock()
-		return fmt.Errorf("任务正在执行中: %d", taskID)
+		return fmt.Errorf("任务正在执行中: %d: %w", taskID, apperrors.ErrTaskInProgress)
 	}
 	s.mu.RUnlock()
 
 	// 加载任务
 	task, err := s.taskService.GetTask(context.Background(), taskID)
 	if err != nil {
-		return fmt.Errorf("加载任务失败: %w", err)
+		return fmt.Errorf("加载任务失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 验证任务状态
 	if task.Status != models.VideoStatusPending {
-		return fmt.Errorf("任务状态不正确: %s", task.Status)
+		return fmt.Errorf("任务状态不正确: %s: %w", task.Status, apperrors.ErrInvalidInput)
 	}
 
 	// 检查任务是否过期
 	if time.Now().UTC().After(task.EndTime) {
-		return fmt.Errorf("任务已过期: %s", task.EndTime.Format(time.RFC3339))
+		return fmt.Errorf("任务已过期: %s: %w", task.EndTime.Format(time.RFC3339), apperrors.ErrInvalidInput)
 	}
 
 	// 直接执行任务
@@ -1232,13 +1232,13 @@ func (s *VideoSimpleScheduler) UpdateTaskEndTime(taskID uint, newEndTime time.Ti
 
 	// 检查任务是否正在执行
 	if !s.executing[taskID] {
-		return fmt.Errorf("任务未在执行中")
+		return fmt.Errorf("任务未在执行中: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 检查是否有更新通道
 	updateChan, hasChan := s.taskUpdateChans[taskID]
 	if !hasChan {
-		return fmt.Errorf("任务监控通道不存在")
+		return fmt.Errorf("任务监控通道不存在: %w", apperrors.ErrInternal)
 	}
 
 	// 更新存储的结束时间
@@ -1252,7 +1252,7 @@ func (s *VideoSimpleScheduler) UpdateTaskEndTime(taskID uint, newEndTime time.Ti
 			zap.Time("new_end_time", newEndTime),
 		)
 	default:
-		return fmt.Errorf("更新通道繁忙，请稍后重试")
+		return fmt.Errorf("更新通道繁忙，请稍后重试: %w", apperrors.ErrInsufficientQuota)
 	}
 
 	return nil

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
@@ -96,13 +97,13 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 	// 根据配置类型生成输出路径
 	mkvPath := c.getOutputPathWithType(task, configType, "mkv")
 	if err := os.MkdirAll(filepath.Dir(mkvPath), 0755); err != nil {
-		return fmt.Errorf("创建输出目录失败: %w", err)
+		return fmt.Errorf("创建输出目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 生成 HLS 输出路径
 	hlsPath := c.getHLSPathWithType(task, configType)
 	if err := os.MkdirAll(hlsPath, 0755); err != nil {
-		return fmt.Errorf("创建HLS目录失败: %w", err)
+		return fmt.Errorf("创建HLS目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	input := c.buildRecordingInput(task, huaweiConfig)
@@ -110,7 +111,7 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 	// 使用 tee muxer 同时生成 MKV 和 HLS
 	args, err := c.buildRecordingCommand(input, mkvPath, hlsPath, task.EndTime.Sub(task.StartTime), task.ID)
 	if err != nil {
-		return fmt.Errorf("构建录制命令失败: %w", err)
+		return fmt.Errorf("构建录制命令失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -318,12 +319,12 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 	// 生成新的输出路径（使用新的时间戳）
 	mkvPath := c.getOutputPathWithType(task, configType, "mkv")
 	if err := os.MkdirAll(filepath.Dir(mkvPath), 0755); err != nil {
-		return fmt.Errorf("创建输出目录失败: %w", err)
+		return fmt.Errorf("创建输出目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	hlsPath := c.getHLSPathWithType(task, configType)
 	if err := os.MkdirAll(hlsPath, 0755); err != nil {
-		return fmt.Errorf("创建HLS目录失败: %w", err)
+		return fmt.Errorf("创建HLS目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	input := c.buildRecordingInput(task, huaweiConfig)
@@ -331,13 +332,13 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 	// 计算剩余录制时长
 	remainingDuration := task.EndTime.Sub(time.Now())
 	if remainingDuration <= 0 {
-		return fmt.Errorf("任务已结束，无法继续录制")
+		return fmt.Errorf("任务已结束，无法继续录制: %w", apperrors.ErrTaskNotFound)
 	}
 
 	// 使用 tee muxer 同时生成 MKV 和 HLS
 	args, err := c.buildRecordingCommand(input, mkvPath, hlsPath, remainingDuration, task.ID)
 	if err != nil {
-		return fmt.Errorf("构建录制命令失败: %w", err)
+		return fmt.Errorf("构建录制命令失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 关闭旧的日志文件
@@ -490,7 +491,7 @@ func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPat
 	logPath := filepath.Join(filepath.Dir(outputPath), "ffmpeg.log")
 	logFile, err := os.Create(logPath)
 	if err != nil {
-		return nil, fmt.Errorf("创建日志文件失败: %w", err)
+		return nil, fmt.Errorf("创建日志文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	cmd.Stdout = logFile
@@ -521,7 +522,7 @@ func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPat
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
-		return nil, fmt.Errorf("启动FFmpeg进程失败: %w", err)
+		return nil, fmt.Errorf("启动FFmpeg进程失败: %w: %w", apperrors.ErrFFmpegFailed, err)
 	}
 
 	return logFile, nil
@@ -844,7 +845,7 @@ func (c *SimpleRecordingCoordinator) buildInputArgs(input RecordingInput) ([]str
 		}
 
 	default:
-		return nil, fmt.Errorf("不支持的输入源类型: %s", input.Type)
+		return nil, fmt.Errorf("不支持的输入源类型: %s: %w", input.Type, apperrors.ErrInvalidInput)
 	}
 
 	return args, err
@@ -859,13 +860,13 @@ func (c *SimpleRecordingCoordinator) buildUSBVideoArgs(input RecordingInput) ([]
 	}
 
 	if !validBackends[input.CameraBackend] {
-		return nil, fmt.Errorf("不支持的摄像头后端: %s", input.CameraBackend)
+		return nil, fmt.Errorf("不支持的摄像头后端: %s: %w", input.CameraBackend, apperrors.ErrInvalidInput)
 	}
 
 	// 检查视频设备是否有效
 	if input.CameraDevice == "" {
 		c.logger.Warn("摄像头设备为空，跳过视频输入")
-		return nil, fmt.Errorf("摄像头设备不能为空")
+		return nil, fmt.Errorf("摄像头设备不能为空: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 如果设备名称为空但设备值看起来像数字索引，警告但继续（某些系统可能使用数字索引）
@@ -913,7 +914,7 @@ func (c *SimpleRecordingCoordinator) buildUSBAudioArgs(input RecordingInput) ([]
 	}
 
 	if !validBackends[input.AudioBackend] {
-		return nil, fmt.Errorf("不支持的音频后端: %s", input.AudioBackend)
+		return nil, fmt.Errorf("不支持的音频后端: %s: %w", input.AudioBackend, apperrors.ErrInvalidInput)
 	}
 
 	// 检查音频设备是否有效
@@ -961,7 +962,7 @@ func isNumericString(s string) bool {
 // buildRTSPArgs 构建RTSP输入参数
 func (c *SimpleRecordingCoordinator) buildRTSPArgs(input RecordingInput) ([]string, error) {
 	if input.RTSPURL == "" {
-		return nil, fmt.Errorf("RTSP URL不能为空")
+		return nil, fmt.Errorf("RTSP URL不能为空: %w", apperrors.ErrInvalidInput)
 	}
 	return []string{"-rtsp_transport", "tcp", "-i", input.RTSPURL}, nil
 }
@@ -969,7 +970,7 @@ func (c *SimpleRecordingCoordinator) buildRTSPArgs(input RecordingInput) ([]stri
 // buildStreamArgs 构建流媒体输入参数
 func (c *SimpleRecordingCoordinator) buildStreamArgs(input RecordingInput) ([]string, error) {
 	if input.StreamURL == "" {
-		return nil, fmt.Errorf("流媒体URL不能为空")
+		return nil, fmt.Errorf("流媒体URL不能为空: %w", apperrors.ErrInvalidInput)
 	}
 
 	protocol := input.StreamProtocol
@@ -989,7 +990,7 @@ func (c *SimpleRecordingCoordinator) buildStreamArgs(input RecordingInput) ([]st
 	case "hls":
 		args = []string{"-i", input.StreamURL}
 	default:
-		return nil, fmt.Errorf("不支持的流媒体协议: %s", protocol)
+		return nil, fmt.Errorf("不支持的流媒体协议: %s: %w", protocol, apperrors.ErrInvalidInput)
 	}
 
 	return args, nil
@@ -1068,7 +1069,7 @@ func (c *SimpleRecordingCoordinator) GetRecordingStatus(taskID uint) (string, er
 	}
 
 	if totalCount == 0 {
-		return "", fmt.Errorf("未找到录制任务: %d", taskID)
+		return "", fmt.Errorf("未找到录制任务: %d: %w", taskID, apperrors.ErrTaskNotFound)
 	}
 
 	if runningCount > 0 {
