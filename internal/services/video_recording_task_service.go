@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,8 +14,9 @@ import (
 )
 
 // VideoRecordingTaskService 视频录制任务服务
-// PERF-003 deferred (per CONTEXT.md): 本 service 的方法均无 ctx 参数，无法在 DB 调用上
-// 加 .WithContext(ctx)；全面 ctx 透传需独立 phase 处理 403 处签名级联。
+// Phase 19 Wave 5 (PERF-003/BUG-005)：全部 DB-touching 方法已改为 ctx context.Context
+// 首参，并在每个 s.db. 链首加 .WithContext(ctx)，以支持优雅关停时的查询取消与 HTTP
+// 超时级联。纯 getter/setter（SetScheduler / GetDB）与纯逻辑辅助（canDeleteTask）保留无参。
 type VideoRecordingTaskService struct {
 	db        *gorm.DB
 	logger    *zap.Logger
@@ -91,11 +93,11 @@ type UpdateTaskRequest struct {
 }
 
 // ListTasks 获取任务列表
-func (s *VideoRecordingTaskService) ListTasks(req *ListTasksRequest) (*ListTasksResponse, error) {
+func (s *VideoRecordingTaskService) ListTasks(ctx context.Context, req *ListTasksRequest) (*ListTasksResponse, error) {
 	var tasks []models.VideoRecordingTask
 	var total int64
 
-	query := s.db.Model(&models.VideoRecordingTask{}).Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator")
+	query := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator")
 
 	// 关键词搜索
 	if req.Keyword != "" {
@@ -177,16 +179,16 @@ func (s *VideoRecordingTaskService) ListTasks(req *ListTasksRequest) (*ListTasks
 }
 
 // GetTaskByID 根据ID获取任务
-func (s *VideoRecordingTaskService) GetTaskByID(id uint) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) GetTaskByID(ctx context.Context, id uint) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator").First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator").First(&task, id).Error; err != nil {
 		return nil, err
 	}
 	return &task, nil
 }
 
 // CreateTask 创建任务
-func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy uint) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) CreateTask(ctx context.Context, req *CreateTaskRequest, createdBy uint) (*models.VideoRecordingTask, error) {
 	// 定义北京时间时区（UTC+8）
 	beijingLocation := time.FixedZone("CST", 8*3600)
 
@@ -226,7 +228,7 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 	if len(req.InputConfigIDs) > 0 {
 		// 验证配置存在（使用 input_configs 表）
 		var firstConfig models.InputConfig
-		if err := s.db.First(&firstConfig, req.InputConfigIDs[0]).Error; err != nil {
+		if err := s.db.WithContext(ctx).First(&firstConfig, req.InputConfigIDs[0]).Error; err != nil {
 			return nil, errors.New("输入配置不存在")
 		}
 	}
@@ -256,14 +258,14 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 		return nil, err
 	}
 
-	if err := s.db.Create(task).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(task).Error; err != nil {
 		return nil, err
 	}
 
 	// 创建关联表记录
 	for _, configID := range req.InputConfigIDs {
 		var config models.InputConfig
-		if err := s.db.First(&config, configID).Error; err != nil {
+		if err := s.db.WithContext(ctx).First(&config, configID).Error; err != nil {
 			s.logger.Warn("加载华为配置失败，跳过关联",
 				zap.Uint("config_id", configID),
 				zap.Error(err),
@@ -296,11 +298,11 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 			InputConfigID: configID,
 			ConfigType:    configType,
 		}
-		s.db.Create(&taskConfig)
+		s.db.WithContext(ctx).Create(&taskConfig)
 	}
 
 	// 重新加载关联数据
-	s.db.Preload("Creator").Preload("TaskInputConfigs").First(task, task.ID)
+	s.db.WithContext(ctx).Preload("Creator").Preload("TaskInputConfigs").First(task, task.ID)
 
 	s.logger.Info("录制任务已创建",
 		zap.Uint("task_id", task.ID),
@@ -336,7 +338,7 @@ func (s *VideoRecordingTaskService) CreateTask(req *CreateTaskRequest, createdBy
 }
 
 // CreateTaskAuto 自动创建任务（固定华为配置ID为1）
-func (s *VideoRecordingTaskService) CreateTaskAuto(req *CreateTaskAutoRequest, createdBy uint) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) CreateTaskAuto(ctx context.Context, req *CreateTaskAutoRequest, createdBy uint) (*models.VideoRecordingTask, error) {
 	// 构造标准创建请求，固定华为配置ID为1
 	standardReq := &CreateTaskRequest{
 		Name:               req.Name,
@@ -348,13 +350,13 @@ func (s *VideoRecordingTaskService) CreateTaskAuto(req *CreateTaskAutoRequest, c
 		ConferenceNumber:   req.ConferenceNumber,
 		InputConfigIDs:     []uint{}, // Empty for auto mode
 	}
-	return s.CreateTask(standardReq, createdBy)
+	return s.CreateTask(ctx, standardReq, createdBy)
 }
 
 // UpdateTask 更新任务
-func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req *UpdateTaskRequest, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, nil, errors.New("任务不存在")
 	}
 
@@ -443,12 +445,12 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 		}
 	}
 
-	if err := s.db.Model(&task).Updates(updates).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&task).Updates(updates).Error; err != nil {
 		return nil, nil, err
 	}
 
 	// 重新加载数据
-	s.db.Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator").First(&task, id)
+	s.db.WithContext(ctx).Preload("InputConfig").Preload("TaskInputConfigs").Preload("Creator").First(&task, id)
 
 	// 验证更新后的数据
 	if err := task.IsValid(); err != nil {
@@ -465,9 +467,9 @@ func (s *VideoRecordingTaskService) UpdateTask(id uint, req *UpdateTaskRequest, 
 }
 
 // DeleteTask 删除任务
-func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin bool) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) DeleteTask(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, errors.New("任务不存在")
 	}
 
@@ -487,9 +489,9 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin boo
 	// 删除前先解锁所有关联的输入配置（防止锁遗留）
 	// PERF-001: 改 Pluck + IN 批量更新，消除 N+1（原每配置一次 UPDATE）。
 	var configIDs []uint
-	if err := s.db.Model(&models.TaskInputConfig{}).Where("task_id = ?", id).Pluck("input_config_id", &configIDs).Error; err == nil {
+	if err := s.db.WithContext(ctx).Model(&models.TaskInputConfig{}).Where("task_id = ?", id).Pluck("input_config_id", &configIDs).Error; err == nil {
 		if len(configIDs) > 0 {
-			s.db.Model(&models.InputConfig{}).Where("id IN ?", configIDs).Updates(map[string]interface{}{
+			s.db.WithContext(ctx).Model(&models.InputConfig{}).Where("id IN ?", configIDs).Updates(map[string]interface{}{
 				"is_locked": false,
 				"locked_by": nil,
 			})
@@ -500,7 +502,7 @@ func (s *VideoRecordingTaskService) DeleteTask(id uint, userID uint, isAdmin boo
 		)
 	}
 
-	result := s.db.Delete(&models.VideoRecordingTask{}, id)
+	result := s.db.WithContext(ctx).Delete(&models.VideoRecordingTask{}, id)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -557,14 +559,14 @@ func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask
 }
 
 // BatchDeleteTasks 批量删除任务
-func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, isAdmin bool) ([]models.VideoRecordingTask, *BatchDeleteTasksResult, error) {
+func (s *VideoRecordingTaskService) BatchDeleteTasks(ctx context.Context, ids []uint, userID uint, isAdmin bool) ([]models.VideoRecordingTask, *BatchDeleteTasksResult, error) {
 	if len(ids) == 0 {
 		return nil, nil, errors.New("任务ID列表不能为空")
 	}
 
 	// Snapshot requested tasks BEFORE any deletion or filtering — for audit OldData capture
 	var oldTasks []models.VideoRecordingTask
-	if err := s.db.Where("id IN ?", ids).Limit(5000).Find(&oldTasks).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Limit(5000).Find(&oldTasks).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -594,9 +596,9 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 	// 删除前先解锁所有待删除任务的输入配置（防止锁遗留）
 	// PERF-001: 单次 Pluck 跨所有待删除任务 + 单次批量 UPDATE，消除双层 N+1。
 	var batchConfigIDs []uint
-	if err := s.db.Model(&models.TaskInputConfig{}).Where("task_id IN ?", result.DeletedIDs).Pluck("input_config_id", &batchConfigIDs).Error; err == nil {
+	if err := s.db.WithContext(ctx).Model(&models.TaskInputConfig{}).Where("task_id IN ?", result.DeletedIDs).Pluck("input_config_id", &batchConfigIDs).Error; err == nil {
 		if len(batchConfigIDs) > 0 {
-			s.db.Model(&models.InputConfig{}).Where("id IN ?", batchConfigIDs).Updates(map[string]interface{}{
+			s.db.WithContext(ctx).Model(&models.InputConfig{}).Where("id IN ?", batchConfigIDs).Updates(map[string]interface{}{
 				"is_locked": false,
 				"locked_by": nil,
 			})
@@ -607,7 +609,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 	)
 
 	// 执行删除
-	dbResult := s.db.Delete(&models.VideoRecordingTask{}, result.DeletedIDs)
+	dbResult := s.db.WithContext(ctx).Delete(&models.VideoRecordingTask{}, result.DeletedIDs)
 	if dbResult.Error != nil {
 		return nil, nil, dbResult.Error
 	}
@@ -629,9 +631,9 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ids []uint, userID uint, is
 }
 
 // StartTask 手动启动任务
-func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) StartTask(ctx context.Context, id uint, userID uint) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, nil, errors.New("任务不存在")
 	}
 
@@ -658,7 +660,7 @@ func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.Vid
 	}
 
 	// Reload post-dispatch state for NewData (asynchronous scheduler may have mutated status).
-	if err := s.db.First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -671,9 +673,9 @@ func (s *VideoRecordingTaskService) StartTask(id uint, userID uint) (*models.Vid
 }
 
 // StopTask 手动停止任务
-func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) StopTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, nil, errors.New("任务不存在")
 	}
 
@@ -702,7 +704,7 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedView
 	}
 
 	// 重新加载任务以获取最新状态（因为 CancelTaskExecution 可能创建了 MKV 文件）
-	if err := s.db.First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -726,7 +728,7 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedView
 		)
 	}
 
-	if err := s.db.Save(&task).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&task).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -734,9 +736,9 @@ func (s *VideoRecordingTaskService) StopTask(id uint, userID uint, hasSharedView
 }
 
 // CancelTask 取消任务
-func (s *VideoRecordingTaskService) CancelTask(id uint, userID uint, hasSharedViewer bool) error {
+func (s *VideoRecordingTaskService) CancelTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) error {
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return errors.New("任务不存在")
 	}
 
@@ -759,7 +761,7 @@ func (s *VideoRecordingTaskService) CancelTask(id uint, userID uint, hasSharedVi
 
 	// 更新状态
 	task.Status = models.VideoStatusCancelled
-	if err := s.db.Save(&task).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&task).Error; err != nil {
 		return err
 	}
 
@@ -772,9 +774,9 @@ func (s *VideoRecordingTaskService) CancelTask(id uint, userID uint, hasSharedVi
 }
 
 // RetryTask 重试失败任务
-func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) RetryTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
-	if err := s.db.First(&task, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, errors.New("任务不存在")
 	}
 
@@ -802,7 +804,7 @@ func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint, hasSharedVie
 	task.StartTime = newTriggerTime.Add(time.Duration(task.PreJoinMinutes) * time.Minute)
 	task.EndTime = task.StartTime.Add(duration)
 
-	if err := s.db.Save(&task).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&task).Error; err != nil {
 		return nil, err
 	}
 
@@ -834,22 +836,22 @@ func (s *VideoRecordingTaskService) RetryTask(id uint, userID uint, hasSharedVie
 }
 
 // GetTasksByStatus 根据状态获取任务列表
-func (s *VideoRecordingTaskService) GetTasksByStatus(status models.VideoRecordingTaskStatus) ([]models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) GetTasksByStatus(ctx context.Context, status models.VideoRecordingTaskStatus) ([]models.VideoRecordingTask, error) {
 	var tasks []models.VideoRecordingTask
 	// PERF-002: 列表查询加 Limit 上限，防止数据增长后全表扫描。
-	if err := s.db.Where("status = ?", status).Limit(1000).Find(&tasks).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("status = ?", status).Limit(1000).Find(&tasks).Error; err != nil {
 		return nil, err
 	}
 	return tasks, nil
 }
 
 // GetPendingTasks 获取待执行的任务
-func (s *VideoRecordingTaskService) GetPendingTasks() ([]models.VideoRecordingTask, error) {
-	return s.GetTasksByStatus(models.VideoStatusPending)
+func (s *VideoRecordingTaskService) GetPendingTasks(ctx context.Context) ([]models.VideoRecordingTask, error) {
+	return s.GetTasksByStatus(ctx, models.VideoStatusPending)
 }
 
 // UpdateTaskStatus 更新任务状态
-func (s *VideoRecordingTaskService) UpdateTaskStatus(id uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
+func (s *VideoRecordingTaskService) UpdateTaskStatus(ctx context.Context, id uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
 	updates := map[string]interface{}{
 		"status": status,
 	}
@@ -857,7 +859,7 @@ func (s *VideoRecordingTaskService) UpdateTaskStatus(id uint, status models.Vide
 		updates["error_msg"] = errorMsg
 	}
 
-	result := s.db.Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
+	result := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -869,13 +871,13 @@ func (s *VideoRecordingTaskService) UpdateTaskStatus(id uint, status models.Vide
 }
 
 // UpdateRecordingInfo 更新录制信息
-func (s *VideoRecordingTaskService) UpdateRecordingInfo(id uint, filePath string, duration int) error {
+func (s *VideoRecordingTaskService) UpdateRecordingInfo(ctx context.Context, id uint, filePath string, duration int) error {
 	updates := map[string]interface{}{
 		"recording_file":     filePath,
 		"recording_duration": duration,
 	}
 
-	result := s.db.Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
+	result := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -887,7 +889,7 @@ func (s *VideoRecordingTaskService) UpdateRecordingInfo(id uint, filePath string
 }
 
 // UpdateRecordingPaths 更新录制文件路径
-func (s *VideoRecordingTaskService) UpdateRecordingPaths(id uint, mkvPath, hlsPath string) error {
+func (s *VideoRecordingTaskService) UpdateRecordingPaths(ctx context.Context, id uint, mkvPath, hlsPath string) error {
 	s.logger.Debug("更新录制文件路径",
 		zap.Uint("task_id", id),
 		zap.String("mkv_path", mkvPath),
@@ -900,7 +902,7 @@ func (s *VideoRecordingTaskService) UpdateRecordingPaths(id uint, mkvPath, hlsPa
 		"hls_preview_path": hlsPath,
 	}
 
-	result := s.db.Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
+	result := s.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -911,13 +913,13 @@ func (s *VideoRecordingTaskService) UpdateRecordingPaths(id uint, mkvPath, hlsPa
 }
 
 // validateConfigTypes 验证配置类型（不能多选同类型）
-func (s *VideoRecordingTaskService) validateConfigTypes(configIDs []uint) error {
+func (s *VideoRecordingTaskService) validateConfigTypes(ctx context.Context, configIDs []uint) error {
 	if len(configIDs) == 0 {
 		return nil
 	}
 
 	var configs []models.InputConfig
-	if err := s.db.Where("id IN ?", configIDs).Limit(1000).Find(&configs).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id IN ?", configIDs).Limit(1000).Find(&configs).Error; err != nil {
 		return err
 	}
 
@@ -953,9 +955,9 @@ func (s *VideoRecordingTaskService) validateConfigTypes(configIDs []uint) error 
 }
 
 // GetInputConfig 获取输入配置（供调度器使用）
-func (s *VideoRecordingTaskService) GetInputConfig(id uint) (*models.InputConfig, error) {
+func (s *VideoRecordingTaskService) GetInputConfig(ctx context.Context, id uint) (*models.InputConfig, error) {
 	var config models.InputConfig
-	if err := s.db.First(&config, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&config, id).Error; err != nil {
 		return nil, err
 	}
 	return &config, nil
@@ -968,7 +970,7 @@ func (s *VideoRecordingTaskService) GetDB() *gorm.DB {
 
 // ClearStuckTasks 清理卡住的任务
 // 将 converting 状态超过指定时间的任务标记为失败，并释放终端锁
-func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearStuckTasksResult, error) {
+func (s *VideoRecordingTaskService) ClearStuckTasks(ctx context.Context, timeoutMinutes int) (*ClearStuckTasksResult, error) {
 	if timeoutMinutes <= 0 {
 		timeoutMinutes = 30 // 默认30分钟
 	}
@@ -983,7 +985,7 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearS
 	// 查找所有 converting 状态且超过超时时间的任务
 	var stuckTasks []models.VideoRecordingTask
 	// PERF-002: 清理路径加 Limit 上限（bounded cleanup）。
-	if err := s.db.Where("status = ? AND updated_at < ?", models.VideoStatusConverting, timeout).Limit(5000).Find(&stuckTasks).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("status = ? AND updated_at < ?", models.VideoStatusConverting, timeout).Limit(5000).Find(&stuckTasks).Error; err != nil {
 		return nil, fmt.Errorf("查询卡住任务失败: %w", err)
 	}
 
@@ -1007,7 +1009,7 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearS
 		task.ConversionStatus = models.ConversionStatusFailed
 		task.ConversionErrorMsg = "任务被清理"
 
-		if err := s.db.Save(&task).Error; err != nil {
+		if err := s.db.WithContext(ctx).Save(&task).Error; err != nil {
 			s.logger.Error("更新任务状态失败",
 				zap.Uint("task_id", task.ID),
 				zap.Error(err),
@@ -1018,9 +1020,9 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(timeoutMinutes int) (*ClearS
 
 		// 释放所有关联的输入配置锁（PERF-001: Pluck + IN 批量更新，消除每配置一次 UPDATE）
 		var configIDs []uint
-		if err := s.db.Model(&models.TaskInputConfig{}).Where("task_id = ?", task.ID).Pluck("input_config_id", &configIDs).Error; err == nil {
+		if err := s.db.WithContext(ctx).Model(&models.TaskInputConfig{}).Where("task_id = ?", task.ID).Pluck("input_config_id", &configIDs).Error; err == nil {
 			if len(configIDs) > 0 {
-				if err := s.db.Model(&models.InputConfig{}).Where("id IN ?", configIDs).Updates(map[string]interface{}{
+				if err := s.db.WithContext(ctx).Model(&models.InputConfig{}).Where("id IN ?", configIDs).Updates(map[string]interface{}{
 					"is_locked": false,
 					"locked_by": nil,
 					"locked_at": nil,

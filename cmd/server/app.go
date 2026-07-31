@@ -1542,7 +1542,7 @@ func (a *MinimalApp) schedulerDebugHandler(c *gin.Context) {
 
 	// 获取数据库中的待执行任务详情
 	if a.videoTaskService != nil {
-		pendingTasks, err := a.videoTaskService.GetPendingTasks()
+		pendingTasks, err := a.videoTaskService.GetPendingTasks(c.Request.Context())
 		if err == nil {
 			taskDetails := make([]map[string]interface{}, 0, len(pendingTasks))
 			for _, task := range pendingTasks {

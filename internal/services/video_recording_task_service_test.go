@@ -59,7 +59,7 @@ func TestRetryTask_PreservesDuration(t *testing.T) {
 				t.Fatalf("创建任务失败: %v", err)
 			}
 
-			retried, err := svc.RetryTask(task.ID, task.CreatedBy, false)
+			retried, err := svc.RetryTask(context.Background(), task.ID, task.CreatedBy, false)
 			assert.NoError(t, err)
 			assert.NotNil(t, retried)
 
@@ -135,7 +135,7 @@ func TestDeleteTask_NoNPlusOne(t *testing.T) {
 		}
 	}
 
-	_, err = svc.DeleteTask(task.ID, task.CreatedBy, false)
+	_, err = svc.DeleteTask(context.Background(), task.ID, task.CreatedBy, false)
 	assert.NoError(t, err)
 
 	// 行为断言：所有 InputConfig 都已解锁
@@ -148,4 +148,35 @@ func TestDeleteTask_NoNPlusOne(t *testing.T) {
 	// 性能断言：对 input_configs 仅 1 次 UPDATE（批量），证明 N+1 已消除
 	assert.Equal(t, 1, counter.inputConfigUpdates,
 		"Pluck+IN 批量更新应只产生 1 次 input_configs UPDATE，实际 %d", counter.inputConfigUpdates)
+}
+
+// TestVideoRecordingTaskService_CancellationPropagation 验证 Phase 19 Wave 5 ctx 级联：
+// 传入已取消的 ctx 时，DB 查询必须返回 context.Canceled（或其包装），证明取消信号能从
+// 调用方经服务方法传播到底层 GORM 调用——这是优雅关停正确性的核心保证。
+func TestVideoRecordingTaskService_CancellationPropagation(t *testing.T) {
+	db := newTestDB(t)
+	svc := NewVideoRecordingTaskService(db, zap.NewNop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-cancelled: 任何后续 DB 操作都应立即失败
+
+	t.Run("ListTasks", func(t *testing.T) {
+		_, err := svc.ListTasks(ctx, &ListTasksRequest{Page: 1, PageSize: 10})
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("GetTaskByID", func(t *testing.T) {
+		_, err := svc.GetTaskByID(ctx, 1)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("GetTasksByStatus", func(t *testing.T) {
+		_, err := svc.GetTasksByStatus(ctx, models.VideoStatusPending)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("UpdateTaskStatus", func(t *testing.T) {
+		err := svc.UpdateTaskStatus(ctx, 1, models.VideoStatusFailed, "test")
+		assert.ErrorIs(t, err, context.Canceled)
+	})
 }

@@ -104,7 +104,7 @@ func (h *VideoRecordingTaskHandler) ListTasks(c *gin.Context) {
 	req.ApplyDataScope = true
 	req.RoleIDs = middleware.GetRoleIDs(c)
 
-	result, err := h.taskService.ListTasks(&req)
+	result, err := h.taskService.ListTasks(c.Request.Context(), &req)
 	if err != nil {
 		h.logger.Error("获取录制任务列表失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取任务列表失败")
@@ -129,7 +129,7 @@ func (h *VideoRecordingTaskHandler) GetTask(c *gin.Context) {
 		return
 	}
 
-	task, err := h.taskService.GetTaskByID(id)
+	task, err := h.taskService.GetTaskByID(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "任务不存在")
 		return
@@ -182,7 +182,7 @@ func (h *VideoRecordingTaskHandler) CreateTask(c *gin.Context) {
 		return
 
 	}
-	task, err := h.taskService.CreateTask(&req, userID)
+	task, err := h.taskService.CreateTask(c.Request.Context(), &req, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -218,7 +218,7 @@ func (h *VideoRecordingTaskHandler) CreateTaskAuto(c *gin.Context) {
 		return
 
 	}
-	task, err := h.taskService.CreateTaskAuto(&req, userID)
+	task, err := h.taskService.CreateTaskAuto(c.Request.Context(), &req, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -262,7 +262,7 @@ func (h *VideoRecordingTaskHandler) UpdateTask(c *gin.Context) {
 
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
-	oldTask, task, err := h.taskService.UpdateTask(id, &req, userID, hasSharedViewer)
+	oldTask, task, err := h.taskService.UpdateTask(c.Request.Context(), id, &req, userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -309,7 +309,7 @@ func (h *VideoRecordingTaskHandler) DeleteTask(c *gin.Context) {
 
 	}
 	isAdmin := middleware.GetIsAdmin(c)
-	oldTask, err := h.taskService.DeleteTask(id, userID, isAdmin)
+	oldTask, err := h.taskService.DeleteTask(c.Request.Context(), id, userID, isAdmin)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -358,7 +358,7 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 
 	}
 	isAdmin := middleware.GetIsAdmin(c)
-	oldTasks, result, err := h.taskService.BatchDeleteTasks(req.IDs, userID, isAdmin)
+	oldTasks, result, err := h.taskService.BatchDeleteTasks(c.Request.Context(), req.IDs, userID, isAdmin)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -433,7 +433,7 @@ func (h *VideoRecordingTaskHandler) StartTask(c *gin.Context) {
 		return
 
 	}
-	oldTask, task, err := h.taskService.StartTask(id, userID)
+	oldTask, task, err := h.taskService.StartTask(c.Request.Context(), id, userID)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -480,7 +480,7 @@ func (h *VideoRecordingTaskHandler) StopTask(c *gin.Context) {
 
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
-	oldTask, task, err := h.taskService.StopTask(id, userID, hasSharedViewer)
+	oldTask, task, err := h.taskService.StopTask(c.Request.Context(), id, userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -527,7 +527,7 @@ func (h *VideoRecordingTaskHandler) CancelTask(c *gin.Context) {
 
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
-	if err := h.taskService.CancelTask(id, userID, hasSharedViewer); err != nil {
+	if err := h.taskService.CancelTask(c.Request.Context(), id, userID, hasSharedViewer); err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
 	}
@@ -561,7 +561,7 @@ func (h *VideoRecordingTaskHandler) RetryTask(c *gin.Context) {
 
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
-	task, err := h.taskService.RetryTask(id, userID, hasSharedViewer)
+	task, err := h.taskService.RetryTask(c.Request.Context(), id, userID, hasSharedViewer)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -648,7 +648,7 @@ func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
 	}
 
 	// 获取任务信息
-	task, err := h.taskService.GetTaskByID(id)
+	task, err := h.taskService.GetTaskByID(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "任务不存在")
 		return
@@ -769,7 +769,7 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 	}
 
 	// 获取任务信息
-	task, err := h.taskService.GetTaskByID(id)
+	task, err := h.taskService.GetTaskByID(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "任务不存在")
 		return
@@ -954,7 +954,7 @@ func (h *VideoRecordingTaskHandler) ClearStuckTasks(c *gin.Context) {
 		}
 	}
 
-	result, err := h.taskService.ClearStuckTasks(timeoutMinutes)
+	result, err := h.taskService.ClearStuckTasks(c.Request.Context(), timeoutMinutes)
 	if err != nil {
 		h.logger.Error("清理卡住任务失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "清理卡住任务失败")
