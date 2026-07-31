@@ -2,11 +2,11 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
 	"go.uber.org/zap"
@@ -211,7 +211,7 @@ func (s *VideoRecordingTaskService) CreateTask(ctx context.Context, req *CreateT
 			zap.String("start_time", req.StartTime),
 			zap.Error(err),
 		)
-		return nil, errors.New("开始时间格式错误，请使用 RFC3339 格式（如：2026-02-11T15:18:01）")
+		return nil, apperrors.ErrInvalidInput
 	}
 	endTime, err := time.ParseInLocation(time.RFC3339, req.EndTime, beijingLocation)
 	if err != nil {
@@ -219,7 +219,7 @@ func (s *VideoRecordingTaskService) CreateTask(ctx context.Context, req *CreateT
 			zap.String("end_time", req.EndTime),
 			zap.Error(err),
 		)
-		return nil, errors.New("结束时间格式错误，请使用 RFC3339 格式（如：2026-02-11T15:20:01）")
+		return nil, apperrors.ErrInvalidInput
 	}
 
 	// startTime 和 endTime 已经是 UTC 时间（因为 ParseInLocation 返回的是指定时区的时间，需要显式转换）
@@ -241,7 +241,7 @@ func (s *VideoRecordingTaskService) CreateTask(ctx context.Context, req *CreateT
 		// 验证配置存在（使用 input_configs 表）
 		var firstConfig models.InputConfig
 		if err := s.db.WithContext(ctx).First(&firstConfig, req.InputConfigIDs[0]).Error; err != nil {
-			return nil, errors.New("输入配置不存在")
+			return nil, apperrors.ErrNotFound
 		}
 	}
 
@@ -369,12 +369,12 @@ func (s *VideoRecordingTaskService) CreateTaskAuto(ctx context.Context, req *Cre
 func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req *UpdateTaskRequest, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
-		return nil, nil, errors.New("任务不存在")
+		return nil, nil, apperrors.ErrTaskNotFound
 	}
 
 	// 检查权限 (shared_viewers 可以修改任何任务)
 	if !hasSharedViewer && task.CreatedBy != userID {
-		return nil, nil, errors.New("无权限修改此任务")
+		return nil, nil, apperrors.ErrForbidden
 	}
 
 	// 待执行状态：可以更新所有字段
@@ -382,7 +382,7 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 	isRecording := task.Status == models.VideoStatusRecording
 
 	if !isRecording && task.Status != models.VideoStatusPending {
-		return nil, nil, errors.New("只能更新待执行状态或录制中状态的任务")
+		return nil, nil, apperrors.ErrInvalidInput
 	}
 
 	// Snapshot before mutation for audit OldData capture
@@ -404,7 +404,7 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 			beijingLocation := time.FixedZone("CST", 8*3600)
 			startTime, err := time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
 			if err != nil {
-				return nil, nil, errors.New("开始时间格式错误")
+				return nil, nil, apperrors.ErrInvalidInput
 			}
 			updates["start_time"] = startTime.UTC()
 		}
@@ -422,7 +422,7 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 		beijingLocation := time.FixedZone("CST", 8*3600)
 		endTime, err := time.ParseInLocation(time.RFC3339, *req.EndTime, beijingLocation)
 		if err != nil {
-			return nil, nil, errors.New("结束时间格式错误")
+			return nil, nil, apperrors.ErrInvalidInput
 		}
 
 		// 验证结束时间必须在开始时间之后
@@ -432,7 +432,7 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 			parsedStartTime, parseErr := time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
 			if parseErr != nil {
 				s.logger.Warn("开始时间解析失败", zap.Error(parseErr))
-				return nil, nil, errors.New("开始时间格式错误")
+				return nil, nil, apperrors.ErrInvalidInput
 			}
 			newStartTime = parsedStartTime
 		} else {
@@ -440,7 +440,7 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 		}
 
 		if endTime.Before(newStartTime) {
-			return nil, nil, errors.New("结束时间不能早于开始时间")
+			return nil, nil, apperrors.ErrInvalidInput
 		}
 
 		updates["end_time"] = endTime.UTC()
@@ -482,17 +482,17 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 func (s *VideoRecordingTaskService) DeleteTask(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
-		return nil, errors.New("任务不存在")
+		return nil, apperrors.ErrTaskNotFound
 	}
 
 	// 只能删除非运行状态的任务（运行中的任务不能删除）
 	if task.Status == models.VideoStatusRecording || task.Status == models.VideoStatusConnecting {
-		return nil, errors.New("运行中的任务无法删除，请先停止任务")
+		return nil, apperrors.ErrTaskInProgress
 	}
 
 	// 检查权限（管理员可以删除任何任务）
 	if !isAdmin && task.CreatedBy != userID {
-		return nil, errors.New("无权限删除此任务")
+		return nil, apperrors.ErrForbidden
 	}
 
 	// Snapshot before delete for audit OldData capture
@@ -519,7 +519,7 @@ func (s *VideoRecordingTaskService) DeleteTask(ctx context.Context, id uint, use
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return nil, errors.New("任务不存在")
+		return nil, apperrors.ErrTaskNotFound
 	}
 
 	s.logger.Info("录制任务已删除",
@@ -573,7 +573,7 @@ func (s *VideoRecordingTaskService) canDeleteTask(task models.VideoRecordingTask
 // BatchDeleteTasks 批量删除任务
 func (s *VideoRecordingTaskService) BatchDeleteTasks(ctx context.Context, ids []uint, userID uint, isAdmin bool) ([]models.VideoRecordingTask, *BatchDeleteTasksResult, error) {
 	if len(ids) == 0 {
-		return nil, nil, errors.New("任务ID列表不能为空")
+		return nil, nil, apperrors.ErrInvalidInput
 	}
 
 	// Snapshot requested tasks BEFORE any deletion or filtering — for audit OldData capture
@@ -583,7 +583,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ctx context.Context, ids []
 	}
 
 	if len(oldTasks) == 0 {
-		return nil, nil, errors.New("任务不存在")
+		return nil, nil, apperrors.ErrTaskNotFound
 	}
 
 	result := &BatchDeleteTasksResult{
@@ -602,7 +602,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ctx context.Context, ids []
 	}
 
 	if len(result.DeletedIDs) == 0 {
-		return oldTasks, result, errors.New("没有可删除的任务")
+		return oldTasks, result, fmt.Errorf("没有可删除的任务: %w", apperrors.ErrInvalidInput)
 	}
 
 	// 删除前先解锁所有待删除任务的输入配置（防止锁遗留）
@@ -646,17 +646,17 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ctx context.Context, ids []
 func (s *VideoRecordingTaskService) StartTask(ctx context.Context, id uint, userID uint) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
-		return nil, nil, errors.New("任务不存在")
+		return nil, nil, apperrors.ErrTaskNotFound
 	}
 
 	// 检查权限
 	if task.CreatedBy != userID {
-		return nil, nil, errors.New("无权限操作此任务")
+		return nil, nil, apperrors.ErrForbidden
 	}
 
 	// 检查状态
 	if task.Status != models.VideoStatusPending {
-		return nil, nil, errors.New("只能启动待执行状态的任务")
+		return nil, nil, apperrors.ErrInvalidInput
 	}
 
 	// Snapshot pre-start state for audit OldData capture
@@ -668,7 +668,7 @@ func (s *VideoRecordingTaskService) StartTask(ctx context.Context, id uint, user
 			return nil, nil, fmt.Errorf("触发任务执行失败: %w", err)
 		}
 	} else {
-		return nil, nil, errors.New("调度器未初始化")
+		return nil, nil, fmt.Errorf("调度器未初始化: %w", apperrors.ErrInternal)
 	}
 
 	// Reload post-dispatch state for NewData (asynchronous scheduler may have mutated status).
@@ -688,17 +688,17 @@ func (s *VideoRecordingTaskService) StartTask(ctx context.Context, id uint, user
 func (s *VideoRecordingTaskService) StopTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
-		return nil, nil, errors.New("任务不存在")
+		return nil, nil, apperrors.ErrTaskNotFound
 	}
 
 	// 检查权限
 	if !hasSharedViewer && task.CreatedBy != userID {
-		return nil, nil, errors.New("无权限操作此任务")
+		return nil, nil, apperrors.ErrForbidden
 	}
 
 	// 检查状态
 	if task.Status != models.VideoStatusRecording && task.Status != models.VideoStatusConnecting {
-		return nil, nil, errors.New("只能停止录制中或连接中的任务")
+		return nil, nil, apperrors.ErrInvalidInput
 	}
 
 	// Snapshot pre-stop state for audit OldData capture (before CancelTaskExecution)
@@ -751,17 +751,17 @@ func (s *VideoRecordingTaskService) StopTask(ctx context.Context, id uint, userI
 func (s *VideoRecordingTaskService) CancelTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) error {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
-		return errors.New("任务不存在")
+		return apperrors.ErrTaskNotFound
 	}
 
 	// 检查权限
 	if !hasSharedViewer && task.CreatedBy != userID {
-		return errors.New("无权限操作此任务")
+		return apperrors.ErrForbidden
 	}
 
 	// 检查状态
 	if task.Status != models.VideoStatusPending && task.Status != models.VideoStatusConnecting {
-		return errors.New("只能取消待执行或连接中的任务")
+		return apperrors.ErrInvalidInput
 	}
 
 	// 从调度器移除
@@ -789,17 +789,17 @@ func (s *VideoRecordingTaskService) CancelTask(ctx context.Context, id uint, use
 func (s *VideoRecordingTaskService) RetryTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
-		return nil, errors.New("任务不存在")
+		return nil, apperrors.ErrTaskNotFound
 	}
 
 	// 检查权限
 	if !hasSharedViewer && task.CreatedBy != userID {
-		return nil, errors.New("无权限操作此任务")
+		return nil, apperrors.ErrForbidden
 	}
 
 	// 检查状态
 	if task.Status != models.VideoStatusFailed {
-		return nil, errors.New("只能重试失败的任务")
+		return nil, apperrors.ErrInvalidInput
 	}
 
 	// 重置状态
@@ -876,7 +876,7 @@ func (s *VideoRecordingTaskService) UpdateTaskStatus(ctx context.Context, id uin
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("任务不存在")
+		return apperrors.ErrTaskNotFound
 	}
 
 	return nil
@@ -894,7 +894,7 @@ func (s *VideoRecordingTaskService) UpdateRecordingInfo(ctx context.Context, id 
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("任务不存在")
+		return apperrors.ErrTaskNotFound
 	}
 
 	return nil
@@ -919,7 +919,7 @@ func (s *VideoRecordingTaskService) UpdateRecordingPaths(ctx context.Context, id
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("任务不存在")
+		return apperrors.ErrTaskNotFound
 	}
 	return nil
 }
@@ -957,10 +957,10 @@ func (s *VideoRecordingTaskService) validateConfigTypes(ctx context.Context, con
 	}
 
 	if usbCount > 1 {
-		return errors.New("最多只能选择1个USB配置")
+		return apperrors.ErrInvalidInput
 	}
 	if streamCount > 1 {
-		return errors.New("最多只能选择1个流媒体配置")
+		return apperrors.ErrInvalidInput
 	}
 
 	return nil
