@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tjfoc/gmsm/sm4"
+	"go.uber.org/zap"
 )
 
 const (
@@ -146,6 +147,40 @@ func DecryptPasswordECB(ciphertext string, sm4Secret string) (string, error) {
 func IsEncryptedPassword(password string) bool {
 	// 使用前缀标记进行可靠检测
 	return strings.HasPrefix(password, ENCRYPTION_PREFIX)
+}
+
+// WarnOnKeyTruncation 检测 SM4 密钥 secret 在 hex-decode 后是否会被 DeriveSM4Key 静默截断，
+// 若会被截断则用 logger.Warn 发出配置警告。**不阻塞启动**——只是让运维知道 secret 长度
+// 不符合预期（期望 32 hex chars = 16 bytes），避免再次出现
+// `openssl rand -hex 32` 生成 64-char secret 时后端静默吞后 32 字节、与前端 sm-crypto
+// 严格要求 16 字节 key 不匹配的隐形 bug（Phase 18 调试会话 sm4-encrypt-key-invalid）。
+//
+// 调用约定：
+//   - 仅在启动期校验函数（ValidateProductionSecrets / ValidateCredentialSM4Config）
+//     中各调用一次，避免热路径日志噪音
+//   - logger 为 nil 时静默 no-op（不输出）
+//   - secret 非 hex（如 Base64 或裸字符串）时不警告（DeriveSM4Key 对非 hex 走 fallback
+//     路径，截断行为依赖于原始字节长度 + 是否 ≥ 16，此处只针对 hex 路径最常见 bug）
+//   - secretName 用于日志字段（如 "SM4_SECRET"、"CREDENTIAL_SM4_SECRET"）
+func WarnOnKeyTruncation(logger *zap.Logger, secret, secretName string) {
+	if logger == nil {
+		return
+	}
+	keyBytes, err := hex.DecodeString(secret)
+	if err != nil {
+		// 非 hex 编码（Base64 或裸字符串）— 不属于本次静默截断 bug 的范畴，不警告。
+		return
+	}
+	const sm4KeyBytes = 16
+	if len(keyBytes) > sm4KeyBytes {
+		logger.Warn("SM4 密钥长度超过 16 字节，DeriveSM4Key 将静默截断（前端 sm-crypto 会拒绝）",
+			zap.String("secret_name", secretName),
+			zap.Int("hex_length", len(secret)),
+			zap.Int("decoded_bytes", len(keyBytes)),
+			zap.Int("dropped_bytes", len(keyBytes)-sm4KeyBytes),
+			zap.String("remediation", "重新生成 SM4_SECRET：openssl rand -hex 16（输出 32 hex chars = 16 bytes）"),
+		)
+	}
 }
 
 // ============================================================================

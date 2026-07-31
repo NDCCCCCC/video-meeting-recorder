@@ -34,6 +34,8 @@ func main() {
 	if err := cfg.ValidateCredentialSM4Config(); err != nil {
 		logger.Fatal("凭据静态加密密钥配置不合法（Phase 18）", zap.Error(err))
 	}
+	// 启动期一次性检测 hex secret 截断风险（典型 bug：`openssl rand -hex 32` 生成 64-char）。
+	cfg.WarnCredentialSM4Truncation(logger)
 
 	logger.Info("Starting Record V2 Server",
 		zap.String("version", "2.0.0"),

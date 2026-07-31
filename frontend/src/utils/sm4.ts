@@ -5,14 +5,21 @@ export const ENCRYPTION_PREFIX = 'SM4:' // 加密前缀标记，用于可靠检�
 
 /**
  * 从字符串派生 SM4 密钥（与后端 deriveSM4Key 兼容）
- * 后端将 32 字符十六进制 secret 解码为 16 字节密钥，sm-crypto 对字符串密钥执行相同转换
+ *
+ * ⚠️ 契约：secret 必须是 **恰好 32 字符的十六进制字符串**（hex-decode 后正好 16 字节）。
+ * 这是 SM4 块密码的强制要求（sm-crypto strict-check：sm4/index.js:255-257 throw "key is invalid"
+ * if key.length !== 16）。后端 DeriveSM4Key 在 hex-decode 后会**静默截断** > 16 字节的 key（这
+ * 一历史行为掩盖了配置错误，见 internal/utils/sm4_password.go:DeriveSM4Key）。
+ *
+ * 正确生成方式：`openssl rand -hex 16` 输出 32 hex chars。`openssl rand -hex 32`
+ * 输出的 64-char secret 在本函数中会被 sm-crypto 拒绝（前端登录报错 "key is invalid"），
+ * 且后端会静默截断丢弃后 32 字节——这是 Phase 18 调试会话 sm4-encrypt-key-invalid 的根因。
  */
 export async function deriveSM4Key(secret: string): Promise<string> {
-  // sm-crypto sm4.encrypt/decrypt 内部把 string key hex-decode 成 16 字节
-  // (node_modules/sm-crypto/src/sm4/index.js: `if (typeof key === 'string')
-  // key = hexToArray(key)`)，这与后端 internal/utils/sm4_password.go
-  // DeriveSM4Key 中的 `hex.DecodeString(secret)` 输出字节完全一致。
-  // 不要在此 hash — 后端是直接 hex decode，不 hash。
+  // 直接返回原始 hex 字符串。sm-crypto 的 sm4.encrypt/decrypt 内部 `hexToArray(key)`
+  // 会按 1:2 转换（每 2 个 hex 字符 → 1 字节），所以 32-char 输入得到 16 字节 key。
+  // 与后端 internal/utils/sm4_password.go DeriveSM4Key 的 `hex.DecodeString(secret)`
+  // 行为完全一致——只要输入恰好 32 字符。
   return secret
 }
 

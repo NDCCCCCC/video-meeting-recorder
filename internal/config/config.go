@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -821,6 +822,9 @@ func bindSecretEnv(v *viper.Viper) {
 // ValidateProductionSecrets 在生产环境强制校验 SM4/HLS Token 密钥：
 // 必须显式设置、长度 ≥ 32 字符、且互不相同。缺失或不合规时调用 logger.Fatal 终止启动。
 // 非生产环境仅打印警告（便于本地/测试运行）。SEC-001/D-03.1/D-03.4。
+//
+// 附加：无论生产/非生产，均调用 utils.WarnOnKeyTruncation 检测 hex 编码 secret 是否会被
+// DeriveSM4Key 静默截断（典型 bug 场景：`openssl rand -hex 32` 生成 64-char secret）。
 func (c *Config) ValidateProductionSecrets(logger *zap.Logger) {
 	if logger == nil {
 		return
@@ -851,6 +855,21 @@ func (c *Config) ValidateProductionSecrets(logger *zap.Logger) {
 			logger.Warn("HLS_TOKEN_SECRET 长度不足 32 字符（非生产环境仅警告）", zap.Int("length", len(hls)))
 		}
 	}
+
+	// 检测 SM4 传输密钥 hex 编码过长（典型 64-char → 32 bytes 被 DeriveSM4Key 静默截断）。
+	// 仅警告，不阻断启动；让运维知道应改为 `openssl rand -hex 16` 输出 32 hex chars。
+	// 注意：HLS_TOKEN_SECRET 用 HMAC-SHA256（任意长度都接受，无截断）— 不报警。
+	utils.WarnOnKeyTruncation(logger, sm4, "SM4_SECRET")
+}
+
+// WarnCredentialSM4Truncation 检测 Phase 18 凭据密钥族的 hex 截断风险。
+// 应在 ValidateCredentialSM4Config 之后调用一次；不阻断启动。
+func (c *Config) WarnCredentialSM4Truncation(logger *zap.Logger) {
+	if logger == nil {
+		return
+	}
+	utils.WarnOnKeyTruncation(logger, c.Auth.CredentialSM4Secret, "CREDENTIAL_SM4_SECRET")
+	utils.WarnOnKeyTruncation(logger, c.Auth.CredentialSM4PreviousSecret, "CREDENTIAL_SM4_PREVIOUS_SECRET")
 }
 
 // CredentialSM4VersionPattern 是 envelope version 段的合法正则：v1, v2, ...
