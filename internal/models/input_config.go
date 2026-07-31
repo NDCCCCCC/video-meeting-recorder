@@ -26,18 +26,18 @@ const (
 // 一个配置可以同时包含华为控制信息和录制源信息
 type InputConfig struct {
 	Base
-	Name             string `gorm:"type:varchar(100);not null" json:"name"`
-	Description      string `gorm:"type:text" json:"description"`
-	ConfigType       string `gorm:"type:varchar(20);not null;index" json:"config_type"` // usb | stream
-	HuaweiEnabled    bool   `gorm:"default:false" json:"huawei_enabled"`                  // 华为控制开关
+	Name          string `gorm:"type:varchar(100);not null" json:"name"`
+	Description   string `gorm:"type:text" json:"description"`
+	ConfigType    string `gorm:"type:varchar(20);not null;index" json:"config_type"` // usb | stream
+	HuaweiEnabled bool   `gorm:"default:false" json:"huawei_enabled"`                // 华为控制开关
 
 	// 华为终端连接配置（当 huawei_enabled=true 时必填）
-	Server           string `gorm:"type:varchar(100)" json:"server"`                      // 华为终端服务器地址
-	Port             int    `gorm:"default:80" json:"port"`                               // 华为终端端口
-	Username         string `gorm:"type:varchar(50)" json:"username"`                     // 登录用户名
-	Password         string `gorm:"type:varchar(100)" json:"-"`                            // 登录密码（不输出到JSON）
-	TerminalNumber   string `gorm:"type:varchar(50)" json:"terminal_number"`              // 终端号码
-	ConferenceNumber string `gorm:"type:varchar(50)" json:"conference_number"`            // 会议号
+	Server           string `gorm:"type:varchar(100)" json:"server"`           // 华为终端服务器地址
+	Port             int    `gorm:"default:80" json:"port"`                    // 华为终端端口
+	Username         string `gorm:"type:varchar(50)" json:"username"`          // 登录用户名
+	Password         string `gorm:"type:text" json:"-"`                        // 登录密码（Phase 18: SM4-GCM envelope；TEXT 支持更长的 ciphertext）
+	TerminalNumber   string `gorm:"type:varchar(50)" json:"terminal_number"`   // 终端号码
+	ConferenceNumber string `gorm:"type:varchar(50)" json:"conference_number"` // 会议号
 
 	// USB摄像头后端配置
 	CameraBackend string `gorm:"type:varchar(20);default:'dshow'" json:"camera_backend"` // dshow (Windows) | v4l2 (Linux) | avfoundation (macOS)
@@ -62,7 +62,7 @@ type InputConfig struct {
 	StreamProtocol string `gorm:"type:varchar(20)" json:"stream_protocol"` // rtmp, rtsp, srt, hls
 	StreamURL      string `gorm:"type:varchar(500)" json:"stream_url"`
 	StreamUsername string `gorm:"type:varchar(100)" json:"stream_username"`
-	StreamPassword string `gorm:"type:varchar(100)" json:"-"` // 不输出到JSON
+	StreamPassword string `gorm:"type:text" json:"-"` // Phase 18: SM4-GCM envelope；TEXT 支持更长的 ciphertext
 	StreamEnabled  bool   `gorm:"default:false" json:"stream_enabled"`
 
 	IsActive bool       `gorm:"default:true" json:"is_active"`

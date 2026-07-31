@@ -211,9 +211,9 @@ func TestValidateCredentialSM4Config_Reject(t *testing.T) {
 		{
 			name: "Previous 配对缺失 (仅 secret)",
 			cfg: Config{Auth: AuthConfig{
-				CredentialSM4Version:         "v1",
-				CredentialSM4Secret:          cur,
-				CredentialSM4PreviousSecret:  prev,
+				CredentialSM4Version:        "v1",
+				CredentialSM4Secret:         cur,
+				CredentialSM4PreviousSecret: prev,
 			}},
 			wantContain: "同时设置或同时缺失",
 		},

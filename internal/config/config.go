@@ -116,9 +116,9 @@ type AuthConfig struct {
 	//   - CredentialSM4Secret != CredentialSM4PreviousSecret（强制轮换）
 	//   - CredentialSM4Version != CredentialSM4PreviousVersion
 	CredentialSM4Version         string `mapstructure:"credential_sm4_version" json:"credential_sm4_version" yaml:"credential_sm4_version"`
-	CredentialSM4Secret         string `mapstructure:"credential_sm4_secret" json:"credential_sm4_secret" yaml:"credential_sm4_secret"`
+	CredentialSM4Secret          string `mapstructure:"credential_sm4_secret" json:"credential_sm4_secret" yaml:"credential_sm4_secret"`
 	CredentialSM4PreviousVersion string `mapstructure:"credential_sm4_previous_version" json:"credential_sm4_previous_version" yaml:"credential_sm4_previous_version"`
-	CredentialSM4PreviousSecret string `mapstructure:"credential_sm4_previous_secret" json:"credential_sm4_previous_secret" yaml:"credential_sm4_previous_secret"`
+	CredentialSM4PreviousSecret  string `mapstructure:"credential_sm4_previous_secret" json:"credential_sm4_previous_secret" yaml:"credential_sm4_previous_secret"`
 }
 
 // ADAuthConfig AD域控配置
