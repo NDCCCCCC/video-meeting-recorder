@@ -81,11 +81,11 @@ func (m *mockTaskService) GetTask(ctx context.Context, id uint) (*models.VideoRe
 	return task, nil
 }
 
-func (m *mockTaskService) GetPendingTasks(ctx context.Context) ([]*models.VideoRecordingTask, error) {
-	var result []*models.VideoRecordingTask
+func (m *mockTaskService) GetPendingTasks(ctx context.Context) ([]models.VideoRecordingTask, error) {
+	var result []models.VideoRecordingTask
 	for _, task := range m.tasks {
 		if task.Status == models.VideoStatusPending {
-			result = append(result, task)
+			result = append(result, *task)
 		}
 	}
 	return result, nil

@@ -17,18 +17,30 @@ import (
 // Phase 19 Wave 5 (PERF-003/BUG-005)：全部 DB-touching 方法已改为 ctx context.Context
 // 首参，并在每个 s.db. 链首加 .WithContext(ctx)，以支持优雅关停时的查询取消与 HTTP
 // 超时级联。纯 getter/setter（SetScheduler / GetDB）与纯逻辑辅助（canDeleteTask）保留无参。
+//
+// Phase 19 D2：新增 encryptor 字段（Phase 18 SM4-GCM 凭据解密从 cmd/server
+// taskServiceAdapter 整合到此服务），消除 scheduler 与服务之间的双层签名级联与
+// 双源 truth。
 type VideoRecordingTaskService struct {
 	db        *gorm.DB
 	logger    *zap.Logger
 	scheduler scheduler.SchedulerInterface
+	// encryptor Phase 18 SM4-GCM 凭据静态解密。GetInputConfig 末尾在 encryptor!=nil
+	// 时解密 Password/StreamPassword；nil 时透传密文。
+	encryptor *CredentialEncryptor
 }
 
 // NewVideoRecordingTaskService 创建视频录制任务服务
-func NewVideoRecordingTaskService(db *gorm.DB, logger *zap.Logger) *VideoRecordingTaskService {
-	return &VideoRecordingTaskService{
+// Phase 19 D2: 增加可选 CredentialEncryptor 参数；传 nil 行为等同 Phase 18 之前（密文透传）。
+func NewVideoRecordingTaskService(db *gorm.DB, logger *zap.Logger, encryptor ...*CredentialEncryptor) *VideoRecordingTaskService {
+	s := &VideoRecordingTaskService{
 		db:     db,
 		logger: logger,
 	}
+	if len(encryptor) > 0 {
+		s.encryptor = encryptor[0]
+	}
+	return s
 }
 
 // SetScheduler 设置调度器
@@ -955,12 +967,50 @@ func (s *VideoRecordingTaskService) validateConfigTypes(ctx context.Context, con
 }
 
 // GetInputConfig 获取输入配置（供调度器使用）
+// GetInputConfig 获取输入配置
+//
+// Phase 19 D2：与原 taskServiceAdapter.GetInputConfig 行为对齐——
+// 当 encryptor!=nil 时解密 Password/StreamPassword 后返回明文（Phase 18 契约；
+// scheduler / recorder 等调用方期望明文）。encryptor 为 nil 时保持原密文（向后兼容）。
+//
+// 解密失败 → 阻断调用方（不静默跳过），错误信息携带 ID 便于排查。
 func (s *VideoRecordingTaskService) GetInputConfig(ctx context.Context, id uint) (*models.InputConfig, error) {
 	var config models.InputConfig
 	if err := s.db.WithContext(ctx).First(&config, id).Error; err != nil {
 		return nil, err
 	}
+	if s.encryptor != nil {
+		if config.Password != "" {
+			pt, err := s.encryptor.Decrypt(config.Password)
+			if err != nil {
+				return nil, fmt.Errorf("VideoRecordingTaskService.GetInputConfig(id=%d) password 解密失败: %w", id, err)
+			}
+			config.Password = pt
+		}
+		if config.StreamPassword != "" {
+			pt, err := s.encryptor.Decrypt(config.StreamPassword)
+			if err != nil {
+				return nil, fmt.Errorf("VideoRecordingTaskService.GetInputConfig(id=%d) stream_password 解密失败: %w", id, err)
+			}
+			config.StreamPassword = pt
+		}
+	}
 	return &config, nil
+}
+
+// GetTask 是 scheduler.TaskServiceInterface 接口适配方法 —— 与
+// VideoRecordingTaskService.GetTaskByID 行为等价但预加载 InputConfig/
+// TaskInputConfigs（与原 taskServiceAdapter.GetTask 行为一致）。
+//
+// 调度器内部所有调用站点期望"任务+关联配置"在一行内拿到，因此本方法不是 GetTaskByID
+// 的简单重命名，而是带 Preload 的语义化封装。该方法满足 scheduler.TaskServiceInterface，
+// 让 cmd/server 不再需要 adapter。
+func (s *VideoRecordingTaskService) GetTask(ctx context.Context, id uint) (*models.VideoRecordingTask, error) {
+	var task models.VideoRecordingTask
+	if err := s.db.WithContext(ctx).Preload("InputConfig").Preload("TaskInputConfigs").First(&task, id).Error; err != nil {
+		return nil, err
+	}
+	return &task, nil
 }
 
 // GetDB 获取数据库连接（供调度器使用）

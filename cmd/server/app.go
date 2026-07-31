@@ -710,7 +710,7 @@ func (a *MinimalApp) initHandlers() error {
 	a.tokenService = auth.NewSM4TokenService(a.config, a.db, a.logger)
 	authService := auth.NewService(a.config, a.db, a.logger)
 	roleService := services.NewRoleService(a.db, a.logger)
-	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger)
+	a.videoTaskService = services.NewVideoRecordingTaskService(a.db, a.logger, a.credentialEncryptor)
 	// 优先使用配置中的 ffprobe_path，否则从 ffmpeg 路径推导
 	ffprobePath := a.config.FFmpeg.FFProbePath
 	if ffprobePath == "" {
@@ -1103,10 +1103,11 @@ func (a *MinimalApp) registerServices() error {
 	a.logger.Info("录制协调器已创建")
 
 	// 创建任务调度器
-	// 注意：这里使用一个适配器将VideoRecordingTaskService转换为TaskServiceInterface
-	taskServiceAdapter := &taskServiceAdapter{db: a.db, logger: a.logger, encryptor: a.credentialEncryptor}
+	// Phase 19 D2：直接传入 videoTaskService（满足 scheduler.TaskServiceInterface），
+	// 不再需要 taskServiceAdapter 适配层。Phase 18 SM4-GCM 凭据解密逻辑已下移到
+	// VideoRecordingTaskService.GetInputConfig 内部（encryptor 字段）。
 	a.scheduler = scheduler.NewVideoSimpleScheduler(
-		taskServiceAdapter,
+		a.videoTaskService,
 		a.coordinator,
 		a.huaweiConnector,
 		a.conversionService,
@@ -1153,104 +1154,6 @@ func (a *MinimalApp) registerServices() error {
 
 	a.logger.Info("服务注册完成")
 	return nil
-}
-
-// taskServiceAdapter 任务服务适配器
-type taskServiceAdapter struct {
-	db        *gorm.DB
-	logger    *zap.Logger
-	encryptor *services.CredentialEncryptor // Phase 18: 解密凭据后再返回
-}
-
-// GetTask 获取任务
-func (a *taskServiceAdapter) GetTask(ctx context.Context, id uint) (*models.VideoRecordingTask, error) {
-	var task models.VideoRecordingTask
-	if err := a.db.WithContext(ctx).Preload("InputConfig").Preload("TaskInputConfigs").First(&task, id).Error; err != nil {
-		return nil, err
-	}
-	return &task, nil
-}
-
-// GetPendingTasks 获取待执行任务
-func (a *taskServiceAdapter) GetPendingTasks(ctx context.Context) ([]*models.VideoRecordingTask, error) {
-	var tasks []*models.VideoRecordingTask
-	if err := a.db.WithContext(ctx).Where("status = ?", models.VideoStatusPending).
-		Preload("InputConfig").Preload("TaskInputConfigs").
-		Order("start_time ASC").
-		Find(&tasks).Error; err != nil {
-		return nil, err
-	}
-	return tasks, nil
-}
-
-// UpdateTaskStatus 更新任务状态
-func (a *taskServiceAdapter) UpdateTaskStatus(ctx context.Context, id uint, status models.VideoRecordingTaskStatus, errorMsg string) error {
-	updates := map[string]interface{}{
-		"status": status,
-	}
-	if errorMsg != "" {
-		updates["error_msg"] = errorMsg
-	}
-
-	result := a.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("任务不存在")
-	}
-	return nil
-}
-
-// UpdateRecordingPaths 更新录制文件路径
-// 注意：这是适配器方法，将 TaskServiceInterface 接口映射到具体实现
-func (a *taskServiceAdapter) UpdateRecordingPaths(ctx context.Context, id uint, mkvPath, hlsPath string) error {
-	updates := map[string]interface{}{
-		"recording_file":   mkvPath,
-		"mkv_file_path":    mkvPath,
-		"hls_preview_path": hlsPath,
-	}
-
-	result := a.db.WithContext(ctx).Model(&models.VideoRecordingTask{}).Where("id = ?", id).Updates(updates)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("任务不存在")
-	}
-	return nil
-}
-
-// GetInputConfig 获取输入配置
-func (a *taskServiceAdapter) GetInputConfig(ctx context.Context, id uint) (*models.InputConfig, error) {
-	var config models.InputConfig
-	if err := a.db.WithContext(ctx).First(&config, id).Error; err != nil {
-		return nil, err
-	}
-	// Phase 18: scheduler / recorder 等调用方期望的是明文 password / stream_password。
-	// 解密失败 → 阻断调用方（不静默跳过）。
-	if a.encryptor != nil {
-		if config.Password != "" {
-			pt, err := a.encryptor.Decrypt(config.Password)
-			if err != nil {
-				return nil, fmt.Errorf("taskServiceAdapter.GetInputConfig(id=%d) password 解密失败: %w", id, err)
-			}
-			config.Password = pt
-		}
-		if config.StreamPassword != "" {
-			pt, err := a.encryptor.Decrypt(config.StreamPassword)
-			if err != nil {
-				return nil, fmt.Errorf("taskServiceAdapter.GetInputConfig(id=%d) stream_password 解密失败: %w", id, err)
-			}
-			config.StreamPassword = pt
-		}
-	}
-	return &config, nil
-}
-
-// GetDB 获取数据库连接
-func (a *taskServiceAdapter) GetDB() *gorm.DB {
-	return a.db
 }
 
 // Start 启动应用

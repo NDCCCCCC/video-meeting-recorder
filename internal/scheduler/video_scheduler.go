@@ -95,7 +95,11 @@ type VideoFileServiceInterface interface {
 // GetDB() 保留无参（返回原始 *gorm.DB 供遗留调用方使用）。
 type TaskServiceInterface interface {
 	GetTask(ctx context.Context, id uint) (*models.VideoRecordingTask, error)
-	GetPendingTasks(ctx context.Context) ([]*models.VideoRecordingTask, error)
+	// GetPendingTasks Phase 19 D2：返回类型由 []*VideoRecordingTask 改为
+	// []VideoRecordingTask（值切片），与 VideoRecordingTaskService.GetPendingTasks
+	// 对齐。scheduler 调用点仅访问 task.ID/Name/EndTime/MKVFilePath 等字段，值
+	// 切片与指针切片使用等价。
+	GetPendingTasks(ctx context.Context) ([]models.VideoRecordingTask, error)
 	UpdateTaskStatus(ctx context.Context, id uint, status models.VideoRecordingTaskStatus, errorMsg string) error
 	UpdateRecordingPaths(ctx context.Context, id uint, mkvPath, hlsPath string) error
 	GetInputConfig(ctx context.Context, id uint) (*models.InputConfig, error)
@@ -801,7 +805,8 @@ func (s *VideoSimpleScheduler) Start() error {
 	addedCount := 0
 	immediateCount := 0
 	expiredCount := 0
-	for _, task := range tasks {
+	for i := range tasks {
+		task := &tasks[i] // 取址避免循环变量覆盖（Phase 19 D2：值切片 → *VideoRecordingTask）
 		if err := s.AddTask(task); err != nil {
 			// 检查是否是过期错误（Phase 19 Wave 6：替换 strings.Contains 字符串匹配）
 			var be *apperrors.BusinessError
