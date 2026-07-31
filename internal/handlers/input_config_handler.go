@@ -60,7 +60,7 @@ func (h *InputConfigHandler) ListConfigs(c *gin.Context) {
 		req.PageSize = 20
 	}
 
-	result, err := h.configService.ListConfigs(&req)
+	result, err := h.configService.ListConfigs(c.Request.Context(), &req)
 	if err != nil {
 		h.logger.Error("Failed to list input configs", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取配置列表失败")
@@ -86,7 +86,7 @@ func (h *InputConfigHandler) GetConfig(c *gin.Context) {
 		return
 	}
 
-	config, err := h.configService.GetConfigByID(uint(id))
+	config, err := h.configService.GetConfigByID(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to get input config", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取配置失败")
@@ -112,7 +112,7 @@ func (h *InputConfigHandler) CreateConfig(c *gin.Context) {
 		return
 	}
 
-	config, err := h.configService.CreateConfig(&req)
+	config, err := h.configService.CreateConfig(c.Request.Context(), &req)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -162,7 +162,7 @@ func (h *InputConfigHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
-	oldConfig, config, err := h.configService.UpdateConfig(uint(id), &req)
+	oldConfig, config, err := h.configService.UpdateConfig(c.Request.Context(), uint(id), &req)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, err.Error())
 		return
@@ -200,7 +200,7 @@ func (h *InputConfigHandler) DeleteConfig(c *gin.Context) {
 		return
 	}
 
-	oldConfig, err := h.configService.DeleteConfig(uint(id))
+	oldConfig, err := h.configService.DeleteConfig(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, err.Error())
 		return
@@ -239,7 +239,7 @@ func (h *InputConfigHandler) TestConnection(c *gin.Context) {
 		return
 	}
 
-	if err := h.configService.TestConnection(&req); err != nil {
+	if err := h.configService.TestConnection(c.Request.Context(), &req); err != nil {
 		response.GinError(c, response.CodeInternalError, err.Error())
 		return
 	}
@@ -273,7 +273,7 @@ func (h *InputConfigHandler) GetActiveConfigs(c *gin.Context) {
 	req.Page = 1
 	req.PageSize = 1000
 
-	result, err := h.configService.ListConfigs(&req)
+	result, err := h.configService.ListConfigs(c.Request.Context(), &req)
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "获取激活配置失败")
 		return

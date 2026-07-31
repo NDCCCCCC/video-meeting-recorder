@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -32,9 +33,9 @@ func (s *APIKeyService) SetAuditService(auditService *audit.AuditLogService) {
 }
 
 // findAPIKeyForUser 查询指定 ID 的 API Key，非管理员只能查自己的
-func (s *APIKeyService) findAPIKeyForUser(id, userID uint, isAdmin bool) (*models.APIKey, error) {
+func (s *APIKeyService) findAPIKeyForUser(ctx context.Context, id, userID uint, isAdmin bool) (*models.APIKey, error) {
 	var apiKey models.APIKey
-	query := s.db.Where("id = ?", id)
+	query := s.db.WithContext(ctx).Where("id = ?", id)
 	if !isAdmin {
 		query = query.Where("user_id = ?", userID)
 	}
@@ -81,7 +82,7 @@ type ListAPIKeysResponse struct {
 }
 
 // CreateAPIKey 创建API密钥
-func (s *APIKeyService) CreateAPIKey(userID uint, req *CreateAPIKeyRequest) (*models.APIKey, string, error) {
+func (s *APIKeyService) CreateAPIKey(ctx context.Context, userID uint, req *CreateAPIKeyRequest) (*models.APIKey, string, error) {
 	// 验证作用域
 	for _, scope := range req.Scopes {
 		if scope != models.ScopeRead && scope != models.ScopeWrite && scope != models.ScopeAdmin {
@@ -125,7 +126,7 @@ func (s *APIKeyService) CreateAPIKey(userID uint, req *CreateAPIKeyRequest) (*mo
 	}
 
 	// 生成密钥并保存
-	if err := s.db.Create(apiKey).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(apiKey).Error; err != nil {
 		s.logger.Error("创建API密钥失败", zap.Error(err))
 		return nil, "", errors.New("创建API密钥失败")
 	}
@@ -140,11 +141,11 @@ func (s *APIKeyService) CreateAPIKey(userID uint, req *CreateAPIKeyRequest) (*mo
 }
 
 // ListAPIKeys 获取API密钥列表
-func (s *APIKeyService) ListAPIKeys(userID uint, isAdmin bool, req *ListAPIKeysRequest) (*ListAPIKeysResponse, error) {
+func (s *APIKeyService) ListAPIKeys(ctx context.Context, userID uint, isAdmin bool, req *ListAPIKeysRequest) (*ListAPIKeysResponse, error) {
 	var apiKeys []models.APIKey
 	var total int64
 
-	query := s.db.Model(&models.APIKey{})
+	query := s.db.WithContext(ctx).Model(&models.APIKey{})
 
 	// 非管理员只能查看自己的密钥
 	if !isAdmin {
@@ -182,13 +183,13 @@ func (s *APIKeyService) ListAPIKeys(userID uint, isAdmin bool, req *ListAPIKeysR
 }
 
 // GetAPIKey 获取API密钥详情
-func (s *APIKeyService) GetAPIKey(id uint, userID uint, isAdmin bool) (*models.APIKey, error) {
-	return s.findAPIKeyForUser(id, userID, isAdmin)
+func (s *APIKeyService) GetAPIKey(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.APIKey, error) {
+	return s.findAPIKeyForUser(ctx, id, userID, isAdmin)
 }
 
 // UpdateAPIKey 更新API密钥
-func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *UpdateAPIKeyRequest) (*models.APIKey, *models.APIKey, error) {
-	apiKey, err := s.findAPIKeyForUser(id, userID, isAdmin)
+func (s *APIKeyService) UpdateAPIKey(ctx context.Context, id uint, userID uint, isAdmin bool, req *UpdateAPIKeyRequest) (*models.APIKey, *models.APIKey, error) {
+	apiKey, err := s.findAPIKeyForUser(ctx, id, userID, isAdmin)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -221,7 +222,7 @@ func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *Up
 	}
 
 	if len(updates) > 0 {
-		if err := s.db.Model(apiKey).Updates(updates).Error; err != nil {
+		if err := s.db.WithContext(ctx).Model(apiKey).Updates(updates).Error; err != nil {
 			return nil, nil, err
 		}
 
@@ -232,7 +233,7 @@ func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *Up
 	}
 
 	// 重新查询获取更新后的数据
-	if err := s.db.First(apiKey, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(apiKey, id).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -240,8 +241,8 @@ func (s *APIKeyService) UpdateAPIKey(id uint, userID uint, isAdmin bool, req *Up
 }
 
 // DeleteAPIKey 删除API密钥
-func (s *APIKeyService) DeleteAPIKey(id uint, userID uint, isAdmin bool) (*models.APIKey, error) {
-	apiKey, err := s.findAPIKeyForUser(id, userID, isAdmin)
+func (s *APIKeyService) DeleteAPIKey(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.APIKey, error) {
+	apiKey, err := s.findAPIKeyForUser(ctx, id, userID, isAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +250,7 @@ func (s *APIKeyService) DeleteAPIKey(id uint, userID uint, isAdmin bool) (*model
 	// Snapshot before delete for audit OldData capture
 	oldAPIKey := *apiKey
 
-	if err := s.db.Delete(apiKey).Error; err != nil {
+	if err := s.db.WithContext(ctx).Delete(apiKey).Error; err != nil {
 		return nil, err
 	}
 
@@ -262,8 +263,8 @@ func (s *APIKeyService) DeleteAPIKey(id uint, userID uint, isAdmin bool) (*model
 }
 
 // ToggleAPIKeyStatus 切换API密钥状态
-func (s *APIKeyService) ToggleAPIKeyStatus(id uint, userID uint, isAdmin bool) (*models.APIKey, *models.APIKey, error) {
-	apiKey, err := s.findAPIKeyForUser(id, userID, isAdmin)
+func (s *APIKeyService) ToggleAPIKeyStatus(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.APIKey, *models.APIKey, error) {
+	apiKey, err := s.findAPIKeyForUser(ctx, id, userID, isAdmin)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -272,7 +273,7 @@ func (s *APIKeyService) ToggleAPIKeyStatus(id uint, userID uint, isAdmin bool) (
 	oldAPIKey := *apiKey
 
 	apiKey.IsActive = !apiKey.IsActive
-	if err := s.db.Save(apiKey).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(apiKey).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -286,9 +287,9 @@ func (s *APIKeyService) ToggleAPIKeyStatus(id uint, userID uint, isAdmin bool) (
 }
 
 // ValidateAPIKey 验证API密钥（供中间件使用）
-func (s *APIKeyService) ValidateAPIKey(key string, clientIP string) (*models.APIKey, error) {
+func (s *APIKeyService) ValidateAPIKey(ctx context.Context, key string, clientIP string) (*models.APIKey, error) {
 	var apiKey models.APIKey
-	if err := s.db.Preload("User").Preload("User.Role").Where("key = ?", key).First(&apiKey).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("User").Preload("User.Role").Where("key = ?", key).First(&apiKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("无效的API密钥")
 		}
@@ -318,7 +319,7 @@ func (s *APIKeyService) ValidateAPIKey(key string, clientIP string) (*models.API
 	// 更新最后使用时间
 	now := time.Now()
 	apiKey.LastUsedAt = &now
-	s.db.Save(&apiKey)
+	s.db.WithContext(ctx).Save(&apiKey)
 
 	return &apiKey, nil
 }
@@ -346,17 +347,17 @@ type UsageLogSummary struct {
 }
 
 // ListUsageLogs 获取 API Key 使用日志
-func (s *APIKeyService) ListUsageLogs(userID uint, isAdmin bool, apiKeyID uint, req *ListUsageLogsRequest) ([]models.APIKeyUsageLog, int64, error) {
+func (s *APIKeyService) ListUsageLogs(ctx context.Context, userID uint, isAdmin bool, apiKeyID uint, req *ListUsageLogsRequest) ([]models.APIKeyUsageLog, int64, error) {
 	var logs []models.APIKeyUsageLog
 	var total int64
 
-	query := s.db.Model(&models.APIKeyUsageLog{})
+	query := s.db.WithContext(ctx).Model(&models.APIKeyUsageLog{})
 
 	// 如果指定了 API Key ID，只查询该密钥的日志
 	if apiKeyID > 0 {
 		// 验证用户是否有权限查看该密钥的日志
 		var apiKey models.APIKey
-		keyQuery := s.db.Where("id = ?", apiKeyID)
+		keyQuery := s.db.WithContext(ctx).Where("id = ?", apiKeyID)
 		if !isAdmin {
 			keyQuery = keyQuery.Where("user_id = ?", userID)
 		}
@@ -372,7 +373,7 @@ func (s *APIKeyService) ListUsageLogs(userID uint, isAdmin bool, apiKeyID uint, 
 		if !isAdmin {
 			// 获取用户的所有密钥 ID
 			var keyIDs []uint
-			if err := s.db.Model(&models.APIKey{}).Where("user_id = ?", userID).Pluck("id", &keyIDs).Error; err != nil {
+			if err := s.db.WithContext(ctx).Model(&models.APIKey{}).Where("user_id = ?", userID).Pluck("id", &keyIDs).Error; err != nil {
 				return nil, 0, err
 			}
 			if len(keyIDs) == 0 {
@@ -418,9 +419,9 @@ func (s *APIKeyService) ListUsageLogs(userID uint, isAdmin bool, apiKeyID uint, 
 }
 
 // GetUsageLogSummary 获取 API Key 使用统计
-func (s *APIKeyService) GetUsageLogSummary(userID uint, isAdmin bool, apiKeyID uint) (*UsageLogSummary, error) {
+func (s *APIKeyService) GetUsageLogSummary(ctx context.Context, userID uint, isAdmin bool, apiKeyID uint) (*UsageLogSummary, error) {
 	// 先构建筛选条件
-	conditions := s.buildUsageLogConditions(userID, isAdmin, apiKeyID)
+	conditions := s.buildUsageLogConditions(ctx, userID, isAdmin, apiKeyID)
 	if conditions == nil {
 		return &UsageLogSummary{}, nil
 	}
@@ -431,13 +432,13 @@ func (s *APIKeyService) GetUsageLogSummary(userID uint, isAdmin bool, apiKeyID u
 	conditions.Count(&summary.TotalRequests)
 
 	// 成功请求数
-	s.db.Model(&models.APIKeyUsageLog{}).
+	s.db.WithContext(ctx).Model(&models.APIKeyUsageLog{}).
 		Where(conditions).
 		Where("success = ?", true).
 		Count(&summary.SuccessRequests)
 
 	// 失败请求数
-	s.db.Model(&models.APIKeyUsageLog{}).
+	s.db.WithContext(ctx).Model(&models.APIKeyUsageLog{}).
 		Where(conditions).
 		Where("success = ?", false).
 		Count(&summary.FailedRequests)
@@ -448,7 +449,7 @@ func (s *APIKeyService) GetUsageLogSummary(userID uint, isAdmin bool, apiKeyID u
 		MaxDuration *int64
 	}
 	var stats StatsResult
-	s.db.Model(&models.APIKeyUsageLog{}).
+	s.db.WithContext(ctx).Model(&models.APIKeyUsageLog{}).
 		Select("AVG(duration) as avg_duration, MAX(duration) as max_duration").
 		Where(conditions).
 		Scan(&stats)
@@ -460,14 +461,14 @@ func (s *APIKeyService) GetUsageLogSummary(userID uint, isAdmin bool, apiKeyID u
 	}
 
 	// 唯一 IP 数量
-	s.db.Model(&models.APIKeyUsageLog{}).
+	s.db.WithContext(ctx).Model(&models.APIKeyUsageLog{}).
 		Where(conditions).
 		Distinct("client_ip").
 		Count(&summary.UniqueIPs)
 
 	// 今日请求数
 	today := time.Now().Truncate(24 * time.Hour)
-	s.db.Model(&models.APIKeyUsageLog{}).
+	s.db.WithContext(ctx).Model(&models.APIKeyUsageLog{}).
 		Where(conditions).
 		Where("created_at >= ?", today).
 		Count(&summary.TodayRequests)
@@ -477,13 +478,13 @@ func (s *APIKeyService) GetUsageLogSummary(userID uint, isAdmin bool, apiKeyID u
 
 // buildUsageLogConditions 构建使用日志查询的条件
 // 返回 nil 表示无需查询（没有匹配的密钥）
-func (s *APIKeyService) buildUsageLogConditions(userID uint, isAdmin bool, apiKeyID uint) *gorm.DB {
-	query := s.db.Model(&models.APIKeyUsageLog{})
+func (s *APIKeyService) buildUsageLogConditions(ctx context.Context, userID uint, isAdmin bool, apiKeyID uint) *gorm.DB {
+	query := s.db.WithContext(ctx).Model(&models.APIKeyUsageLog{})
 
 	if apiKeyID > 0 {
 		// 验证用户是否有权限查看该密钥
 		var apiKey models.APIKey
-		keyQuery := s.db.Where("id = ?", apiKeyID)
+		keyQuery := s.db.WithContext(ctx).Where("id = ?", apiKeyID)
 		if !isAdmin {
 			keyQuery = keyQuery.Where("user_id = ?", userID)
 		}
@@ -495,7 +496,7 @@ func (s *APIKeyService) buildUsageLogConditions(userID uint, isAdmin bool, apiKe
 		// 非管理员只能查看自己密钥的统计
 		if !isAdmin {
 			var keyIDs []uint
-			if err := s.db.Model(&models.APIKey{}).Where("user_id = ?", userID).Pluck("id", &keyIDs).Error; err != nil {
+			if err := s.db.WithContext(ctx).Model(&models.APIKey{}).Where("user_id = ?", userID).Pluck("id", &keyIDs).Error; err != nil {
 				return nil
 			}
 			if len(keyIDs) == 0 {

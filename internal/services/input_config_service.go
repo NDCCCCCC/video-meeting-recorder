@@ -152,11 +152,11 @@ type TestConnectionRequest struct {
 }
 
 // ListConfigs 获取输入配置列表
-func (s *InputConfigService) ListConfigs(req *ListConfigsRequest) (*InputConfigListResponse, error) {
+func (s *InputConfigService) ListConfigs(ctx context.Context, req *ListConfigsRequest) (*InputConfigListResponse, error) {
 	var configs []models.InputConfig
 	var total int64
 
-	query := s.db.Model(&models.InputConfig{}).Preload("VideoRecordingTasks")
+	query := s.db.WithContext(ctx).Model(&models.InputConfig{}).Preload("VideoRecordingTasks")
 
 	if req.Keyword != "" {
 		query = query.Where("name LIKE ? OR description LIKE ? OR config_type LIKE ?",
@@ -187,9 +187,9 @@ func (s *InputConfigService) ListConfigs(req *ListConfigsRequest) (*InputConfigL
 }
 
 // GetConfigByID 根据ID获取输入配置
-func (s *InputConfigService) GetConfigByID(id uint) (*models.InputConfig, error) {
+func (s *InputConfigService) GetConfigByID(ctx context.Context, id uint) (*models.InputConfig, error) {
 	var config models.InputConfig
-	if err := s.db.Preload("VideoRecordingTasks").First(&config, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("VideoRecordingTasks").First(&config, id).Error; err != nil {
 		return nil, err
 	}
 	// Phase 18: 解密凭据列后再返回（解密失败 → 阻断调用方；上层须知此 row 异常）
@@ -213,7 +213,7 @@ func (s *InputConfigService) GetConfigByID(id uint) (*models.InputConfig, error)
 }
 
 // CreateConfig 创建输入配置
-func (s *InputConfigService) CreateConfig(req *CreateInputConfigRequest) (*models.InputConfig, error) {
+func (s *InputConfigService) CreateConfig(ctx context.Context, req *CreateInputConfigRequest) (*models.InputConfig, error) {
 	// Phase 18: 加密凭据列后再写库（仅非空值）
 	password, err := s.encryptPasswordField(req.Password)
 	if err != nil {
@@ -266,7 +266,7 @@ func (s *InputConfigService) CreateConfig(req *CreateInputConfigRequest) (*model
 		return nil, err
 	}
 
-	if err := s.db.Create(config).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(config).Error; err != nil {
 		return nil, err
 	}
 
@@ -281,9 +281,9 @@ func (s *InputConfigService) CreateConfig(req *CreateInputConfigRequest) (*model
 // UpdateConfig 更新输入配置
 // 返回 (oldConfig, newConfig, error): oldConfig 是 mutate 前的快照，newConfig 是 mutate 后的记录
 // 调用方（handler）负责把这两个对象交给 audit.RecordChange 写审计表
-func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest) (*models.InputConfig, *models.InputConfig, error) {
+func (s *InputConfigService) UpdateConfig(ctx context.Context, id uint, req *UpdateInputConfigRequest) (*models.InputConfig, *models.InputConfig, error) {
 	var config models.InputConfig
-	if err := s.db.First(&config, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&config, id).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -376,7 +376,7 @@ func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest
 		return nil, nil, err
 	}
 
-	if err := s.db.Save(&config).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&config).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -391,9 +391,9 @@ func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest
 
 // DeleteConfig 删除输入配置
 // 返回 (oldConfig, error): oldConfig 是删除前的快照，handler 负责把 OldData 交给 audit.RecordChange
-func (s *InputConfigService) DeleteConfig(id uint) (*models.InputConfig, error) {
+func (s *InputConfigService) DeleteConfig(ctx context.Context, id uint) (*models.InputConfig, error) {
 	var config models.InputConfig
-	if err := s.db.First(&config, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&config, id).Error; err != nil {
 		return nil, err
 	}
 
@@ -402,12 +402,12 @@ func (s *InputConfigService) DeleteConfig(id uint) (*models.InputConfig, error) 
 
 	// 检查是否有任务正在使用
 	var count int64
-	s.db.Table("task_input_configs").Where("input_config_id = ?", id).Count(&count)
+	s.db.WithContext(ctx).Table("task_input_configs").Where("input_config_id = ?", id).Count(&count)
 	if count > 0 {
 		return nil, errors.New("配置正在被任务使用，无法删除")
 	}
 
-	if err := s.db.Delete(&models.InputConfig{}, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Delete(&models.InputConfig{}, id).Error; err != nil {
 		return nil, err
 	}
 
@@ -456,7 +456,7 @@ func (s *InputConfigService) validateHuaweiFields(config *models.InputConfig) er
 }
 
 // TestConnection 测试输入配置连接
-func (s *InputConfigService) TestConnection(req *TestConnectionRequest) error {
+func (s *InputConfigService) TestConnection(ctx context.Context, req *TestConnectionRequest) error {
 	s.logger.Info("测试输入配置连接",
 		zap.String("config_type", req.ConfigType),
 	)
@@ -465,7 +465,7 @@ func (s *InputConfigService) TestConnection(req *TestConnectionRequest) error {
 	case models.ConfigTypeUSB:
 		return s.testUSBDevice(req)
 	case models.ConfigTypeStream:
-		return s.testStreamConnection(req)
+		return s.testStreamConnection(ctx, req)
 	default:
 		return errors.New("不支持的配置类型")
 	}
@@ -495,7 +495,7 @@ func (s *InputConfigService) testUSBDevice(req *TestConnectionRequest) error {
 }
 
 // testStreamConnection 测试流媒体连接
-func (s *InputConfigService) testStreamConnection(req *TestConnectionRequest) error {
+func (s *InputConfigService) testStreamConnection(ctx context.Context, req *TestConnectionRequest) error {
 	s.logger.Info("测试流媒体连接",
 		zap.String("protocol", req.StreamProtocol),
 		zap.String("url", req.StreamURL),
@@ -520,7 +520,8 @@ func (s *InputConfigService) testStreamConnection(req *TestConnectionRequest) er
 		return errors.New("不支持的流媒体协议")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// PERF-003/BUG-005: ffprobe 超时 ctx 从请求 ctx 派生，使请求取消能中断探测。
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	args := []string{"-v", "error"}

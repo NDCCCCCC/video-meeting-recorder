@@ -59,7 +59,7 @@ func TestInputConfigService_CreateConfig_EncryptsPasswords(t *testing.T) {
 		Password:       "huawei-pw-456",
 	}
 
-	got, err := svc.CreateConfig(req)
+	got, err := svc.CreateConfig(context.Background(), req)
 	require.NoError(t, err)
 	assert.NotZero(t, got.ID)
 
@@ -72,7 +72,7 @@ func TestInputConfigService_CreateConfig_EncryptsPasswords(t *testing.T) {
 	assert.True(t, utils.IsEncryptedPassword(dbRow.StreamPassword))
 
 	// GetConfigByID 应解密回明文
-	loaded, err := svc.GetConfigByID(got.ID)
+	loaded, err := svc.GetConfigByID(context.Background(), got.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "huawei-pw-456", loaded.Password, "GetConfigByID 应解密 Password")
 	assert.Equal(t, "stream-pw-123", loaded.StreamPassword)
@@ -88,7 +88,7 @@ func TestInputConfigService_CreateConfig_NilEncryptor_PassesThrough(t *testing.T
 		Password:       "plain-pw",
 		StreamPassword: "plain-spw",
 	}
-	got, err := svc.CreateConfig(req)
+	got, err := svc.CreateConfig(context.Background(), req)
 	require.NoError(t, err)
 
 	// encryptor=nil 时，DB 存明文（向后兼容）
@@ -106,7 +106,7 @@ func TestInputConfigService_CreateConfig_EmptyPasswords_StaysEmpty(t *testing.T)
 		ConfigType: "stream",
 		StreamURL:  "rtmp://x",
 	}
-	got, err := svc.CreateConfig(req)
+	got, err := svc.CreateConfig(context.Background(), req)
 	require.NoError(t, err)
 
 	assert.Empty(t, got.Password)
@@ -123,7 +123,7 @@ func TestInputConfigService_UpdateConfig_EncryptsOnlyChanged(t *testing.T) {
 	ctx := context.Background()
 
 	// 先创建一条
-	created, err := svc.CreateConfig(&CreateInputConfigRequest{
+	created, err := svc.CreateConfig(context.Background(), &CreateInputConfigRequest{
 		Name:       "Update",
 		ConfigType: "stream",
 		StreamURL:  "rtmp://x",
@@ -133,7 +133,7 @@ func TestInputConfigService_UpdateConfig_EncryptsOnlyChanged(t *testing.T) {
 
 	// 不改 password，只改 name
 	newName := "Update-v2"
-	_, _, err = svc.UpdateConfig(created.ID, &UpdateInputConfigRequest{Name: &newName})
+	_, _, err = svc.UpdateConfig(context.Background(), created.ID, &UpdateInputConfigRequest{Name: &newName})
 	require.NoError(t, err)
 
 	var after models.InputConfig
@@ -142,12 +142,12 @@ func TestInputConfigService_UpdateConfig_EncryptsOnlyChanged(t *testing.T) {
 
 	// 改 password → 应重新加密
 	newPw := "new-pw-v2"
-	_, newConfig, err := svc.UpdateConfig(created.ID, &UpdateInputConfigRequest{Password: &newPw})
+	_, newConfig, err := svc.UpdateConfig(context.Background(), created.ID, &UpdateInputConfigRequest{Password: &newPw})
 	require.NoError(t, err)
 	assert.True(t, utils.IsEncryptedPassword(newConfig.Password))
 	assert.NotEqual(t, newPw, newConfig.Password)
 
-	loaded, err := svc.GetConfigByID(created.ID)
+	loaded, err := svc.GetConfigByID(context.Background(), created.ID)
 	require.NoError(t, err)
 	assert.Equal(t, newPw, loaded.Password, "GetConfigByID 应解密出新 password")
 	_ = ctx
@@ -157,7 +157,7 @@ func TestInputConfigService_GetConfigByID_DecryptionFailureFails(t *testing.T) {
 	svc, _ := newTestInputConfigService(t, true)
 
 	// 创建后用另一个 encryptor 重写 password（模拟数据被改）
-	created, err := svc.CreateConfig(&CreateInputConfigRequest{
+	created, err := svc.CreateConfig(context.Background(), &CreateInputConfigRequest{
 		Name: "DecFail", ConfigType: "stream", StreamURL: "rtmp://x",
 		Password: "ok",
 	})
@@ -169,7 +169,7 @@ func TestInputConfigService_GetConfigByID_DecryptionFailureFails(t *testing.T) {
 	tampered := dbRow.Password[:len(dbRow.Password)-1] + "X"
 	require.NoError(t, svc.db.Model(&dbRow).Update("password", tampered).Error)
 
-	_, err = svc.GetConfigByID(created.ID)
+	_, err = svc.GetConfigByID(context.Background(), created.ID)
 	assert.Error(t, err, "篡改 envelope 后 GetConfigByID 应失败")
 	assert.Contains(t, err.Error(), "解密")
 }
@@ -177,17 +177,17 @@ func TestInputConfigService_GetConfigByID_DecryptionFailureFails(t *testing.T) {
 func TestInputConfigService_UpdateConfig_StreamPassword_Encryption(t *testing.T) {
 	svc, _ := newTestInputConfigService(t, true)
 
-	created, err := svc.CreateConfig(&CreateInputConfigRequest{
+	created, err := svc.CreateConfig(context.Background(), &CreateInputConfigRequest{
 		Name: "Sp", ConfigType: "stream", StreamURL: "rtmp://x",
 	})
 	require.NoError(t, err)
 
 	newSp := "new-stream-pw"
-	_, nc, err := svc.UpdateConfig(created.ID, &UpdateInputConfigRequest{StreamPassword: &newSp})
+	_, nc, err := svc.UpdateConfig(context.Background(), created.ID, &UpdateInputConfigRequest{StreamPassword: &newSp})
 	require.NoError(t, err)
 	assert.True(t, utils.IsEncryptedPassword(nc.StreamPassword))
 
-	loaded, err := svc.GetConfigByID(created.ID)
+	loaded, err := svc.GetConfigByID(context.Background(), created.ID)
 	require.NoError(t, err)
 	assert.Equal(t, newSp, loaded.StreamPassword)
 }

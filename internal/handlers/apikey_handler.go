@@ -98,7 +98,7 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 
 	}
 
-	apiKey, fullKey, err := h.apiKeyService.CreateAPIKey(userID, &req)
+	apiKey, fullKey, err := h.apiKeyService.CreateAPIKey(c.Request.Context(), userID, &req)
 	if err != nil {
 		h.logger.Warn("创建API密钥失败",
 			zap.Uint("user_id", userID),
@@ -148,7 +148,7 @@ func (h *APIKeyHandler) ListAPIKeys(c *gin.Context) {
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
-	result, err := h.apiKeyService.ListAPIKeys(userID, isAdmin, &req)
+	result, err := h.apiKeyService.ListAPIKeys(c.Request.Context(), userID, isAdmin, &req)
 	if err != nil {
 		h.logger.Error("获取API密钥列表失败",
 			zap.Uint("user_id", userID),
@@ -197,7 +197,7 @@ func (h *APIKeyHandler) GetAPIKey(c *gin.Context) {
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
-	apiKey, err := h.apiKeyService.GetAPIKey(id, userID, isAdmin)
+	apiKey, err := h.apiKeyService.GetAPIKey(c.Request.Context(), id, userID, isAdmin)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, err.Error())
 		return
@@ -241,7 +241,7 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
-	oldAPIKey, apiKey, err := h.apiKeyService.UpdateAPIKey(id, userID, isAdmin, &req)
+	oldAPIKey, apiKey, err := h.apiKeyService.UpdateAPIKey(c.Request.Context(), id, userID, isAdmin, &req)
 	if err != nil {
 		h.logger.Warn("更新API密钥失败",
 			zap.Uint("user_id", userID),
@@ -299,7 +299,7 @@ func (h *APIKeyHandler) DeleteAPIKey(c *gin.Context) {
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
-	oldAPIKey, err := h.apiKeyService.DeleteAPIKey(id, userID, isAdmin)
+	oldAPIKey, err := h.apiKeyService.DeleteAPIKey(c.Request.Context(), id, userID, isAdmin)
 	if err != nil {
 		h.logger.Warn("删除API密钥失败",
 			zap.Uint("user_id", userID),
@@ -359,7 +359,7 @@ func (h *APIKeyHandler) ToggleAPIKeyStatus(c *gin.Context) {
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
-	oldAPIKey, apiKey, err := h.apiKeyService.ToggleAPIKeyStatus(id, userID, isAdmin)
+	oldAPIKey, apiKey, err := h.apiKeyService.ToggleAPIKeyStatus(c.Request.Context(), id, userID, isAdmin)
 	if err != nil {
 		h.logger.Warn("切换API密钥状态失败",
 			zap.Uint("user_id", userID),
@@ -428,7 +428,7 @@ func (h *APIKeyHandler) ListUsageLogs(c *gin.Context) {
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
-	logs, total, err := h.apiKeyService.ListUsageLogs(userID, isAdmin, id, &req)
+	logs, total, err := h.apiKeyService.ListUsageLogs(c.Request.Context(), userID, isAdmin, id, &req)
 	if err != nil {
 		h.logger.Error("获取使用日志失败",
 			zap.Uint("user_id", userID),
@@ -472,7 +472,7 @@ func (h *APIKeyHandler) GetUsageLogSummary(c *gin.Context) {
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
-	summary, err := h.apiKeyService.GetUsageLogSummary(userID, isAdmin, id)
+	summary, err := h.apiKeyService.GetUsageLogSummary(c.Request.Context(), userID, isAdmin, id)
 	if err != nil {
 		h.logger.Error("获取使用统计失败",
 			zap.Uint("user_id", userID),
