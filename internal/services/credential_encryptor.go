@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"go.uber.org/zap"
@@ -45,11 +46,13 @@ type CredentialEncryptor struct {
 //   - previousVersion / previousSecret 配对存在时启用轮换；否则 previous 为零值
 //   - 内部把 secret 通过 utils.DeriveSM4Key 归一化为 16 字节密钥
 func NewCredentialEncryptor(currentVersion, currentSecret string, previousVersion, previousSecret string, logger *zap.Logger) (*CredentialEncryptor, error) {
+	// Phase 19 D4: 配置验证错误用 BusinessError(CodeInvalidInput) 包装，
+	// 让 handleStart-up 错误能用统一 mapping 落到 400 而非 500。
 	if currentVersion == "" {
-		return nil, errors.New("currentVersion 不能为空")
+		return nil, apperrors.NewBusinessError(apperrors.CodeInvalidInput, "currentVersion 不能为空", nil)
 	}
 	if len(currentSecret) < 32 {
-		return nil, fmt.Errorf("currentSecret 必须 ≥ 32 字符（实际 %d）", len(currentSecret))
+		return nil, apperrors.NewBusinessError(apperrors.CodeInvalidInput, fmt.Sprintf("currentSecret 必须 ≥ 32 字符（实际 %d）", len(currentSecret)), nil)
 	}
 	enc := &CredentialEncryptor{
 		logger:         logger,
@@ -57,14 +60,14 @@ func NewCredentialEncryptor(currentVersion, currentSecret string, previousVersio
 		currentKey:     utils.DeriveSM4Key(currentSecret),
 	}
 	if (previousVersion == "") != (previousSecret == "") {
-		return nil, errors.New("previousVersion 与 previousSecret 必须同时存在或同时缺失")
+		return nil, apperrors.NewBusinessError(apperrors.CodeInvalidInput, "previousVersion 与 previousSecret 必须同时存在或同时缺失", nil)
 	}
 	if previousVersion != "" {
 		if previousVersion == currentVersion {
-			return nil, errors.New("previousVersion 必须不等于 currentVersion")
+			return nil, apperrors.NewBusinessError(apperrors.CodeInvalidInput, "previousVersion 必须不等于 currentVersion", nil)
 		}
 		if len(previousSecret) < 32 {
-			return nil, fmt.Errorf("previousSecret 必须 ≥ 32 字符（实际 %d）", len(previousSecret))
+			return nil, apperrors.NewBusinessError(apperrors.CodeInvalidInput, fmt.Sprintf("previousSecret 必须 ≥ 32 字符（实际 %d）", len(previousSecret)), nil)
 		}
 		enc.previousVersion = previousVersion
 		enc.previousKey = utils.DeriveSM4Key(previousSecret)

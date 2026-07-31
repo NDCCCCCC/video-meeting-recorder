@@ -192,7 +192,12 @@ func (h *VideoFileHandler) DeleteFile(c *gin.Context) {
 
 	oldFile, err := h.fileService.DeleteFile(c.Request.Context(), id)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		// Phase 19 D4: DeleteFile 返回 BusinessError，handler 用统一 HandleError 映射。
+		if response.HandleError(c, err) {
+			return
+		}
+		// 兜底（理论不可达）
+		response.GinError(c, response.CodeInternalError, "删除失败: "+err.Error())
 		return
 	}
 

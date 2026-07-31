@@ -265,17 +265,24 @@ func (s *VideoFileService) GetFileByID(ctx context.Context, id uint) (*models.Vi
 
 // DeleteFile 删除文件（支持录制文件和孤立文件）
 // 返回 (oldFile, error): oldFile 是删除前的快照，handler 负责把 OldData 交给 audit.RecordChange
+//
+// 错误（Phase 19 D4）：用 apperrors.BusinessError 包装用户可见错误
+//   - gorm.ErrRecordNotFound → CodeNotFound (404)
+//   - FileStatusProcessing → CodeInvalidInput (400)
 func (s *VideoFileService) DeleteFile(ctx context.Context, id uint) (*models.VideoFile, error) {
 	var file models.VideoFile
 	if err := s.db.WithContext(ctx).First(&file, id).Error; err != nil {
-		return nil, errors.New("文件不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperrors.NewBusinessError(apperrors.CodeNotFound, "文件不存在", err)
+		}
+		return nil, fmt.Errorf("查询视频文件失败: %w", err)
 	}
 
 	// ★ Snapshot OldData BEFORE delete（用于审计 OldData 捕获）
 	oldFile := file
 
 	if file.Status == models.FileStatusProcessing {
-		return nil, errors.New("文件正在处理中，无法删除")
+		return nil, apperrors.NewBusinessError(apperrors.CodeInvalidInput, "文件正在处理中，无法删除", nil)
 	}
 
 	// 获取任务ID
