@@ -49,7 +49,8 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		errors.Is(err, ErrRoleNotFound),
 		errors.Is(err, ErrADAccountNotFound),
 		errors.Is(err, ErrPermissionNotFound),
-		errors.Is(err, ErrAPIKeyNotFound):
+		errors.Is(err, ErrAPIKeyNotFound),
+		errors.Is(err, ErrPPTFileNotFound):
 		return http.StatusNotFound, respCodeNotFound, "资源不存在"
 	case errors.Is(err, ErrUnauthorized),
 		errors.Is(err, ErrTokenInvalid),
@@ -133,7 +134,7 @@ func IsKnownError(err error) bool {
 	for _, sentinel := range []error{
 		ErrNotFound, ErrTaskNotFound, ErrVideoFileNotFound,
 		ErrUserNotFound, ErrRoleNotFound, ErrADAccountNotFound, ErrPermissionNotFound,
-		ErrAPIKeyNotFound,
+		ErrAPIKeyNotFound, ErrPPTFileNotFound,
 		ErrUnauthorized, ErrForbidden, ErrInvalidInput, ErrInvalidFileType,
 		ErrAlreadyExists, ErrTaskInProgress, ErrUsernameExists, ErrEmailExists,
 		ErrRoleNameExists, ErrRoleInUse,

@@ -32,12 +32,14 @@ func NewPPTFileService(db *gorm.DB, logger *zap.Logger, cfg *config.Config) *PPT
 }
 
 // GetPPTFileByID retrieves a PPT file by ID
+// Phase 19 D13: 404 NotFound 错误统一为 apperrors.ErrPPTFileNotFound sentinel;
+// handler 端的 9 处 \"PPT文件不存在\" 写死 GinError 已切 HandleError。
 func (s *PPTFileService) GetPPTFileByID(ctx context.Context, id uint) (*models.PPTFile, error) {
 	var pptFile models.PPTFile
 	err := s.db.WithContext(ctx).Where("id = ?", id).First(&pptFile).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("PPT文件不存在")
+			return nil, apperrors.ErrPPTFileNotFound
 		}
 		return nil, err
 	}

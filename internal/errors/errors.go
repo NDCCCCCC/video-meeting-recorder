@@ -74,6 +74,12 @@ var (
 	ErrAPIKeyExpired        = errors.New("API key expired")
 	ErrAPIKeyDisabled       = errors.New("API key disabled")
 	ErrAPIKeyIPNotAllowed   = errors.New("API key IP not allowed")
+
+	// PPT file sentinels（Phase 19 D13）：ppt_file_service.go admin 与 handler 路径统一化。
+	// ppt_file_service.go 仅 1 个 "PPT文件不存在" 适合 sentinel；其他内部错已用 %w
+	// 或 BusinessError（D4 已迁移）；ppt_handler.go 的 10+ 处 "PPT文件不存在"
+	// GinError 切到 HandleError 后经 sentinel 链识别为 404。
+	ErrPPTFileNotFound = errors.New("PPT file not found")
 )
 
 // Wrap 包装错误，添加上下文信息
