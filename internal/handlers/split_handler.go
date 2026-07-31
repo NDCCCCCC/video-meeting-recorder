@@ -80,7 +80,7 @@ func (h *SplitHandler) SubmitSplit(c *gin.Context) {
 		return
 	}
 
-	if err := h.splittingService.SubmitSplit(uint(id), req.Markers, req.ReEncode, userID); err != nil {
+	if err := h.splittingService.SubmitSplit(c.Request.Context(), uint(id), req.Markers, req.ReEncode, userID); err != nil {
 		response.GinError(c, response.CodeInternalError, "提交分割任务失败: "+err.Error())
 		return
 	}

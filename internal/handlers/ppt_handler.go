@@ -202,7 +202,7 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 	}
 
 	// Get all PPTs for this video
-	ppts, err := h.pptFileService.GetPptsByVideoFile(uint(id))
+	ppts, err := h.pptFileService.GetPptsByVideoFile(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to get PPTs for video",
 			zap.String("video_file_id", idStr),
@@ -243,7 +243,7 @@ func (h *PPThandler) BatchGetPptsByVideos(c *gin.Context) {
 	results := make(map[uint]interface{})
 	for _, videoID := range req.VideoIDs {
 		// 检查单个视频的 PPT
-		ppts, err := h.pptFileService.GetPptsByVideoFile(videoID)
+		ppts, err := h.pptFileService.GetPptsByVideoFile(c.Request.Context(), videoID)
 		if err != nil {
 			results[videoID] = gin.H{
 				"has_ppt": false,
@@ -388,7 +388,7 @@ func (h *PPThandler) DownloadPPT(c *gin.Context) {
 	}
 
 	// Load PPT file
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -426,7 +426,7 @@ func (h *PPThandler) DeletePPT(c *gin.Context) {
 	}
 
 	// Load PPT file to verify ownership
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -439,7 +439,7 @@ func (h *PPThandler) DeletePPT(c *gin.Context) {
 	}
 
 	// Delete PPT file
-	oldPPT, err := h.pptFileService.DeletePPTFile(uint(id))
+	oldPPT, err := h.pptFileService.DeletePPTFile(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to delete PPT file",
 			zap.String("ppt_id", idStr),
@@ -506,7 +506,7 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 	}
 
 	// Load PPT file to check ownership (via SourceVideoFile)
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -524,7 +524,7 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 
 	// Call service to rename
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
-	if err := h.pptFileService.RenamePPTFile(uint(id), newName, userID, hasSharedViewer); err != nil {
+	if err := h.pptFileService.RenamePPTFile(c.Request.Context(), uint(id), newName, userID, hasSharedViewer); err != nil {
 		h.logger.Warn("重命名PPT文件失败",
 			zap.String("ppt_id", idStr),
 			zap.String("new_name", newName),
@@ -543,7 +543,7 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 	}
 
 	// Get updated PPT file info
-	pptFile, err = h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err = h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err))
 		response.GinSuccess(c, gin.H{
@@ -577,7 +577,7 @@ func (h *PPThandler) DetectDuplicatesHandler(c *gin.Context) {
 	}
 
 	// Load PPT file
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -640,7 +640,7 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 	}
 
 	// Load PPT file
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -683,7 +683,7 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 	}
 
 	// Get updated PPT file info (service returned new state too, but reload to capture latest committed state)
-	updatedPPT, err := h.pptFileService.GetPPTFileByID(uint(id))
+	updatedPPT, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
 		response.GinSuccess(c, gin.H{
@@ -726,7 +726,7 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 	}
 
 	// Load PPT file
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -755,7 +755,7 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 	}
 
 	// Get updated PPT file info
-	updatedPPT, err := h.pptFileService.GetPPTFileByID(uint(id))
+	updatedPPT, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
 		response.GinSuccess(c, gin.H{
@@ -806,7 +806,7 @@ func (h *PPThandler) CaptureFrameHandler(c *gin.Context) {
 	}
 
 	// Load PPT file
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -878,7 +878,7 @@ func (h *PPThandler) InsertSlideHandler(c *gin.Context) {
 	}
 
 	// Load PPT file
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -925,7 +925,7 @@ func (h *PPThandler) InsertSlideHandler(c *gin.Context) {
 	}
 
 	// Get updated PPT file info
-	updatedPPT, err := h.pptFileService.GetPPTFileByID(uint(id))
+	updatedPPT, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
 		response.GinSuccess(c, gin.H{
@@ -963,7 +963,7 @@ func (h *PPThandler) CapturedPreviewHandler(c *gin.Context) {
 	}
 
 	// Load PPT file
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return
@@ -1058,7 +1058,7 @@ func (h *PPThandler) ReorderSlidesHandler(c *gin.Context) {
 	}
 
 	// Load PPT file
-	pptFile, err := h.pptFileService.GetPPTFileByID(uint(id))
+	pptFile, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "PPT文件不存在")
 		return

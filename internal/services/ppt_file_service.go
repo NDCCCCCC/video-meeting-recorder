@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,9 +30,9 @@ func NewPPTFileService(db *gorm.DB, logger *zap.Logger, cfg *config.Config) *PPT
 }
 
 // GetPPTFileByID retrieves a PPT file by ID
-func (s *PPTFileService) GetPPTFileByID(id uint) (*models.PPTFile, error) {
+func (s *PPTFileService) GetPPTFileByID(ctx context.Context, id uint) (*models.PPTFile, error) {
 	var pptFile models.PPTFile
-	err := s.db.Where("id = ?", id).First(&pptFile).Error
+	err := s.db.WithContext(ctx).Where("id = ?", id).First(&pptFile).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("PPT文件不存在")
@@ -42,9 +43,9 @@ func (s *PPTFileService) GetPPTFileByID(id uint) (*models.PPTFile, error) {
 }
 
 // GetPptsByVideoFile retrieves all PPT files for a video, ordered by newest first (per D-12)
-func (s *PPTFileService) GetPptsByVideoFile(videoFileID uint) ([]models.PPTFile, error) {
+func (s *PPTFileService) GetPptsByVideoFile(ctx context.Context, videoFileID uint) ([]models.PPTFile, error) {
 	var pptFiles []models.PPTFile
-	err := s.db.Where("source_video_file_id = ?", videoFileID).
+	err := s.db.WithContext(ctx).Where("source_video_file_id = ?", videoFileID).
 		Order("created_at DESC").
 		Find(&pptFiles).Error
 	if err != nil {
@@ -54,9 +55,9 @@ func (s *PPTFileService) GetPptsByVideoFile(videoFileID uint) ([]models.PPTFile,
 }
 
 // DeletePPTFile deletes a PPT file record and physical file
-func (s *PPTFileService) DeletePPTFile(id uint) (*models.PPTFile, error) {
+func (s *PPTFileService) DeletePPTFile(ctx context.Context, id uint) (*models.PPTFile, error) {
 	// Load PPT file first
-	pptFile, err := s.GetPPTFileByID(id)
+	pptFile, err := s.GetPPTFileByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +87,7 @@ func (s *PPTFileService) DeletePPTFile(id uint) (*models.PPTFile, error) {
 	}
 
 	// Delete database record
-	if err := s.db.Delete(&models.PPTFile{}, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Delete(&models.PPTFile{}, id).Error; err != nil {
 		return nil, fmt.Errorf("failed to delete PPT file record: %w", err)
 	}
 
@@ -98,16 +99,16 @@ func (s *PPTFileService) DeletePPTFile(id uint) (*models.PPTFile, error) {
 }
 
 // CreatePPTFile creates a new PPT file record
-func (s *PPTFileService) CreatePPTFile(pptFile *models.PPTFile) error {
-	if err := s.db.Create(pptFile).Error; err != nil {
+func (s *PPTFileService) CreatePPTFile(ctx context.Context, pptFile *models.PPTFile) error {
+	if err := s.db.WithContext(ctx).Create(pptFile).Error; err != nil {
 		return fmt.Errorf("failed to create PPT file record: %w", err)
 	}
 	return nil
 }
 
 // UpdatePPTFile updates a PPT file record
-func (s *PPTFileService) UpdatePPTFile(id uint, updates map[string]interface{}) error {
-	if err := s.db.Model(&models.PPTFile{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+func (s *PPTFileService) UpdatePPTFile(ctx context.Context, id uint, updates map[string]interface{}) error {
+	if err := s.db.WithContext(ctx).Model(&models.PPTFile{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return fmt.Errorf("failed to update PPT file record: %w", err)
 	}
 	return nil
@@ -118,10 +119,10 @@ func (s *PPTFileService) UpdatePPTFile(id uint, updates map[string]interface{}) 
 //   - id: PPT file ID
 //   - newName: new filename without extension (extension will be preserved)
 //   - userID: user ID requesting the rename (for ownership validation)
-func (s *PPTFileService) RenamePPTFile(id uint, newName string, userID uint, hasSharedViewer bool) error {
+func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName string, userID uint, hasSharedViewer bool) error {
 	// Validation: load PPT file with SourceVideoFile preloaded
 	var pptFile models.PPTFile
-	if err := s.db.Preload("SourceVideoFile").First(&pptFile, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("SourceVideoFile").First(&pptFile, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("PPT文件不存在")
 		}
@@ -167,7 +168,7 @@ func (s *PPTFileService) RenamePPTFile(id uint, newName string, userID uint, has
 
 	// Check if another file with the same path already exists
 	var existingFile models.PPTFile
-	err := s.db.Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
+	err := s.db.WithContext(ctx).Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
 	if err == nil {
 		return fmt.Errorf("目标文件名已存在")
 	} else if err != gorm.ErrRecordNotFound {
@@ -175,7 +176,7 @@ func (s *PPTFileService) RenamePPTFile(id uint, newName string, userID uint, has
 	}
 
 	// Atomic rename: database transaction + filesystem rename
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Step 1: Rename physical file
 		if err := os.Rename(pptFile.FilePath, newFilePath); err != nil {
 			s.logger.Warn("重命名PPT物理文件失败",

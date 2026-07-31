@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -114,7 +115,7 @@ func TestSplittingService_SmartCleanup(t *testing.T) {
 		require.NoError(t, db.Create(seg2).Error)
 
 		// Submit new split (should delete old segments)
-		err := splittingService.SubmitSplit(parent.ID, []float64{10.0, 20.0}, false, userID)
+		err := splittingService.SubmitSplit(context.Background(), parent.ID, []float64{10.0, 20.0}, false, userID)
 
 		// Verify cleanup happened
 		assert.NoError(t, err)
@@ -164,7 +165,7 @@ func TestSplittingService_SmartCleanup(t *testing.T) {
 		require.NoError(t, db.Create(seg1).Error)
 
 		// Submit new split
-		err := splittingService.SubmitSplit(parent.ID, []float64{10.0}, false, userID)
+		err := splittingService.SubmitSplit(context.Background(), parent.ID, []float64{10.0}, false, userID)
 		assert.NoError(t, err)
 
 		// Verify parent still exists
@@ -216,7 +217,7 @@ func TestSplittingService_SmartCleanup(t *testing.T) {
 		// Try to submit split as different user (cleanup should find 0 segments, not fail)
 		// Actually this won't fail since DeleteSplitSegmentsByParentID returns 0, nil when no segments found
 		// Let's test a different scenario: cleanup succeeds (0 segments deleted) and split continues
-		err := splittingService.SubmitSplit(parent.ID, []float64{10.0}, false, userID)
+		err := splittingService.SubmitSplit(context.Background(), parent.ID, []float64{10.0}, false, userID)
 		assert.NoError(t, err, "Should succeed when cleanup finds no segments to delete")
 	})
 
@@ -260,7 +261,7 @@ func TestSplittingService_SmartCleanup(t *testing.T) {
 		}
 
 		// Submit split (should log cleanup)
-		err := splittingService.SubmitSplit(parent.ID, []float64{10.0, 20.0}, false, userID)
+		err := splittingService.SubmitSplit(context.Background(), parent.ID, []float64{10.0, 20.0}, false, userID)
 		assert.NoError(t, err)
 		// Note: In real test, would verify log messages contain "清理旧分割段完成"
 	})
@@ -291,12 +292,12 @@ func TestSplittingService_SmartCleanup(t *testing.T) {
 		require.NoError(t, db.Create(parent).Error)
 
 		// Submit first split
-		err1 := splittingService.SubmitSplit(parent.ID, []float64{10.0}, false, userID)
+		err1 := splittingService.SubmitSplit(context.Background(), parent.ID, []float64{10.0}, false, userID)
 		assert.NoError(t, err1)
 
 		// Submit second split immediately (should clean up first split's segments)
 		// Note: Since first split hasn't created segments yet, cleanup will find 0
-		err2 := splittingService.SubmitSplit(parent.ID, []float64{20.0, 30.0}, false, userID)
+		err2 := splittingService.SubmitSplit(context.Background(), parent.ID, []float64{20.0, 30.0}, false, userID)
 		assert.NoError(t, err2, "Concurrent split should be handled correctly")
 
 		// Verify status
@@ -332,7 +333,7 @@ func TestSplittingService_SmartCleanupNoSegments(t *testing.T) {
 		require.NoError(t, db.Create(parent).Error)
 
 		// Submit first split (no cleanup needed)
-		err := splittingService.SubmitSplit(parent.ID, []float64{10.0, 20.0}, false, userID)
+		err := splittingService.SubmitSplit(context.Background(), parent.ID, []float64{10.0, 20.0}, false, userID)
 		assert.NoError(t, err, "First-time split should succeed without cleanup")
 	})
 }

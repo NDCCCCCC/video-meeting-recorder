@@ -88,7 +88,7 @@ func (s *SplittingService) Stop() {
 }
 
 // SubmitSplit submits a split task
-func (s *SplittingService) SubmitSplit(videoFileID uint, markers []float64, reEncode bool, createdBy uint) error {
+func (s *SplittingService) SubmitSplit(ctx context.Context, videoFileID uint, markers []float64, reEncode bool, createdBy uint) error {
 	// 1. Smart cleanup: delete existing segments before creating new ones
 	deletedCount, err := s.videoFileService.DeleteSplitSegmentsByParentID(videoFileID, createdBy)
 	if err != nil {
@@ -150,17 +150,17 @@ func (s *SplittingService) worker(id int) {
 	for {
 		select {
 		case task := <-s.taskQueue:
-			s.processSplit(task)
+			s.processSplit(s.ctx, task)
 		case <-s.ctx.Done():
 			return
 		}
 	}
 }
 
-func (s *SplittingService) processSplit(task *SplitTask) {
+func (s *SplittingService) processSplit(ctx context.Context, task *SplitTask) {
 	// 1. Load source video file
 	var sourceFile models.VideoFile
-	if err := s.db.First(&sourceFile, task.VideoFileID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&sourceFile, task.VideoFileID).Error; err != nil {
 		s.logger.Error("源视频文件不存在", zap.Uint("video_file_id", task.VideoFileID), zap.Error(err))
 		s.statusMu.Lock()
 		s.statusMap[task.VideoFileID] = "failed"
