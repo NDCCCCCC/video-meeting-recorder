@@ -1,8 +1,9 @@
 package services
 
 import (
-	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
@@ -19,24 +20,66 @@ const (
 	keyAuthADAllowAutoCreate = "auth.ad.allow_auto_create"
 )
 
+// authADForDB 是 system_settings['auth.ad'] JSON 行专用的 DTO。
+//
+// 设计动机：auth.ADAuthConfig 本身有一个 json:"password" 字段（保留用于环境变量 / YAML 解析）；
+// 而 system_settings['auth.ad'] 的 JSON 行必须**永远不包含** password 字段（Phase 18 起）。
+// 本 DTO 显式 json:"-" 屏蔽，避免结构体序列化时把 password 字段混入 DB JSON 行。
+//
+// 任何 adConfigForDB(password ...string) → 不带 password 的 DTO；保留原 AD 字段全集。
+type authADForDB struct {
+	Server             string `json:"server"`
+	BindDN             string `json:"bind_dn"`
+	BaseDN             string `json:"base_dn"`
+	UseTLS             bool   `json:"use_tls"`
+	PoolSize           int    `json:"pool_size"`
+	DialTimeout        int    `json:"dial_timeout"`
+	RequestTimeout     int    `json:"request_timeout"`
+	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	AllowAutoCreate    bool   `json:"allow_auto_create"`
+}
+
+// toADAuthConfigForDB 把 auth.ADAuthConfig 转为不带 password 的 DTO。
+func toADAuthConfigForDB(c *auth.ADAuthConfig) authADForDB {
+	return authADForDB{
+		Server:             c.Server,
+		BindDN:             c.BindDN,
+		BaseDN:             c.BaseDN,
+		UseTLS:             c.UseTLS,
+		PoolSize:           c.PoolSize,
+		DialTimeout:        c.DialTimeout,
+		RequestTimeout:     c.RequestTimeout,
+		InsecureSkipVerify: c.InsecureSkipVerify,
+		AllowAutoCreate:    c.AllowAutoCreate,
+	}
+}
+
 // ConfigService handles loading/saving system configuration from/to database
 type ConfigService struct {
-	db     *gorm.DB
-	logger *zap.Logger
-	cfg    *config.Config // live config reference
+	db        *gorm.DB
+	logger    *zap.Logger
+	cfg       *config.Config       // live config reference
+	encryptor *CredentialEncryptor // Phase 18: 凭据静态加密器（可为 nil，向后兼容测试）
 }
 
 // NewConfigService creates a new ConfigService
-func NewConfigService(db *gorm.DB, logger *zap.Logger, cfg *config.Config) *ConfigService {
+// encryptor 可为 nil（用于早期启动或测试场景）；nil 时 SaveAuthConfig/LoadAuthConfig
+// 会显式报错，因为 Phase 18 后不允许凭据以 base64-stub 或明文落库。
+func NewConfigService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, encryptor *CredentialEncryptor) *ConfigService {
 	return &ConfigService{
-		db:     db,
-		logger: logger,
-		cfg:    cfg,
+		db:        db,
+		logger:    logger,
+		cfg:       cfg,
+		encryptor: encryptor,
 	}
 }
 
 // LoadAuthConfig loads auth config from database, overriding YAML defaults
 func (s *ConfigService) LoadAuthConfig() error {
+	if s.encryptor == nil {
+		return errors.New("ConfigService.encryptor 未注入；LoadAuthConfig 需要 CredentialEncryptor（Phase 18 强制要求）")
+	}
+
 	// Load mode
 	var modeSetting models.SystemSetting
 	if err := s.db.Where("`key` = ?", keyAuthMode).First(&modeSetting).Error; err == nil {
@@ -44,7 +87,7 @@ func (s *ConfigService) LoadAuthConfig() error {
 		s.logger.Info("Loaded auth mode from database", zap.String("mode", s.cfg.Auth.Mode))
 	}
 
-	// Load AD config
+	// Load AD config（JSON 不含 password 字段——Phase 18 invariant 已强制保证）
 	var adSetting models.SystemSetting
 	if err := s.db.Where("`key` = ?", keyAuthAD).First(&adSetting).Error; err == nil {
 		var adConfig auth.ADAuthConfig
@@ -65,12 +108,17 @@ func (s *ConfigService) LoadAuthConfig() error {
 	}
 
 	// Load and decrypt AD password
+	// Phase 18: 解密失败 → logger.Fatal 终止启动（不能 warn-and-continue）
 	var pwdSetting models.SystemSetting
 	if err := s.db.Where("`key` = ?", keyAuthADPassword).First(&pwdSetting).Error; err == nil {
-		decrypted, err := s.decryptPassword(pwdSetting.Value)
+		decrypted, err := s.encryptor.Decrypt(pwdSetting.Value)
 		if err != nil {
-			s.logger.Warn("Failed to decrypt AD password from database", zap.Error(err))
-			return err
+			// Per Phase 18 spec: decrypt error → logger.Fatal（不是 warn-and-continue）
+			s.logger.Fatal("Failed to decrypt AD password from database (Phase 18 fail-closed)",
+				zap.Uint("setting_id", pwdSetting.ID),
+				zap.Error(err),
+			)
+			return fmt.Errorf("AD password 解密失败（进程已 Fatal）: %w", err)
 		}
 		s.cfg.Auth.AD.Password = decrypted
 		s.logger.Info("Loaded AD password from database")
@@ -79,21 +127,32 @@ func (s *ConfigService) LoadAuthConfig() error {
 	return nil
 }
 
-// SaveAuthConfig saves auth config to database
+// SaveAuthConfig saves auth config to database.
+//
+// Phase 18 关键变化：
+//   - system_settings['auth.ad'] JSON 行**必须不包含 password 字段** → 使用 authADForDB DTO
+//   - system_settings['auth.ad.password'] 独立一行存密文 envelope
 func (s *ConfigService) SaveAuthConfig(mode string, adConfig *auth.ADAuthConfig) error {
+	if s.encryptor == nil {
+		return errors.New("ConfigService.encryptor 未注入；SaveAuthConfig 需要 CredentialEncryptor（Phase 18 强制要求）")
+	}
+
 	// Save mode
 	modeSetting := models.SystemSetting{Key: keyAuthMode, Value: mode}
 	s.db.Where("`key` = ?", keyAuthMode).Assign(&modeSetting).Save(&modeSetting)
 
-	// Save AD config (without password)
-	adConfigForDB := *adConfig
-	adConfigJSON, _ := json.Marshal(adConfigForDB)
+	// Save AD config — 用专用 DTO 显式剥离 password 字段
+	adDB := toADAuthConfigForDB(adConfig)
+	adConfigJSON, err := json.Marshal(adDB)
+	if err != nil {
+		return fmt.Errorf("序列化 AD config JSON 失败: %w", err)
+	}
 	adSetting := models.SystemSetting{Key: keyAuthAD, Value: string(adConfigJSON)}
 	s.db.Where("`key` = ?", keyAuthAD).Assign(&adSetting).Save(&adSetting)
 
-	// Encrypt and save password
+	// Encrypt and save password (envelope)
 	if adConfig.Password != "" {
-		encrypted, err := s.encryptPassword(adConfig.Password)
+		encrypted, err := s.encryptor.Encrypt(adConfig.Password)
 		if err != nil {
 			s.logger.Error("Failed to encrypt AD password for database", zap.Error(err))
 			return err
@@ -104,20 +163,4 @@ func (s *ConfigService) SaveAuthConfig(mode string, adConfig *auth.ADAuthConfig)
 
 	s.logger.Info("Saved auth config to database")
 	return nil
-}
-
-// encryptPassword encrypts password using base64 (TODO: upgrade to SM4-GCM)
-func (s *ConfigService) encryptPassword(password string) (string, error) {
-	// TODO: Implement SM4-GCM encryption for password at rest
-	// For now, use base64 encoding (password is still encrypted in transit via SM4-ECB)
-	return base64.StdEncoding.EncodeToString([]byte(password)), nil
-}
-
-// decryptPassword decrypts password from database storage
-func (s *ConfigService) decryptPassword(encrypted string) (string, error) {
-	decoded, err := base64.StdEncoding.DecodeString(encrypted)
-	if err != nil {
-		return "", err
-	}
-	return string(decoded), nil
 }

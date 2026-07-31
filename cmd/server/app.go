@@ -65,6 +65,8 @@ type MinimalApp struct {
 	pptEditorService     *services.PPTEditorService
 	frameCaptureService  *services.FrameCaptureService
 	depsManager          *services.PythonDepsManager
+	// Phase 18: 凭据静态加密器（启动期由 Initialize 构造并完成 fail-closed 校验）
+	credentialEncryptor *services.CredentialEncryptor
 }
 
 // Handlers 处理器集合
@@ -89,7 +91,8 @@ type Handlers struct {
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
 type huaweiDBAdapter struct {
-	db *gorm.DB
+	db        *gorm.DB
+	encryptor *services.CredentialEncryptor // Phase 18: 解密 Password 后再返回
 }
 
 func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huaweiapi.HuaweiConfigDB, error) {
@@ -101,12 +104,23 @@ func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huaweiapi.HuaweiConfi
 		return nil, err
 	}
 
+	// Phase 18: DB 存的是 SM4-GCM envelope；华为 API client 需要明文密码。
+	// 解密失败 → 阻断调用方（与 InvariantScan 保持一致：不静默跳过）。
+	password := config.Password
+	if password != "" && a.encryptor != nil {
+		decrypted, err := a.encryptor.Decrypt(password)
+		if err != nil {
+			return nil, fmt.Errorf("华为配置 (id=%d) 密码解密失败: %w", configID, err)
+		}
+		password = decrypted
+	}
+
 	return &huaweiapi.HuaweiConfigDB{
 		ID:             config.ID,
 		Server:         config.Server,
 		Port:           config.Port,
 		Username:       config.Username,
-		Password:       config.Password,
+		Password:       password,
 		TerminalNumber: config.TerminalNumber,
 	}, nil
 }
@@ -121,12 +135,51 @@ func NewMinimalApp(cfg *config.Config, logger *zap.Logger) *MinimalApp {
 }
 
 // Initialize 初始化应用
+//
+// Phase 18 启动顺序（fail-closed：任何一步失败 → 返回 error，不进入 HTTP serve）：
+//  1. LoadConfig + ValidateCredentialSM4Config（已由 cmd/server/main.go 完成）
+//  2. initDatabase（OpenDatabase + AutoMigrate + ALTER COLUMN 扩列）
+//  3. 构造 CredentialEncryptor
+//  4. MigratePlaintextToGCM（在事务内把历史明文/base64-stub 升级为 envelope）
+//  5. InvariantScan（fail if any plaintext/unknown-version/undecryptable）
+//  6. RotateIfNeeded（rewrites previous-version envelopes to current）
+//  7. 第二次 InvariantScan（确保轮换后所有 envelope 都是 current version）
+//  8. initRouter → checkPythonDependencies → initHandlers → registerRoutes → registerServices
 func (a *MinimalApp) Initialize() error {
 	a.logger.Info("正在初始化应用...")
+
+	// Phase 18 step 3：构造 CredentialEncryptor
+	if err := a.initCredentialEncryptor(); err != nil {
+		return fmt.Errorf("failed to initialize credential encryptor: %w", err)
+	}
 
 	// 初始化数据库
 	if err := a.initDatabase(); err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+
+	// Phase 18 step 4：数据迁移（plaintext / base64-stub → envelope）
+	if err := a.credentialEncryptor.MigratePlaintextToGCM(context.Background(), a.db); err != nil {
+		return fmt.Errorf("凭据明文迁移失败: %w", err)
+	}
+
+	// Phase 18 step 5：第一次 InvariantScan（必须 0 失败）
+	if err := a.credentialEncryptor.InvariantScan(context.Background(), a.db); err != nil {
+		return fmt.Errorf("凭据 invariant scan 失败: %w", err)
+	}
+
+	// Phase 18 step 6：RotateIfNeeded（previous → current；no-op 时直接跳过）
+	rotated, err := a.credentialEncryptor.RotateIfNeeded(context.Background(), a.db)
+	if err != nil {
+		return fmt.Errorf("凭据轮换失败: %w", err)
+	}
+	if rotated > 0 {
+		a.logger.Info("凭据轮换完成", zap.Int("rotated", rotated))
+	}
+
+	// Phase 18 step 7：第二次 InvariantScan（轮换后必须全部为 current version）
+	if err := a.credentialEncryptor.InvariantScan(context.Background(), a.db); err != nil {
+		return fmt.Errorf("凭据轮换后 invariant scan 失败: %w", err)
 	}
 
 	// 初始化Gin路由
@@ -156,6 +209,28 @@ func (a *MinimalApp) Initialize() error {
 	}
 
 	a.logger.Info("应用初始化成功")
+	return nil
+}
+
+// initCredentialEncryptor 构造 CredentialEncryptor 并保存到 a.credentialEncryptor。
+// 必须保证 cfg.Auth.CredentialSM4* 已被 ValidateCredentialSM4Config 校验通过
+// （这是 cmd/server/main.go 的责任）。
+func (a *MinimalApp) initCredentialEncryptor() error {
+	enc, err := services.NewCredentialEncryptor(
+		a.config.Auth.CredentialSM4Version,
+		a.config.Auth.CredentialSM4Secret,
+		a.config.Auth.CredentialSM4PreviousVersion,
+		a.config.Auth.CredentialSM4PreviousSecret,
+		a.logger,
+	)
+	if err != nil {
+		return err
+	}
+	a.credentialEncryptor = enc
+	a.logger.Info("CredentialEncryptor 构造成功",
+		zap.String("current_version", enc.CurrentVersion()),
+		zap.Bool("has_previous", enc.HasPrevious()),
+	)
 	return nil
 }
 
@@ -609,7 +684,7 @@ func (a *MinimalApp) initHandlers() error {
 	a.videoFileService = services.NewVideoFileService(a.db, a.logger, a.config.Storage.RecordingsPath, ffprobePath)
 	a.videoFileService.SetHLSPath(a.config.Storage.HLSPath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
-	inputConfigService := services.NewInputConfigService(a.db, a.logger, a.config, usbScanner)
+	inputConfigService := services.NewInputConfigService(a.db, a.logger, a.config, usbScanner, a.credentialEncryptor)
 
 	// 审计日志服务（必须在 userService 之前创建）
 	auditService := audit.NewAuditLogService(a.db, a.logger)
@@ -689,7 +764,7 @@ func (a *MinimalApp) initHandlers() error {
 	a.frameCaptureService = services.NewFrameCaptureService(a.config.FFmpeg.Path, ffprobePath, a.logger)
 
 	// 华为管理器（使用数据库配置动态创建客户端）
-	dbAdapter := &huaweiDBAdapter{db: a.db}
+	dbAdapter := &huaweiDBAdapter{db: a.db, encryptor: a.credentialEncryptor}
 	a.huaweiManager = huaweiapi.NewManager(a.logger, dbAdapter)
 	// SEC-003a: 注入全局 TLS 策略（默认 TLS 1.2、InsecureSkipVerify=false；生产环境强制校验）。
 	a.huaweiManager.SetTLSPolicy(
@@ -708,7 +783,7 @@ func (a *MinimalApp) initHandlers() error {
 	dashboardService := services.NewDashboardService(a.db, a.logger)
 
 	// 配置服务 - 用于持久化系统配置到数据库
-	configService := services.NewConfigService(a.db, a.logger, a.config)
+	configService := services.NewConfigService(a.db, a.logger, a.config, a.credentialEncryptor)
 	// 从数据库加载持久化的认证配置（覆盖 YAML 默认值）
 	if err := configService.LoadAuthConfig(); err != nil {
 		a.logger.Warn("Failed to load persisted auth config, using YAML defaults", zap.Error(err))
@@ -719,7 +794,7 @@ func (a *MinimalApp) initHandlers() error {
 		Auth:          handlers.NewAuthHandler(authService, a.logger),
 		User:          handlers.NewUserHandler(userService, auditService, a.logger),
 		Role:          handlers.NewRoleHandler(roleService, auditService, a.logger),
-		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db),
+		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db, a.credentialEncryptor),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, auditService, a.logger, a.config),
 		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, auditService, a.logger, usbScanner),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, auditService, a.logger),
@@ -987,7 +1062,7 @@ func (a *MinimalApp) registerServices() error {
 
 	// 创建任务调度器
 	// 注意：这里使用一个适配器将VideoRecordingTaskService转换为TaskServiceInterface
-	taskServiceAdapter := &taskServiceAdapter{db: a.db, logger: a.logger}
+	taskServiceAdapter := &taskServiceAdapter{db: a.db, logger: a.logger, encryptor: a.credentialEncryptor}
 	a.scheduler = scheduler.NewVideoSimpleScheduler(
 		taskServiceAdapter,
 		a.coordinator,
@@ -1040,8 +1115,9 @@ func (a *MinimalApp) registerServices() error {
 
 // taskServiceAdapter 任务服务适配器
 type taskServiceAdapter struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db        *gorm.DB
+	logger    *zap.Logger
+	encryptor *services.CredentialEncryptor // Phase 18: 解密凭据后再返回
 }
 
 // GetTask 获取任务
@@ -1108,6 +1184,24 @@ func (a *taskServiceAdapter) GetInputConfig(id uint) (*models.InputConfig, error
 	var config models.InputConfig
 	if err := a.db.First(&config, id).Error; err != nil {
 		return nil, err
+	}
+	// Phase 18: scheduler / recorder 等调用方期望的是明文 password / stream_password。
+	// 解密失败 → 阻断调用方（不静默跳过）。
+	if a.encryptor != nil {
+		if config.Password != "" {
+			pt, err := a.encryptor.Decrypt(config.Password)
+			if err != nil {
+				return nil, fmt.Errorf("taskServiceAdapter.GetInputConfig(id=%d) password 解密失败: %w", id, err)
+			}
+			config.Password = pt
+		}
+		if config.StreamPassword != "" {
+			pt, err := a.encryptor.Decrypt(config.StreamPassword)
+			if err != nil {
+				return nil, fmt.Errorf("taskServiceAdapter.GetInputConfig(id=%d) stream_password 解密失败: %w", id, err)
+			}
+			config.StreamPassword = pt
+		}
 	}
 	return &config, nil
 }

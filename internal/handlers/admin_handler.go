@@ -24,15 +24,17 @@ type AdminHandler struct {
 	configService *services.ConfigService
 	authService   *auth.Service
 	db            *gorm.DB
+	encryptor     *services.CredentialEncryptor // Phase 18: 用于 MigrateInputConfigs 加密历史明文
 }
 
-func NewAdminHandler(cfg *config.Config, logger *zap.Logger, configService *services.ConfigService, authService *auth.Service, db *gorm.DB) *AdminHandler {
+func NewAdminHandler(cfg *config.Config, logger *zap.Logger, configService *services.ConfigService, authService *auth.Service, db *gorm.DB, encryptor *services.CredentialEncryptor) *AdminHandler {
 	return &AdminHandler{
 		cfg:           cfg,
 		logger:        logger,
 		configService: configService,
 		authService:   authService,
 		db:            db,
+		encryptor:     encryptor,
 	}
 }
 
@@ -332,6 +334,36 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 				configType = "stream"
 			}
 			hwEnabled := hc.Server != "" && hc.Username != "" && hc.TerminalNumber != ""
+
+			// Phase 18: 在 INSERT 前用 encryptor 把明文 Password / StreamPassword 包成 envelope。
+			// 不在 INSERT 前重置 hc.Password，因为 tx.Exec 会用 hc.Password 直接写入 DB。
+			pw := hc.Password
+			if pw != "" && h.encryptor != nil {
+				enc, eerr := h.encryptor.Encrypt(pw)
+				if eerr != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = fmt.Errorf("encrypt password (name=%s): %w", hc.Name, eerr)
+					}
+					mu.Unlock()
+					return
+				}
+				pw = enc
+			}
+			spw := hc.StreamPassword
+			if spw != "" && h.encryptor != nil {
+				enc, eerr := h.encryptor.Encrypt(spw)
+				if eerr != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = fmt.Errorf("encrypt stream_password (name=%s): %w", hc.Name, eerr)
+					}
+					mu.Unlock()
+					return
+				}
+				spw = enc
+			}
+
 			insertSQL := `
 				INSERT INTO input_configs (
 					created_at, updated_at, deleted_at,
@@ -347,11 +379,11 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 			if err := tx.Exec(insertSQL,
 				hc.CreatedAt, hc.UpdatedAt, hc.DeletedAt,
 				hc.Name, hc.Description, configType, hwEnabled,
-				hc.Server, hc.Port, hc.Username, hc.Password, hc.TerminalNumber, hc.ConferenceNumber,
+				hc.Server, hc.Port, hc.Username, pw, hc.TerminalNumber, hc.ConferenceNumber,
 				hc.CameraBackend, hc.USBCameraName, hc.USBCameraDevice, hc.CameraBindingStatus,
 				hc.AudioBackend, hc.USBAudioName, hc.USBAudioDevice, hc.AudioBindingStatus,
 				hc.OutputFormat,
-				hc.StreamProtocol, hc.StreamURL, hc.StreamUsername, hc.StreamPassword, hc.StreamEnabled,
+				hc.StreamProtocol, hc.StreamURL, hc.StreamUsername, spw, hc.StreamEnabled,
 				hc.IsActive, hc.IsLocked, hc.LockedBy, hc.LockedAt,
 			).Error; err != nil {
 				mu.Lock()

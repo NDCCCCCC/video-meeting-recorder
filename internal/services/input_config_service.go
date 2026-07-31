@@ -19,16 +19,43 @@ type InputConfigService struct {
 	logger     *zap.Logger
 	config     *config.Config
 	usbScanner *USBDeviceScanner
+	encryptor  *CredentialEncryptor // Phase 18: Phase 18 时为 nil（注入时机由 cmd/server/app.go 决定）
 }
 
-// NewInputConfigService 创建输入配置服务
-func NewInputConfigService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, usbScanner *USBDeviceScanner) *InputConfigService {
+// NewInputConfigService 创建输入配置服务。
+// encryptor 可为 nil（用于早期启动或测试场景）；nil 时不会加密凭据，
+// 写入端会记录 Warn 但不阻断（保留 Phase 17 行为，便于单元测试）。
+func NewInputConfigService(db *gorm.DB, logger *zap.Logger, cfg *config.Config, usbScanner *USBDeviceScanner, encryptor *CredentialEncryptor) *InputConfigService {
 	return &InputConfigService{
 		db:         db,
 		logger:     logger,
 		config:     cfg,
 		usbScanner: usbScanner,
+		encryptor:  encryptor,
 	}
+}
+
+// encryptPasswordField 在 encryptor 不为 nil 时把明文包成 envelope；否则原样返回。
+// 空字符串始终原样返回（Phase 17 行为：空凭据 = 无凭据）。
+func (s *InputConfigService) encryptPasswordField(plaintext string) (string, error) {
+	if plaintext == "" {
+		return "", nil
+	}
+	if s.encryptor == nil {
+		return plaintext, nil
+	}
+	return s.encryptor.Encrypt(plaintext)
+}
+
+// decryptPasswordField 是 encryptPasswordField 的反向操作。
+func (s *InputConfigService) decryptPasswordField(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	if s.encryptor == nil {
+		return value, nil
+	}
+	return s.encryptor.Decrypt(value)
 }
 
 // InputConfigListResponse 输入配置列表响应
@@ -165,11 +192,38 @@ func (s *InputConfigService) GetConfigByID(id uint) (*models.InputConfig, error)
 	if err := s.db.Preload("VideoRecordingTasks").First(&config, id).Error; err != nil {
 		return nil, err
 	}
+	// Phase 18: 解密凭据列后再返回（解密失败 → 阻断调用方；上层须知此 row 异常）
+	if s.encryptor != nil {
+		if pwd, err := s.decryptPasswordField(config.Password); err != nil {
+			s.logger.Error("GetConfigByID 解密 password 失败",
+				zap.Uint("config_id", config.ID), zap.Error(err))
+			return nil, fmt.Errorf("解密 password 失败 (id=%d): %w", config.ID, err)
+		} else {
+			config.Password = pwd
+		}
+		if spwd, err := s.decryptPasswordField(config.StreamPassword); err != nil {
+			s.logger.Error("GetConfigByID 解密 stream_password 失败",
+				zap.Uint("config_id", config.ID), zap.Error(err))
+			return nil, fmt.Errorf("解密 stream_password 失败 (id=%d): %w", config.ID, err)
+		} else {
+			config.StreamPassword = spwd
+		}
+	}
 	return &config, nil
 }
 
 // CreateConfig 创建输入配置
 func (s *InputConfigService) CreateConfig(req *CreateInputConfigRequest) (*models.InputConfig, error) {
+	// Phase 18: 加密凭据列后再写库（仅非空值）
+	password, err := s.encryptPasswordField(req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("加密 password 失败: %w", err)
+	}
+	streamPassword, err := s.encryptPasswordField(req.StreamPassword)
+	if err != nil {
+		return nil, fmt.Errorf("加密 stream_password 失败: %w", err)
+	}
+
 	config := &models.InputConfig{
 		Name:             req.Name,
 		Description:      req.Description,
@@ -178,7 +232,7 @@ func (s *InputConfigService) CreateConfig(req *CreateInputConfigRequest) (*model
 		Server:           req.Server,
 		Port:             req.Port,
 		Username:         req.Username,
-		Password:         req.Password,
+		Password:         password,
 		TerminalNumber:   req.TerminalNumber,
 		ConferenceNumber: req.ConferenceNumber,
 		CameraBackend:    req.CameraBackend,
@@ -190,7 +244,7 @@ func (s *InputConfigService) CreateConfig(req *CreateInputConfigRequest) (*model
 		StreamProtocol:   req.StreamProtocol,
 		StreamURL:        req.StreamURL,
 		StreamUsername:   req.StreamUsername,
-		StreamPassword:   req.StreamPassword,
+		StreamPassword:   streamPassword,
 		StreamEnabled:    req.StreamEnabled,
 		OutputFormat:     req.OutputFormat,
 		IsActive:         true,
@@ -234,6 +288,9 @@ func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest
 	}
 
 	// ★ Snapshot OldData BEFORE mutation（用于审计 OldData 捕获）
+	// 注意：oldConfig 仍存 ciphertext（因为审计场景下要让 OldData 展示密文形态）。
+	// 若想给审计展示解密后的明文，需由调用方在 audit middleware 内 sanitize 后再序列化；
+	// 这里保持纯明文 → ciphertext 的语义边界，audit Sanitizer 已按字段名脱敏 Password/StreamPassword。
 	oldConfig := config
 
 	// 更新非空字段
@@ -256,7 +313,12 @@ func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest
 		config.Username = *req.Username
 	}
 	if req.Password != nil {
-		config.Password = *req.Password
+		// Phase 18: 加密（nil 表示"不改"；空字符串表示"清空"——也按清空处理）
+		enc, eerr := s.encryptPasswordField(*req.Password)
+		if eerr != nil {
+			return nil, nil, fmt.Errorf("加密 password 失败: %w", eerr)
+		}
+		config.Password = enc
 	}
 	if req.TerminalNumber != nil {
 		config.TerminalNumber = *req.TerminalNumber
@@ -292,7 +354,12 @@ func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest
 		config.StreamUsername = *req.StreamUsername
 	}
 	if req.StreamPassword != nil {
-		config.StreamPassword = *req.StreamPassword
+		// Phase 18: 加密
+		enc, eerr := s.encryptPasswordField(*req.StreamPassword)
+		if eerr != nil {
+			return nil, nil, fmt.Errorf("加密 stream_password 失败: %w", eerr)
+		}
+		config.StreamPassword = enc
 	}
 	if req.StreamEnabled != nil {
 		config.StreamEnabled = *req.StreamEnabled
@@ -318,6 +385,7 @@ func (s *InputConfigService) UpdateConfig(id uint, req *UpdateInputConfigRequest
 		zap.String("config_type", config.ConfigType),
 	)
 
+	// 返回的 newConfig 是 DB 内的密文形态；调用方如需明文，自行调 GetConfigByID。
 	return &oldConfig, &config, nil
 }
 

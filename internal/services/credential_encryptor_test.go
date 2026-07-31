@@ -36,8 +36,9 @@ func newTestEncryptorWithPrevious(t *testing.T, prevVer, prevSec, curVer, curSec
 	return enc
 }
 
-// openInMemoryDB 打开一个 SQLite 内存数据库 + 自动迁移 InputConfig + SystemSetting。
+// openInMemoryDB 打开一个 SQLite 内存数据库 + 自动迁移 InputConfig + SystemSetting + VideoRecordingTask。
 // 使用 modernc.org/sqlite 纯 Go driver，DSN 走 :memory: 加 foreign_keys。
+// VideoRecordingTask 是 InputConfigService.GetConfigByID Preload 依赖的关联表。
 func openInMemoryDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	sqlDB, err := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(1)")
@@ -46,7 +47,11 @@ func openInMemoryDB(t *testing.T) *gorm.DB {
 		Logger: gormLoggerSilent(),
 	})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&models.InputConfig{}, &models.SystemSetting{}))
+	require.NoError(t, db.AutoMigrate(
+		&models.InputConfig{},
+		&models.SystemSetting{},
+		&models.VideoRecordingTask{},
+	))
 	return db
 }
 
