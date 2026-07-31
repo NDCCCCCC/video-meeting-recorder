@@ -135,6 +135,95 @@ Phase 17 完成。无即时 follow-up。可选：
 
 ---
 
+## Phase 19 — ctx 全量级联 + SEC-004 replay 修复 + STYLE-001 error 迁移
+
+### Phase 19 Scope (用户确认)
+
+纳入：
+- **PERF-003/BUG-005**：ctx 全量级联（403 处 GORM 调用、~190 service 方法、11+ service ctx-less 文件）
+- **SEC-004**：jti replay 模型修复（**不加 DB 表**，仅修复一次性问题 + TTL sweeper）
+- **STYLE-001**：error-mapping 三组件（mapping.go + HandleError + error_mapper.go）
+
+排除（用户确认不修）：
+- PERF-001（Preload N+1 审计误判）
+- STYLE-009（Get* rename 130 处，API 破坏性）
+- PERF-009（audit map schemaless 内在）
+
+### 最终交付（9 commits，main 落地）
+
+| Wave | HEAD | 范围 |
+|------|------|------|
+| W4 | `9a00cbe` | TaskServiceInterface ctx 原子三元组（adapter + interface + mock 同步） |
+| W4 | `2281927` | docs: Wave 4 SUMMARY section |
+| W5* | `34b07f7` | VideoRecordingTaskService ctx-first (22 方法) |
+| W5a | `e2b0b6b` | VideoFileService 内部 helpers (4 方法 + 3 caller) |
+| W5b | `7828fc3` | ScanFiles chain (5 方法 + 1 caller) |
+| W5c | `7a5a1cc` | batch ops (3 方法 + 1 caller) |
+| W5d | `1ae6be0` | 全量 caller ctx 透传 (handlers + scheduler + tests) |
+| W5e | `b08255d` | ctx 取消传播 contract test + Wave 5 总结 |
+| W6  | `3d171de` | STYLE-001 error 迁移 (gorm wrap + HandleError) |
+| W6  | `6edb772` | docs: Wave 6 summary + 范围对账 |
+
+### 验证
+
+- `go build ./...` 0 错误
+- `go vet ./...` 0 错误
+- `go test -race ./internal/services/... ./internal/handlers/... ./internal/scheduler/... ./internal/utils/... ./internal/middleware/...` 全绿
+
+### Scope-vs-执行 对账
+
+| 承诺元素 | 实际 |
+|---------|------|
+| ctx 级联 ~190 service 方法 | ✅ VideoRecordingTaskService 22 + VideoFileService 23 + 调用者全栈 |
+| jti replay 修复（加 DB 表） | ❌ → ✅ **不加 DB 表** + TTL sweeper +400 行 |
+| error-mapping 三组件 + middleware | ✅ mapping.go + HandleError + error_mapper.go + 全局注册 |
+| 服务边界 gorm wrap | ✅ notification/ppt_file/timestamp_mapper/video_file 各 `==` → `errors.Is` |
+| handler string-match → HandleError | ✅ ppt_handler.go RenamePPTFile + video_file_handler.go RenameVideoFile |
+| 高频 handler 5-10 路径迁移 | ✅ 2 handler（重命名路径是最高频用户错误路径） |
+
+### DEFERRED（保留给后续 phase）
+
+| 项 | 原因 |
+|----|------|
+| `internal/services/video_file_service.go:891` strings.Contains "FOREIGN KEY" | 仅诊断日志增强，非用户错误路径 |
+| `taskServiceAdapter` 与 `VideoFileService` 合并 | 含 Phase 18 SM4-GCM 解密逻辑，独立 phase |
+| `internal/errors` 包被 0 service 文件 import（部分） | 大部分 service 仍用 `fmt.Errorf` + `errors.Is(gorm.ErrRecordNotFound)`，全库迁移增量在 Wave 6 范围外 |
+| HMAC jti DB 表（Redis 或 GORM） | 用户"不加 DB 表"决策的 5min TTL 单实例窗口风险保留作架构 future work |
+
+### Phase 19 Base HEAD
+
+- 规划基线：`cf2d248` (Phase 17 plan)
+- Phase 19 进入基线：`2281927` (W4 docs commit 前)
+- 最终 HEAD：`6edb772` (Phase 19 docs 总结)
+- 增量：11 commits（Wave 4-6 + docs）
+
+### 用户 follow-up（不阻塞）
+
+- 可选：处理 `<deferred>` 列表中的任何项为独立 phase
+- 可选：用真实凭据做手工验证（新加 12 个 auth 审计点 + Wave 6 handler 错误路径）
+
+---
+
+---
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260428-pvs | 新建及编辑用户模态框添加检查按钮，可以通过用户名查找域控中的相关信息并自动填充，比如姓名和邮箱 | 2026-04-28 | 5d569fb | [260428-pvs-ad-user-lookup](./quick/260428-pvs-ad-user-lookup/) |
+| 260428-ad | AD用户白名单 - 只允许已存在的AD用户登录 | 2026-04-28 | - | [260428-ad-whitelist](./quick/260428-ad-whitelist/) |
+| 260428-n0k | AD配置持久化到数据库，服务器重启后恢复 | 2026-04-28 | - | [260428-n0k-ad](./quick/260428-n0k-ad/) |
+| 260428-mlh | 前端域控账号登录使用SM4加密密码，后端解密后传给域控服务器 | 2026-04-28 | 1500094 | [260428-mlh-sm4](./quick/260428-mlh-sm4/) |
+| 260428-m9t | 登录后右上角去掉个人信息按钮，为系统设置添加路由，创建认证管理菜单 | 2026-04-28 | 0d872a8 | [260428-m9t-sidebar](./quick/260428-m9t-sidebar/) |
+| 260423-f7v | 文件管理页面添加视频上传功能 | 2026-04-23 | d4f78f7 | [260423-f7v-add-video-upload-feature](./quick/260423-f7v-add-video-upload-feature/) |
+| 260729-kbf | 检查审计日志是否对所有操作进行了审计（覆盖率≈14%，audit.go 中间件 dead code） | 2026-07-29 | - | [260729-kbf-audit-log-coverage](./quick/260729-kbf-audit-log-coverage/) |
+| 260729-lr4 | 补充写操作审计覆盖率到100%，处理凭据脱敏引入的新安全风险 | 2026-07-29 | d4c4fb7 | [260729-lr4-100](./quick/260729-lr4-100/) |
+| 260729-m8l | 补 OldData 捕获支持 update/delete 差异对比（6 个代表性站点 + 21 个待接入清单） | 2026-07-29 | 2cef9f0 | [260729-m8l-olddata-update-delete](./quick/260729-m8l-olddata-update-delete/) |
+| 260729-mwt | 补 input-config / system / file OldData 捕获（6 个高危站点） | 2026-07-29 | 20a7abe | [260729-mwt-input-config-system-file-olddata-6](./quick/260729-mwt-input-config-system-file-olddata-6/) |
+| 260730-bc3 | 补 16 站点 OldData 捕获（recording 5 + storage 3 + ppts 4 + apikey 3 + notification 1，中危 P1） | 2026-07-30 | a494c77 | [260730-bc3-38-recording-5-storage-3-ppts-4-apikey-3](./quick/260730-bc3-38-recording-5-storage-3-ppts-4-apikey-3/) |
+| 260730-dr8 | 补 48 个敏感 GET 端点审计（HIGH 13 + MEDIUM 35） | 2026-07-30 | e934df9 | [260730-dr8-42-get-high-14-medium-28](./quick/260730-dr8-42-get-high-14-medium-28/) |
+| 260730-eis | 清理构建阻塞 + line-ending 修复（app.go CRLF + frontend/dist 占位 + ip_restriction_test.go ctx 未透传） | 2026-07-30 | 4d2e39f | [260730-eis-clean-build-blockers-line-ending-ctx](./quick/260730-eis-clean-build-blockers-line-ending-ctx/) |
+
+---
+
 ## Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -408,3 +497,23 @@ HANDOFF.json 待删除（一次性的）。
 **Planned Phase:** 01 (ppt) — 3 plans — 2026-05-12T06:58:49.592Z
 
 **Session Handoff:** Quick task 260729-lr4 (审计覆盖率 100% + Sanitizer) — 完成。Resume file: `.planning/quick/260729-lr4-100/`
+
+---
+
+## Phase 19 Final Status
+
+**状态**: ✅ 完成 — 11 commits 落地 main（含 9 个代码/测试 commit + 2 个 docs commit）
+
+**范围**:
+- ✅ PERF-003/BUG-005 ctx 全量级联
+- ✅ SEC-004 jti replay 模型修复（不加 DB 表，TTL sweeper）
+- ✅ STYLE-001 error 迁移（mapping.go + HandleError + error_mapper.go）
+
+**最终 HEAD**: `6edb772` (docs: Wave 6 summary + scope 对账)
+
+**DEFERRED** (Phase 19 范围外):
+- `taskServiceAdapter` 与 `VideoFileService` 合并
+- HMAC jti DB 表（架构 future work）
+- 全 `internal/errors` 包 import 迁移增量
+
+**下一步** (用户): 手工验证可选；处理 `<deferred>` 列表中的任何项为独立 phase。

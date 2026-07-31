@@ -114,6 +114,7 @@ func IsKnownError(err error) bool {
 		ErrAlreadyExists, ErrTaskInProgress, ErrInsufficientQuota,
 		ErrServiceUnavailable, ErrFFmpegFailed, ErrTranscriptionFailed,
 		ErrSplitFailed, ErrInternal,
+		ErrDuplicateRecord, ErrForeignKeyConstraint,
 	} {
 		if errors.Is(err, sentinel) {
 			return true

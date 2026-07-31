@@ -159,3 +159,23 @@ func TestNotFound(t *testing.T) {
 	status, _, _ := MapToHTTPStatus(err)
 	assert.Equal(t, http.StatusNotFound, status)
 }
+
+// TestIsKnownError_ForeignKey_Sentinel (Phase 19 D1) 验证 ErrForeignKeyConstraint
+// 被 IsKnownError 识别 + 可被 errors.Is 链匹配。
+func TestIsKnownError_ForeignKey_Sentinel(t *testing.T) {
+	assert.True(t, IsKnownError(ErrForeignKeyConstraint))
+	wrapped := fmt.Errorf("创建文件记录失败: %w", ErrForeignKeyConstraint)
+	assert.True(t, IsKnownError(wrapped))
+	assert.True(t, errors.Is(wrapped, ErrForeignKeyConstraint))
+}
+
+// TestDoubleWrap_ForeignKey_StillDetectable (Phase 19 D1) 验证 createWithDuplicateCheck
+// 的 `fmt.Errorf("%w: %w", ErrForeignKeyConstraint, err)` 双 %w wrap 仍可被 errors.Is
+// 检测到 ErrForeignKeyConstraint。
+//（Go 1.20+ errors 支持 multi-%w，"双 %w" 链中两个目标都可被 errors.Is 匹配。）
+func TestDoubleWrap_ForeignKey_StillDetectable(t *testing.T) {
+	inner := errors.New("FOREIGN KEY constraint failed: SQLite/driver message")
+	doubleWrapped := fmt.Errorf("%w: %w", ErrForeignKeyConstraint, inner)
+	assert.True(t, errors.Is(doubleWrapped, ErrForeignKeyConstraint), "双 %w wrap 必须仍可 errors.Is 检测 ErrForeignKeyConstraint")
+	assert.True(t, errors.Is(doubleWrapped, inner), "双 %w wrap 必须仍可 errors.Is 检测 inner err")
+}

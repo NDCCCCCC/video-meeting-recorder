@@ -25,6 +25,11 @@ var (
 	ErrSplitFailed         = errors.New("split operation failed")
 	ErrInsufficientQuota   = errors.New("insufficient quota")
 	ErrServiceUnavailable  = errors.New("service temporarily unavailable")
+	// ErrDuplicateRecord 唯一约束失败（如 UNIQUE 冲突）
+	ErrDuplicateRecord = errors.New("duplicate record")
+	// ErrForeignKeyConstraint 外键约束失败（如 taskID 不存在于 VideoRecordingTask 表）。
+	// 用于 diagnostic-only 路径：service 检测到外键违反时区分 duplicate 与 FK 失败做差异化日志。
+	ErrForeignKeyConstraint = errors.New("foreign key constraint failed")
 )
 
 // Wrap 包装错误，添加上下文信息
@@ -84,13 +89,14 @@ func NewBusinessError(code, message string, err error) *BusinessError {
 
 // 常用错误码常量
 const (
-	CodeNotFound           = "NOT_FOUND"
-	CodeAlreadyExists      = "ALREADY_EXISTS"
-	CodeInvalidInput       = "INVALID_INPUT"
-	CodeUnauthorized       = "UNAUTHORIZED"
-	CodeForbidden          = "FORBIDDEN"
-	CodeInternalError      = "INTERNAL_ERROR"
-	CodeServiceUnavailable = "SERVICE_UNAVAILABLE"
-	CodeTaskInProgress     = "TASK_IN_PROGRESS"
-	CodeFFmpegError        = "FFMPEG_ERROR"
+	CodeNotFound             = "NOT_FOUND"
+	CodeAlreadyExists        = "ALREADY_EXISTS"
+	CodeInvalidInput         = "INVALID_INPUT"
+	CodeUnauthorized         = "UNAUTHORIZED"
+	CodeForbidden            = "FORBIDDEN"
+	CodeInternalError        = "INTERNAL_ERROR"
+	CodeServiceUnavailable   = "SERVICE_UNAVAILABLE"
+	CodeTaskInProgress       = "TASK_IN_PROGRESS"
+	CodeFFmpegError          = "FFMPEG_ERROR"
+	CodeForeignKeyConstraint = "FOREIGN_KEY_CONSTRAINT"
 )

@@ -889,7 +889,8 @@ func (s *VideoFileService) createNewFile(ctx context.Context, filePath string, t
 
 	if err := s.createWithDuplicateCheck(ctx, videoFile); err != nil {
 		// 如果是外键约束失败，尝试验证任务是否存在
-		if strings.Contains(err.Error(), "FOREIGN KEY") && taskID != nil {
+		// Phase 19 D1：用 errors.Is 替换 strings.Contains("FOREIGN KEY") 字符串匹配
+		if errors.Is(err, apperrors.ErrForeignKeyConstraint) && taskID != nil {
 			var taskExists models.VideoRecordingTask
 			if checkErr := s.db.WithContext(ctx).Select("id").First(&taskExists, *taskID).Error; checkErr != nil {
 				s.logger.Error("外键约束失败：任务不存在",
@@ -917,6 +918,12 @@ func (s *VideoFileService) createNewFile(ctx context.Context, filePath string, t
 }
 
 // createWithDuplicateCheck 创建记录并处理重复
+//
+// 错误分类（Phase 19 D1）：
+//   - duplicate（UNIQUE 冲突）→ 静默重查返回已存在记录
+//   - foreign key 约束失败（taskID 不存在等）→ wrap 到 apperrors.ErrForeignKeyConstraint
+//     让诊断日志可用 errors.Is 检测而非 strings.Contains
+//   - 其他 → 原样 wrap 透传
 func (s *VideoFileService) createWithDuplicateCheck(ctx context.Context, videoFile *models.VideoFile) error {
 	if err := s.db.WithContext(ctx).Create(videoFile).Error; err != nil {
 		if s.isDuplicateError(err) {
@@ -926,6 +933,11 @@ func (s *VideoFileService) createWithDuplicateCheck(ctx context.Context, videoFi
 				*videoFile = existingFile
 				return nil
 			}
+		}
+		// 外键约束失败（如 taskID 指向不存在的 VideoRecordingTask）→ 用 sentinel 包装，
+		// 替代下游 strings.Contains("FOREIGN KEY") 字符串匹配。
+		if strings.Contains(err.Error(), "FOREIGN KEY") {
+			return fmt.Errorf("%w: %w", apperrors.ErrForeignKeyConstraint, err)
 		}
 		return fmt.Errorf("创建文件记录失败: %w", err)
 	}
