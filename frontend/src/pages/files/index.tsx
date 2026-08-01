@@ -1,6 +1,6 @@
 // 文件管理页面
 
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import {
   Table,
   Button,
@@ -17,7 +17,6 @@ import {
   Col,
   Tooltip,
   Radio,
-  Dropdown,
   Spin,
   Alert,
   Empty,
@@ -30,14 +29,8 @@ import {
   FileOutlined,
   FolderOpenOutlined,
   VideoCameraOutlined,
-  EyeOutlined,
   ScanOutlined,
-  ScissorOutlined,
-  CloudOutlined,
-  LaptopOutlined,
-  EditOutlined,
   UploadOutlined,
-  FilePptOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -51,7 +44,6 @@ import {
 } from '../../api/transcription'
 import { PermissionGuard } from '../../components/PermissionGuard'
 import { PERMISSIONS } from '../../utils/permissions'
-import { RenderVideoPreview } from '../../components/VideoPlayerSimple'
 const TranscriptionProgressModal = lazy(() => import('../../components/TranscriptionProgressModal'))
 import VideoUploadModal from '../../components/VideoUploadModal'
 import EmptyFiles from '@/assets/illustrations/EmptyFiles'
@@ -72,6 +64,13 @@ import {
   samplingRateOptions,
 } from './constants'
 import { formatFileSize, formatDuration } from './utils'
+import FileRowActions from './components/FileRowActions'
+
+// 渲染状态标签（纯函数，提升到模块层以保持引用稳定，供 columns useMemo 复用）
+function renderStatus(status: VideoFileStatus) {
+  const config = STATUS_CONFIG[status]
+  return <Tag color={config.color}>{config.label}</Tag>
+}
 
 export default function FileManagement() {
   const navigate = useNavigate()
@@ -498,134 +497,61 @@ export default function FileManagement() {
     loadStats()
   }, [loadFiles, loadStats])
 
-  // 渲染状态标签 - 简单渲染函数不需要 memoization
-  function renderStatus(status: VideoFileStatus) {
-    const config = STATUS_CONFIG[status]
-    return <Tag color={config.color}>{config.label}</Tag>
-  }
-
-  // 渲染操作按钮 - 作为 Table column 的 render prop 不需要 useCallback
-  function renderActions(record: VideoFile) {
-    // 构建"更多"操作菜单
-    const moreMenuItems: any[] = []
-
-    // 下载
-    moreMenuItems.push({
-      key: 'download',
-      icon: <DownloadOutlined />,
-      label: '下载文件',
-      disabled: record.status !== 'ready',
-      onClick: () => handleDownload(record.id, record.file_name),
-    })
-
-    // 转录相关（仅 mp4 格式）
-    if (record.format === 'mp4') {
-      if (activeTranscriptions.has(record.id)) {
-        // 有活跃转录任务
-        moreMenuItems.push({
-          key: 'view-transcription',
-          icon: <CloudOutlined />,
-          label: '查看转录进度',
-          onClick: () => {
-            const taskInfo = activeTranscriptions.get(record.id)
-            if (!taskInfo) {
-              message.error('转录任务信息未找到')
-              return
-            }
-            setTranscriptionVideoFile(record)
-            setCloudTranscriptionMode(taskInfo.mode as TranscriptionMode)
-            setSelectedSamplingRate(taskInfo.samplingRate)
-            setTranscriptionModalOpen(true)
-          },
-        })
-      } else if (record.status === 'ready') {
-        // 可以开始转录
-        moreMenuItems.push({
-          key: 'transcribe-submenu',
-          icon: <CloudOutlined />,
-          label: '开始转录',
-          children: [
-            {
-              key: 'local',
-              icon: <LaptopOutlined />,
-              label: '本地转录',
-              onClick: () => handleTranscribeClick(record),
-            },
-            {
-              key: 'cloud',
-              icon: <CloudOutlined />,
-              label: '云端转录（通义听悟）',
-              onClick: () => handleCloudTranscribe(record),
-            },
-          ],
-        })
+  // 查看转录进度：从 activeTranscriptions 取任务信息并打开进度弹窗
+  const handleViewTranscriptionProgress = useCallback(
+    (record: VideoFile) => {
+      const taskInfo = activeTranscriptions.get(record.id)
+      if (!taskInfo) {
+        message.error('转录任务信息未找到')
+        return
       }
-    }
+      setTranscriptionVideoFile(record)
+      setCloudTranscriptionMode(taskInfo.mode as TranscriptionMode)
+      setSelectedSamplingRate(taskInfo.samplingRate)
+      setTranscriptionModalOpen(true)
+    },
+    [activeTranscriptions]
+  )
 
-    // 预览PPT（使用后端返回的 has_ppt 字段）
-    if (record.has_ppt) {
-      moreMenuItems.push({
-        key: 'preview-ppt',
-        icon: <FilePptOutlined />,
-        label: '预览PPT',
-        onClick: () => navigate(`/results/${record.id}`),
-      })
-    }
+  const handlePreviewPpt = useCallback(
+    (record: VideoFile) => navigate(`/results/${record.id}`),
+    [navigate]
+  )
+  const handleSplit = useCallback((record: VideoFile) => navigate(`/split/${record.id}`), [navigate])
 
-    // 分隔线
-    moreMenuItems.push({ type: 'divider' })
+  // 渲染操作按钮：memo 化的 FileRowActions，handler 全部以稳定 useCallback 下传
+  const renderActions = useCallback(
+    (record: VideoFile) => (
+      <FileRowActions
+        record={record}
+        isActiveTranscription={activeTranscriptions.has(record.id)}
+        onDownload={handleDownload}
+        onViewTranscriptionProgress={handleViewTranscriptionProgress}
+        onTranscribe={handleTranscribeClick}
+        onCloudTranscribe={handleCloudTranscribe}
+        onPreviewPpt={handlePreviewPpt}
+        onSplit={handleSplit}
+        onRename={handleRename}
+        onDelete={handleDelete}
+        onViewDetail={viewDetail}
+      />
+    ),
+    [
+      activeTranscriptions,
+      handleDownload,
+      handleViewTranscriptionProgress,
+      handleTranscribeClick,
+      handleCloudTranscribe,
+      handlePreviewPpt,
+      handleSplit,
+      handleRename,
+      handleDelete,
+      viewDetail,
+    ]
+  )
 
-    // 视频分割（仅 mp4 格式）
-    if (record.format === 'mp4') {
-      moreMenuItems.push({
-        key: 'split',
-        icon: <ScissorOutlined />,
-        label: '视频分割',
-        onClick: () => navigate(`/split/${record.id}`),
-      })
-    }
-
-    // 重命名（非原始录制文件）
-    if (record.source_type !== 'recording' || record.parent_id) {
-      moreMenuItems.push({
-        key: 'rename',
-        icon: <EditOutlined />,
-        label: '重命名',
-        disabled: record.status !== 'ready',
-        onClick: () => handleRename(record),
-      })
-    }
-
-    // 删除
-    moreMenuItems.push({
-      key: 'delete',
-      icon: <DeleteOutlined />,
-      label: '删除',
-      danger: true,
-      disabled: record.status === 'processing',
-      onClick: () => {
-        Modal.confirm({
-          title: '确定要删除这个文件吗？',
-          onOk: () => handleDelete(record.id),
-        })
-      },
-    })
-
-    return (
-      <Space size="small">
-        <RenderVideoPreview {...record} />
-        <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => viewDetail(record)}>
-          详情
-        </Button>
-        <Dropdown menu={{ items: moreMenuItems }} trigger={['click']}>
-          <Button size="small">更多</Button>
-        </Dropdown>
-      </Space>
-    )
-  }
-
-  // 表格列定义 - 移除 useMemo，因为 renderActions 依赖的值频繁变化
-  const columns: ColumnsType<VideoFile> = [
+  // 表格列定义 - 用 useMemo 固化引用（renderActions 为 useCallback，renderStatus 已上提为模块级）
+  const columns = useMemo<ColumnsType<VideoFile>>(() => [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -713,7 +639,7 @@ export default function FileManagement() {
       fixed: 'right' as const,
       render: renderActions,
     },
-  ]
+  ], [renderActions, navigate])
 
   const isReady = viewingFile?.status === 'ready'
 
