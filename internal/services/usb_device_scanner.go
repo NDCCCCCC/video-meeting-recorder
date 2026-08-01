@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 )
 
@@ -60,7 +61,7 @@ func (s *USBDeviceScanner) ScanVideoDevices() ([]USBDeviceInfo, error) {
 	}
 
 	if err != nil {
-		s.logger.Error("扫描视频设备失败", zap.Error(err))
+		s.logger.Error("扫描视频设备失败", zap.Error(err), response.SentinelField(err))
 	}
 
 	s.logger.Info("已扫描视频设备", zap.Int("count", len(devices)))
@@ -84,7 +85,7 @@ func (s *USBDeviceScanner) scanWindowsVideoDevices() ([]USBDeviceInfo, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		s.logger.Warn("PowerShell命令失败，尝试使用ffmpeg", zap.Error(err), zap.String("stderr", stderr.String()))
+		s.logger.Warn("PowerShell命令失败，尝试使用ffmpeg", zap.Error(err), response.SentinelField(err), zap.String("stderr", stderr.String()))
 		// 如果PowerShell失败，尝试使用ffmpeg
 		return s.scanWindowsVideoDevicesFFmpeg()
 	}
@@ -132,7 +133,7 @@ func (s *USBDeviceScanner) scanWindowsVideoDevicesFFmpeg() ([]USBDeviceInfo, err
 
 	// ffmpeg会输出到stderr
 	if err := cmd.Run(); err != nil {
-		s.logger.Warn("FFmpeg 设备扫描返回错误", zap.Error(err))
+		s.logger.Warn("FFmpeg 设备扫描返回错误", zap.Error(err), response.SentinelField(err))
 	}
 	// ffmpeg会返回错误码，但设备列表仍然在stderr中
 
@@ -266,7 +267,7 @@ func (s *USBDeviceScanner) ScanAudioDevices() ([]USBDeviceInfo, error) {
 	}
 
 	if err != nil {
-		s.logger.Error("扫描音频设备失败", zap.Error(err))
+		s.logger.Error("扫描音频设备失败", zap.Error(err), response.SentinelField(err))
 	}
 
 	s.logger.Info("已扫描音频设备", zap.Int("count", len(devices)))
@@ -289,7 +290,7 @@ func (s *USBDeviceScanner) scanWindowsAudioDevices() ([]USBDeviceInfo, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		s.logger.Warn("PowerShell Get-AudioDevice失败，尝试使用ffmpeg", zap.Error(err))
+		s.logger.Warn("PowerShell Get-AudioDevice失败，尝试使用ffmpeg", zap.Error(err), response.SentinelField(err))
 		// 如果PowerShell失败，尝试使用ffmpeg
 		return s.scanWindowsAudioDevicesFFmpeg()
 	}
@@ -335,7 +336,7 @@ func (s *USBDeviceScanner) scanWindowsAudioDevicesFFmpeg() ([]USBDeviceInfo, err
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		s.logger.Warn("FFmpeg 音频设备扫描返回错误", zap.Error(err))
+		s.logger.Warn("FFmpeg 音频设备扫描返回错误", zap.Error(err), response.SentinelField(err))
 	} // ffmpeg会返回错误码，但设备列表仍然在stderr中
 
 	output := stderr.String()
