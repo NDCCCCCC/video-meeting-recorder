@@ -860,7 +860,7 @@ func (c *Config) ValidateProductionSecrets(logger *zap.Logger) {
 	// 检测 SM4 传输密钥 hex 编码过长（典型 64-char → 32 bytes 被 DeriveSM4Key 静默截断）。
 	// 仅警告，不阻断启动；让运维知道应改为 `openssl rand -hex 16` 输出 32 hex chars。
 	// 注意：HLS_TOKEN_SECRET 用 HMAC-SHA256（任意长度都接受，无截断）— 不报警。
-	utils.WarnOnKeyTruncation(logger, sm4, "SM4_SECRET")
+	utils.WarnOnKeyTruncation(logger, sm4, "SM4_SECRET", utils.SM4KeyTransport)
 }
 
 // WarnCredentialSM4Truncation 检测 Phase 18 凭据密钥族的 hex 截断风险。
@@ -869,8 +869,8 @@ func (c *Config) WarnCredentialSM4Truncation(logger *zap.Logger) {
 	if logger == nil {
 		return
 	}
-	utils.WarnOnKeyTruncation(logger, c.Auth.CredentialSM4Secret, "CREDENTIAL_SM4_SECRET")
-	utils.WarnOnKeyTruncation(logger, c.Auth.CredentialSM4PreviousSecret, "CREDENTIAL_SM4_PREVIOUS_SECRET")
+	utils.WarnOnKeyTruncation(logger, c.Auth.CredentialSM4Secret, "CREDENTIAL_SM4_SECRET", utils.SM4KeyStatic)
+	utils.WarnOnKeyTruncation(logger, c.Auth.CredentialSM4PreviousSecret, "CREDENTIAL_SM4_PREVIOUS_SECRET", utils.SM4KeyStatic)
 }
 
 // CredentialSM4VersionPattern 是 envelope version 段的合法正则：v1, v2, ...

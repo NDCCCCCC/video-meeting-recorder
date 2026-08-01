@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestDeriveSM4Key(t *testing.T) {
@@ -289,7 +290,7 @@ func captureZapLogger(t *testing.T) (*zap.Logger, *[]zap.Field) {
 func TestWarnOnKeyTruncation_NilLogger(t *testing.T) {
 	// nil logger 必须 no-op，不 panic
 	assert.NotPanics(t, func() {
-		WarnOnKeyTruncation(nil, "02a07280c190d77285676f2db527de0a", "SM4_SECRET")
+		WarnOnKeyTruncation(nil, "02a07280c190d77285676f2db527de0a", "SM4_SECRET", SM4KeyTransport)
 	}, "nil logger 必须静默 no-op，不 panic")
 }
 
@@ -297,7 +298,7 @@ func TestWarnOnKeyTruncation_EmptySecret(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	// 空字符串 hex decode 失败 → 不警告（也不报错）
 	assert.NotPanics(t, func() {
-		WarnOnKeyTruncation(logger, "", "SM4_SECRET")
+		WarnOnKeyTruncation(logger, "", "SM4_SECRET", SM4KeyTransport)
 	})
 }
 
@@ -305,7 +306,7 @@ func TestWarnOnKeyTruncation_ValidHex32(t *testing.T) {
 	// 标准长度（32 hex = 16 bytes）→ 不应触发警告
 	logger := zaptest.NewLogger(t)
 	assert.NotPanics(t, func() {
-		WarnOnKeyTruncation(logger, "02a07280c190d77285676f2db527de0a", "SM4_SECRET")
+		WarnOnKeyTruncation(logger, "02a07280c190d77285676f2db527de0a", "SM4_SECRET", SM4KeyTransport)
 	})
 }
 
@@ -313,7 +314,7 @@ func TestWarnOnKeyTruncation_HexOverLength(t *testing.T) {
 	// 64 hex = 32 bytes → 必须触发警告（典型 bug 场景）
 	logger := zaptest.NewLogger(t)
 	assert.NotPanics(t, func() {
-		WarnOnKeyTruncation(logger, "4fa9f34f4e26dd8de970b1cfd9d6f2ad328151235694d58c513f7fcf631216a6", "SM4_SECRET")
+		WarnOnKeyTruncation(logger, "4fa9f34f4e26dd8de970b1cfd9d6f2ad328151235694d58c513f7fcf631216a6", "SM4_SECRET", SM4KeyTransport)
 	})
 	// 警告内容通过 zaptest 断言：实际字段值由 logger 输出验证（zaptest 内部已捕获）
 }
@@ -322,7 +323,7 @@ func TestWarnOnKeyTruncation_Base64Secret(t *testing.T) {
 	// Base64 编码的 secret（hex decode 失败）→ 不警告（不属于本次 bug 范畴）
 	logger := zaptest.NewLogger(t)
 	assert.NotPanics(t, func() {
-		WarnOnKeyTruncation(logger, "EDC6UNKa5JQUrBnBsmgRww==", "HLS_TOKEN_SECRET")
+		WarnOnKeyTruncation(logger, "EDC6UNKa5JQUrBnBsmgRww==", "HLS_TOKEN_SECRET", SM4KeyTransport)
 	})
 }
 
@@ -330,6 +331,35 @@ func TestWarnOnKeyTruncation_OddLengthHex(t *testing.T) {
 	// 奇数长度 hex（hex.DecodeString 会失败）→ 不警告
 	logger := zaptest.NewLogger(t)
 	assert.NotPanics(t, func() {
-		WarnOnKeyTruncation(logger, "abc", "SM4_SECRET")
+		WarnOnKeyTruncation(logger, "abc", "SM4_SECRET", SM4KeyTransport)
 	})
+}
+
+// ============================================================================
+// WarnOnKeyTruncation 文案区分（传输密钥 vs 静态密钥）—— 修正 STYLE/SEC 文案误报
+// 传输密钥（SM4_SECRET）：前端 sm-crypto 参与，严格要求 16 字节，>16 字节会被前端拒绝。
+// 静态密钥（CREDENTIAL_SM4_SECRET）：后端 at-rest 专用，前端不参与，截断是 SM4 预期行为。
+// ============================================================================
+
+func TestWarnOnKeyTruncation_StaticKeyMessageOmitsFrontend(t *testing.T) {
+	// 静态加密密钥前端不参与 → 告警文案不应提及"前端"，且应标明是静态加密用途
+	core, recorded := observer.New(zap.WarnLevel)
+	logger := zap.New(core)
+	overlong := "4fa9f34f4e26dd8de970b1cfd9d6f2ad328151235694d58c513f7fcf631216a6" // 64 hex = 32 bytes
+	WarnOnKeyTruncation(logger, overlong, "CREDENTIAL_SM4_SECRET", SM4KeyStatic)
+	require.Len(t, recorded.All(), 1, "静态密钥 hex 超长应触发 1 条告警")
+	msg := recorded.All()[0].Message
+	assert.NotContains(t, msg, "前端", "静态密钥告警不应提及前端（前端不参与静态加密）")
+	assert.Contains(t, msg, "静态", "静态密钥告警应标明用途为静态加密")
+}
+
+func TestWarnOnKeyTruncation_TransportKeyMessageMentionsFrontend(t *testing.T) {
+	// 传输加密密钥前端 sm-crypto 参与 → 告警文案应提及前端兼容性风险
+	core, recorded := observer.New(zap.WarnLevel)
+	logger := zap.New(core)
+	overlong := "4fa9f34f4e26dd8de970b1cfd9d6f2ad328151235694d58c513f7fcf631216a6"
+	WarnOnKeyTruncation(logger, overlong, "SM4_SECRET", SM4KeyTransport)
+	require.Len(t, recorded.All(), 1, "传输密钥 hex 超长应触发 1 条告警")
+	msg := recorded.All()[0].Message
+	assert.Contains(t, msg, "前端", "传输密钥告警应提及前端 sm-crypto 兼容性")
 }

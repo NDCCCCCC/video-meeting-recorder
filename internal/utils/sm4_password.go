@@ -152,20 +152,35 @@ func IsEncryptedPassword(password string) bool {
 	return strings.HasPrefix(password, ENCRYPTION_PREFIX)
 }
 
+// SM4KeyUse 标识 SM4 密钥的用途，决定 DeriveSM4Key 截断告警的措辞。
+type SM4KeyUse int
+
+const (
+	// SM4KeyTransport: 传输加密密钥（如 SM4_SECRET），前端 sm-crypto 参与。
+	// sm-crypto 严格要求 16 字节 key（sm-crypto/index.js throw "key is invalid" if length != 16），
+	// 因此 hex 解码后 > 16 字节会被 DeriveSM4Key 静默截断、与前端不匹配，导致前端登录失败。
+	SM4KeyTransport SM4KeyUse = iota
+	// SM4KeyStatic: 静态加密密钥（如 CREDENTIAL_SM4_SECRET），后端 at-rest 专用，前端不参与。
+	// DeriveSM4Key 取前 16 字节是 SM4 算法的强制要求，后端自加自解、功能自洽；
+	// 告警仅提醒"配置熵未被充分利用"，不涉及前端兼容性。
+	SM4KeyStatic
+)
+
 // WarnOnKeyTruncation 检测 SM4 密钥 secret 在 hex-decode 后是否会被 DeriveSM4Key 静默截断，
-// 若会被截断则用 logger.Warn 发出配置警告。**不阻塞启动**——只是让运维知道 secret 长度
-// 不符合预期（期望 32 hex chars = 16 bytes），避免再次出现
-// `openssl rand -hex 32` 生成 64-char secret 时后端静默吞后 32 字节、与前端 sm-crypto
-// 严格要求 16 字节 key 不匹配的隐形 bug（Phase 18 调试会话 sm4-encrypt-key-invalid）。
+// 若会被截断则用 logger.Warn 发出配置警告。**不阻塞启动**。
+//
+// use 决定告警文案：传输密钥（前端参与）强调前端 sm-crypto 兼容性风险；静态密钥（后端专用）
+// 说明截断是 SM4 算法的预期行为、前端不参与。历史上（Phase 18 前）此函数对静态密钥
+// CREDENTIAL_SM4_SECRET 也套用"前端会拒绝"文案——属误报，已按 use 区分修正。
 //
 // 调用约定：
-//   - 仅在启动期校验函数（ValidateProductionSecrets / ValidateCredentialSM4Config）
+//   - 仅在启动期校验函数（ValidateProductionSecrets / WarnCredentialSM4Truncation）
 //     中各调用一次，避免热路径日志噪音
 //   - logger 为 nil 时静默 no-op（不输出）
 //   - secret 非 hex（如 Base64 或裸字符串）时不警告（DeriveSM4Key 对非 hex 走 fallback
 //     路径，截断行为依赖于原始字节长度 + 是否 ≥ 16，此处只针对 hex 路径最常见 bug）
 //   - secretName 用于日志字段（如 "SM4_SECRET"、"CREDENTIAL_SM4_SECRET"）
-func WarnOnKeyTruncation(logger *zap.Logger, secret, secretName string) {
+func WarnOnKeyTruncation(logger *zap.Logger, secret, secretName string, use SM4KeyUse) {
 	if logger == nil {
 		return
 	}
@@ -176,13 +191,27 @@ func WarnOnKeyTruncation(logger *zap.Logger, secret, secretName string) {
 	}
 	const sm4KeyBytes = 16
 	if len(keyBytes) > sm4KeyBytes {
-		logger.Warn("SM4 密钥长度超过 16 字节，DeriveSM4Key 将静默截断（前端 sm-crypto 会拒绝）",
+		msg, remediation := sm4TruncationMessage(use)
+		logger.Warn(msg,
 			zap.String("secret_name", secretName),
 			zap.Int("hex_length", len(secret)),
 			zap.Int("decoded_bytes", len(keyBytes)),
 			zap.Int("dropped_bytes", len(keyBytes)-sm4KeyBytes),
-			zap.String("remediation", "重新生成 SM4_SECRET：openssl rand -hex 16（输出 32 hex chars = 16 bytes）"),
+			zap.String("remediation", remediation),
 		)
+	}
+}
+
+// sm4TruncationMessage 按 use 返回截断告警的消息文本与 remediation。
+// 传输密钥强调前端 sm-crypto 严格要求 16 字节；静态密钥说明截断是后端预期行为。
+func sm4TruncationMessage(use SM4KeyUse) (msg, remediation string) {
+	switch use {
+	case SM4KeyTransport:
+		return "SM4 传输密钥 hex 解码后超过 16 字节，DeriveSM4Key 将静默截断（前端 sm-crypto 严格要求 16 字节，超长会被前端拒绝）",
+			"重新生成 SM4_SECRET：openssl rand -hex 16（输出 32 hex chars = 16 bytes）"
+	default: // SM4KeyStatic
+		return "SM4 静态加密密钥 hex 解码后超过 16 字节，DeriveSM4Key 将取前 16 字节作为 SM4 密钥（截断是 SM4 算法预期，后端自加自解功能自洽；仅提醒配置熵未被充分利用）",
+			"如需消除截断提示：openssl rand -hex 16（32 hex = 16 bytes）。现有密文无需迁移——DeriveSM4Key 取前 16 字节的行为不变"
 	}
 }
 
