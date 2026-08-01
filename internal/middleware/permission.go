@@ -25,7 +25,7 @@ func RequirePermission(db *gorm.DB, resource, action string) gin.HandlerFunc {
 
 		// 加载用户和权限
 		var user models.User
-		if err := db.Preload("Roles.Permissions").First(&user, userID).Error; err != nil {
+		if err := db.WithContext(c.Request.Context()).Preload("Roles.Permissions").First(&user, userID).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": response.CodeInternalError, "message": "加载用户信息失败"})
 			c.Abort()
 			return
@@ -57,7 +57,7 @@ func RequireRole(db *gorm.DB, roles ...string) gin.HandlerFunc {
 		}
 
 		var user models.User
-		if err := db.Preload("Roles").First(&user, userID).Error; err != nil {
+		if err := db.WithContext(c.Request.Context()).Preload("Roles").First(&user, userID).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": response.CodeInternalError, "message": "加载用户信息失败"})
 			c.Abort()
 			return
@@ -107,7 +107,7 @@ func RequireOwnershipOrRole(db *gorm.DB, ownerIDField string, roles ...string) g
 
 		// 检查角色
 		var user models.User
-		if err := db.Preload("Roles").First(&user, userID).Error; err != nil {
+		if err := db.WithContext(c.Request.Context()).Preload("Roles").First(&user, userID).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": response.CodeInternalError, "message": "加载用户信息失败"})
 			c.Abort()
 			return

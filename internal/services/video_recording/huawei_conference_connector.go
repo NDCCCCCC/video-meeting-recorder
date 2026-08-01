@@ -2,6 +2,7 @@ package video_recording
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -33,6 +34,14 @@ func NewHuaweiConferenceConnector(
 }
 
 // huaweiDBAdapter 实现 huawei.DBInterface 接口
+//
+// Deprecated: 这是**不解密**华为密码的 DB 适配器——直接返回 models.InputConfig.Password
+// 字段(DB 中已是 Phase 18 信封格式 SM4:<version>:<base64>),在生产环境会让 manager 拿到
+// 密文形态的密码,导致华为认证失败。
+//
+// 生产路径请改用 cmd/server/app.go 中的 huaweiDBAdapter 实现,它通过 CredentialEncryptor
+// 解密后再传给 manager。本 adapter 保留仅为旧测试与 unit test,请勿在新代码中构造。
+// 若被实例化,将仅在内部 logger 留下提示(此处无 logger 字段,故已在 godoc 上明确警示)。
 type huaweiDBAdapter struct {
 	db *gorm.DB
 }
@@ -40,7 +49,7 @@ type huaweiDBAdapter struct {
 func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huawei.HuaweiConfigDB, error) {
 	var config models.InputConfig
 	if err := a.db.First(&config, configID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("输入配置不存在: ID=%d", configID)
 		}
 		return nil, err
@@ -51,7 +60,7 @@ func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huawei.HuaweiConfigDB
 		Server:         config.Server,
 		Port:           config.Port,
 		Username:       config.Username,
-		Password:       config.Password,
+		Password:       config.Password, // Deprecated: 此处直接返回密文形态;生产请用 cmd/server huaweiDBAdapter。
 		TerminalNumber: config.TerminalNumber,
 	}, nil
 }
@@ -73,7 +82,7 @@ func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, tas
 	)
 
 	// 1. 加载华为配置
-	config, err := c.getHuaweiConfig(configID)
+	config, err := c.getHuaweiConfig(ctx, configID)
 	if err != nil {
 		return fmt.Errorf("加载华为配置失败: %w", err)
 	}
@@ -97,14 +106,14 @@ func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, tas
 	}
 
 	if err := c.manager.SafeCallConference(ctx, configID, callReq); err != nil {
-		c.unlockTerminal(config.ID) // 释放锁
+		c.unlockTerminal(ctx, config.ID) // 释放锁
 		return fmt.Errorf("呼叫会议失败: %w", err)
 	}
 
 	// 5. 等待连接确认
 	waitTimeout := 30 * time.Second
 	if err := c.manager.WaitForConnection(ctx, configID, task.ConferenceNumber, config.TerminalNumber, waitTimeout); err != nil {
-		c.unlockTerminal(config.ID)
+		c.unlockTerminal(ctx, config.ID)
 		return fmt.Errorf("等待连接失败: %w", err)
 	}
 
@@ -131,7 +140,7 @@ func (c *HuaweiConferenceConnector) DisconnectFromConference(ctx context.Context
 	)
 
 	// 1. 加载华为配置
-	config, err := c.getHuaweiConfig(configID)
+	config, err := c.getHuaweiConfig(ctx, configID)
 	if err != nil {
 		return fmt.Errorf("加载华为配置失败: %w", err)
 	}
@@ -147,7 +156,7 @@ func (c *HuaweiConferenceConnector) DisconnectFromConference(ctx context.Context
 	}
 
 	// 3. 解锁终端
-	if err := c.unlockTerminal(config.ID); err != nil {
+	if err := c.unlockTerminal(ctx, config.ID); err != nil {
 		c.logger.Warn("解锁终端失败", zap.Error(err))
 	}
 
@@ -204,7 +213,7 @@ func (c *HuaweiConferenceConnector) GetConferenceInfo(ctx context.Context, task 
 
 // GetTerminalStatus 获取终端状态
 func (c *HuaweiConferenceConnector) GetTerminalStatus(ctx context.Context, configID uint) (*huawei.TerminalStatus, error) {
-	config, err := c.getHuaweiConfig(configID)
+	config, err := c.getHuaweiConfig(ctx, configID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +222,7 @@ func (c *HuaweiConferenceConnector) GetTerminalStatus(ctx context.Context, confi
 
 // IsTerminalAvailable 检查终端是否可用
 func (c *HuaweiConferenceConnector) IsTerminalAvailable(ctx context.Context, configID uint) (bool, error) {
-	config, err := c.getHuaweiConfig(configID)
+	config, err := c.getHuaweiConfig(ctx, configID)
 	if err != nil {
 		return false, err
 	}
@@ -269,7 +278,7 @@ func (c *HuaweiConferenceConnector) lockTerminal(ctx context.Context, taskID uin
 	}
 
 	// 保存到数据库
-	if err := c.db.Save(config).Error; err != nil {
+	if err := c.db.WithContext(ctx).Save(config).Error; err != nil {
 		return fmt.Errorf("保存锁定状态失败: %w", err)
 	}
 
@@ -283,9 +292,9 @@ func (c *HuaweiConferenceConnector) lockTerminal(ctx context.Context, taskID uin
 }
 
 // unlockTerminal 解锁终端
-func (c *HuaweiConferenceConnector) unlockTerminal(configID uint) error {
+func (c *HuaweiConferenceConnector) unlockTerminal(ctx context.Context, configID uint) error {
 	var config models.InputConfig
-	if err := c.db.First(&config, configID).Error; err != nil {
+	if err := c.db.WithContext(ctx).First(&config, configID).Error; err != nil {
 		return fmt.Errorf("配置不存在: %w", err)
 	}
 
@@ -293,7 +302,7 @@ func (c *HuaweiConferenceConnector) unlockTerminal(configID uint) error {
 		return err
 	}
 
-	if err := c.db.Save(&config).Error; err != nil {
+	if err := c.db.WithContext(ctx).Save(&config).Error; err != nil {
 		return fmt.Errorf("保存解锁状态失败: %w", err)
 	}
 
@@ -307,11 +316,11 @@ func (c *HuaweiConferenceConnector) unlockTerminal(configID uint) error {
 
 // UnlockTerminalByTaskID 通过任务ID解锁终端
 // 此方法用于任务取消时强制解锁，即使任务对象无法完整获取
-func (c *HuaweiConferenceConnector) UnlockTerminalByTaskID(taskID uint) error {
+func (c *HuaweiConferenceConnector) UnlockTerminalByTaskID(ctx context.Context, taskID uint) error {
 	// 通过任务ID查找华为配置
 	var config models.InputConfig
-	if err := c.db.Where("locked_by = ?", taskID).First(&config).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	if err := c.db.WithContext(ctx).Where("locked_by = ?", taskID).First(&config).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.logger.Info("未找到被此任务锁定的终端",
 				zap.Uint("task_id", taskID),
 			)
@@ -334,7 +343,7 @@ func (c *HuaweiConferenceConnector) UnlockTerminalByTaskID(taskID uint) error {
 		return fmt.Errorf("解锁配置失败: %w", err)
 	}
 
-	if err := c.db.Save(&config).Error; err != nil {
+	if err := c.db.WithContext(ctx).Save(&config).Error; err != nil {
 		return fmt.Errorf("保存解锁状态失败: %w", err)
 	}
 
@@ -349,12 +358,12 @@ func (c *HuaweiConferenceConnector) UnlockTerminalByTaskID(taskID uint) error {
 
 // ClearStaleTerminalLocks 清理过期的终端锁
 // 服务异常退出可能导致终端锁没有释放，启动时检查并清理
-func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
+func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks(ctx context.Context) error {
 	c.logger.Info("开始清理过期的终端锁")
 
-	// 查询所有被锁定的华为配置
+	// 查询所有被锁定的华为配置（PERF-002: 加 Limit(1000) 防止全表锁扫描）
 	var lockedConfigs []models.InputConfig
-	if err := c.db.Where("is_locked = ?", true).Find(&lockedConfigs).Error; err != nil {
+	if err := c.db.WithContext(ctx).Where("is_locked = ?", true).Limit(1000).Find(&lockedConfigs).Error; err != nil {
 		return fmt.Errorf("查询被锁定的华为配置失败: %w", err)
 	}
 
@@ -366,7 +375,7 @@ func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
 				zap.Uint("config_id", config.ID),
 				zap.String("terminal_number", config.TerminalNumber),
 			)
-			if err := c.db.Model(&config).Updates(map[string]interface{}{
+			if err := c.db.WithContext(ctx).Model(&config).Updates(map[string]interface{}{
 				"is_locked": false,
 				"locked_by": nil,
 				"locked_at": nil,
@@ -378,14 +387,14 @@ func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
 
 		// 检查锁定任务的状态
 		var task models.VideoRecordingTask
-		err := c.db.First(&task, *config.LockedBy).Error
+		err := c.db.WithContext(ctx).First(&task, *config.LockedBy).Error
 		if err != nil {
 			// 任务不存在，解锁
 			c.logger.Info("清理不存在任务的终端锁",
 				zap.Uint("config_id", config.ID),
 				zap.Uint("locked_by_task_id", *config.LockedBy),
 			)
-			if err := c.db.Model(&config).Updates(map[string]interface{}{
+			if err := c.db.WithContext(ctx).Model(&config).Updates(map[string]interface{}{
 				"is_locked": false,
 				"locked_by": nil,
 				"locked_at": nil,
@@ -404,7 +413,7 @@ func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
 				zap.Uint("locked_by_task_id", *config.LockedBy),
 				zap.String("task_status", string(task.Status)),
 			)
-			if err := c.db.Model(&config).Updates(map[string]interface{}{
+			if err := c.db.WithContext(ctx).Model(&config).Updates(map[string]interface{}{
 				"is_locked": false,
 				"locked_by": nil,
 				"locked_at": nil,
@@ -423,10 +432,10 @@ func (c *HuaweiConferenceConnector) ClearStaleTerminalLocks() error {
 }
 
 // getHuaweiConfig 获取华为配置
-func (c *HuaweiConferenceConnector) getHuaweiConfig(configID uint) (*models.InputConfig, error) {
+func (c *HuaweiConferenceConnector) getHuaweiConfig(ctx context.Context, configID uint) (*models.InputConfig, error) {
 	var config models.InputConfig
-	if err := c.db.First(&config, configID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	if err := c.db.WithContext(ctx).First(&config, configID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("输入配置不存在: ID=%d", configID)
 		}
 		return nil, err
@@ -458,8 +467,10 @@ func (c *HuaweiConferenceConnector) ValidateConference(ctx context.Context, conf
 
 // GetActiveTerminals 获取所有可用的终端
 func (c *HuaweiConferenceConnector) GetActiveTerminals(ctx context.Context) ([]models.InputConfig, error) {
+	// PERF-002: 加 Limit(1000);实际生产中可用终端不会超过此数。
+	// BUG-005: ctx 透传到 ORM (audit item)。
 	var configs []models.InputConfig
-	if err := c.db.Where("is_active = ?", true).Find(&configs).Error; err != nil {
+	if err := c.db.WithContext(ctx).Where("is_active = ?", true).Limit(1000).Find(&configs).Error; err != nil {
 		return nil, err
 	}
 

@@ -69,6 +69,17 @@ func NewHLSToken(secret string, duration time.Duration) *HLSToken {
 	if len(secret) < 32 {
 		panic(fmt.Sprintf("HLS token secret 必须 ≥ 32 字符（当前 %d），拒绝初始化", len(secret)))
 	}
+	// SEC-001/PR-B: 监测长时间窗。若配置 > 60s 在生产环境会被 HLS token 通过 URL/CDN
+	// 暴露的窗口显著放大，建议 ≤ 30s。仅警告，不阻断（向后兼容旧部署）。
+	if duration > 60*time.Second {
+		// 使用 zap L() 避免在该包强依赖 logger 字段；启动期调用方已 logger.Fatal/Info。
+		if l := zap.L(); l != nil {
+			l.Warn("HLS token TTL 较长",
+				zap.Duration("duration", duration),
+				zap.String("recommendation", "建议 ≤ 30s；否则 CDN/浏览器历史中 token 可被重放窗口放大"),
+			)
+		}
+	}
 	return &HLSToken{
 		secret:        secret,
 		tokenDuration: duration,
@@ -191,7 +202,7 @@ func (h *HLSToken) Verify(token string) (*HLSTokenClaims, error) {
 			// clause.OnConflict{DoNothing} → SQLite/MySQL/PostgreSQL 跨方言生成
 			// INSERT OR IGNORE / INSERT IGNORE / ON CONFLICT DO NOTHING；jti 已存在
 			// 时不报错（幂等）。
-			if err := h.db.Clauses(clause.OnConflict{DoNothing: true}).Create(rec).Error; err != nil {
+			if err := h.db.WithContext(context.Background()).Clauses(clause.OnConflict{DoNothing: true}).Create(rec).Error; err != nil {
 				// 不阻断 Verify（主防线未破），但保留日志能力排查 DB 异常。
 				if h.logger != nil {
 					h.logger.Warn("HLS jti 记录写入失败（Verify 不阻断，仅日志）",
@@ -230,9 +241,13 @@ func (h *HLSToken) evictExpired() {
 
 // pruneExpiredDB 删除 DB 中 expires_at < now 的所有记录（Phase 19 D3）。
 // 失败仅记录日志——sweeper 进程将在下一 tick 重试。
+//
+// ctx 来源：后台 sweeper（sweepLoop → evictExpired → 此处），属"后台方法"——
+// evictExpired 的无参签名被 hls_token_test.go 直接调用，无法在此链路上加 ctx 形参，
+// 故按 BUG-005/PERF-003 约定使用 context.Background()（GORM 调用不再无 ctx）。
 func (h *HLSToken) pruneExpiredDB() {
 	now := time.Now().Unix()
-	result := h.db.Where("expires_at < ?", now).Delete(&models.HLSJtiRecord{})
+	result := h.db.WithContext(context.Background()).Where("expires_at < ?", now).Delete(&models.HLSJtiRecord{})
 	if result.Error != nil {
 		if h.logger != nil {
 			h.logger.Warn("hls_jti_records prune 失败（下一 tick 重试）", zap.Error(result.Error))

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -55,7 +56,7 @@ func NewTimestampMapper(db *gorm.DB, logger *zap.Logger) *TimestampMapper {
 
 // GetTimestampMap retrieves slide-to-timestamp mappings for a video file
 // Returns sorted array of timestamps, caching results for performance
-func (m *TimestampMapper) GetTimestampMap(videoFileID uint) ([]models.SlideTimestamp, error) {
+func (m *TimestampMapper) GetTimestampMap(ctx context.Context, videoFileID uint) ([]models.SlideTimestamp, error) {
 	// Check cache first
 	if cached, found := m.cache.Get(videoFileID); found {
 		m.logger.Debug("Timestamp cache hit", zap.Uint("video_file_id", videoFileID))
@@ -66,7 +67,7 @@ func (m *TimestampMapper) GetTimestampMap(videoFileID uint) ([]models.SlideTimes
 
 	// Query database for transcription task
 	var task models.TranscriptionTask
-	err := m.db.Where("video_file_id = ? AND status = ?", videoFileID, models.TranscriptionStatusCompleted).
+	err := m.db.WithContext(ctx).Where("video_file_id = ? AND status = ?", videoFileID, models.TranscriptionStatusCompleted).
 		Order("created_at DESC").
 		First(&task).Error
 
@@ -96,9 +97,9 @@ func (m *TimestampMapper) GetTimestampMap(videoFileID uint) ([]models.SlideTimes
 
 // GetTimestampForSlide retrieves timestamp for a specific slide number
 // Uses binary search for O(log n) lookup, interpolates if not found
-func (m *TimestampMapper) GetTimestampForSlide(videoFileID uint, slideNumber int) (float64, error) {
+func (m *TimestampMapper) GetTimestampForSlide(ctx context.Context, videoFileID uint, slideNumber int) (float64, error) {
 	// Get timestamp map
-	timestamps, err := m.GetTimestampMap(videoFileID)
+	timestamps, err := m.GetTimestampMap(ctx, videoFileID)
 	if err != nil {
 		return 0, err
 	}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"sync"
 
@@ -181,7 +182,7 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 
 	// Find latest transcription task for this video
 	var task models.TranscriptionTask
-	if err := h.transcriptionService.GetDB().
+	if err := h.transcriptionService.GetDB().WithContext(c.Request.Context()).
 		Where("video_file_id = ? AND status = ?", uint(id), models.TranscriptionStatusCompleted).
 		Order("created_at DESC").
 		First(&task).Error; err != nil {
@@ -194,7 +195,7 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 
 	// Get text segments
 	var texts []models.TranscriptionText
-	if err := h.transcriptionService.GetDB().
+	if err := h.transcriptionService.GetDB().WithContext(c.Request.Context()).
 		Where("transcription_task_id = ?", task.ID).
 		Order("segment_index ASC").
 		Find(&texts).Error; err != nil {
@@ -249,9 +250,10 @@ func (h *TranscriptionHandler) ListActiveTasks(c *gin.Context) {
 		videoFileIDs[i] = task.VideoFileID
 	}
 
-	// 2. 一次性查询所有 VideoFile
+	// 2. 一次性查询所有 VideoFile（PERF-002: IN 子句天然限定,但加 Limit 上限防止
+	//    videoFileIDs 长度过大时的全表扫描风险）
 	var videoFiles []models.VideoFile
-	h.transcriptionService.GetDB().Where("id IN ?", videoFileIDs).Find(&videoFiles)
+	h.transcriptionService.GetDB().WithContext(c.Request.Context()).Where("id IN ?", videoFileIDs).Limit(1000).Find(&videoFiles)
 
 	// 3. 创建 map 快速查找
 	vfMap := make(map[uint]models.VideoFile, len(videoFiles))
@@ -321,7 +323,7 @@ func (h *TranscriptionHandler) GetTimestampMapHandler(c *gin.Context) {
 	}
 
 	// Get timestamp map from service
-	timestamps, err := h.timestampMapper.GetTimestampMap(videoFileID)
+	timestamps, err := h.timestampMapper.GetTimestampMap(c.Request.Context(), videoFileID)
 	if err != nil {
 		// Return empty array instead of error for graceful degradation
 		response.GinSuccess(c, gin.H{
@@ -444,7 +446,7 @@ func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("批量转录成功",
+	h.logger.Info("批量转录已提交",
 		zap.Uint("user_id", userID),
 		zap.Uint("job_group_id", result.JobGroupID),
 		zap.Int("total", result.TotalCount),
@@ -452,7 +454,19 @@ func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
 		zap.Int("failed", result.FailedCount),
 	)
 
-	response.GinSuccess(c, result)
+	// PERF-005/PR-F: 异步转录批任务返 202 + status URL,与 POST /admin/migrate-input-configs 同模式。
+	c.Header("Location", fmt.Sprintf("/api/v1/transcriptions/batch/%d", result.JobGroupID))
+	c.JSON(http.StatusAccepted, gin.H{
+		"code":    response.CodeSuccess,
+		"message": "已提交,异步执行中",
+		"data": gin.H{
+			"job_group_id": result.JobGroupID,
+			"total":        result.TotalCount,
+			"submitted":    result.SubmittedCount,
+			"failed":       result.FailedCount,
+			"status_url":   fmt.Sprintf("/api/v1/transcriptions/batch/%d", result.JobGroupID),
+		},
+	})
 }
 
 // GetBatchTranscriptionStatus handles GET /api/v1/transcriptions/batch/:id

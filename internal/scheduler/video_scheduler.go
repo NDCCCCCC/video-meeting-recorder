@@ -345,7 +345,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 	// 加载任务关联的所有输入配置
 	var taskConfigs []models.TaskInputConfig
-	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs).Error; err != nil {
+	if err := s.taskService.GetDB().WithContext(ctx).Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs).Error; err != nil {
 		s.logger.Error("加载任务关联配置失败", zap.Error(err), response.SentinelField(err))
 		s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, err.Error())
 		return
@@ -402,7 +402,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 	// 重新加载任务关联的所有输入配置（可能已更新）
 	taskConfigs = nil
-	if err := s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs).Error; err != nil {
+	if err := s.taskService.GetDB().WithContext(ctx).Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs).Error; err != nil {
 		s.logger.Error("重新加载任务关联配置失败", zap.Error(err), response.SentinelField(err))
 		s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, err.Error())
 		return
@@ -421,7 +421,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	var inputConfigs []models.InputConfig
 	for _, tc := range taskConfigs {
 		var config models.InputConfig
-		if err := s.taskService.GetDB().First(&config, tc.InputConfigID).Error; err != nil {
+		if err := s.taskService.GetDB().WithContext(ctx).First(&config, tc.InputConfigID).Error; err != nil {
 			s.logger.Error("加载华为配置失败",
 				zap.Uint("config_id", tc.InputConfigID),
 				zap.Error(err),
@@ -612,7 +612,7 @@ func (s *VideoSimpleScheduler) completeTask(ctx context.Context, taskID uint) {
 
 	// 加载任务关联的输入配置
 	var taskConfigs []models.TaskInputConfig
-	s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
+	s.taskService.GetDB().WithContext(ctx).Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
 
 	// 检查是否有华为控制配置
 	hasHuaweiAuto := false
@@ -1284,7 +1284,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 
 	// 加载任务关联的输入配置
 	var taskConfigs []models.TaskInputConfig
-	s.taskService.GetDB().Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
+	s.taskService.GetDB().WithContext(ctx).Where("task_id = ?", taskID).Limit(1000).Find(&taskConfigs)
 
 	// 检查是否有华为控制配置
 	hasHuaweiAuto := false
@@ -1376,7 +1376,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 			zap.Error(err),
 			response.SentinelField(err),
 		)
-		if unlockErr := s.connector.UnlockTerminalByTaskID(taskID); unlockErr != nil {
+		if unlockErr := s.connector.UnlockTerminalByTaskID(ctx, taskID); unlockErr != nil {
 			s.logger.Error("强制解锁终端失败",
 				zap.Uint("task_id", taskID),
 				zap.Error(unlockErr),
@@ -1399,7 +1399,7 @@ func (s *VideoSimpleScheduler) cleanupStaleTerminalLocks() {
 		return
 	}
 
-	if err := s.connector.ClearStaleTerminalLocks(); err != nil {
+	if err := s.connector.ClearStaleTerminalLocks(context.Background()); err != nil {
 		s.logger.Error("清理过期终端锁失败", zap.Error(err), response.SentinelField(err))
 	}
 }

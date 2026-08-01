@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
@@ -30,7 +31,7 @@ func TestTimestampMapper_GetTimestampMap(t *testing.T) {
 			name: "Returns cached timestamp map on second call",
 			setup: func(mapper *TimestampMapper) {
 				// First call should populate cache
-				mapper.GetTimestampMap(1)
+				mapper.GetTimestampMap(context.Background(), 1)
 			},
 			videoFileID: 1,
 			expectError: false,

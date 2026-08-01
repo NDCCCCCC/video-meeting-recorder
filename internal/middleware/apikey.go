@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -47,7 +48,9 @@ func logAPIKeyUsage(c *gin.Context, db *gorm.DB, logger *zap.Logger, apiKeyID, u
 			Duration:   durationMs,
 			Success:    statusCode < 400,
 		}
-		if err := db.Create(log).Error; err != nil {
+		// 此写入在 detached goroutine 中执行（请求已结束），c.Request.Context() 可能已取消，
+		// 使用 context.Background() 避免写入因 ctx 取消而失败。
+		if err := db.WithContext(context.Background()).Create(log).Error; err != nil {
 			// Log to system logger since DB write failed
 			if logger != nil {
 				logger.Warn("Failed to log API key usage",
@@ -129,7 +132,7 @@ func handleAPIKeyAuth(c *gin.Context, db *gorm.DB, logger *zap.Logger) bool {
 
 	var key models.APIKey
 	clientIP := c.ClientIP()
-	err := db.Preload("User.Roles.Permissions").Where("key = ?", apiKey).First(&key).Error
+	err := db.WithContext(c.Request.Context()).Preload("User.Roles.Permissions").Where("key = ?", apiKey).First(&key).Error
 	if err != nil {
 		// API Key 格式不对或不存在，继续尝试其他认证方式
 		return false
@@ -154,7 +157,7 @@ func handleAPIKeyAuth(c *gin.Context, db *gorm.DB, logger *zap.Logger) bool {
 	// 更新最后使用时间
 	now := time.Now()
 	key.LastUsedAt = &now
-	db.Save(&key)
+	db.WithContext(c.Request.Context()).Save(&key)
 
 	// 将用户信息存入context
 	c.Set("user_id", key.UserID)
