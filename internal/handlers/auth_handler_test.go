@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -23,7 +22,7 @@ func TestClassifyAuthLoginError(t *testing.T) {
 	}{
 		{
 			name:       "sentinel maps to forbidden",
-			err:        auth.ErrADUserNotRegistered,
+			err:        apperrors.ErrADUserNotRegistered,
 			wantCode:   response.CodeForbidden,
 			wantStatus: http.StatusForbidden,
 		},
@@ -35,7 +34,7 @@ func TestClassifyAuthLoginError(t *testing.T) {
 		},
 		{
 			name:       "wrapped sentinel maps to forbidden",
-			err:        fmt.Errorf("用户映射失败: %w", auth.ErrADUserNotRegistered),
+			err:        fmt.Errorf("用户映射失败: %w", apperrors.ErrADUserNotRegistered),
 			wantCode:   response.CodeForbidden,
 			wantStatus: http.StatusForbidden,
 		},
