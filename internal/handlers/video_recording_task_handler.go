@@ -109,7 +109,10 @@ func (h *VideoRecordingTaskHandler) ListTasks(c *gin.Context) {
 
 	result, err := h.taskService.ListTasks(c.Request.Context(), &req)
 	if err != nil {
-		h.logger.Error("获取录制任务列表失败", zap.Error(err))
+		h.logger.Error("获取录制任务列表失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "获取任务列表失败")
 		return
 	}
@@ -187,7 +190,10 @@ func (h *VideoRecordingTaskHandler) CreateTask(c *gin.Context) {
 	}
 	task, err := h.taskService.CreateTask(c.Request.Context(), &req, userID)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "创建任务失败")
 		return
 	}
 
@@ -223,7 +229,10 @@ func (h *VideoRecordingTaskHandler) CreateTaskAuto(c *gin.Context) {
 	}
 	task, err := h.taskService.CreateTaskAuto(c.Request.Context(), &req, userID)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "自动创建任务失败")
 		return
 	}
 
@@ -267,7 +276,10 @@ func (h *VideoRecordingTaskHandler) UpdateTask(c *gin.Context) {
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	oldTask, task, err := h.taskService.UpdateTask(c.Request.Context(), id, &req, userID, hasSharedViewer)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "更新任务失败")
 		return
 	}
 
@@ -280,7 +292,7 @@ func (h *VideoRecordingTaskHandler) UpdateTask(c *gin.Context) {
 		OldData:    oldTask,
 		NewData:    task,
 	}); err != nil {
-		h.logger.Warn("Failed to record task update change", zap.Error(err), zap.Uint("task_id", id))
+		h.logger.Warn("Failed to record task update change", zap.Error(err), response.SentinelField(err), zap.Uint("task_id", id))
 	}
 
 	h.logger.Info("录制任务已更新", zap.Uint("task_id", id))
@@ -314,7 +326,10 @@ func (h *VideoRecordingTaskHandler) DeleteTask(c *gin.Context) {
 	isAdmin := middleware.GetIsAdmin(c)
 	oldTask, err := h.taskService.DeleteTask(c.Request.Context(), id, userID, isAdmin)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "删除任务失败")
 		return
 	}
 
@@ -327,7 +342,7 @@ func (h *VideoRecordingTaskHandler) DeleteTask(c *gin.Context) {
 		OldData:    oldTask,
 		NewData:    nil,
 	}); err != nil {
-		h.logger.Warn("Failed to record task delete change", zap.Error(err), zap.Uint("task_id", id))
+		h.logger.Warn("Failed to record task delete change", zap.Error(err), response.SentinelField(err), zap.Uint("task_id", id))
 	}
 
 	h.logger.Info("录制任务已删除", zap.Uint("task_id", id))
@@ -363,7 +378,10 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 	isAdmin := middleware.GetIsAdmin(c)
 	oldTasks, result, err := h.taskService.BatchDeleteTasks(c.Request.Context(), req.IDs, userID, isAdmin)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "批量删除任务失败")
 		return
 	}
 
@@ -384,7 +402,7 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 			OldData:    oldTasks,
 			NewData:    nil,
 		}); err != nil {
-			h.logger.Warn("Failed to record batch task delete change", zap.Error(err))
+			h.logger.Warn("Failed to record batch task delete change", zap.Error(err), response.SentinelField(err))
 		}
 	}
 
@@ -438,7 +456,10 @@ func (h *VideoRecordingTaskHandler) StartTask(c *gin.Context) {
 	}
 	oldTask, task, err := h.taskService.StartTask(c.Request.Context(), id, userID)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "启动任务失败")
 		return
 	}
 
@@ -451,7 +472,7 @@ func (h *VideoRecordingTaskHandler) StartTask(c *gin.Context) {
 		OldData:    oldTask,
 		NewData:    task,
 	}); err != nil {
-		h.logger.Warn("Failed to record task start change", zap.Error(err), zap.Uint("task_id", id))
+		h.logger.Warn("Failed to record task start change", zap.Error(err), response.SentinelField(err), zap.Uint("task_id", id))
 	}
 
 	h.logger.Info("录制任务已启动", zap.Uint("task_id", id))
@@ -485,7 +506,10 @@ func (h *VideoRecordingTaskHandler) StopTask(c *gin.Context) {
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	oldTask, task, err := h.taskService.StopTask(c.Request.Context(), id, userID, hasSharedViewer)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "停止任务失败")
 		return
 	}
 
@@ -498,7 +522,7 @@ func (h *VideoRecordingTaskHandler) StopTask(c *gin.Context) {
 		OldData:    oldTask,
 		NewData:    task,
 	}); err != nil {
-		h.logger.Warn("Failed to record task stop change", zap.Error(err), zap.Uint("task_id", id))
+		h.logger.Warn("Failed to record task stop change", zap.Error(err), response.SentinelField(err), zap.Uint("task_id", id))
 	}
 
 	h.logger.Info("录制任务已停止", zap.Uint("task_id", id))
@@ -531,7 +555,10 @@ func (h *VideoRecordingTaskHandler) CancelTask(c *gin.Context) {
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	if err := h.taskService.CancelTask(c.Request.Context(), id, userID, hasSharedViewer); err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "取消任务失败")
 		return
 	}
 
@@ -566,7 +593,10 @@ func (h *VideoRecordingTaskHandler) RetryTask(c *gin.Context) {
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	task, err := h.taskService.RetryTask(c.Request.Context(), id, userID, hasSharedViewer)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "重试任务失败")
 		return
 	}
 
@@ -627,7 +657,10 @@ func (h *VideoRecordingTaskHandler) RetryConversion(c *gin.Context) {
 	}
 
 	if err := h.conversionService.RetryConversion(c.Request.Context(), id); err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "重试转换失败")
 		return
 	}
 
@@ -959,7 +992,7 @@ func (h *VideoRecordingTaskHandler) ClearStuckTasks(c *gin.Context) {
 
 	result, err := h.taskService.ClearStuckTasks(c.Request.Context(), timeoutMinutes)
 	if err != nil {
-		h.logger.Error("清理卡住任务失败", zap.Error(err))
+		h.logger.Error("清理卡住任务失败", zap.Error(err), response.SentinelField(err))
 		response.GinError(c, response.CodeInternalError, "清理卡住任务失败")
 		return
 	}
