@@ -171,3 +171,13 @@ Plans:
 
 - [x] 20-04-PLAN.md — Service-layer ~160 zap.Error sites upgraded with SentinelField (services/auth/scheduler/huawei; middleware DEFERRED per D-03.7) [parallel with 20-05]
 - [x] 20-05-PLAN.md — cmd/error-doc-gen generator + docs/errors.md + //go:generate directive + CI sync-check (no Makefile per R-2) [parallel with 20-04]
+
+### Phase 21: Close v1.1 gaps: retro-verify phases 17/18/19 + create REQUIREMENTS.md + fix auth_handler.go:57 WARNING
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 20
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 21 to break down)

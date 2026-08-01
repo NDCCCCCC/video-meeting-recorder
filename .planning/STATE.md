@@ -137,6 +137,11 @@ Phase 17 完成。无即时 follow-up。可选：
 
 ---
 
+### Roadmap Evolution
+- Phase 21 added: Close v1.1 gaps — retro-verify phases 17/18/19 + create REQUIREMENTS.md + fix auth_handler.go:57 WARNING (driven by /gsd-audit-milestone gaps_found, 2026-08-01)
+
+---
+
 ## Phase 19 — ctx 全量级联 + SEC-004 replay 修复 + STYLE-001 error 迁移
 
 ### Phase 19 Scope (用户确认)
