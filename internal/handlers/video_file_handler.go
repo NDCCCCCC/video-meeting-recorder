@@ -65,7 +65,10 @@ func (h *VideoFileHandler) ListFiles(c *gin.Context) {
 
 	result, err := h.fileService.ListFiles(c.Request.Context(), &req)
 	if err != nil {
-		h.logger.Error("获取文件列表失败", zap.Error(err))
+		h.logger.Error("获取文件列表失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "获取文件列表失败")
 		return
 	}
@@ -197,7 +200,7 @@ func (h *VideoFileHandler) DeleteFile(c *gin.Context) {
 			return
 		}
 		// 兜底（理论不可达）
-		response.GinError(c, response.CodeInternalError, "删除失败: "+err.Error())
+		response.GinError(c, response.CodeInternalError, "删除失败")
 		return
 	}
 
@@ -211,7 +214,7 @@ func (h *VideoFileHandler) DeleteFile(c *gin.Context) {
 		OldData:    oldFile,
 		NewData:    nil,
 	}); err != nil {
-		h.logger.Warn("Failed to record video file delete change", zap.Error(err), zap.Uint("file_id", id))
+		h.logger.Warn("Failed to record video file delete change", zap.Error(err), response.SentinelField(err), zap.Uint("file_id", id))
 	}
 
 	h.logger.Info("视频文件已删除", zap.Uint("file_id", id))
@@ -233,7 +236,10 @@ func (h *VideoFileHandler) BatchDeleteFiles(c *gin.Context) {
 
 	oldFiles, result, err := h.fileService.BatchDeleteFiles(c.Request.Context(), req.IDs)
 	if err != nil {
-		h.logger.Error("批量删除文件失败", zap.Error(err))
+		h.logger.Error("批量删除文件失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "批量删除失败")
 		return
 	}
@@ -256,7 +262,7 @@ func (h *VideoFileHandler) BatchDeleteFiles(c *gin.Context) {
 			OldData:    oldFiles,
 			NewData:    nil,
 		}); err != nil {
-			h.logger.Warn("Failed to record batch video file delete change", zap.Error(err))
+			h.logger.Warn("Failed to record batch video file delete change", zap.Error(err), response.SentinelField(err))
 		}
 	}
 
@@ -276,7 +282,10 @@ func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
 
 	stats, err := h.fileService.GetFileStats(c.Request.Context(), format)
 	if err != nil {
-		h.logger.Error("获取统计信息失败", zap.Error(err))
+		h.logger.Error("获取统计信息失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "获取统计信息失败")
 		return
 	}
@@ -288,7 +297,10 @@ func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
 func (h *VideoFileHandler) ScanFiles(c *gin.Context) {
 	result, err := h.fileService.ScanFiles(c.Request.Context())
 	if err != nil {
-		h.logger.Error("扫描文件失败", zap.Error(err))
+		h.logger.Error("扫描文件失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "扫描文件失败")
 		return
 	}
@@ -354,7 +366,8 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 		h.logger.Warn("重命名视频文件失败",
 			zap.Uint("file_id", id),
 			zap.String("new_name", newName),
-			zap.Error(err))
+			zap.Error(err),
+			response.SentinelField(err))
 
 		// STYLE-001 Phase 19 Wave 6：service 返回 BusinessError，handler 用统一 HandleError 映射。
 		// 不再需要手写字符串匹配 switch。
@@ -362,14 +375,14 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 			return
 		}
 		// 未识别的兜底错误（理论不可达，因为 HandleError 对未知 err 也写 500）
-		response.GinError(c, response.CodeInternalError, "重命名失败: "+err.Error())
+		response.GinError(c, response.CodeInternalError, "重命名失败")
 		return
 	}
 
 	// Get updated file info
 	file, err = h.fileService.GetFileByID(c.Request.Context(),id)
 	if err != nil {
-		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err))
+		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err), response.SentinelField(err))
 		response.GinSuccess(c, gin.H{
 			"message": "重命名成功",
 		})
@@ -413,8 +426,12 @@ func (h *VideoFileHandler) BatchDownloadFiles(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.Int("file_count", len(req.IDs)),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
-		response.GinError(c, response.CodeInternalError, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "批量下载失败")
 		return
 	}
 	defer resp.Reader.Close()
