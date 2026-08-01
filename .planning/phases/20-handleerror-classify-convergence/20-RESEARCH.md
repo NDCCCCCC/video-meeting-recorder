@@ -640,27 +640,33 @@ default:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-### Q-1: `auth.ErrADUserNotRegistered` 处理方案（R-3）
+> All 4 questions resolved during /gsd:plan-phase 20 via user decision (Q-1, Q-2) or Claude's Discretion locked in planner prompt (Q-3, Q-4). Resolutions landed in the PLAN.md files as noted.
+
+### Q-1: `auth.ErrADUserNotRegistered` 处理方案（R-3） — ✅ RESOLVED
 - **What we know:** 当前 classifyAuthLoginError 显式判 → 403；切 HandleError → 500 ad-hoc
 - **What's unclear:** 用户是否接受方案 2（迁到 internal/errors，违反 D-01.3 不主动迁 cross-package）？
 - **Recommendation:** Planner 在 PLAN Wave 0 中**默认采用方案 2**（补漏范畴，非"主动加新 sentinel"），并在 commit message 中显式声明"R-3 决策：迁移 ad_auth.ErrADUserNotRegistered 至 internal/errors 属 D-02.2 补漏例外"。若用户反对，则在 discuss-phase 补 D-07 决策。
+- **✅ RESOLVED:** 用户在 plan-phase 拍板采用方案 2（迁移到 internal/errors，D-02.2 补漏例外）。落地于 20-01 Task 3。
 
-### Q-2: Makefile vs shell 脚本 vs CI 直接调（R-2）
+### Q-2: Makefile vs shell 脚本 vs CI 直接调（R-2） — ✅ RESOLVED
 - **What we know:** 项目无 Makefile 历史；CONTEXT D-04.4 期望"已有 pattern"是错的
 - **What's unclear:** 用户偏好哪种 check 集成方式？
 - **Recommendation:** Planner 在 PLAN 中**默认采用方案 3**（go:generate + CI step，最轻量），并在 commit message 中说明。或 escalate discuss-phase 补 D-08。
+- **✅ RESOLVED:** 用户在 plan-phase 拍板采用方案 3（go:generate + CI step，不建 Makefile）。落地于 20-05 Task 2。
 
-### Q-3: SentinelField helper 放 pkg/response 还是 pkg/logging（D-03.1 Claude's Discretion）
+### Q-3: SentinelField helper 放 pkg/response 还是 pkg/logging（D-03.1 Claude's Discretion） — ✅ RESOLVED
 - **What we know:** pkg/response 已 import internal/errors；pkg/logging 不存在（需新建）；call-site 跨 handler + service（200+ 处都需 import）
 - **What's unclear:** 是否值得新建 pkg/logging 包？
 - **Recommendation:** **放 pkg/response**。理由：(a) 已有循环依赖方向 `pkg/response → internal/errors`，再加 `zap.Field` 不引入新方向；(b) handler 已普遍 import pkg/response；(c) service 层 import pkg/response 也无障碍（无循环）。新建 pkg/logging 徒增包数。Planner 可在 PLAN Wave 0 锁定此选择。
+- **✅ RESOLVED:** Claude's Discretion 锁定为 pkg/response（用户在 plan-phase 确认）。落地于 20-01 Task 2，调用 internal/errors.FirstKnownSentinelName 避免 slice 副本。
 
-### Q-4: 散点精确行号是否在 Wave 0 重新锁定（R-1）
+### Q-4: 散点精确行号是否在 Wave 0 重新锁定（R-1） — ✅ RESOLVED
 - **What we know:** CONTEXT D-02.3 各文件计数大体对（除漏列 2 文件），但行号会随每次 commit 微变
 - **What's unclear:** 是否在 PLAN 中固定行号清单？
 - **Recommendation:** **不在 PLAN 中固定行号**——行号会随前序 commit 漂移；改为每文件给出"grep 模式 + 期望计数"作为验收条件。每个 atomic commit 自验"该文件 err.Error() GinError 计数 = 0"。
+- **✅ RESOLVED:** 采用 grep 模式 + 期望计数作为 acceptance_criteria（非行号），已贯穿 20-02/20-03/20-04 各 plan 的 verify 块。
 
 ---
 
