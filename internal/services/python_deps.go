@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +43,7 @@ func NewPythonDepsManager(logger *zap.Logger, preferUV bool) *PythonDepsManager 
 			zap.String("base_dir", baseDir))
 	} else {
 		logger.Warn("Failed to get executable path, using current directory",
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		// Fallback to current working directory
 		if wd, err := os.Getwd(); err == nil {
 			baseDir = wd
@@ -113,6 +114,7 @@ func (m *PythonDepsManager) checkWithMethod(ctx context.Context, method string) 
 			zap.String("script", m.checkScript),
 			zap.String("output", string(output)),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		return nil, fmt.Errorf("%s check failed: %w", method, err)
 	}
@@ -130,6 +132,7 @@ func (m *PythonDepsManager) checkWithMethod(ctx context.Context, method string) 
 			zap.String("method", method),
 			zap.String("output", string(output)),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		return nil, fmt.Errorf("failed to parse check output: %w", err)
 	}
