@@ -33,14 +33,13 @@ import {
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import * as inputConfigApi from '../../../api/input-config'
-import type {
-  InputConfig,
-  InputConfigListParams,
-  CreateInputConfigRequest,
-  UpdateInputConfigRequest,
-  USBDeviceInfo,
-  ConfigType,
-} from '../../../types/input-config'
+import type { InputConfig, InputConfigListParams, USBDeviceInfo, ConfigType } from '../../../types/input-config'
+import {
+  resolveCameraDeviceId,
+  resolveAudioDeviceId,
+  buildCreatePayload,
+  buildUpdatePayload,
+} from './utils'
 
 export default function InputConfigManagement() {
   const [configs, setConfigs] = useState<InputConfig[]>([])
@@ -157,68 +156,12 @@ export default function InputConfigManagement() {
 
       if (editingConfig) {
         // 编辑模式：密码为空则不更新密码
-        const req: UpdateInputConfigRequest = {
-          name: values.name,
-          description: values.description,
-          huawei_enabled: values.huawei_enabled,
-          // 华为字段
-          server: values.server,
-          port: values.port,
-          username: values.username,
-          terminal_number: values.terminal_number,
-          conference_number: values.conference_number,
-          // USB字段
-          camera_backend: values.camera_backend,
-          usb_camera_name: values.usb_camera_name,
-          usb_camera_device: values.usb_camera_device,
-          audio_backend: values.audio_backend,
-          usb_audio_name: values.usb_audio_name,
-          usb_audio_device: values.usb_audio_device,
-          // 流媒体字段
-          stream_protocol: values.stream_protocol,
-          stream_url: values.stream_url,
-          stream_username: values.stream_username,
-          stream_password: values.stream_password,
-          stream_enabled: values.stream_enabled,
-          // 录制配置
-          output_format: values.output_format,
-        }
-        // 只有在密码字段有值时才更新密码
-        if (values.password && values.password.trim() !== '') {
-          req.password = values.password
-        }
+        const req = buildUpdatePayload(values)
         await inputConfigApi.updateInputConfig(editingConfig.id, req)
         message.success('更新成功')
       } else {
         // 新建模式：根据配置类型决定必填字段
-        const req: CreateInputConfigRequest = {
-          name: values.name,
-          description: values.description,
-          config_type: configType,
-          huawei_enabled: huaweiEnabled,
-          // 华为字段
-          server: values.server,
-          port: values.port,
-          username: values.username,
-          password: values.password,
-          terminal_number: values.terminal_number,
-          conference_number: values.conference_number,
-          // USB字段
-          camera_backend: values.camera_backend,
-          usb_camera_name: values.usb_camera_name,
-          usb_camera_device: values.usb_camera_device,
-          audio_backend: values.audio_backend,
-          usb_audio_name: values.usb_audio_name,
-          usb_audio_device: values.usb_audio_device,
-          // 流媒体字段
-          stream_protocol: values.stream_protocol,
-          stream_url: values.stream_url,
-          stream_username: values.stream_username,
-          stream_password: values.stream_password,
-          stream_enabled: values.stream_enabled,
-          // 录制配置
-          output_format: values.output_format,
-        }
+        const req = buildCreatePayload(values, configType, huaweiEnabled)
         await inputConfigApi.createInputConfig(req)
         message.success('创建成功')
       }
@@ -277,19 +220,9 @@ export default function InputConfigManagement() {
 
   // 选择摄像头
   const handleSelectCamera = (device: USBDeviceInfo) => {
-    // 提取设备索引（用于兼容）
-    let deviceIndex = device.device_id
-    if (device.backend === 'dshow' && device.device_id.startsWith('video=')) {
-      // video=0 -> 0
-      deviceIndex = device.device_id.replace('video=', '')
-    } else if (device.backend === 'v4l2' && device.device_id.startsWith('/dev/video')) {
-      // /dev/video0 -> video0
-      deviceIndex = device.device_id.replace('/dev/', '')
-    }
-
     form.setFieldsValue({
       usb_camera_name: device.name,
-      usb_camera_device: deviceIndex,
+      usb_camera_device: resolveCameraDeviceId(device),
       camera_backend: device.backend,
     })
     message.info(`已选择摄像头: ${device.name}`)
@@ -297,22 +230,9 @@ export default function InputConfigManagement() {
 
   // 选择音频设备
   const handleSelectAudio = (device: USBDeviceInfo) => {
-    // 提取设备索引（用于兼容）
-    let deviceIndex = device.device_id
-    if (device.backend === 'dshow' && device.device_id.startsWith('audio=')) {
-      // audio=0 -> 0
-      deviceIndex = device.device_id.replace('audio=', '')
-    } else if (device.backend === 'wasapi' || device.backend === 'dshow') {
-      // Windows 音频设备使用完整名称
-      deviceIndex = device.name
-    } else if (device.backend === 'alsa' && device.device_id.startsWith('hw:')) {
-      // hw:0,0 -> hw:0,0 (保持不变)
-      deviceIndex = device.device_id
-    }
-
     form.setFieldsValue({
       usb_audio_name: device.name,
-      usb_audio_device: deviceIndex,
+      usb_audio_device: resolveAudioDeviceId(device),
       audio_backend: device.backend,
     })
     message.info(`已选择音频设备: ${device.name}`)

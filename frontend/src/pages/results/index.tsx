@@ -35,12 +35,7 @@ import { submitTranscriptionWithMode } from '../../api/transcription'
 import type { PPTResult, SlideImage, SelectedSlide, MergeSlideItem } from '../../types/ppt'
 import type { TranscriptionMode } from '../../types/transcription'
 import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
-
-// 格式化文件大小
-const formatFileSize = (bytes: number): string => {
-  if (!bytes || bytes === 0) return '0 MB'
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
-}
+import { formatFileSize } from './utils'
 
 // Side-by-side preview layout styles
 const previewAreaStyle: React.CSSProperties = {
