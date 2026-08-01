@@ -436,7 +436,7 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 			beijingLocation := time.FixedZone("CST", 8*3600)
 			parsedStartTime, parseErr := time.ParseInLocation(time.RFC3339, *req.StartTime, beijingLocation)
 			if parseErr != nil {
-				s.logger.Warn("开始时间解析失败", zap.Error(parseErr))
+				s.logger.Warn("开始时间解析失败", zap.Error(parseErr), response.SentinelField(parseErr))
 				return nil, nil, apperrors.ErrInvalidInput
 			}
 			newStartTime = parsedStartTime

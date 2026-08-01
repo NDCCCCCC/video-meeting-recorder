@@ -861,7 +861,7 @@ func (s *VideoSimpleScheduler) Start() error {
 	// 启动后立即同步一次，确保所有 pending 任务被正确处理
 	s.logger.Info("启动后同步待执行任务")
 	if syncErr := s.SyncPendingTasks(); syncErr != nil {
-		s.logger.Error("启动后同步任务失败", zap.Error(syncErr))
+		s.logger.Error("启动后同步任务失败", zap.Error(syncErr), response.SentinelField(syncErr))
 	}
 
 	return nil
@@ -1196,6 +1196,7 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 			s.logger.Warn("停止录制失败",
 				zap.Uint("task_id", taskID),
 				zap.Error(stopErr),
+				response.SentinelField(stopErr),
 			)
 		}
 
@@ -1228,6 +1229,7 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 			s.logger.Warn("停止录制失败",
 				zap.Uint("task_id", taskID),
 				zap.Error(stopErr),
+				response.SentinelField(stopErr),
 			)
 		}
 		s.RemoveTask(taskID)
@@ -1306,6 +1308,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 				s.logger.Warn("断开华为会议连接失败",
 					zap.Uint("task_id", taskID),
 					zap.Error(disconnectErr),
+					response.SentinelField(disconnectErr),
 				)
 			} else {
 				s.logger.Info("华为会议连接已断开",
@@ -1362,6 +1365,7 @@ func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
 				s.logger.Warn("提交转换任务失败",
 					zap.Uint("task_id", taskID),
 					zap.Error(convertErr),
+					response.SentinelField(convertErr),
 				)
 			}
 		}

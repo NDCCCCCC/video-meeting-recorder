@@ -685,7 +685,9 @@ func (c *HuaweiClient) Stop(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		c.logger.Warn("HuaweiClient 停止超时（keep-alive goroutine 未在 ctx 内退出）",
-			zap.Error(ctx.Err()))
+			zap.Error(ctx.Err()),
+			response.SentinelField(ctx.Err()),
+		)
 		return ctx.Err()
 	}
 }

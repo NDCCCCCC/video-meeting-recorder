@@ -913,6 +913,7 @@ func (s *VideoFileService) createNewFile(ctx context.Context, filePath string, t
 				s.logger.Error("外键约束失败：任务不存在",
 					zap.Uint("task_id", *taskID),
 					zap.Error(checkErr),
+					response.SentinelField(checkErr),
 				)
 			} else {
 				s.logger.Error("外键约束失败：任务存在但仍创建失败",
@@ -1444,6 +1445,7 @@ func (s *VideoFileService) RenameVideoFile(ctx context.Context, id uint, newName
 					zap.String("from", newFilePath),
 					zap.String("to", videoFile.FilePath),
 					zap.Error(rollbackErr),
+					response.SentinelField(rollbackErr),
 				)
 			}
 			return fmt.Errorf("更新数据库记录失败: %w", err)

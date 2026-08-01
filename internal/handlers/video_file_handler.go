@@ -130,8 +130,8 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 	// 打开文件
 	fileHandle, err := os.Open(file.FilePath)
 	if err != nil {
-		h.logger.Error("无法打开文件", zap.Uint("file_id", id), zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "无法打开文件")
+		h.logger.Error("无法打开文件", zap.Uint("file_id", id), zap.Error(err), response.SentinelField(err))
+		response.HandleError(c, err)
 		return
 	}
 	defer fileHandle.Close()

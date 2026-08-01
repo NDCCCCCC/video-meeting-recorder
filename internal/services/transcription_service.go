@@ -673,7 +673,9 @@ func (s *TranscriptionService) updateTaskStatus(
 	if result.Error != nil {
 		s.logger.Error("更新转录任务状态失败",
 			zap.Uint("task_id", taskID),
-			zap.Error(result.Error))
+			zap.Error(result.Error),
+			response.SentinelField(result.Error),
+		)
 		return result.Error
 	}
 	return nil
@@ -839,7 +841,9 @@ func (s *TranscriptionService) handleCloudFailure(ctx context.Context, task *mod
 		zap.Uint("task_id", task.ID),
 		zap.Uint("video_file_id", task.VideoFileID),
 		zap.Bool("initial_stage", isInitialStage),
-		zap.Error(cloudErr))
+		zap.Error(cloudErr),
+		response.SentinelField(cloudErr),
+	)
 
 	if isInitialStage {
 		// Auto-fallback to local transcription per D-07

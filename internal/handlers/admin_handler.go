@@ -401,9 +401,9 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 	wg.Wait()
 
 	if firstErr != nil {
-		h.logger.Error("Failed to migrate config", zap.Error(firstErr))
+		h.logger.Error("Failed to migrate config", zap.Error(firstErr), response.SentinelField(firstErr))
 		tx.Rollback()
-		response.GinError(c, response.CodeInternalError, "迁移失败：无法写入目标数据")
+		response.HandleError(c, firstErr)
 		return
 	}
 
