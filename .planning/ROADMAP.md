@@ -169,5 +169,5 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 — service zap upgrade + docs generator)*
 
-- [ ] 20-04-PLAN.md — Service-layer ~161 zap.Error sites upgraded with SentinelField (services/auth/scheduler/huawei/middleware) [parallel with 20-05]
+- [ ] 20-04-PLAN.md — Service-layer ~160 zap.Error sites upgraded with SentinelField (services/auth/scheduler/huawei; middleware DEFERRED per D-03.7) [parallel with 20-05]
 - [ ] 20-05-PLAN.md — cmd/error-doc-gen generator + docs/errors.md + //go:generate directive + CI sync-check (no Makefile per R-2) [parallel with 20-04]

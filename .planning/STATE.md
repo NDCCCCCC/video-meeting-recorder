@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
 status: executing
-last_updated: "2026-08-01T00:00:00.000Z"
+last_updated: "2026-08-01T01:29:02.718Z"
 last_activity: 2026-08-01
 progress:
-  total_phases: 22
-  completed_phases: 18
-  total_plans: 83
-  completed_plans: 81
-  percent: 81
+  total_phases: 7
+  completed_phases: 4
+  total_plans: 24
+  completed_plans: 16
+  percent: 57
 ---
 
 # STATE.md - Project Memory
@@ -18,7 +18,7 @@ progress:
 **Project:** Record V2
 **Milestone:** v1.1 - 文件管理与编辑增强
 **Last Updated:** 2026-04-28
-**Last Activity:** 2026-07-30
+**Last Activity:** 2026-08-01
 
 ---
 
@@ -43,7 +43,7 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 Phase: 18 (凭据静态加密 + 密钥轮换 — SEC-003b 修复) — ✅ COMPLETE
 Plan: Phase 18 single plan with 4 waves (all done)
 **Phase:** 18
-**Status:** Complete
+**Status:** Ready to execute
 **Progress:** [██████████] 100%
 
 ### Phase Summary
@@ -127,6 +127,7 @@ Wave 3 (P1b) 执行器在写 SUMMARY.md 时遇上游 API 错误（`模型不存�
 ### Next Steps (非阻塞)
 
 Phase 17 完成。无即时 follow-up。可选：
+
 1. 用真实凭据做生产环境审计验证（参考 `.planning/quick/260729-lr4-100/260729-lr4-SUMMARY.md` 验证步骤）——验证新加的 12 个 auth 审计点是否真的入 audit_logs
 2. 处理 `<deferred>` 列表中的任何独立 phase
 3. 整理前端 23 个未提交文件（与 phase 17 无关）
@@ -140,11 +141,13 @@ Phase 17 完成。无即时 follow-up。可选：
 ### Phase 19 Scope (用户确认)
 
 纳入：
+
 - **PERF-003/BUG-005**：ctx 全量级联（403 处 GORM 调用、~190 service 方法、11+ service ctx-less 文件）
 - **SEC-004**：jti replay 模型修复（**不加 DB 表**，仅修复一次性问题 + TTL sweeper）
 - **STYLE-001**：error-mapping 三组件（mapping.go + HandleError + error_mapper.go）
 
 排除（用户确认不修）：
+
 - PERF-001（Preload N+1 审计误判）
 - STYLE-009（Get* rename 130 处，API 破坏性）
 - PERF-009（audit map schemaless 内在）
@@ -506,6 +509,7 @@ HANDOFF.json 待删除（一次性的）。
 **状态**: ✅ 完成 — 11 commits 落地 main（含 9 个代码/测试 commit + 2 个 docs commit）
 
 **范围**:
+
 - ✅ PERF-003/BUG-005 ctx 全量级联
 - ✅ SEC-004 jti replay 模型修复（不加 DB 表，TTL sweeper）
 - ✅ STYLE-001 error 迁移（mapping.go + HandleError + error_mapper.go）
@@ -513,6 +517,7 @@ HANDOFF.json 待删除（一次性的）。
 **最终 HEAD**: `6edb772` (docs: Wave 6 summary + scope 对账)
 
 **DEFERRED** (Phase 19 范围外):
+
 - `taskServiceAdapter` 与 `VideoFileService` 合并
 - HMAC jti DB 表（架构 future work）
 - 全 `internal/errors` 包 import 迁移增量
@@ -526,17 +531,20 @@ HANDOFF.json 待删除（一次性的）。
 **状态**: 📋 CONTEXT 收齐，Ready for planning
 
 **范围 (3 项目标聚焦)**:
+
 - handler ad-hoc classify 全量清理: 9 文件 27 处 inline 分支 + `classifyAuthLoginError` formal 函数，全部走 `if response.HandleError(c, err) { return }`
 - zap logger `sentinel_type` 字段接入: `SentinelField(err)` helper; sentinel → `sentinel_type="ErrXxx"`, BusinessError → `BusinessError(code=yyy)`, unknown → `ad-hoc`
 - 自动生成 `docs/errors.md`: go:generate + Makefile check; 列 name | kind | HTTP status | call-site count
 
 **最终决策**:
+
 - Scope: 仅 3 项；typed error kind 字段 deferred
 - Classify 替换: 一次性全量扫荡 + 表驱动单测验证状态码不回归
 - Service 边界: BusinessError / sentinel `%w` wrap；handler 一律 HandleError
 - 不主动迁 cross-package local error var (仅 survey)
 
 **最终交付**:
+
 - `.planning/phases/20-handleerror-classify-convergence/20-CONTEXT.md` (398 行)
 - `.planning/phases/20-handleerror-classify-convergence/20-DISCUSSION-LOG.md` (122 行)
 - Commit `e2eac56` on main
