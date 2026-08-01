@@ -52,7 +52,7 @@
 | 17. 后端代码审查 56 发现修复 P0/P1/P2 | v1.1 | 4/4 | Complete | 2026-07-30 |
 | 18. 凭据静态加密 + 密钥轮换 (SEC-003b) | v1.1 | 1/1 | Complete | 2026-07-31 |
 | 19. ctx 全量级联 + SEC-004 replay + STYLE-001 error | v1.1 | 4/4 | Complete | 2026-07-31 |
-| 20. 错误处理统一收敛 + sentinel 体系增强 | v1.1 | 5/5 | Complete   | 2026-08-01 |
+| 20. 错误处理统一收敛 + sentinel 体系增强 | v1.1 | 5/5 | Complete    | 2026-08-01 |
 
 ## Backlog
 
