@@ -62,7 +62,10 @@ func (h *InputConfigHandler) ListConfigs(c *gin.Context) {
 
 	result, err := h.configService.ListConfigs(c.Request.Context(), &req)
 	if err != nil {
-		h.logger.Error("Failed to list input configs", zap.Error(err))
+		h.logger.Error("Failed to list input configs", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "获取配置列表失败")
 		return
 	}
@@ -88,7 +91,10 @@ func (h *InputConfigHandler) GetConfig(c *gin.Context) {
 
 	config, err := h.configService.GetConfigByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("Failed to get input config", zap.Error(err))
+		h.logger.Error("Failed to get input config", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "获取配置失败")
 		return
 	}
@@ -114,7 +120,10 @@ func (h *InputConfigHandler) CreateConfig(c *gin.Context) {
 
 	config, err := h.configService.CreateConfig(c.Request.Context(), &req)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "创建配置失败")
 		return
 	}
 
@@ -128,7 +137,7 @@ func (h *InputConfigHandler) CreateConfig(c *gin.Context) {
 		OldData:    nil,
 		NewData:    config,
 	}); err != nil {
-		h.logger.Warn("Failed to record input config create change", zap.Error(err), zap.Uint("config_id", config.ID))
+		h.logger.Warn("Failed to record input config create change", zap.Error(err), response.SentinelField(err), zap.Uint("config_id", config.ID))
 	}
 
 	h.logger.Info("Input config created",
@@ -164,7 +173,10 @@ func (h *InputConfigHandler) UpdateConfig(c *gin.Context) {
 
 	oldConfig, config, err := h.configService.UpdateConfig(c.Request.Context(), uint(id), &req)
 	if err != nil {
-		response.GinError(c, response.CodeInvalidRequest, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "更新配置失败")
 		return
 	}
 
@@ -178,7 +190,7 @@ func (h *InputConfigHandler) UpdateConfig(c *gin.Context) {
 		OldData:    oldConfig,
 		NewData:    config,
 	}); err != nil {
-		h.logger.Warn("Failed to record input config update change", zap.Error(err), zap.Uint("config_id", config.ID))
+		h.logger.Warn("Failed to record input config update change", zap.Error(err), response.SentinelField(err), zap.Uint("config_id", config.ID))
 	}
 
 	response.GinSuccess(c, config)
@@ -202,7 +214,10 @@ func (h *InputConfigHandler) DeleteConfig(c *gin.Context) {
 
 	oldConfig, err := h.configService.DeleteConfig(c.Request.Context(), uint(id))
 	if err != nil {
-		response.GinError(c, response.CodeInternalError, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "删除配置失败")
 		return
 	}
 
@@ -216,7 +231,7 @@ func (h *InputConfigHandler) DeleteConfig(c *gin.Context) {
 		OldData:    oldConfig,
 		NewData:    nil,
 	}); err != nil {
-		h.logger.Warn("Failed to record input config delete change", zap.Error(err), zap.Uint("config_id", uint(id)))
+		h.logger.Warn("Failed to record input config delete change", zap.Error(err), response.SentinelField(err), zap.Uint("config_id", uint(id)))
 	}
 
 	response.GinSuccess(c, gin.H{"message": "配置已删除"})
@@ -240,7 +255,10 @@ func (h *InputConfigHandler) TestConnection(c *gin.Context) {
 	}
 
 	if err := h.configService.TestConnection(c.Request.Context(), &req); err != nil {
-		response.GinError(c, response.CodeInternalError, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "连接测试失败")
 		return
 	}
 
@@ -275,6 +293,9 @@ func (h *InputConfigHandler) GetActiveConfigs(c *gin.Context) {
 
 	result, err := h.configService.ListConfigs(c.Request.Context(), &req)
 	if err != nil {
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "获取激活配置失败")
 		return
 	}
