@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
 status: executing
-last_updated: "2026-07-31T02:00:00.000Z"
-last_activity: 2026-07-31
+last_updated: "2026-08-01T00:00:00.000Z"
+last_activity: 2026-08-01
 progress:
-  total_phases: 21
+  total_phases: 22
   completed_phases: 18
   total_plans: 83
   completed_plans: 81
-  percent: 86
+  percent: 81
 ---
 
 # STATE.md - Project Memory
@@ -287,6 +287,7 @@ Phase 17 完成。无即时 follow-up。可选：
 - Phase 1 added: 新功能 - 在视频播放中添加外挂字幕支持（预览视频、切割视频、预览PPT页面） (2026-05-12)
 - Phase 15 added: 前端去 AI 味 (2026-07-28)
 - Phase 17 added: 后端代码审查 56 个发现修复 - P0/P1/P2 全量 (2026-07-30)
+- Phase 20 added: 错误处理统一收敛 + sentinel 体系增强（HandleError 全量替换 classify / zap logger errors.Is / 自动文档生成 / typed error kind） (2026-08-01)
 
 ## Accumulated Context
 
@@ -517,3 +518,27 @@ HANDOFF.json 待删除（一次性的）。
 - 全 `internal/errors` 包 import 迁移增量
 
 **下一步** (用户): 手工验证可选；处理 `<deferred>` 列表中的任何项为独立 phase。
+
+---
+
+## Phase 20 — Context Captured (2026-08-01)
+
+**状态**: 📋 CONTEXT 收齐，Ready for planning
+
+**范围 (3 项目标聚焦)**:
+- handler ad-hoc classify 全量清理: 9 文件 27 处 inline 分支 + `classifyAuthLoginError` formal 函数，全部走 `if response.HandleError(c, err) { return }`
+- zap logger `sentinel_type` 字段接入: `SentinelField(err)` helper; sentinel → `sentinel_type="ErrXxx"`, BusinessError → `BusinessError(code=yyy)`, unknown → `ad-hoc`
+- 自动生成 `docs/errors.md`: go:generate + Makefile check; 列 name | kind | HTTP status | call-site count
+
+**最终决策**:
+- Scope: 仅 3 项；typed error kind 字段 deferred
+- Classify 替换: 一次性全量扫荡 + 表驱动单测验证状态码不回归
+- Service 边界: BusinessError / sentinel `%w` wrap；handler 一律 HandleError
+- 不主动迁 cross-package local error var (仅 survey)
+
+**最终交付**:
+- `.planning/phases/20-handleerror-classify-convergence/20-CONTEXT.md` (398 行)
+- `.planning/phases/20-handleerror-classify-convergence/20-DISCUSSION-LOG.md` (122 行)
+- Commit `e2eac56` on main
+
+**下一步**: `/gsd-plan-phase 20` 生成 PLAN.md,或 `/gsd-plan-phase 20 --skip-research` 直接进入 plan
