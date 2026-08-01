@@ -11,6 +11,7 @@ import (
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/go-ldap/ldap/v3"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -64,7 +65,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	// Step 1: Connect to AD server
 	conn, err := a.connectAD()
 	if err != nil {
-		a.logger.Error("AD connection failed", zap.Error(err))
+		a.logger.Error("AD connection failed", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("无法连接到域控服务器，请检查网络和配置: %w", apperrors.ErrADUnreachable) // per D-18, D6
 	}
 	// STYLE-008: nil 防御——connectAD 失败时 conn 为 nil，defer Close 会 panic
@@ -75,7 +76,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	// Step 2: Bind as admin to search for user
 	err = conn.Bind(a.adConfig.BindDN, a.adConfig.Password)
 	if err != nil {
-		a.logger.Error("AD admin bind failed", zap.Error(err))
+		a.logger.Error("AD admin bind failed", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("域控管理员认证失败: %w", apperrors.ErrADConfigError)
 	}
 
@@ -92,7 +93,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 
 	sr, err := conn.Search(searchRequest)
 	if err != nil {
-		a.logger.Error("AD user search failed", zap.Error(err))
+		a.logger.Error("AD user search failed", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("搜索用户失败: %w", apperrors.ErrADUnreachable)
 	}
 
@@ -122,7 +123,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 
 	// Validate SM4 secret configuration
 	if err := utils.ValidateSM4Secret(a.sm4Secret); err != nil {
-		a.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
+		a.logger.Error("Invalid SM4 secret configuration", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("系统配置错误: %w", apperrors.ErrADConfigError)
 	}
 
@@ -145,7 +146,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	// Step 6: Find or create local user (transparent mapping per D-06, D-08)
 	localUser, err := a.findOrCreateLocalUser(adUser)
 	if err != nil {
-		a.logger.Error("AD user mapping failed", zap.Error(err))
+		a.logger.Error("AD user mapping failed", zap.Error(err), response.SentinelField(err))
 		// Preserve sentinel error so handler can map to HTTP 403 instead of 500
 		if IsADUserNotRegistered(err) {
 			return nil, err
@@ -158,7 +159,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	// Step 7: Generate token using existing token service
 	tokenPair, err := a.tokenService.GenerateTokenPair(localUser)
 	if err != nil {
-		a.logger.Error("AD token generation failed", zap.Error(err))
+		a.logger.Error("AD token generation failed", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("登录失败，请稍后重试: %w", apperrors.ErrInternal)
 	}
 
@@ -284,7 +285,7 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 	var defaultRole models.Role
 	err = a.db.Where("name = ?", models.RoleViewer).First(&defaultRole).Error
 	if err != nil {
-		a.logger.Error("Default viewer role not found", zap.Error(err))
+		a.logger.Error("Default viewer role not found", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("默认角色不存在: %w", apperrors.ErrADConfigError)
 	}
 
@@ -295,7 +296,7 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 
 	// Then associate the role via users_roles junction table (many2many)
 	if err := a.db.Model(&user).Association("Roles").Append(&defaultRole); err != nil {
-		a.logger.Error("Failed to assign default role to AD user", zap.Error(err))
+		a.logger.Error("Failed to assign default role to AD user", zap.Error(err), response.SentinelField(err))
 		// Cleanup: delete the user if role assignment fails
 		a.db.Delete(&user)
 		return nil, fmt.Errorf("分配默认角色失败: %w", err)
@@ -391,7 +392,7 @@ func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, erro
 	// Connect to AD server
 	conn, err := a.connectAD()
 	if err != nil {
-		a.logger.Error("AD connection failed during lookup", zap.Error(err))
+		a.logger.Error("AD connection failed during lookup", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("无法连接到域控服务器: %w", apperrors.ErrADUnreachable)
 	}
 	// STYLE-008: nil 防御——connectAD 失败时 conn 为 nil，defer Close 会 panic
@@ -402,7 +403,7 @@ func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, erro
 	// Bind as admin to search for user
 	err = conn.Bind(a.adConfig.BindDN, a.adConfig.Password)
 	if err != nil {
-		a.logger.Error("AD admin bind failed during lookup", zap.Error(err))
+		a.logger.Error("AD admin bind failed during lookup", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("域控管理员认证失败: %w", apperrors.ErrADConfigError)
 	}
 
@@ -419,7 +420,7 @@ func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, erro
 
 	sr, err := conn.Search(searchRequest)
 	if err != nil {
-		a.logger.Error("AD user search failed during lookup", zap.Error(err))
+		a.logger.Error("AD user search failed during lookup", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("搜索用户失败: %w", apperrors.ErrADUnreachable)
 	}
 

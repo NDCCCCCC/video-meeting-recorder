@@ -11,6 +11,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -57,7 +58,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 			a.logLoginFailure(ctx, req.Username, ipAddress, userAgent, "用户不存在")
 			return nil, fmt.Errorf("用户名或密码错误: %w", apperrors.ErrUnauthorized)
 		}
-		a.logger.Error("Login failed: database error", zap.Error(err))
+		a.logger.Error("Login failed: database error", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("登录失败，请稍后重试: %w", apperrors.ErrInternal)
 	}
 
@@ -74,7 +75,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 	if a.cfg != nil && utils.IsEncryptedPassword(req.Password) {
 		if a.cfg.SM4Secret != "" {
 			if err := utils.ValidateSM4Secret(a.cfg.SM4Secret); err != nil {
-				a.logger.Error("Invalid SM4 secret configuration", zap.Error(err))
+				a.logger.Error("Invalid SM4 secret configuration", zap.Error(err), response.SentinelField(err))
 				return nil, fmt.Errorf("系统配置错误: %w", apperrors.ErrADConfigError)
 			}
 		}
@@ -130,7 +131,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 	// 8. 生成Token
 	tokenPair, err := a.tokenService.GenerateTokenPair(&user)
 	if err != nil {
-		a.logger.Error("Login failed: token generation", zap.Error(err))
+		a.logger.Error("Login failed: token generation", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("登录失败，请稍后重试: %w", apperrors.ErrInternal)
 	}
 
@@ -138,12 +139,12 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 	now := time.Now()
 	user.LastLoginAt = &now
 	if err := a.db.Save(&user).Error; err != nil {
-		a.logger.Error("Login: failed to update last login", zap.Error(err))
+		a.logger.Error("Login: failed to update last login", zap.Error(err), response.SentinelField(err))
 	}
 
 	// 10. 创建session记录（按 RefreshToken 存储，便于 RefreshAccessToken 中的宽限期查找）
 	if err := a.tokenService.CreateSession(user.ID, tokenPair.RefreshToken, ipAddress, userAgent, tokenPair.ExpiresAt); err != nil {
-		a.logger.Warn("Failed to create session", zap.Error(err))
+		a.logger.Warn("Failed to create session", zap.Error(err), response.SentinelField(err))
 	}
 
 	// 11. Audit log
@@ -229,6 +230,7 @@ func (a *LocalAuthenticator) checkIPRestrictions(ctx context.Context, user *mode
 				zap.String("client_ip", clientIP),
 				zap.Uint("user_id", user.ID),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 		}
 		// Log validation failure to audit trail

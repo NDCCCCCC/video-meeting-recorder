@@ -15,6 +15,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/tjfoc/gmsm/sm4"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -77,12 +78,12 @@ func NewSM4TokenService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *SM
 
 	block, err := sm4.NewCipher(key)
 	if err != nil {
-		logger.Fatal("创建SM4加密器失败", zap.Error(err))
+		logger.Fatal("创建SM4加密器失败", zap.Error(err), response.SentinelField(err))
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		logger.Fatal("创建GCM模式失败", zap.Error(err))
+		logger.Fatal("创建GCM模式失败", zap.Error(err), response.SentinelField(err))
 	}
 
 	return &SM4TokenService{
@@ -377,7 +378,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 				zap.String("token_prefix", refreshToken[:8]),
 			)
 			if err := s.RevokeUserSessions(claims.UserID); err != nil {
-				s.logger.Warn("撤销用户会话失败", zap.Uint("user_id", claims.UserID), zap.Error(err))
+				s.logger.Warn("撤销用户会话失败", zap.Uint("user_id", claims.UserID), zap.Error(err), response.SentinelField(err))
 			}
 			return nil, apperrors.ErrTokenReplayed
 		}
@@ -403,7 +404,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 	if err := s.db.WithContext(ctx).Model(&models.Session{}).
 		Where("token = ?", refreshToken).
 		Update("last_used_at", now).Error; err != nil {
-		s.logger.Warn("更新session last_used_at失败", zap.Error(err))
+		s.logger.Warn("更新session last_used_at失败", zap.Error(err), response.SentinelField(err))
 	}
 
 	// 缓存新生成的 token 对，设置宽限期过期时间
