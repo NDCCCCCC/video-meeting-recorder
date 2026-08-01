@@ -17,6 +17,7 @@ import (
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -166,7 +167,7 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 	// 3. 计算文件 SHA-256
 	fileFingerprint, err := s.calculateSHA256(req.File)
 	if err != nil {
-		s.logger.Warn("计算 SHA-256 失败", zap.Error(err))
+		s.logger.Warn("计算 SHA-256 失败", zap.Error(err), response.SentinelField(err))
 	}
 
 	// 4. 检查文件是否已存在（秒传）
@@ -336,7 +337,7 @@ func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*mo
 			s.logger.Warn("Async file deletion failed",
 				zap.Uint("file_id", fileID),
 				zap.String("file_path", file.FilePath),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 		}
 	}()
 
@@ -557,7 +558,7 @@ func (s *FileService) validateFile(file *multipart.FileHeader) error {
 	if err != nil {
 		// 检测失败允许上传（兼容 0 字节文件、虚拟文件系统）；上层依赖扩展名控制
 		s.logger.Warn("MIME magic bytes 检测失败，跳过 MIME 校验",
-			zap.String("filename", file.Filename), zap.Error(err))
+			zap.String("filename", file.Filename), zap.Error(err), response.SentinelField(err))
 	} else if !isAllowedMIME(mimeType, ext) {
 		return fmt.Errorf("文件 MIME 类型与扩展名不匹配: detected=%s ext=%s: %w",
 			mimeType, ext, apperrors.ErrInvalidInput)
