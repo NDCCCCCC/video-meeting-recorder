@@ -17,12 +17,14 @@ func (m *Migration016AlterFingerprintToSHA256) Name() string {
 
 func (m *Migration016AlterFingerprintToSHA256) Up(db *gorm.DB) error {
 	// SEC-006: fingerprint 升级 SHA-256，旧 MD5 指纹失效。
-	// 实际 schema 沿用历史列名 uploaded_files.file_md5；等价 SQL 为：
-	// ALTER TABLE uploaded_files ALTER COLUMN file_md5 TYPE VARCHAR(64) (fingerprint)
+	// 实际 schema 列名经 018 迁移后为 uploaded_files.file_fingerprint；
+	// 本迁移仅负责 Varchar 列宽（VARCHAR(32) -> VARCHAR(64)），与列名无关。
 	if !db.Migrator().HasTable(&models.UploadedFile{}) {
 		return nil
 	}
-	if err := db.Migrator().AlterColumn(&models.UploadedFile{}, "FileMD5"); err != nil {
+	// 幂等性：仅在列仍以旧名 file_md5 / 新名 file_fingerprint 存在时执行 widen。
+	// 改造期间通过 018 完成重命名后，本行需使用新字段名 "FileFingerprint"。
+	if err := db.Migrator().AlterColumn(&models.UploadedFile{}, "FileFingerprint"); err != nil {
 		return fmt.Errorf("widen uploaded file fingerprint: %w: %w", apperrors.ErrInternal, err)
 	}
 	return nil

@@ -312,5 +312,6 @@ func GetRegisteredMigrations() []interface{} {
 		&Migration014_CreateInputConfigs{},
 		&Migration015_AddTranscriptionJobGroups{},
 		&Migration016AlterFingerprintToSHA256{},
+		&Migration018_RenameFileMD5ToFingerprint{},
 	}
 }
