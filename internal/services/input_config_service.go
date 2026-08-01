@@ -9,6 +9,7 @@ import (
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -196,14 +197,14 @@ func (s *InputConfigService) GetConfigByID(ctx context.Context, id uint) (*model
 	if s.encryptor != nil {
 		if pwd, err := s.decryptPasswordField(config.Password); err != nil {
 			s.logger.Error("GetConfigByID 解密 password 失败",
-				zap.Uint("config_id", config.ID), zap.Error(err))
+				zap.Uint("config_id", config.ID), zap.Error(err), response.SentinelField(err))
 			return nil, fmt.Errorf("解密 password 失败 (id=%d): %w", config.ID, err)
 		} else {
 			config.Password = pwd
 		}
 		if spwd, err := s.decryptPasswordField(config.StreamPassword); err != nil {
 			s.logger.Error("GetConfigByID 解密 stream_password 失败",
-				zap.Uint("config_id", config.ID), zap.Error(err))
+				zap.Uint("config_id", config.ID), zap.Error(err), response.SentinelField(err))
 			return nil, fmt.Errorf("解密 stream_password 失败 (id=%d): %w", config.ID, err)
 		} else {
 			config.StreamPassword = spwd
@@ -539,6 +540,7 @@ func (s *InputConfigService) testStreamConnection(ctx context.Context, req *Test
 		s.logger.Error("FFprobe failed",
 			zap.Error(err),
 			zap.String("output", string(output)),
+			response.SentinelField(err),
 		)
 		return fmt.Errorf("流媒体连接测试失败: %w: %w", apperrors.ErrInternal, err)
 	}
