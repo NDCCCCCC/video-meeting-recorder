@@ -204,6 +204,17 @@ func Generate(errorsPath, mappingPath, repoRoot, outputPath string) error {
 		}
 		delete(statusByCode, "__default__")
 	}
+	// Apply default switch branch status to any sentinels not explicitly listed.
+	// Mirrors the BusinessError logic above; without this every sentinel routed
+	// via the default branch renders as HTTP 0 in the generated docs (WR-01).
+	if defaultStatus, ok := statusBySentinel["__default__"]; ok {
+		for _, s := range sentinels {
+			if _, listed := statusBySentinel[s.Name]; !listed {
+				statusBySentinel[s.Name] = defaultStatus
+			}
+		}
+		delete(statusBySentinel, "__default__")
+	}
 
 	sentinelCallSites := countCallSites(sentinels, repoRoot)
 	codeCallSites := countCodeCallSites(codes, repoRoot)
@@ -284,12 +295,18 @@ type caseBranch struct {
 // so each `case` may list multiple sentinels, all sharing one `return`.
 // We accumulate sentinels per case branch and apply the next matching
 // `return http.StatusXxx, ...` line as their status.
+//
+// The default branch is captured separately under the "__default__" key so
+// the caller can apply it to sentinels that fall through (e.g. ErrInternal,
+// ErrDuplicateRecord, ErrForeignKeyConstraint). Without this, the rendered
+// docs would show HTTP status 0 for those entries (WR-01).
 func mapSentinelsToStatus(src string, pats *patterns, statusByName map[string]int) map[string]int {
 	out := make(map[string]int)
 	lines := strings.Split(src, "\n")
 	var branch *caseBranch
 	inSwitch := false
 	switchDepth := 0
+	var defaultStatus int
 
 	flush := func() {
 		if branch == nil {
@@ -321,12 +338,23 @@ func mapSentinelsToStatus(src string, pats *patterns, statusByName map[string]in
 			continue
 		}
 
+		// Default branch: remember its status for unmatched sentinels.
+		if strings.HasPrefix(trimmed, "default:") {
+			branch = &caseBranch{}
+			continue
+		}
+
 		// Return line: apply status to the open branch.
 		if m := pats.returnHTTP.FindStringSubmatch(line); m != nil {
 			if branch != nil {
 				if code, ok := statusByName[m[1]]; ok {
-					for _, s := range branch.sentinels {
-						out[s] = code
+					if len(branch.sentinels) == 0 {
+						// Default branch return — remember for later.
+						defaultStatus = code
+					} else {
+						for _, s := range branch.sentinels {
+							out[s] = code
+						}
 					}
 				}
 				flush()
@@ -339,6 +367,11 @@ func mapSentinelsToStatus(src string, pats *patterns, statusByName map[string]in
 			switchDepth = 0
 			branch = nil
 		}
+	}
+
+	// Expose default branch status to the caller via the reserved "__default__" key.
+	if defaultStatus != 0 {
+		out["__default__"] = defaultStatus
 	}
 	return out
 }
@@ -466,7 +499,9 @@ func auditAdHocErrors(repoRoot string) int {
 	handlersDir := filepath.Join(repoRoot, "internal", "handlers")
 	// Two patterns: (a) `response.GinError(c, ..., err.Error())` style
 	// and (b) bare `err.Error()` inside handlers — a strong signal of
-	// ad-hoc classification. We exclude `_test.go` and `ShouldBindJSON`.
+	// ad-hoc classification. We exclude `_test.go` and lines inside
+	// `ShouldBindJSON` blocks (request-binding validation errors are
+	// expected in handlers, not service-classifier ad-hoc counts).
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`\berr\.Error\(\)`),
 		regexp.MustCompile(`\berrMsg\s*:=`),
@@ -482,6 +517,10 @@ func auditAdHocErrors(repoRoot string) int {
 // all *.go files (excluding _test.go if excludeTests is true). Files are
 // walked directly (filepath.WalkDir) — no exec of external grep, so the
 // generator stays portable to Windows without Git Bash / Cygwin.
+//
+// Lines inside a `ShouldBindJSON` block are excluded by source context,
+// not by filename (the previous implementation checked `HasSuffix(name,
+// "ShouldBindJSON")` which could never match a `.go` filename). WR-02.
 func grepCount(dir string, pattern *regexp.Regexp, excludeTests bool) int {
 	count := 0
 	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -498,20 +537,52 @@ func grepCount(dir string, pattern *regexp.Regexp, excludeTests bool) int {
 		if excludeTests && strings.HasSuffix(name, "_test.go") {
 			return nil
 		}
-		if strings.HasSuffix(name, "ShouldBindJSON") {
-			return nil
-		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil
 		}
-		for _, line := range strings.Split(string(data), "\n") {
-			if pattern.MatchString(line) {
-				count++
-			}
-		}
+		count += grepCountInSource(string(data), pattern)
 		return nil
 	})
+	return count
+}
+
+// grepCountInSource counts lines matching pattern in src, excluding lines
+// that fall inside a `c.ShouldBindJSON(...)` block. Block boundaries are
+// tracked by counting `{` and `}` from the line that contains the binding
+// call until the depth returns to 0. This is the WR-02 fix: the previous
+// implementation checked filename suffix, which is impossible to match.
+func grepCountInSource(src string, pattern *regexp.Regexp) int {
+	count := 0
+	lines := strings.Split(src, "\n")
+	inBindingBlock := false
+	blockDepth := 0
+
+	for _, line := range lines {
+		if inBindingBlock {
+			opens := strings.Count(line, "{")
+			closes := strings.Count(line, "}")
+			blockDepth += opens
+			blockDepth -= closes
+			if blockDepth <= 0 {
+				inBindingBlock = false
+				blockDepth = 0
+			}
+			continue
+		}
+		if strings.Contains(line, "ShouldBindJSON") {
+			opens := strings.Count(line, "{")
+			closes := strings.Count(line, "}")
+			blockDepth = opens - closes
+			if blockDepth > 0 {
+				inBindingBlock = true
+			}
+			continue
+		}
+		if pattern.MatchString(line) {
+			count++
+		}
+	}
 	return count
 }
 

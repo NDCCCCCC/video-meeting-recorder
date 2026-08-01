@@ -19,13 +19,13 @@
 | ErrAPIKeyInvalid | Sentinel | 401 | 5 |
 | ErrAPIKeyNotFound | Sentinel | 404 | 9 |
 | ErrAlreadyExists | Sentinel | 409 | 9 |
-| ErrDuplicateRecord | Sentinel | 0 | 4 |
+| ErrDuplicateRecord | Sentinel | 500 | 4 |
 | ErrEmailExists | Sentinel | 409 | 6 |
 | ErrFFmpegFailed | Sentinel | 500 | 6 |
 | ErrForbidden | Sentinel | 403 | 24 |
-| ErrForeignKeyConstraint | Sentinel | 0 | 15 |
+| ErrForeignKeyConstraint | Sentinel | 500 | 15 |
 | ErrInsufficientQuota | Sentinel | 429 | 12 |
-| ErrInternal | Sentinel | 0 | 105 |
+| ErrInternal | Sentinel | 500 | 105 |
 | ErrInvalidFileType | Sentinel | 400 | 5 |
 | ErrInvalidInput | Sentinel | 400 | 146 |
 | ErrNotFound | Sentinel | 404 | 29 |
@@ -63,9 +63,9 @@ resolved by `mapBusinessError` in `internal/errors/mapping.go`.
 | BusinessError(code=FFMPEG_ERROR) | BusinessError | 500 | 6 |
 | BusinessError(code=FORBIDDEN) | BusinessError | 403 | 54 |
 | BusinessError(code=FOREIGN_KEY_CONSTRAINT) | BusinessError | 500 | 1 |
-| BusinessError(code=INTERNAL_ERROR) | BusinessError | 500 | 118 |
+| BusinessError(code=INTERNAL_ERROR) | BusinessError | 500 | 64 |
 | BusinessError(code=INVALID_INPUT) | BusinessError | 400 | 40 |
-| BusinessError(code=NOT_FOUND) | BusinessError | 404 | 48 |
+| BusinessError(code=NOT_FOUND) | BusinessError | 404 | 47 |
 | BusinessError(code=SERVICE_UNAVAILABLE) | BusinessError | 503 | 8 |
 | BusinessError(code=TASK_IN_PROGRESS) | BusinessError | 409 | 3 |
 | BusinessError(code=UNAUTHORIZED) | BusinessError | 401 | 19 |
@@ -76,7 +76,7 @@ Counts of remaining inline `err.Error()` classify branches in
 `internal/handlers/*.go` (excluding `_test.go` and `ShouldBindJSON`).
 After Phase 20 convergence (`20-02` + `20-03`) the target is **0**.
 
-> Current `err.Error()` / inline classify branches: **31** (target: 0)
+> Current `err.Error()` / inline classify branches: **15** (target: 0)
 
 If this number grows, a handler has regressed to the pre-Phase-20 anti-pattern.
 Move the classification into the service layer (return a sentinel / `BusinessError`)
