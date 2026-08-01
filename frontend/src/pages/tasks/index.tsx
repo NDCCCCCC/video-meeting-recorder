@@ -32,16 +32,14 @@ import { PERMISSIONS } from '../../utils/permissions'
 import {
   STATUS_CONFIG,
   DEFAULT_PAGE_SIZE,
-  DEFAULT_PRE_JOIN_MINUTES,
-  DEFAULT_RECORD_DELAY_MINUTES,
   POLL_INTERVAL,
   DELETABLE_STATUSES,
   ACTIVE_STATUSES,
   STATUS_OPTIONS,
-  canEditAllFields,
 } from './constants'
-import { formatDuration, hasActiveTasks } from './utils'
+import { formatDuration, hasActiveTasks, validateInputConfigSelection } from './utils'
 import { TaskActions } from './components/TaskActions'
+import { TaskFormModal } from './components/TaskFormModal'
 import EmptyTasks from '@/assets/illustrations/EmptyTasks'
 import ErrorNetwork from '@/assets/illustrations/ErrorNetwork'
 import { designTokens } from '@/styles/theme'
@@ -55,33 +53,6 @@ import type {
 import type { InputConfig } from '../../types/input-config'
 
 const { RangePicker } = DatePicker
-
-type ConfigType = 'usb' | 'stream' | 'none'
-
-const CONFIG_TYPE_TAGS: Record<ConfigType, { color: string; label: string }> = {
-  usb: { color: 'blue', label: 'USB' },
-  stream: { color: 'green', label: '流媒体' },
-  none: { color: 'default', label: '未配置' },
-}
-
-const getConfigType = (config: InputConfig): ConfigType => {
-  const hasUSB = config.usb_camera_device || config.usb_audio_device
-  const hasStream = config.stream_enabled && config.stream_url
-
-  if (hasUSB) return 'usb'
-  if (hasStream) return 'stream'
-  return 'none'
-}
-
-const getConfigTypeTagConfig = (config: InputConfig) => {
-  const type = getConfigType(config)
-  const tagConfig = CONFIG_TYPE_TAGS[type]
-  const label =
-    type === 'stream'
-      ? `${tagConfig.label}(${config.stream_protocol?.toUpperCase()})`
-      : tagConfig.label
-  return { ...tagConfig, label }
-}
 
 export default function TaskManagement() {
   const [tasks, setTasks] = useState<VideoRecordingTask[]>([])
@@ -262,17 +233,11 @@ export default function TaskManagement() {
         configIds = [values.huawei_config_id]
       }
 
-      // 验证配置类型限制
+      // 验证配置类型限制（与表单 validator 复用同一函数）
       const selectedConfigs = huaweiConfigs.filter((c) => configIds.includes(c.id))
-      const usbCount = selectedConfigs.filter((c) => getConfigType(c) === 'usb').length
-      const streamCount = selectedConfigs.filter((c) => getConfigType(c) === 'stream').length
-
-      if (usbCount > 1) {
-        message.error('最多只能选择1个USB配置')
-        return
-      }
-      if (streamCount > 1) {
-        message.error('最多只能选择1个流媒体配置')
+      const selectionError = validateInputConfigSelection(selectedConfigs)
+      if (selectionError) {
+        message.error(selectionError)
         return
       }
 
@@ -544,12 +509,6 @@ export default function TaskManagement() {
     ]
   )
 
-  // 渲染配置类型标签
-  const renderConfigTypeTag = useCallback((config: InputConfig): React.ReactElement => {
-    const tagConfig = getConfigTypeTagConfig(config)
-    return <Tag color={tagConfig.color}>{tagConfig.label}</Tag>
-  }, [])
-
   // 表格列定义
   const columns: ColumnsType<VideoRecordingTask> = useMemo(
     () => [
@@ -623,13 +582,6 @@ export default function TaskManagement() {
       },
     ],
     [renderStatus, renderActions]
-  )
-
-  // 录制中状态提示内容 (rendering-hoist-jsx)
-  const RECORDING_TIP = (
-    <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 4 }}>
-      任务正在录制中，仅可修改结束时间
-    </div>
   )
 
   // D-05.1 / D-05.2 — 空态与错误态分支
@@ -785,208 +737,15 @@ export default function TaskManagement() {
       )}
 
       {/* 新建/编辑任务对话框 */}
-      <Modal
-        title={
-          editingTask
-            ? editingTask.status === 'recording'
-              ? '修改结束时间'
-              : '编辑录制任务'
-            : '新建录制任务'
-        }
+      <TaskFormModal
         open={modalVisible}
+        form={form}
+        editingTask={editingTask}
+        huaweiConfigs={huaweiConfigs}
+        configsLoading={configsLoading}
         onOk={handleSubmit}
         onCancel={closeModal}
-        width={700}
-        destroyOnHidden
-      >
-        <Form form={form} layout="vertical">
-          {/* 录制中状态只能编辑结束时间，其他字段被禁用并显示提示 */}
-          {editingTask && editingTask.status === 'recording' ? RECORDING_TIP : null}
-
-          <Form.Item
-            name="name"
-            label="任务名称"
-            rules={[
-              {
-                required: !editingTask || canEditAllFields(editingTask.status),
-                message: '请输入任务名称',
-              },
-              { max: 200, message: '任务名称最多200个字符' },
-            ]}
-          >
-            <Input
-              placeholder="例：周例会（2026-07-28）"
-              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="description"
-            label="描述"
-            rules={[{ max: 500, message: '描述最多500个字符' }]}
-          >
-            <Input.TextArea
-              placeholder="会议主题、参会人或备注"
-              rows={3}
-              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="conference_number"
-            label="会议号"
-            rules={[
-              {
-                required: !editingTask || canEditAllFields(editingTask.status),
-                message: '请输入会议号',
-              },
-              { max: 50, message: '会议号最多50个字符' },
-            ]}
-          >
-            <Input
-              placeholder="华为会议号，如 987654321"
-              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="huawei_config_id"
-            label="输入配置（可选，最多选一路USB和一路流媒体）"
-            rules={[
-              {
-                validator: async (_, value) => {
-                  // 输入配置是可选的，如果用户选择了配置则验证
-                  if (value && (Array.isArray(value) ? value.length > 0 : value)) {
-                    const ids = Array.isArray(value) ? value : [value]
-                    const selectedConfigs = huaweiConfigs.filter((c) => ids.includes(c.id))
-                    const usbCount = selectedConfigs.filter(
-                      (c) => getConfigType(c) === 'usb'
-                    ).length
-                    const streamCount = selectedConfigs.filter(
-                      (c) => getConfigType(c) === 'stream'
-                    ).length
-
-                    if (usbCount > 1) {
-                      throw new Error('最多只能选择1个USB配置')
-                    }
-                    if (streamCount > 1) {
-                      throw new Error('最多只能选择1个流媒体配置')
-                    }
-
-                    const invalidConfigs = selectedConfigs.filter(
-                      (c) => getConfigType(c) === 'none'
-                    )
-                    if (invalidConfigs.length > 0) {
-                      throw new Error(`配置"${invalidConfigs[0].name}"未配置USB设备或流媒体`)
-                    }
-                  }
-                },
-              },
-            ]}
-          >
-            <Select
-              mode="multiple"
-              placeholder="最多一路 USB + 一路流媒体"
-              loading={configsLoading}
-              showSearch
-              optionFilterProp="label"
-              disabled={!!editingTask && !canEditAllFields(editingTask.status)}
-              tagRender={(props) => {
-                const { label, value, onClose } = props
-                const config = huaweiConfigs.find((c) => c.id === value)
-                const tagConfig = config ? getConfigTypeTagConfig(config) : CONFIG_TYPE_TAGS.none
-
-                return (
-                  <Tag
-                    color={tagConfig.color}
-                    closable
-                    onClose={onClose}
-                    style={{ marginRight: 3 }}
-                  >
-                    {label}
-                  </Tag>
-                )
-              }}
-            >
-              {huaweiConfigs.map((config) => {
-                const configType = getConfigType(config)
-                // 根据配置类型显示不同信息
-                const detailInfo =
-                  configType === 'usb'
-                    ? `${config.usb_camera_device || '无摄像头'}`
-                    : configType === 'stream'
-                      ? `${config.stream_protocol || 'RTMP'}:${config.stream_url || '无地址'}`
-                      : `${config.server || '无服务器'}:${config.port || 80}`
-
-                return (
-                  <Select.Option key={config.id} value={config.id}>
-                    <Space>
-                      {config.name} ({detailInfo}){renderConfigTypeTag(config)}
-                    </Space>
-                  </Select.Option>
-                )
-              })}
-            </Select>
-          </Form.Item>
-
-          <Space size="large">
-            <Form.Item
-              name="start_time"
-              label="开始时间"
-              rules={[
-                {
-                  required: !editingTask || canEditAllFields(editingTask.status),
-                  message: '请选择开始时间',
-                },
-              ]}
-            >
-              <DatePicker
-                showTime
-                format="YYYY-MM-DD HH:mm:ss"
-                disabled={!!editingTask && !canEditAllFields(editingTask.status)}
-              />
-            </Form.Item>
-
-            <Form.Item
-              name="end_time"
-              label="结束时间"
-              rules={[{ required: true, message: '请选择结束时间' }]}
-            >
-              <DatePicker showTime format="YYYY-MM-DD HH:mm:ss" />
-            </Form.Item>
-          </Space>
-
-          <Space size="large">
-            <Form.Item
-              name="pre_join_minutes"
-              label="提前进入(分钟)"
-              rules={[
-                { type: 'number', min: 0, max: 60, message: '提前进入时间必须在0-60分钟之间' },
-              ]}
-              initialValue={DEFAULT_PRE_JOIN_MINUTES}
-            >
-              <Input
-                type="number"
-                style={{ width: 120 }}
-                disabled={!!editingTask && !canEditAllFields(editingTask.status)}
-              />
-            </Form.Item>
-
-            <Form.Item
-              name="record_delay_minutes"
-              label="录制延迟(分钟)"
-              rules={[{ type: 'number', min: 0, max: 60, message: '录制延迟必须在0-60分钟之间' }]}
-              initialValue={DEFAULT_RECORD_DELAY_MINUTES}
-            >
-              <Input
-                type="number"
-                style={{ width: 120 }}
-                disabled={!!editingTask && !canEditAllFields(editingTask.status)}
-              />
-            </Form.Item>
-          </Space>
-        </Form>
-      </Modal>
+      />
     </div>
   )
 }
