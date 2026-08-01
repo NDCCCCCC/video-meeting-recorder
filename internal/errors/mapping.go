@@ -132,29 +132,72 @@ func IsKnownError(err error) bool {
 	if errors.As(err, &be) {
 		return true
 	}
-	for _, sentinel := range []error{
-		ErrNotFound, ErrTaskNotFound, ErrVideoFileNotFound,
-		ErrUserNotFound, ErrRoleNotFound, ErrADAccountNotFound, ErrPermissionNotFound,
-		ErrAPIKeyNotFound, ErrPPTFileNotFound,
-		ErrUnauthorized, ErrForbidden, ErrInvalidInput, ErrInvalidFileType,
-		ErrAlreadyExists, ErrTaskInProgress, ErrUsernameExists, ErrEmailExists,
-		ErrRoleNameExists, ErrRoleInUse,
-		ErrSystemAdminProtected, ErrSystemRoleProtected, ErrUserDisabled,
-		ErrAPIKeyDisabled, ErrAPIKeyIPNotAllowed,
-		ErrTokenInvalid, ErrTokenExpired, ErrTokenNotYetValid, ErrTokenReplayed,
-		ErrAPIKeyInvalid, ErrAPIKeyExpired,
-		ErrInsufficientQuota,
-		ErrServiceUnavailable, ErrADConfigError, ErrADUnreachable,
-		ErrTranscriptionUnavailable,
-		ErrFFmpegFailed, ErrTranscriptionFailed,
-		ErrSplitFailed, ErrInternal,
-		ErrDuplicateRecord, ErrForeignKeyConstraint,
-	} {
-		if errors.Is(err, sentinel) {
-			return true
+	_, ok := FirstKnownSentinelName(err)
+	return ok
+}
+
+// FirstKnownSentinelName returns the stable Go identifier of the first sentinel
+// matched in err's wrapping chain. The order intentionally mirrors the known
+// error precedence used by IsKnownError.
+func FirstKnownSentinelName(err error) (name string, ok bool) {
+	if err == nil {
+		return "", false
+	}
+	for _, sentinel := range knownSentinels {
+		if errors.Is(err, sentinel.err) {
+			return sentinel.name, true
 		}
 	}
-	return false
+	return "", false
+}
+
+// knownSentinels is the single source of truth for sentinel recognition and
+// logging names. Keep this order stable: the first errors.Is hit wins.
+var knownSentinels = []struct {
+	name string
+	err  error
+}{
+	{"ErrNotFound", ErrNotFound},
+	{"ErrTaskNotFound", ErrTaskNotFound},
+	{"ErrVideoFileNotFound", ErrVideoFileNotFound},
+	{"ErrUserNotFound", ErrUserNotFound},
+	{"ErrRoleNotFound", ErrRoleNotFound},
+	{"ErrADAccountNotFound", ErrADAccountNotFound},
+	{"ErrPermissionNotFound", ErrPermissionNotFound},
+	{"ErrAPIKeyNotFound", ErrAPIKeyNotFound},
+	{"ErrPPTFileNotFound", ErrPPTFileNotFound},
+	{"ErrUnauthorized", ErrUnauthorized},
+	{"ErrForbidden", ErrForbidden},
+	{"ErrInvalidInput", ErrInvalidInput},
+	{"ErrInvalidFileType", ErrInvalidFileType},
+	{"ErrAlreadyExists", ErrAlreadyExists},
+	{"ErrTaskInProgress", ErrTaskInProgress},
+	{"ErrUsernameExists", ErrUsernameExists},
+	{"ErrEmailExists", ErrEmailExists},
+	{"ErrRoleNameExists", ErrRoleNameExists},
+	{"ErrRoleInUse", ErrRoleInUse},
+	{"ErrSystemAdminProtected", ErrSystemAdminProtected},
+	{"ErrSystemRoleProtected", ErrSystemRoleProtected},
+	{"ErrUserDisabled", ErrUserDisabled},
+	{"ErrAPIKeyDisabled", ErrAPIKeyDisabled},
+	{"ErrAPIKeyIPNotAllowed", ErrAPIKeyIPNotAllowed},
+	{"ErrTokenInvalid", ErrTokenInvalid},
+	{"ErrTokenExpired", ErrTokenExpired},
+	{"ErrTokenNotYetValid", ErrTokenNotYetValid},
+	{"ErrTokenReplayed", ErrTokenReplayed},
+	{"ErrAPIKeyInvalid", ErrAPIKeyInvalid},
+	{"ErrAPIKeyExpired", ErrAPIKeyExpired},
+	{"ErrInsufficientQuota", ErrInsufficientQuota},
+	{"ErrServiceUnavailable", ErrServiceUnavailable},
+	{"ErrADConfigError", ErrADConfigError},
+	{"ErrADUnreachable", ErrADUnreachable},
+	{"ErrTranscriptionUnavailable", ErrTranscriptionUnavailable},
+	{"ErrFFmpegFailed", ErrFFmpegFailed},
+	{"ErrTranscriptionFailed", ErrTranscriptionFailed},
+	{"ErrSplitFailed", ErrSplitFailed},
+	{"ErrInternal", ErrInternal},
+	{"ErrDuplicateRecord", ErrDuplicateRecord},
+	{"ErrForeignKeyConstraint", ErrForeignKeyConstraint},
 }
 
 // FromGORM 把 gorm 错误转换为 sentinel：gorm.ErrRecordNotFound → ErrNotFound，
