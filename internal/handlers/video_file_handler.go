@@ -66,10 +66,7 @@ func (h *VideoFileHandler) ListFiles(c *gin.Context) {
 	result, err := h.fileService.ListFiles(c.Request.Context(), &req)
 	if err != nil {
 		h.logger.Error("获取文件列表失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "获取文件列表失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -196,11 +193,7 @@ func (h *VideoFileHandler) DeleteFile(c *gin.Context) {
 	oldFile, err := h.fileService.DeleteFile(c.Request.Context(), id)
 	if err != nil {
 		// Phase 19 D4: DeleteFile 返回 BusinessError，handler 用统一 HandleError 映射。
-		if response.HandleError(c, err) {
-			return
-		}
-		// 兜底（理论不可达）
-		response.GinError(c, response.CodeInternalError, "删除失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -237,10 +230,7 @@ func (h *VideoFileHandler) BatchDeleteFiles(c *gin.Context) {
 	oldFiles, result, err := h.fileService.BatchDeleteFiles(c.Request.Context(), req.IDs)
 	if err != nil {
 		h.logger.Error("批量删除文件失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "批量删除失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -283,10 +273,7 @@ func (h *VideoFileHandler) GetFileStats(c *gin.Context) {
 	stats, err := h.fileService.GetFileStats(c.Request.Context(), format)
 	if err != nil {
 		h.logger.Error("获取统计信息失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "获取统计信息失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -298,10 +285,7 @@ func (h *VideoFileHandler) ScanFiles(c *gin.Context) {
 	result, err := h.fileService.ScanFiles(c.Request.Context())
 	if err != nil {
 		h.logger.Error("扫描文件失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "扫描文件失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -371,11 +355,7 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 
 		// STYLE-001 Phase 19 Wave 6：service 返回 BusinessError，handler 用统一 HandleError 映射。
 		// 不再需要手写字符串匹配 switch。
-		if response.HandleError(c, err) {
-			return
-		}
-		// 未识别的兜底错误（理论不可达，因为 HandleError 对未知 err 也写 500）
-		response.GinError(c, response.CodeInternalError, "重命名失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -428,10 +408,7 @@ func (h *VideoFileHandler) BatchDownloadFiles(c *gin.Context) {
 			zap.Error(err),
 			response.SentinelField(err),
 		)
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "批量下载失败")
+		response.HandleError(c, err)
 		return
 	}
 	defer resp.Reader.Close()

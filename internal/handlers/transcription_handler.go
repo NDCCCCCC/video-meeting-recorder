@@ -99,10 +99,7 @@ func (h *TranscriptionHandler) SubmitTranscription(c *gin.Context) {
 
 	if err := h.transcriptionService.SubmitTranscriptionWithMode(c.Request.Context(), uint(id), req.SamplingRate, req.Mode, userID); err != nil {
 		h.logger.Warn("提交转录任务失败", zap.Uint64("video_id", id), zap.String("mode", req.Mode), zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "提交转录任务失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -443,10 +440,7 @@ func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
 			zap.Error(err),
 			response.SentinelField(err),
 		)
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "批量转录失败")
+		response.HandleError(c, err)
 		return
 	}
 

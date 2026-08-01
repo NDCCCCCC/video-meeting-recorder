@@ -63,10 +63,7 @@ func (h *InputConfigHandler) ListConfigs(c *gin.Context) {
 	result, err := h.configService.ListConfigs(c.Request.Context(), &req)
 	if err != nil {
 		h.logger.Error("Failed to list input configs", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "获取配置列表失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -92,10 +89,7 @@ func (h *InputConfigHandler) GetConfig(c *gin.Context) {
 	config, err := h.configService.GetConfigByID(c.Request.Context(), uint(id))
 	if err != nil {
 		h.logger.Error("Failed to get input config", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "获取配置失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -120,10 +114,7 @@ func (h *InputConfigHandler) CreateConfig(c *gin.Context) {
 
 	config, err := h.configService.CreateConfig(c.Request.Context(), &req)
 	if err != nil {
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "创建配置失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -173,10 +164,7 @@ func (h *InputConfigHandler) UpdateConfig(c *gin.Context) {
 
 	oldConfig, config, err := h.configService.UpdateConfig(c.Request.Context(), uint(id), &req)
 	if err != nil {
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "更新配置失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -214,10 +202,7 @@ func (h *InputConfigHandler) DeleteConfig(c *gin.Context) {
 
 	oldConfig, err := h.configService.DeleteConfig(c.Request.Context(), uint(id))
 	if err != nil {
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "删除配置失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -255,10 +240,7 @@ func (h *InputConfigHandler) TestConnection(c *gin.Context) {
 	}
 
 	if err := h.configService.TestConnection(c.Request.Context(), &req); err != nil {
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "连接测试失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -293,10 +275,7 @@ func (h *InputConfigHandler) GetActiveConfigs(c *gin.Context) {
 
 	result, err := h.configService.ListConfigs(c.Request.Context(), &req)
 	if err != nil {
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "获取激活配置失败")
+		response.HandleError(c, err)
 		return
 	}
 

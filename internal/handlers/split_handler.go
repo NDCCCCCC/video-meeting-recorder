@@ -82,10 +82,7 @@ func (h *SplitHandler) SubmitSplit(c *gin.Context) {
 
 	if err := h.splittingService.SubmitSplit(c.Request.Context(), uint(id), req.Markers, req.ReEncode, userID); err != nil {
 		h.logger.Warn("提交分割任务失败", zap.Uint("video_id", uint(id)), zap.Int("marker_count", len(req.Markers)), zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "提交分割任务失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -119,10 +116,7 @@ func (h *SplitHandler) GenerateSnapshot(c *gin.Context) {
 	snapshotFile, err := h.snapshotService.GenerateSnapshot(c.Request.Context(), uint(id), userID, hasSharedViewer)
 	if err != nil {
 		h.logger.Warn("生成快照失败", zap.Uint("task_id", uint(id)), zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "生成快照失败")
+		response.HandleError(c, err)
 		return
 	}
 

@@ -90,10 +90,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	result, err := h.fileService.Upload(c.Request.Context(), h.getUserID(c), uploadReq)
 	if err != nil {
 		h.logger.Warn("文件上传失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "上传失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -131,10 +128,7 @@ func (h *FileHandler) Download(c *gin.Context) {
 			zap.Error(err),
 			response.SentinelField(err),
 		)
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "下载失败")
+		response.HandleError(c, err)
 		return
 	}
 	defer reader.Close()
@@ -168,10 +162,7 @@ func (h *FileHandler) Delete(c *gin.Context) {
 	oldFile, err := h.fileService.Delete(c.Request.Context(), uint(fileID), h.getUserID(c))
 	if err != nil {
 		h.logger.Warn("删除文件失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "删除失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -226,10 +217,7 @@ func (h *FileHandler) Share(c *gin.Context) {
 	)
 	if err != nil {
 		h.logger.Warn("生成分享链接失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "生成分享链接失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -269,10 +257,7 @@ func (h *FileHandler) ShareDownload(c *gin.Context) {
 	reader, filename, err := h.fileService.GetShareDownload(c.Request.Context(), shareToken, password)
 	if err != nil {
 		h.logger.Warn("通过分享链接下载失败", zap.String("share_token", maskAccessToken(shareToken)), zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeNotFound, "分享链接无效或已过期")
+		response.HandleError(c, err)
 		return
 	}
 	defer reader.Close()
@@ -308,10 +293,7 @@ func (h *FileHandler) List(c *gin.Context) {
 	result, err := h.fileService.Query(c.Request.Context(), h.getUserID(c), &req)
 	if err != nil {
 		h.logger.Warn("查询文件列表失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "查询失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -328,10 +310,7 @@ func (h *FileHandler) GetQuota(c *gin.Context) {
 	quota, err := h.fileService.GetUserQuota(c.Request.Context(), h.getUserID(c))
 	if err != nil {
 		h.logger.Warn("获取存储配额失败", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "获取失败")
+		response.HandleError(c, err)
 		return
 	}
 

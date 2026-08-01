@@ -143,10 +143,7 @@ func (h *AdminHandler) UpdateAuthConfig(c *gin.Context) {
 	if h.configService != nil {
 		if err := h.configService.SaveAuthConfig(c.Request.Context(), req.Mode, &req.AD); err != nil {
 			h.logger.Error("Failed to save auth config to database", zap.Error(err), response.SentinelField(err))
-			if response.HandleError(c, err) {
-				return
-			}
-			response.GinError(c, response.CodeInternalError, "配置保存失败")
+			response.HandleError(c, err)
 			return
 		}
 	}
@@ -212,10 +209,7 @@ func (h *AdminHandler) LookupADUser(c *gin.Context) {
 	result, err := adAuth.LookupUser(req.Username)
 	if err != nil {
 		h.logger.Error("AD user lookup failed", zap.String("username", req.Username), zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "域控查询失败")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -244,10 +238,7 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 	var totalCount int64
 	if err := tx.Table("huawei_configs").Count(&totalCount).Error; err != nil {
 		h.logger.Error("Failed to count huawei_configs", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "迁移失败：无法读取源数据")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -288,10 +279,7 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 	var huaweiConfigs []HuaweiConfigRow
 	if err := tx.Table("huawei_configs").Find(&huaweiConfigs).Error; err != nil {
 		h.logger.Error("Failed to fetch huawei_configs", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "迁移失败：无法读取源数据")
+		response.HandleError(c, err)
 		return
 	}
 
@@ -422,10 +410,7 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		h.logger.Error("Failed to commit migration", zap.Error(err), response.SentinelField(err))
-		if response.HandleError(c, err) {
-			return
-		}
-		response.GinError(c, response.CodeInternalError, "迁移失败：无法提交事务")
+		response.HandleError(c, err)
 		return
 	}
 
