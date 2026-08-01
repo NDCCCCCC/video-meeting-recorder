@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 )
 
@@ -91,6 +92,7 @@ func (e *FrameExtractor) ExtractFrames(ctx context.Context, videoPath string, ou
 		e.logger.Error("FFmpeg帧提取失败",
 			zap.Error(err),
 			zap.String("stderr", stderr.String()),
+			response.SentinelField(err),
 		)
 		return nil, fmt.Errorf("FFmpeg帧提取失败: %w, stderr: %s", err, stderr.String())
 	}
@@ -157,6 +159,7 @@ func (e *FrameExtractor) ExtractFrameAtTimestamp(ctx context.Context, videoPath 
 		e.logger.Error("单帧提取失败",
 			zap.Error(err),
 			zap.String("stderr", stderr.String()),
+			response.SentinelField(err),
 		)
 		return fmt.Errorf("单帧提取失败: %w, stderr: %s", err, stderr.String())
 	}
@@ -182,7 +185,7 @@ func (e *FrameExtractor) CreateTempDir(baseDir string, videoFileID uint) (string
 func (e *FrameExtractor) CleanupTempDir(dir string) error {
 	if err := os.RemoveAll(dir); err != nil {
 		// 清理错误是非致命的，只记录日志
-		e.logger.Warn("清理临时目录失败", zap.String("dir", dir), zap.Error(err))
+		e.logger.Warn("清理临时目录失败", zap.String("dir", dir), zap.Error(err), response.SentinelField(err))
 		return err
 	}
 
@@ -213,7 +216,7 @@ func (e *FrameExtractor) scanOutputDir(outputDir string, samplingRateSeconds flo
 
 		index, err := strconv.Atoi(idxStr)
 		if err != nil {
-			e.logger.Warn("解析帧索引失败", zap.String("file", fileName), zap.Error(err))
+			e.logger.Warn("解析帧索引失败", zap.String("file", fileName), zap.Error(err), response.SentinelField(err))
 			continue
 		}
 
