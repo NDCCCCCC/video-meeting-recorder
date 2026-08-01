@@ -89,8 +89,11 @@ func (h *FileHandler) Upload(c *gin.Context) {
 
 	result, err := h.fileService.Upload(c.Request.Context(), h.getUserID(c), uploadReq)
 	if err != nil {
-		h.logger.Warn("文件上传失败", zap.Error(err))
-		response.GinError(c, response.CodeInternalError, err.Error())
+		h.logger.Warn("文件上传失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "上传失败")
 		return
 	}
 
@@ -103,7 +106,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		OldData:    nil,
 		NewData:    result,
 	}); err != nil {
-		h.logger.Warn("Failed to record storage upload change", zap.Error(err), zap.Uint("file_id", result.FileID))
+		h.logger.Warn("Failed to record storage upload change", zap.Error(err), response.SentinelField(err), zap.Uint("file_id", result.FileID))
 	}
 
 	response.GinSuccess(c, result)
@@ -126,8 +129,12 @@ func (h *FileHandler) Download(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.String("token", maskAccessToken(accessToken)),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
-		response.GinError(c, response.CodeNotFound, err.Error())
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "下载失败")
 		return
 	}
 	defer reader.Close()
@@ -160,8 +167,11 @@ func (h *FileHandler) Delete(c *gin.Context) {
 
 	oldFile, err := h.fileService.Delete(c.Request.Context(), uint(fileID), h.getUserID(c))
 	if err != nil {
-		h.logger.Warn("删除文件失败", zap.Error(err))
-		response.GinError(c, response.CodeInternalError, err.Error())
+		h.logger.Warn("删除文件失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "删除失败")
 		return
 	}
 
@@ -174,7 +184,7 @@ func (h *FileHandler) Delete(c *gin.Context) {
 		OldData:    oldFile,
 		NewData:    nil,
 	}); err != nil {
-		h.logger.Warn("Failed to record storage delete change", zap.Error(err), zap.Uint("file_id", uint(fileID)))
+		h.logger.Warn("Failed to record storage delete change", zap.Error(err), response.SentinelField(err), zap.Uint("file_id", uint(fileID)))
 	}
 
 	response.GinSuccess(c, gin.H{"message": "删除成功"})
@@ -215,8 +225,11 @@ func (h *FileHandler) Share(c *gin.Context) {
 		req.Password,
 	)
 	if err != nil {
-		h.logger.Warn("生成分享链接失败", zap.Error(err))
-		response.GinError(c, response.CodeInternalError, err.Error())
+		h.logger.Warn("生成分享链接失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "生成分享链接失败")
 		return
 	}
 
@@ -229,7 +242,7 @@ func (h *FileHandler) Share(c *gin.Context) {
 		OldData:    oldShare,
 		NewData:    newShare,
 	}); err != nil {
-		h.logger.Warn("Failed to record storage share change", zap.Error(err), zap.Uint("file_id", uint(fileID)))
+		h.logger.Warn("Failed to record storage share change", zap.Error(err), response.SentinelField(err), zap.Uint("file_id", uint(fileID)))
 	}
 
 	response.GinSuccess(c, gin.H{"share_url": shareURL})
@@ -255,7 +268,11 @@ func (h *FileHandler) ShareDownload(c *gin.Context) {
 
 	reader, filename, err := h.fileService.GetShareDownload(c.Request.Context(), shareToken, password)
 	if err != nil {
-		response.GinError(c, response.CodeNotFound, err.Error())
+		h.logger.Warn("通过分享链接下载失败", zap.String("share_token", maskAccessToken(shareToken)), zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeNotFound, "分享链接无效或已过期")
 		return
 	}
 	defer reader.Close()
@@ -290,7 +307,10 @@ func (h *FileHandler) List(c *gin.Context) {
 
 	result, err := h.fileService.Query(c.Request.Context(), h.getUserID(c), &req)
 	if err != nil {
-		h.logger.Warn("查询文件列表失败", zap.Error(err))
+		h.logger.Warn("查询文件列表失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "查询失败")
 		return
 	}
@@ -307,7 +327,10 @@ func (h *FileHandler) List(c *gin.Context) {
 func (h *FileHandler) GetQuota(c *gin.Context) {
 	quota, err := h.fileService.GetUserQuota(c.Request.Context(), h.getUserID(c))
 	if err != nil {
-		h.logger.Warn("获取存储配额失败", zap.Error(err))
+		h.logger.Warn("获取存储配额失败", zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
 		response.GinError(c, response.CodeInternalError, "获取失败")
 		return
 	}
