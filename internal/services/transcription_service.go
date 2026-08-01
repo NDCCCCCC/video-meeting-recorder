@@ -14,6 +14,7 @@ import (
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -251,7 +252,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 
 	// Reload task to check mode
 	if err := s.db.WithContext(ctx).Preload("VideoFile").First(task, task.ID).Error; err != nil {
-		s.logger.Error("Failed to load task", zap.Error(err))
+		s.logger.Error("Failed to load task", zap.Error(err), response.SentinelField(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
 		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
@@ -272,7 +273,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 	if err != nil {
 		s.logger.Error("创建临时目录失败",
 			zap.Uint("video_file_id", task.VideoFileID),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
 		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
@@ -293,7 +294,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 	if err := s.db.WithContext(ctx).First(&videoFile, task.VideoFileID).Error; err != nil {
 		s.logger.Error("加载视频文件失败",
 			zap.Uint("video_file_id", task.VideoFileID),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
 		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
@@ -312,7 +313,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 	if err != nil {
 		s.logger.Error("帧提取失败",
 			zap.Uint("video_file_id", task.VideoFileID),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		s.updateProgress(task.VideoFileID, "", 0, 0, 0, err.Error(), nil)
 		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
@@ -367,7 +368,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 	if err != nil {
 		s.logger.Error("解码首帧失败",
 			zap.String("file_path", frames[0].FilePath),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		return
@@ -389,7 +390,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 		if err != nil {
 			s.logger.Warn("解码帧失败，跳过",
 				zap.String("file_path", frames[i].FilePath),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 			continue
 		}
 
@@ -398,7 +399,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 		if err != nil {
 			s.logger.Warn("相似度检测失败，跳过",
 				zap.Int("frame_index", i),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 			prevImg = currImg
 			continue
 		}
@@ -440,14 +441,14 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 	if err := task.SetSlideTimestamps(slideTimestamps); err != nil {
 		s.logger.Error("设置时间戳失败",
 			zap.Uint("video_file_id", task.VideoFileID),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		// Don't fail the task for timestamp recording errors
 	} else {
 		// Update task in database
 		if err := s.db.WithContext(ctx).Model(task).Update("slide_timestamps", task.SlideTimestamps).Error; err != nil {
 			s.logger.Warn("保存时间戳到数据库失败",
 				zap.Uint("video_file_id", task.VideoFileID),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 		} else {
 			s.logger.Info("时间戳已记录",
 				zap.Uint("video_file_id", task.VideoFileID),
@@ -483,7 +484,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 			s.logger.Error("高分辨率帧提取失败",
 				zap.Int("frame_index", i),
 				zap.Float64("timestamp", frame.Timestamp),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 			s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 			s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 			// 更新任务组进度
@@ -528,7 +529,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 	if err != nil {
 		s.logger.Error("PPTX生成失败",
 			zap.Uint("video_file_id", task.VideoFileID),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
@@ -548,7 +549,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 	if err != nil {
 		s.logger.Error("获取PPTX文件信息失败",
 			zap.String("path", pptxOutputPath),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		// 更新任务组进度
@@ -571,7 +572,7 @@ func (s *TranscriptionService) processTranscription(ctx context.Context, task *m
 	if err := s.db.WithContext(ctx).Create(pptFile).Error; err != nil {
 		s.logger.Error("创建PPT文件记录失败",
 			zap.Uint("video_file_id", task.VideoFileID),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		s.updateProgress(task.VideoFileID, "", 0, len(frames), 0, err.Error(), nil)
 		s.updateTaskStatus(ctx, task.ID, models.TranscriptionStatusFailed, err.Error(), 0, nil)
 		return
@@ -737,7 +738,7 @@ func (s *TranscriptionService) processCloudTranscription(ctx context.Context, ta
 
 	// Save text content to TranscriptionText table
 	if err := s.saveTextContent(ctx, task, result); err != nil {
-		s.logger.Error("保存文字内容失败", zap.Error(err))
+		s.logger.Error("保存文字内容失败", zap.Error(err), response.SentinelField(err))
 		// Don't fail the task for text save errors -- text is optional
 	}
 
@@ -748,7 +749,7 @@ func (s *TranscriptionService) processCloudTranscription(ctx context.Context, ta
 		ruleID := fmt.Sprintf("expire-transcription-%d", task.ID)
 		if err := s.ossService.SetLifecycleRule(cleanupCtx, ruleID,
 			fmt.Sprintf("transcriptions/%d/", task.VideoFileID), 1); err != nil {
-			s.logger.Warn("设置OSS清理规则失败", zap.Error(err))
+			s.logger.Warn("设置OSS清理规则失败", zap.Error(err), response.SentinelField(err))
 			// Fallback: attempt immediate deletion of this specific file
 			if delErr := s.ossService.DeleteFile(cleanupCtx, objectKey); delErr != nil {
 				s.logger.Error("OSS文件删除也失败，文件可能成为孤儿文件",
@@ -793,7 +794,7 @@ func (s *TranscriptionService) pollTingwuStatus(ctx context.Context, task *model
 		if err != nil {
 			s.logger.Warn("查询Tingwu状态失败，重试",
 				zap.String("cloud_task_id", cloudTaskID),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 			// Exponential backoff with jitter: TRAN-04
 			delay = time.Duration(float64(delay) * 1.5)
 			if delay > maxDelay {
@@ -947,7 +948,7 @@ func (s *TranscriptionService) cleanupOrphanedOSSFiles(ctx context.Context) {
 		[]string{models.TranscriptionStatusCompleted, models.TranscriptionStatusFailed},
 		cutoff,
 	).Find(&tasks).Error; err != nil {
-		s.logger.Error("查询待清理OSS文件失败", zap.Error(err))
+		s.logger.Error("查询待清理OSS文件失败", zap.Error(err), response.SentinelField(err))
 		return
 	}
 
@@ -961,7 +962,7 @@ func (s *TranscriptionService) cleanupOrphanedOSSFiles(ctx context.Context) {
 		if err := s.ossService.DeleteFile(ctx, objectKey); err != nil {
 			s.logger.Warn("清理OSS文件失败",
 				zap.String("object_key", objectKey),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 		} else {
 			// Clear the OSSURL to avoid re-processing
 			s.db.WithContext(ctx).Model(&task).Update("oss_url", "")
@@ -1057,6 +1058,7 @@ func (s *TranscriptionService) SubmitBatchTranscription(ctx context.Context, req
 			s.logger.Warn("批量转录创建任务失败",
 				zap.Uint("video_file_id", videoFileID),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 			continue
 		}
@@ -1128,7 +1130,7 @@ func (s *TranscriptionService) GetJobGroupStatus(ctx context.Context, jobGroupID
 func (s *TranscriptionService) updateJobGroupProgress(ctx context.Context, jobGroupID uint) {
 	var jobGroup models.TranscriptionJobGroup
 	if err := s.db.WithContext(ctx).Preload("Tasks").First(&jobGroup, jobGroupID).Error; err != nil {
-		s.logger.Error("更新任务组进度失败", zap.Uint("job_group_id", jobGroupID), zap.Error(err))
+		s.logger.Error("更新任务组进度失败", zap.Uint("job_group_id", jobGroupID), zap.Error(err), response.SentinelField(err))
 		return
 	}
 
