@@ -1,11 +1,7 @@
 package handlers
 
 import (
-	"errors"
-	"net/http"
-
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -24,40 +20,6 @@ func NewAuthHandler(authService *auth.Service, logger *zap.Logger) *AuthHandler 
 		authService: authService,
 		logger:      logger,
 	}
-}
-
-// classifyAuthLoginError defines the handler-layer mapping used by Login.
-// The returned status documents the response.GinError runtime mapping and is
-// asserted in tests together with the response code to prevent wiring regressions.
-//
-// Phase 19 D6: extend sentinel coverage. Order matches the priority of HTTP
-// mapping (specificity decreasing). Sentinel fallback chain:
-//   - ErrADUserNotRegistered (existing) → 403 白名单策略
-//   - ErrADAccountNotFound              → 404 AD 找不到该用户名
-//   - ErrUserDisabled                   → 403 用户已被禁用（AD 路径或本地）
-//   - ErrADConfigError / ErrADUnreachable → 500 AD 基础设施不可用（前端的 5xx 兜底
-//     OK 这两类；如未来改用 HandleError 则走 mapping.go 的 503 ServiceUnavailable）
-//   - ErrUnauthorized                   → 401 密码错误（统一 AD + local）
-//   - default                            → 500 兜底（保守策略）
-//
-// 注：handler 当前用 response.GinError(c, code, msg) 而非 GinErrorWithStatus，
-//     httpStatus 实际由 code 决定。CodeInternalError (1005) 默认 → 500。
-//     Phase 20+ 重构时若 Login 切到 HandleError，503 区分会自动生效。
-func classifyAuthLoginError(err error) (code int, httpStatus int) {
-	switch {
-	case auth.IsADUserNotRegistered(err):
-		return response.CodeForbidden, http.StatusForbidden
-	case errors.Is(err, apperrors.ErrADAccountNotFound):
-		return response.CodeNotFound, http.StatusNotFound
-	case errors.Is(err, apperrors.ErrUserDisabled):
-		return response.CodeForbidden, http.StatusForbidden
-	case errors.Is(err, apperrors.ErrADConfigError),
-		errors.Is(err, apperrors.ErrADUnreachable):
-		return response.CodeInternalError, http.StatusInternalServerError
-	case errors.Is(err, apperrors.ErrUnauthorized):
-		return response.CodeUnauthorized, http.StatusUnauthorized
-	}
-	return response.CodeInvalidCredential, http.StatusInternalServerError
 }
 
 // Login 用户登录
@@ -86,10 +48,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		h.logger.Warn("Login failed",
 			zap.String("username", req.Username),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
-		// Keep login error classification centralized and directly testable.
-		code, _ := classifyAuthLoginError(err)
-		response.GinError(c, code, err.Error())
+		// Phase 20 (20-02): Login 错误统一走 response.HandleError；mapping.go 通过
+		// errors.Is 链自动识别 sentinel → 对应 401/403/404/503/500 状态码。
+		//   - ErrADUserNotRegistered → 403 (R-3 要求)。
+		//   - ErrADConfigError / ErrADUnreachable → 503 (R-4: 500 → 503)。
+		if response.HandleError(c, err) {
+			return
+		}
+		// 兜底：unknown error（response.HandleError 已写 500）。
 		return
 	}
 
@@ -145,7 +113,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	if err := h.authService.Logout(token); err != nil {
-		h.logger.Error("Logout failed", zap.Error(err))
+		h.logger.Error("Logout failed", zap.Error(err), response.SentinelField(err))
 	}
 
 	response.GinSuccess(c, gin.H{
@@ -172,6 +140,7 @@ func (h *AuthHandler) LogoutAll(c *gin.Context) {
 		h.logger.Error("Logout all failed",
 			zap.Uint("user_id", userID),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		response.GinError(c, response.CodeInternalError, "操作失败")
 		return

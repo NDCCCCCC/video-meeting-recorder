@@ -21,9 +21,9 @@ import (
 //
 // The sentinel now lives in internal/errors (Phase 20 R-3 migration) so the
 // mapping.go pipeline can recognize the error in 403-handling without
-// importing the auth package. This wrapper remains for callers that still
-// use the auth-package helper (e.g. legacy classifyAuthLoginError). It will
-// be removed once the Login handler is migrated to HandleError in 20-02.
+// importing the auth package. This wrapper remains for any callers that
+// still need a direct predicate; the Login handler now uses
+// response.HandleError (Phase 20 20-02) and no longer references this helper.
 func IsADUserNotRegistered(err error) bool {
 	return errors.Is(err, apperrors.ErrADUserNotRegistered)
 }

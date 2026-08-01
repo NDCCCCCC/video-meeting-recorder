@@ -39,10 +39,11 @@ var (
 	ErrRoleNotFound         = errors.New("role not found")
 	ErrSystemAdminProtected = errors.New("system admin protected from modification")
 
-	// 认证 sentinels（Phase 19 D6）：ad_auth + local_auth Login 路径统一化。
-	// ad_auth 与 local_auth 共享 auth_handler.go 的 classifyAuthLoginError 入口；mapping
-	// 后端以 sentinel 形式覆盖所有 Login 错误模式。Auth 路径的密码错统一映射 401 Unauthorized，
-	// 已存在 ErrUnauthorized sentinel 直接复用，AD 账号不存在映射 404，被禁用映射 403。
+	// 认证 sentinels（Phase 19 D6, Phase 20 R-3 migration）：ad_auth + local_auth Login 路径统一化。
+	// Login handler 已迁移到 response.HandleError (Phase 20 20-02)；mapping 后端以 sentinel 形式
+	// 覆盖所有 Login 错误模式 (errors.Is 链)。
+	// Auth 路径的密码错统一映射 401 Unauthorized，已存在 ErrUnauthorized sentinel 直接复用，
+	// AD 账号不存在映射 404，被禁用映射 403，未注册白名单映射 403。
 	ErrADAccountNotFound = errors.New("AD account not found")
 	ErrUserDisabled      = errors.New("user disabled")
 	ErrADConfigError     = errors.New("AD configuration error")
