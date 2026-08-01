@@ -57,7 +57,7 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 
 	result, err := h.userService.ListUsers(c.Request.Context(), &req)
 	if err != nil {
-		h.logger.Error("Failed to list users", zap.Error(err))
+		h.logger.Error("Failed to list users", zap.Error(err), response.SentinelField(err))
 		response.HandleError(c, err)
 		return
 	}
@@ -162,7 +162,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		OldData:    oldUser,
 		NewData:    user,
 	}); err != nil {
-		h.logger.Warn("Failed to record user update change", zap.Error(err), zap.Uint("user_id", id))
+		h.logger.Warn("Failed to record user update change", zap.Error(err), response.SentinelField(err), zap.Uint("user_id", id))
 	}
 
 	h.logger.Info("User updated", zap.Uint("user_id", id))
@@ -199,7 +199,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		OldData:    oldUser,
 		NewData:    nil,
 	}); err != nil {
-		h.logger.Warn("Failed to record user delete change", zap.Error(err), zap.Uint("user_id", id))
+		h.logger.Warn("Failed to record user delete change", zap.Error(err), response.SentinelField(err), zap.Uint("user_id", id))
 	}
 
 	h.logger.Info("User deleted", zap.Uint("user_id", id))
@@ -246,7 +246,7 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 		OldData:    oldSnapshot,
 		NewData:    newSnapshot,
 	}); err != nil {
-		h.logger.Warn("Failed to record password reset change", zap.Error(err), zap.Uint("user_id", id))
+		h.logger.Warn("Failed to record password reset change", zap.Error(err), response.SentinelField(err), zap.Uint("user_id", id))
 	}
 
 	h.logger.Info("User password reset", zap.Uint("user_id", id))
