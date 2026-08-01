@@ -12,6 +12,7 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -82,7 +83,7 @@ func (s *FFmpegConversionService) Start() error {
 
 	// 加载待转换的任务
 	if err := s.loadPendingTasks(s.ctx); err != nil {
-		s.logger.Error("加载待转换任务失败", zap.Error(err))
+		s.logger.Error("加载待转换任务失败", zap.Error(err), response.SentinelField(err))
 	}
 
 	s.logger.Info("FFmpeg转换服务启动成功")
@@ -223,7 +224,7 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 	// 加载任务
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
-		s.logger.Error("加载任务失败", zap.Uint("task_id", taskID), zap.Error(err))
+		s.logger.Error("加载任务失败", zap.Uint("task_id", taskID), zap.Error(err), response.SentinelField(err))
 		return
 	}
 
@@ -279,6 +280,7 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 			s.logger.Error("创建MP4文件记录失败",
 				zap.Uint("task_id", taskID),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 		} else if videoFile != nil && videoFile.Duration > 0 {
 			// 更新录制时长（从视频文件元数据获取）
@@ -316,7 +318,7 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 			if err != nil {
 				// 只在非取消错误时记录警告
 				if scanCtx.Err() == nil {
-					s.logger.Warn("转换完成后自动扫描失败", zap.Error(err))
+					s.logger.Warn("转换完成后自动扫描失败", zap.Error(err), response.SentinelField(err))
 				}
 			} else {
 				s.logger.Info("转换完成后自动扫描成功", zap.Uint("task_id", taskID))
@@ -386,6 +388,7 @@ func (s *FFmpegConversionService) convertMKVToMP4(ctx context.Context, task *mod
 			zap.Error(err),
 			zap.String("stderr", stderr.String()),
 			zap.String("stdout", stdout.String()),
+			response.SentinelField(err),
 		)
 		return "", fmt.Errorf("FFmpeg转换失败: %w, stderr: %s", err, stderr.String())
 	}
@@ -424,6 +427,7 @@ func (s *FFmpegConversionService) handleConversionError(ctx context.Context, tas
 			zap.Uint("task_id", task.ID),
 			zap.Int("retry_count", task.ConversionRetryCount),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		return
 	}
@@ -436,6 +440,7 @@ func (s *FFmpegConversionService) handleConversionError(ctx context.Context, tas
 		zap.Int("retry_count", task.ConversionRetryCount),
 		zap.Duration("backoff", backoffDuration),
 		zap.Error(err),
+		response.SentinelField(err),
 	)
 
 	// 保存错误信息
