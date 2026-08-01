@@ -11,6 +11,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -76,7 +77,7 @@ func (s *PPTFileService) DeletePPTFile(ctx context.Context, id uint) (*models.PP
 			s.logger.Warn("Failed to delete PPT physical file",
 				zap.Uint("ppt_file_id", id),
 				zap.String("path", pptFile.FilePath),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 		}
 	}
 
@@ -86,7 +87,7 @@ func (s *PPTFileService) DeletePPTFile(ctx context.Context, id uint) (*models.PP
 			s.logger.Warn("Failed to delete slide cache",
 				zap.Uint("ppt_file_id", id),
 				zap.String("cache_path", pptFile.SlideCachePath),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 		}
 	}
 
@@ -187,7 +188,7 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 				zap.Uint("ppt_file_id", id),
 				zap.String("old_path", pptFile.FilePath),
 				zap.String("new_path", newFilePath),
-				zap.Error(err),
+				zap.Error(err), response.SentinelField(err),
 			)
 			return fmt.Errorf("重命名物理文件失败: %w", err)
 		}
@@ -205,7 +206,7 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 					zap.Uint("ppt_file_id", id),
 					zap.String("old_cache", pptFile.SlideCachePath),
 					zap.String("new_cache", newSlideCachePath),
-					zap.Error(err),
+					zap.Error(err), response.SentinelField(err),
 				)
 				// Don't fail on cache rename error - continue with DB update
 				newSlideCachePath = pptFile.SlideCachePath
@@ -221,13 +222,13 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 			// Rollback: try to revert physical file rename
 			s.logger.Error("更新数据库失败，尝试回滚文件重命名",
 				zap.Uint("ppt_file_id", id),
-				zap.Error(err),
+				zap.Error(err), response.SentinelField(err),
 			)
 			if rollbackErr := os.Rename(newFilePath, pptFile.FilePath); rollbackErr != nil {
 				s.logger.Error("回滚文件重命名失败",
 					zap.String("from", newFilePath),
 					zap.String("to", pptFile.FilePath),
-					zap.Error(rollbackErr),
+					zap.Error(rollbackErr), response.SentinelField(rollbackErr),
 				)
 			}
 			return fmt.Errorf("更新数据库记录失败: %w", err)

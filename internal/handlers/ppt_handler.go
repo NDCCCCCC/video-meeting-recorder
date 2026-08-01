@@ -117,8 +117,11 @@ func (h *PPThandler) GetSlides(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get slides",
 			zap.String("ppt_id", idStr),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "获取幻灯片失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "获取幻灯片失败")
 		return
 	}
 
@@ -152,7 +155,7 @@ func (h *PPThandler) ServeSlideImage(c *gin.Context) {
 			zap.String("ppt_id", idStr),
 			zap.String("resolution", resolution),
 			zap.String("filename", filename),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "幻灯片图片不存在"})
 		return
 	}
@@ -206,8 +209,11 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get PPTs for video",
 			zap.String("video_file_id", idStr),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "获取PPT列表失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "获取PPT列表失败")
 		return
 	}
 
@@ -286,7 +292,7 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 	// Read body for logging before binding (since binding consumes it)
 	bodyBytes, err := c.GetRawData()
 	if err != nil {
-		h.logger.Warn("Failed to read request body", zap.Error(err))
+		h.logger.Warn("Failed to read request body", zap.Error(err), response.SentinelField(err))
 		response.GinError(c, response.CodeInvalidRequest, "读取请求失败")
 		return
 	}
@@ -297,6 +303,7 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		h.logger.Warn("Merge request JSON parse failed",
 			zap.Error(err),
+			response.SentinelField(err),
 			zap.String("request_body", bodyStr))
 		response.GinError(c, response.CodeInvalidRequest, "无效的请求参数: "+err.Error())
 		return
@@ -366,8 +373,11 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 		h.logger.Error("Failed to merge slides",
 			zap.Uint("video_file_id", req.VideoFileID),
 			zap.Int("slide_count", len(req.Slides)),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "合并幻灯片失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "合并幻灯片失败")
 		return
 	}
 
@@ -443,8 +453,11 @@ func (h *PPThandler) DeletePPT(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to delete PPT file",
 			zap.String("ppt_id", idStr),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "删除PPT文件失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "删除PPT文件失败")
 		return
 	}
 
@@ -457,7 +470,7 @@ func (h *PPThandler) DeletePPT(c *gin.Context) {
 		OldData:    oldPPT,
 		NewData:    nil,
 	}); err != nil {
-		h.logger.Warn("Failed to record PPT delete change", zap.Error(err), zap.Uint("ppt_id", uint(id)))
+		h.logger.Warn("Failed to record PPT delete change", zap.Error(err), response.SentinelField(err), zap.Uint("ppt_id", uint(id)))
 	}
 
 	response.GinSuccess(c, gin.H{
@@ -528,21 +541,21 @@ func (h *PPThandler) RenamePPT(c *gin.Context) {
 		h.logger.Warn("重命名PPT文件失败",
 			zap.String("ppt_id", idStr),
 			zap.String("new_name", newName),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 
 		// STYLE-001 Phase 19 Wave 6：service 返回 BusinessError，handler 用统一 HandleError 映射。
 		if response.HandleError(c, err) {
 			return
 		}
 		// 未识别的兜底错误（理论不可达）
-		response.GinError(c, response.CodeInternalError, "重命名失败: "+err.Error())
+		response.GinError(c, response.CodeInternalError, "重命名失败")
 		return
 	}
 
 	// Get updated PPT file info
 	pptFile, err = h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err))
+		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err), response.SentinelField(err))
 		response.GinSuccess(c, gin.H{
 			"message": "重命名成功",
 		})
@@ -597,8 +610,11 @@ func (h *PPThandler) DetectDuplicatesHandler(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to detect duplicate slides",
 			zap.String("ppt_id", idStr),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "检测重复幻灯片失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "检测重复幻灯片失败")
 		return
 	}
 
@@ -664,25 +680,22 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 		h.logger.Error("Failed to delete slides",
 			zap.String("ppt_id", idStr),
 			zap.Ints("slide_numbers", req.Slides),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 
-		// Map error messages
-		errMsg := err.Error()
-		switch {
-		case errMsg == "cannot delete all slides":
-			response.GinError(c, response.CodeInvalidRequest, "不能删除所有幻灯片")
-		case errMsg == "no backup exists for rollback":
-			response.GinError(c, response.CodeInternalError, "无法创建备份")
-		default:
-			response.GinError(c, response.CodeInternalError, "删除幻灯片失败: "+err.Error())
+		// Phase 20: service returns %w-wrapped sentinels (ErrInvalidInput 等);
+		// 之前的字符串匹配 (errMsg == "cannot delete all slides") 已收口 — HandleError
+		// 根据 mapping.go 自动决定 400/500 状态码。
+		if response.HandleError(c, err) {
+			return
 		}
+		response.GinError(c, response.CodeInternalError, "删除幻灯片失败")
 		return
 	}
 
 	// Get updated PPT file info (service returned new state too, but reload to capture latest committed state)
 	updatedPPT, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
+		h.logger.Error("Failed to get updated PPT file", zap.Error(err), response.SentinelField(err))
 		response.GinSuccess(c, gin.H{
 			"message":        "幻灯片删除成功",
 			"deleted_slides": req.Slides,
@@ -699,7 +712,7 @@ func (h *PPThandler) DeleteSlidesHandler(c *gin.Context) {
 		OldData:    oldPPT,
 		NewData:    updatedPPT,
 	}); err != nil {
-		h.logger.Warn("Failed to record PPT delete slides change", zap.Error(err), zap.Uint("ppt_id", updatedPPT.ID))
+		h.logger.Warn("Failed to record PPT delete slides change", zap.Error(err), response.SentinelField(err), zap.Uint("ppt_id", updatedPPT.ID))
 	}
 
 	// Parse deleted slides for response
@@ -746,15 +759,18 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to rollback PPT",
 			zap.String("ppt_id", idStr),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "回滚失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "回滚失败")
 		return
 	}
 
 	// Get updated PPT file info
 	updatedPPT, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
+		h.logger.Error("Failed to get updated PPT file", zap.Error(err), response.SentinelField(err))
 		response.GinSuccess(c, gin.H{
 			"message":  "回滚成功",
 			"restored": true,
@@ -771,7 +787,7 @@ func (h *PPThandler) RollbackHandler(c *gin.Context) {
 		OldData:    oldPPT,
 		NewData:    updatedPPT,
 	}); err != nil {
-		h.logger.Warn("Failed to record PPT rollback change", zap.Error(err), zap.Uint("ppt_id", updatedPPT.ID))
+		h.logger.Warn("Failed to record PPT rollback change", zap.Error(err), response.SentinelField(err), zap.Uint("ppt_id", updatedPPT.ID))
 	}
 
 	response.GinSuccess(c, gin.H{
@@ -833,8 +849,11 @@ func (h *PPThandler) CaptureFrameHandler(c *gin.Context) {
 		h.logger.Error("Failed to capture frame",
 			zap.String("ppt_id", idStr),
 			zap.Float64("timestamp", req.Timestamp),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "捕获帧失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "捕获帧失败")
 		return
 	}
 
@@ -906,25 +925,21 @@ func (h *PPThandler) InsertSlideHandler(c *gin.Context) {
 		h.logger.Error("Failed to insert slide",
 			zap.String("ppt_id", idStr),
 			zap.Int("insert_position", req.InsertPosition),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 
-		// Map error messages
-		errMsg := err.Error()
-		switch {
-		case errMsg == "frame bytes cannot be empty":
-			response.GinError(c, response.CodeInvalidRequest, "帧数据不能为空")
-		case strings.Contains(errMsg, "frame bytes too large"):
-			response.GinError(c, response.CodeInvalidRequest, "帧数据过大")
-		default:
-			response.GinError(c, response.CodeInternalError, "插入幻灯片失败: "+err.Error())
+		// Phase 20: service 现在用 %w 包装 ErrInvalidInput; HandleError 通过 mapping.go
+		// 自动映射 "frame bytes cannot be empty" / "frame bytes too large" 等为 400。
+		if response.HandleError(c, err) {
+			return
 		}
+		response.GinError(c, response.CodeInternalError, "插入幻灯片失败")
 		return
 	}
 
 	// Get updated PPT file info
 	updatedPPT, err := h.pptFileService.GetPPTFileByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("Failed to get updated PPT file", zap.Error(err))
+		h.logger.Error("Failed to get updated PPT file", zap.Error(err), response.SentinelField(err))
 		response.GinSuccess(c, gin.H{
 			"success":               true,
 			"page_count":            pptFile.PageCount + 1,
@@ -990,8 +1005,11 @@ func (h *PPThandler) CapturedPreviewHandler(c *gin.Context) {
 		h.logger.Error("Failed to capture preview frame",
 			zap.String("ppt_id", idStr),
 			zap.Float64("timestamp", timestamp),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "捕获预览帧失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "捕获预览帧失败")
 		return
 	}
 
@@ -1072,8 +1090,11 @@ func (h *PPThandler) ReorderSlidesHandler(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to reorder slides",
 			zap.String("ppt_id", idStr),
-			zap.Error(err))
-		response.GinError(c, response.CodeInternalError, "重排序幻灯片失败: "+err.Error())
+			zap.Error(err), response.SentinelField(err))
+		if response.HandleError(c, err) {
+			return
+		}
+		response.GinError(c, response.CodeInternalError, "重排序幻灯片失败")
 		return
 	}
 
@@ -1086,7 +1107,7 @@ func (h *PPThandler) ReorderSlidesHandler(c *gin.Context) {
 		OldData:    oldPPT,
 		NewData:    newPPT,
 	}); err != nil {
-		h.logger.Warn("Failed to record PPT reorder slides change", zap.Error(err), zap.Uint("ppt_id", uint(id)))
+		h.logger.Warn("Failed to record PPT reorder slides change", zap.Error(err), response.SentinelField(err), zap.Uint("ppt_id", uint(id)))
 	}
 
 	// NOTE: Don't invalidate cache after reordering!

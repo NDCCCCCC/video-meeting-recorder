@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -100,7 +102,7 @@ func (s *PPTEditorService) DetectDuplicateSlides(ctx context.Context, pptFileID 
 		if err != nil {
 			s.logger.Warn("Failed to get slide image path",
 				zap.Int("slide_number", slide.SlideNumber),
-				zap.Error(err))
+				zap.Error(err), response.SentinelField(err))
 			continue
 		}
 		images[i] = slideImage{Number: slide.SlideNumber, Path: path}
@@ -115,7 +117,7 @@ func (s *PPTEditorService) DetectDuplicateSlides(ctx context.Context, pptFileID 
 			if err != nil {
 				s.logger.Warn("Failed to load slide image",
 					zap.Int("slide_number", images[i].Number),
-					zap.Error(err))
+					zap.Error(err), response.SentinelField(err))
 				continue
 			}
 
@@ -123,7 +125,7 @@ func (s *PPTEditorService) DetectDuplicateSlides(ctx context.Context, pptFileID 
 			if err != nil {
 				s.logger.Warn("Failed to load slide image",
 					zap.Int("slide_number", images[j].Number),
-					zap.Error(err))
+					zap.Error(err), response.SentinelField(err))
 				continue
 			}
 
@@ -133,7 +135,7 @@ func (s *PPTEditorService) DetectDuplicateSlides(ctx context.Context, pptFileID 
 				s.logger.Warn("Failed to compare slides",
 					zap.Int("slide1", images[i].Number),
 					zap.Int("slide2", images[j].Number),
-					zap.Error(err))
+					zap.Error(err), response.SentinelField(err))
 				continue
 			}
 
@@ -318,7 +320,7 @@ func (s *PPTEditorService) DeleteSlides(ctx context.Context, pptFileID uint, sli
 
 	// Check if trying to delete all slides
 	if len(slideNumbers) >= pptFile.PageCount {
-		return nil, nil, fmt.Errorf("cannot delete all slides")
+		return nil, nil, fmt.Errorf("cannot delete all slides: %w", apperrors.ErrInvalidInput)
 	}
 
 	// Get all slides
@@ -365,7 +367,7 @@ func (s *PPTEditorService) DeleteSlides(ctx context.Context, pptFileID uint, sli
 
 	// Invalidate slide cache
 	if err := s.slideCache.InvalidateCache(ctx, pptFileID); err != nil {
-		s.logger.Warn("Failed to invalidate slide cache", zap.Error(err))
+		s.logger.Warn("Failed to invalidate slide cache", zap.Error(err), response.SentinelField(err))
 	}
 
 	// Update database record
@@ -430,7 +432,7 @@ func (s *PPTEditorService) Rollback(ctx context.Context, pptFileID uint) (*model
 	}
 
 	if !pptFile.HasBackup() {
-		return nil, nil, fmt.Errorf("no backup exists for rollback")
+		return nil, nil, fmt.Errorf("no backup exists for rollback: %w", apperrors.ErrInvalidInput)
 	}
 
 	// Snapshot before backup copy / cache invalidation / DB writes for audit OldData capture
@@ -443,13 +445,13 @@ func (s *PPTEditorService) Rollback(ctx context.Context, pptFileID uint) (*model
 
 	// Invalidate cache
 	if err := s.slideCache.InvalidateCache(ctx, pptFileID); err != nil {
-		s.logger.Warn("Failed to invalidate cache after rollback", zap.Error(err))
+		s.logger.Warn("Failed to invalidate cache after rollback", zap.Error(err), response.SentinelField(err))
 	}
 
 	// Get original page count from backup
 	originalCount, err := s.getSlideCountFromPPTX(pptFile.BackupPath)
 	if err != nil {
-		s.logger.Warn("Failed to get original slide count", zap.Error(err))
+		s.logger.Warn("Failed to get original slide count", zap.Error(err), response.SentinelField(err))
 		originalCount = pptFile.PageCount
 	}
 
@@ -577,20 +579,20 @@ func (s *PPTEditorService) InsertCapturedFrame(ctx context.Context, pptFileID ui
 
 	// WR-06: Check for overflow before validation
 	if pptFile.PageCount == 2147483647 { // math.MaxInt32
-		return fmt.Errorf("cannot insert slide: maximum page count reached")
+		return fmt.Errorf("cannot insert slide: maximum page count reached: %w", apperrors.ErrInvalidInput)
 	}
 
 	// Validate insert position
 	if insertPosition < 1 || insertPosition > pptFile.PageCount+1 {
-		return fmt.Errorf("invalid insert position: %d (valid range: 1-%d)", insertPosition, pptFile.PageCount+1)
+		return fmt.Errorf("invalid insert position: %d (valid range: 1-%d): %w", insertPosition, pptFile.PageCount+1, apperrors.ErrInvalidInput)
 	}
 
 	// Validate frame bytes
 	if len(frameBytes) == 0 {
-		return fmt.Errorf("frame bytes cannot be empty")
+		return fmt.Errorf("frame bytes cannot be empty: %w", apperrors.ErrInvalidInput)
 	}
 	if len(frameBytes) > 10*1024*1024 { // 10MB limit (T-06-17 mitigation)
-		return fmt.Errorf("frame bytes too large: %d bytes (max 10MB)", len(frameBytes))
+		return fmt.Errorf("frame bytes too large: %d bytes (max 10MB): %w", len(frameBytes), apperrors.ErrInvalidInput)
 	}
 
 	// Get all existing slides
@@ -655,7 +657,7 @@ func (s *PPTEditorService) InsertCapturedFrame(ctx context.Context, pptFileID ui
 
 	// Invalidate slide cache
 	if err := s.slideCache.InvalidateCache(ctx, pptFileID); err != nil {
-		s.logger.Warn("Failed to invalidate slide cache", zap.Error(err))
+		s.logger.Warn("Failed to invalidate slide cache", zap.Error(err), response.SentinelField(err))
 	}
 
 	// Invalidate timestamp cache as well (CR-02 fix)
@@ -741,7 +743,7 @@ func (s *PPTEditorService) SaveCapturedFrame(pptFileID uint, frameBytes []byte, 
 		if os.IsNotExist(err) || os.IsPermission(err) {
 			return "", fmt.Errorf("failed to generate thumbnail: %w", err)
 		}
-		s.logger.Warn("Failed to generate thumbnail", zap.Error(err))
+		s.logger.Warn("Failed to generate thumbnail", zap.Error(err), response.SentinelField(err))
 		// Continue for decode errors (non-critical)
 	}
 
@@ -877,10 +879,10 @@ func (s *PPTEditorService) ReorderSlides(ctx context.Context, pptFileID uint, ne
 		dstThumbnail := filepath.Join(backupDir, fmt.Sprintf("slide_%03d_thumbnail.jpg", slide.SlideNumber))
 
 		if err := copyFile(srcFullsize, dstFullsize); err != nil {
-			s.logger.Warn("Failed to backup fullsize slide", zap.Error(err))
+			s.logger.Warn("Failed to backup fullsize slide", zap.Error(err), response.SentinelField(err))
 		}
 		if err := copyFile(srcThumbnail, dstThumbnail); err != nil {
-			s.logger.Warn("Failed to backup thumbnail slide", zap.Error(err))
+			s.logger.Warn("Failed to backup thumbnail slide", zap.Error(err), response.SentinelField(err))
 		}
 	}
 
