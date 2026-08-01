@@ -64,6 +64,7 @@ func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
 		errors.Is(err, ErrSystemAdminProtected),
 		errors.Is(err, ErrSystemRoleProtected),
 		errors.Is(err, ErrUserDisabled),
+		errors.Is(err, ErrADUserNotRegistered),
 		errors.Is(err, ErrAPIKeyDisabled),
 		errors.Is(err, ErrAPIKeyIPNotAllowed):
 		return http.StatusForbidden, respCodeForbidden, "禁止访问"
@@ -179,6 +180,7 @@ var knownSentinels = []struct {
 	{"ErrSystemAdminProtected", ErrSystemAdminProtected},
 	{"ErrSystemRoleProtected", ErrSystemRoleProtected},
 	{"ErrUserDisabled", ErrUserDisabled},
+	{"ErrADUserNotRegistered", ErrADUserNotRegistered},
 	{"ErrAPIKeyDisabled", ErrAPIKeyDisabled},
 	{"ErrAPIKeyIPNotAllowed", ErrAPIKeyIPNotAllowed},
 	{"ErrTokenInvalid", ErrTokenInvalid},

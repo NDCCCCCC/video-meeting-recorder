@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/go-ldap/ldap/v3"
@@ -16,15 +16,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrADUserNotRegistered is the sentinel error returned when an AD-authenticated
-// user is not present in the local user table and auto-create is disabled.
-// Callers can use errors.Is to map this to a 403 response (whitelist policy).
-var ErrADUserNotRegistered = errors.New("账号未在系统中注册，请联系管理员添加")
-
 // IsADUserNotRegistered reports whether err originates from the
 // "AD user not registered, auto-create disabled" branch.
+//
+// The sentinel now lives in internal/errors (Phase 20 R-3 migration) so the
+// mapping.go pipeline can recognize the error in 403-handling without
+// importing the auth package. This wrapper remains for callers that still
+// use the auth-package helper (e.g. legacy classifyAuthLoginError). It will
+// be removed once the Login handler is migrated to HandleError in 20-02.
 func IsADUserNotRegistered(err error) bool {
-	return errors.Is(err, ErrADUserNotRegistered)
+	return errors.Is(err, apperrors.ErrADUserNotRegistered)
 }
 
 // ADAuthenticator AD域控认证器
@@ -256,7 +257,7 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 		a.logger.Warn("AD user not found in system and auto-create is disabled",
 			zap.String("username", adUser.Username))
 		// Return sentinel so handler can map to HTTP 403 (whitelist policy)
-		return nil, ErrADUserNotRegistered
+		return nil, apperrors.ErrADUserNotRegistered
 	}
 
 	// Auto-create is allowed, proceed with user creation

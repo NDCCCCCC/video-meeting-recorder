@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/go-ldap/ldap/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -206,15 +207,16 @@ func TestADUser_IsDisabled(t *testing.T) {
 
 // TestErrADUserNotRegistered_Sentinel verifies the sentinel error is detected
 // by IsADUserNotRegistered so the HTTP handler can map it to 403 (whitelist policy).
+// The sentinel itself was migrated to internal/errors in Phase 20 R-3.
 func TestErrADUserNotRegistered_Sentinel(t *testing.T) {
 	t.Run("direct sentinel matches", func(t *testing.T) {
-		err := ErrADUserNotRegistered
+		err := apperrors.ErrADUserNotRegistered
 		assert.True(t, IsADUserNotRegistered(err), "IsADUserNotRegistered must recognize sentinel")
-		assert.True(t, errors.Is(err, ErrADUserNotRegistered))
+		assert.True(t, errors.Is(err, apperrors.ErrADUserNotRegistered))
 	})
 
 	t.Run("wrapped sentinel matches", func(t *testing.T) {
-		err := fmt.Errorf("wrap: %w", ErrADUserNotRegistered)
+		err := fmt.Errorf("wrap: %w", apperrors.ErrADUserNotRegistered)
 		assert.True(t, IsADUserNotRegistered(err), "IsADUserNotRegistered must recognize wrapped sentinel")
 	})
 

@@ -33,20 +33,25 @@ var (
 
 	// 用户/角色管理 sentinels（Phase 19 D5）：user_service 高频错误路径统一化。
 	// handler 改用 response.HandleError 后，这些 sentinel 决定 HTTP 状态码（404/409/403）。
-	ErrUserNotFound          = errors.New("user not found")
-	ErrUsernameExists        = errors.New("username already taken")
-	ErrEmailExists           = errors.New("email already in use")
-	ErrRoleNotFound          = errors.New("role not found")
-	ErrSystemAdminProtected  = errors.New("system admin protected from modification")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrUsernameExists       = errors.New("username already taken")
+	ErrEmailExists          = errors.New("email already in use")
+	ErrRoleNotFound         = errors.New("role not found")
+	ErrSystemAdminProtected = errors.New("system admin protected from modification")
 
 	// 认证 sentinels（Phase 19 D6）：ad_auth + local_auth Login 路径统一化。
 	// ad_auth 与 local_auth 共享 auth_handler.go 的 classifyAuthLoginError 入口；mapping
 	// 后端以 sentinel 形式覆盖所有 Login 错误模式。Auth 路径的密码错统一映射 401 Unauthorized，
 	// 已存在 ErrUnauthorized sentinel 直接复用，AD 账号不存在映射 404，被禁用映射 403。
-	ErrADAccountNotFound     = errors.New("AD account not found")
-	ErrUserDisabled          = errors.New("user disabled")
-	ErrADConfigError         = errors.New("AD configuration error")
-	ErrADUnreachable         = errors.New("AD server unreachable")
+	ErrADAccountNotFound = errors.New("AD account not found")
+	ErrUserDisabled      = errors.New("user disabled")
+	ErrADConfigError     = errors.New("AD configuration error")
+	ErrADUnreachable     = errors.New("AD server unreachable")
+	// ErrADUserNotRegistered is returned when an AD-authenticated user is not
+	// present in the local user table and auto-create is disabled. Mapped to
+	// 403 (Phase 20 R-3 migration) so the auth login path can route through
+	// HandleError without falling through to a 500 ad-hoc response.
+	ErrADUserNotRegistered = errors.New("账号未在系统中注册，请联系管理员添加")
 
 	// Token sentinels（Phase 19 D7）：sm4_token.go 高频 token 校验路径统一化。
 	// middleware/auth.go 调 SM4TokenService.ValidateToken 时返回 sentinel；
@@ -61,19 +66,19 @@ var (
 	// Role sentinels（Phase 19 D9）：role_service admin 路径统一化。
 	// 与 D5/D6/D7 sentinel 设计对齐——ErrRoleNotFound (D5) 已在 404 case，
 	// 在此补充 role 特有状态。role_service 9 散点全部 sentinel 化。
-	ErrRoleNameExists        = errors.New("role name already exists")
-	ErrSystemRoleProtected   = errors.New("system role protected from deletion")
-	ErrRoleInUse             = errors.New("role still in use by users")
-	ErrPermissionNotFound    = errors.New("permission not found")
+	ErrRoleNameExists      = errors.New("role name already exists")
+	ErrSystemRoleProtected = errors.New("system role protected from deletion")
+	ErrRoleInUse           = errors.New("role still in use by users")
+	ErrPermissionNotFound  = errors.New("permission not found")
 
 	// APIKey sentinels（Phase 19 D10）：apikey_service admin 路径统一化。
 	// apikey 验证路径（ValidateAPIKey）与 D7 token 校验类似——区分 NotFound / Invalid /
 	// Expired / Disabled / IP-Not-Allowed。错误经 IsKnownError 链调用方分支。
-	ErrAPIKeyNotFound       = errors.New("API key not found")
-	ErrAPIKeyInvalid        = errors.New("API key invalid")
-	ErrAPIKeyExpired        = errors.New("API key expired")
-	ErrAPIKeyDisabled       = errors.New("API key disabled")
-	ErrAPIKeyIPNotAllowed   = errors.New("API key IP not allowed")
+	ErrAPIKeyNotFound     = errors.New("API key not found")
+	ErrAPIKeyInvalid      = errors.New("API key invalid")
+	ErrAPIKeyExpired      = errors.New("API key expired")
+	ErrAPIKeyDisabled     = errors.New("API key disabled")
+	ErrAPIKeyIPNotAllowed = errors.New("API key IP not allowed")
 
 	// PPT file sentinels（Phase 19 D13）：ppt_file_service.go admin 与 handler 路径统一化。
 	// ppt_file_service.go 仅 1 个 "PPT文件不存在" 适合 sentinel；其他内部错已用 %w
