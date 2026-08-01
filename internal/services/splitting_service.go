@@ -13,6 +13,7 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -96,6 +97,7 @@ func (s *SplittingService) SubmitSplit(ctx context.Context, videoFileID uint, ma
 			zap.Uint("video_file_id", videoFileID),
 			zap.Uint("user_id", createdBy),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		return fmt.Errorf("清理旧分割段失败: %w", err)
 	}
@@ -161,7 +163,7 @@ func (s *SplittingService) processSplit(ctx context.Context, task *SplitTask) {
 	// 1. Load source video file
 	var sourceFile models.VideoFile
 	if err := s.db.WithContext(ctx).First(&sourceFile, task.VideoFileID).Error; err != nil {
-		s.logger.Error("源视频文件不存在", zap.Uint("video_file_id", task.VideoFileID), zap.Error(err))
+		s.logger.Error("源视频文件不存在", zap.Uint("video_file_id", task.VideoFileID), zap.Error(err), response.SentinelField(err))
 		s.statusMu.Lock()
 		s.statusMap[task.VideoFileID] = "failed"
 		s.statusMu.Unlock()
@@ -171,7 +173,7 @@ func (s *SplittingService) processSplit(ctx context.Context, task *SplitTask) {
 	// 2. Create output directory
 	outputDir := filepath.Join(filepath.Dir(sourceFile.FilePath), "segments")
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		s.logger.Error("创建输出目录失败", zap.Error(err))
+		s.logger.Error("创建输出目录失败", zap.Error(err), response.SentinelField(err))
 		s.statusMu.Lock()
 		s.statusMap[task.VideoFileID] = "failed"
 		s.statusMu.Unlock()
@@ -243,6 +245,7 @@ func (s *SplittingService) processSplit(ctx context.Context, task *SplitTask) {
 				zap.String("output", outputPath),
 				zap.Error(err),
 				zap.String("stderr", stderrBuf.String()),
+				response.SentinelField(err),
 			)
 			continue
 		}
@@ -255,7 +258,7 @@ func (s *SplittingService) processSplit(ctx context.Context, task *SplitTask) {
 	for _, segPath := range createdFiles {
 		segmentFile, err := s.videoFileService.CreateSegmentFile(s.ctx, segPath, &parentID, models.SourceTypeSplit, task.CreatedBy)
 		if err != nil {
-			s.logger.Error("注册分割段文件失败", zap.String("path", segPath), zap.Error(err))
+			s.logger.Error("注册分割段文件失败", zap.String("path", segPath), zap.Error(err), response.SentinelField(err))
 			continue
 		}
 		s.logger.Info("分割段文件已注册", zap.Uint("segment_id", segmentFile.ID), zap.String("path", segPath))
