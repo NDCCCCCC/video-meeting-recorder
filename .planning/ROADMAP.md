@@ -52,7 +52,7 @@
 | 17. 后端代码审查 56 发现修复 P0/P1/P2 | v1.1 | 4/4 | Complete | 2026-07-30 |
 | 18. 凭据静态加密 + 密钥轮换 (SEC-003b) | v1.1 | 1/1 | Complete | 2026-07-31 |
 | 19. ctx 全量级联 + SEC-004 replay + STYLE-001 error | v1.1 | 4/4 | Complete | 2026-07-31 |
-| 20. 错误处理统一收敛 + sentinel 体系增强 | v1.1 | 1/5 | In Progress|  |
+| 20. 错误处理统一收敛 + sentinel 体系增强 | v1.1 | 2/5 | In Progress|  |
 
 ## Backlog
 
@@ -154,7 +154,7 @@ Plans:
 **Goal:** 在 Phase 19（D18-D21 完成 24 个 sentinel 散点统一 + ~356 散点收敛）的基础上进一步深化错误处理体系：handler 层移除 ad-hoc classify 函数全部走 HandleError；zap logger 集成 errors.Is 链并输出 sentinel_type 字段；自动生成 sentinel 文档；引入 typed error kind 字段区分 Sentinel / BusinessError / ad-hoc。
 **Requirements**: D-22 候选清单（1）handler 错误处理统一收敛（移除 classify 函数，全部走 HandleError） / （2）zap logger 集成 errors.Is 链输出 sentinel_type 字段 / （3）自动生成 sentinel 文档 / （4）typed error kind 字段区分（Sentinel vs BusinessError vs ad-hoc）
 **Depends on:** Phase 19
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 
@@ -164,7 +164,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 — handler classify convergence)*
 
-- [ ] 20-02-PLAN.md — 4 heavy handlers (ppt/video_recording_task/auth/input_config) + classifyAuthLoginError delete + ppt_file_service %w wrapping + table-driven tests
+- [x] 20-02-PLAN.md — 4 heavy handlers (ppt/video_recording_task/auth/input_config) + classifyAuthLoginError delete + ppt_file_service %w wrapping + table-driven tests
 - [ ] 20-03-PLAN.md — 8 light handlers (file/video_file/admin/user/transcription/split/role/apikey) + table-driven tests  [parallel with 20-02, no file overlap]
 
 **Wave 3** *(blocked on Wave 2 — service zap upgrade + docs generator)*
