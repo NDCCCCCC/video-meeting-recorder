@@ -16,6 +16,7 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -309,7 +310,7 @@ func (s *VideoFileService) DeleteFile(ctx context.Context, id uint) (*models.Vid
 	})
 
 	if err != nil {
-		s.logger.Error("删除数据库记录失败", zap.Uint("file_id", id), zap.Error(err))
+		s.logger.Error("删除数据库记录失败", zap.Uint("file_id", id), zap.Error(err), response.SentinelField(err))
 		return nil, err
 	}
 
@@ -322,6 +323,7 @@ func (s *VideoFileService) DeleteFile(ctx context.Context, id uint) (*models.Vid
 		s.logger.Warn("删除 recordings 目录失败",
 			zap.String("dir", recordingsDir),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 	}
 
@@ -332,6 +334,7 @@ func (s *VideoFileService) DeleteFile(ctx context.Context, id uint) (*models.Vid
 			s.logger.Warn("删除 HLS 目录失败",
 				zap.String("dir", hlsDir),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 		}
 	}
@@ -454,7 +457,7 @@ func (s *VideoFileService) deleteOrphanFile(ctx context.Context, file *models.Vi
 	})
 
 	if err != nil {
-		s.logger.Error("删除孤立文件数据库记录失败", zap.Uint("file_id", file.ID), zap.Error(err))
+		s.logger.Error("删除孤立文件数据库记录失败", zap.Uint("file_id", file.ID), zap.Error(err), response.SentinelField(err))
 		return err
 	}
 
@@ -464,6 +467,7 @@ func (s *VideoFileService) deleteOrphanFile(ctx context.Context, file *models.Vi
 			zap.Uint("file_id", file.ID),
 			zap.String("file_path", file.FilePath),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 	}
 
@@ -488,7 +492,7 @@ func (s *VideoFileService) deleteByTaskID(ctx context.Context, taskID uint) erro
 	})
 
 	if err != nil {
-		s.logger.Error("删除数据库记录失败", zap.Uint("task_id", taskID), zap.Error(err))
+		s.logger.Error("删除数据库记录失败", zap.Uint("task_id", taskID), zap.Error(err), response.SentinelField(err))
 		return err
 	}
 
@@ -501,6 +505,7 @@ func (s *VideoFileService) deleteByTaskID(ctx context.Context, taskID uint) erro
 		s.logger.Warn("删除 recordings 目录失败",
 			zap.String("dir", recordingsDir),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 	}
 
@@ -511,6 +516,7 @@ func (s *VideoFileService) deleteByTaskID(ctx context.Context, taskID uint) erro
 			s.logger.Warn("删除 HLS 目录失败",
 				zap.String("dir", hlsDir),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 		}
 	}
@@ -574,6 +580,7 @@ func (s *VideoFileService) deleteCounterpartFile(ctx context.Context, file *mode
 			zap.Uint("counterpart_id", file.ID),
 			zap.String("counterpart_path", file.FilePath),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 	}
 
@@ -581,6 +588,7 @@ func (s *VideoFileService) deleteCounterpartFile(ctx context.Context, file *mode
 		s.logger.Warn("删除对应格式数据库记录失败",
 			zap.Uint("counterpart_id", file.ID),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 	} else {
 		s.logger.Info("已删除对应格式文件",
@@ -672,6 +680,7 @@ func (s *VideoFileService) extractVideoMetadata(filePath string) (*videoMetadata
 		s.logger.Warn("ffprobe 执行失败，使用默认元数据",
 			zap.String("file", filePath),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		return metadata, nil
 	}
@@ -852,6 +861,7 @@ func (s *VideoFileService) createNewFile(ctx context.Context, filePath string, t
 		s.logger.Warn("提取视频元数据失败",
 			zap.String("file", filePath),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		metadata = &videoMetadata{
 			Format:     format,
@@ -908,6 +918,7 @@ func (s *VideoFileService) createNewFile(ctx context.Context, filePath string, t
 				s.logger.Error("外键约束失败：任务存在但仍创建失败",
 					zap.Uint("task_id", *taskID),
 					zap.Error(err),
+					response.SentinelField(err),
 				)
 			}
 		}
@@ -1010,7 +1021,7 @@ func (s *VideoFileService) CreateSegmentFile(ctx context.Context, segmentPath st
 	// 3. 提取元数据（使用现有方法）
 	metadata, err := s.extractVideoMetadata(segmentPath)
 	if err != nil {
-		s.logger.Warn("提取视频元数据失败，使用默认值", zap.Error(err))
+		s.logger.Warn("提取视频元数据失败，使用默认值", zap.Error(err), response.SentinelField(err))
 		metadata = s.getDefaultMetadata(segmentPath)
 	}
 
@@ -1094,7 +1105,7 @@ func (s *VideoFileService) ScanFiles(ctx context.Context) (*ScanResult, error) {
 	for _, scanConfig := range scanPaths {
 		files, err := s.findVideoFiles(scanConfig.path, scanConfig.sourceType)
 		if err != nil {
-			s.logger.Warn("扫描目录失败", zap.String("directory", scanConfig.path), zap.Error(err))
+			s.logger.Warn("扫描目录失败", zap.String("directory", scanConfig.path), zap.Error(err), response.SentinelField(err))
 			continue
 		}
 		allFiles = append(allFiles, files...)
@@ -1243,6 +1254,7 @@ func (s *VideoFileService) handleExistingFile(ctx context.Context, file fileInfo
 		s.logger.Warn("提取视频元数据失败",
 			zap.String("file", file.filePath),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 	} else {
 		// 获取文件大小
@@ -1287,6 +1299,7 @@ func (s *VideoFileService) handleExistingFile(ctx context.Context, file fileInfo
 				s.logger.Error("更新文件元数据失败",
 					zap.Uint("file_id", existingFile.ID),
 					zap.Error(err),
+					response.SentinelField(err),
 				)
 			} else {
 				s.logger.Info("更新文件元数据",
@@ -1410,6 +1423,7 @@ func (s *VideoFileService) RenameVideoFile(ctx context.Context, id uint, newName
 				zap.String("old_path", videoFile.FilePath),
 				zap.String("new_path", newFilePath),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 			return fmt.Errorf("重命名物理文件失败: %w", err)
 		}
@@ -1423,6 +1437,7 @@ func (s *VideoFileService) RenameVideoFile(ctx context.Context, id uint, newName
 			s.logger.Error("更新数据库失败，尝试回滚文件重命名",
 				zap.Uint("file_id", id),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 			if rollbackErr := os.Rename(newFilePath, videoFile.FilePath); rollbackErr != nil {
 				s.logger.Error("回滚文件重命名失败",
@@ -1505,6 +1520,7 @@ func (s *VideoFileService) DeleteSplitSegmentsByParentID(ctx context.Context, pa
 							zap.Uint("segment_id", segment.ID),
 							zap.String("path", segment.FilePath),
 							zap.Error(err),
+							response.SentinelField(err),
 						)
 					}
 					// Continue with DB deletion even if physical file is missing
@@ -1519,6 +1535,7 @@ func (s *VideoFileService) DeleteSplitSegmentsByParentID(ctx context.Context, pa
 							zap.Uint("segment_id", segment.ID),
 							zap.String("thumbnail_path", *segment.ThumbnailPath),
 							zap.Error(err),
+							response.SentinelField(err),
 						)
 					}
 				}
@@ -1620,6 +1637,7 @@ func (s *VideoFileService) BatchDownloadFiles(ctx context.Context, ids []uint, u
 				s.logger.Warn("添加文件到ZIP失败",
 					zap.Uint("file_id", file.ID),
 					zap.Error(err),
+					response.SentinelField(err),
 				)
 			}
 		}
