@@ -8,6 +8,7 @@ import (
 	"time"
 
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 )
 
@@ -173,7 +174,7 @@ func (m *Manager) removeClient(ctx context.Context, configID uint) {
 
 	if exists {
 		if err := client.Logout(ctx); err != nil {
-			m.logger.Warn("登出华为客户端失败", zap.Uint("config_id", configID), zap.Error(err))
+			m.logger.Warn("登出华为客户端失败", zap.Uint("config_id", configID), zap.Error(err), response.SentinelField(err))
 		}
 	}
 }
@@ -190,6 +191,7 @@ func (m *Manager) Close(ctx context.Context) error {
 			m.logger.Error("关闭华为客户端失败",
 				zap.Uint("config_id", configID),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 		}
 	}
@@ -264,7 +266,7 @@ func (m *Manager) SafeCallConference(ctx context.Context, configID uint, req *Ca
 	if status.Status == "in_call" {
 		m.logger.Info("终端正在通话，先挂断", zap.String("terminal_number", req.TerminalNumber))
 		if err := client.HangupCall(ctx); err != nil {
-			m.logger.Warn("挂断残留连接失败，继续尝试呼叫", zap.Error(err))
+			m.logger.Warn("挂断残留连接失败，继续尝试呼叫", zap.Error(err), response.SentinelField(err))
 		}
 		timer := time.NewTimer(time.Second)
 		defer timer.Stop()
@@ -314,7 +316,7 @@ func (m *Manager) WaitForConnection(ctx context.Context, configID uint, conferen
 		case <-ticker.C:
 			client, err := m.GetClient(ctx, configID)
 			if err != nil {
-				m.logger.Warn("获取客户端失败，继续等待", zap.Error(err))
+				m.logger.Warn("获取客户端失败，继续等待", zap.Error(err), response.SentinelField(err))
 				continue
 			}
 
@@ -328,6 +330,7 @@ func (m *Manager) WaitForConnection(ctx context.Context, configID uint, conferen
 				m.logger.Warn("获取会议信息失败，继续等待",
 					zap.Error(err),
 					zap.Int("retry", retryCount),
+					response.SentinelField(err),
 				)
 				continue
 			}

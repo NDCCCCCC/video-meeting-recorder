@@ -14,6 +14,7 @@ import (
 	"time"
 
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 )
 
@@ -648,10 +649,10 @@ func (c *HuaweiClient) StartKeepAlive(ctx context.Context) {
 				return
 			case <-ticker.C:
 				if _, err := c.GetMailboxData(keepAliveCtx); err != nil {
-					c.logger.Error("会话保活失败", zap.Error(err))
+					c.logger.Error("会话保活失败", zap.Error(err), response.SentinelField(err))
 					// 保活失败，尝试重新初始化
 					if err := c.InitializeAndStartKeepAlive(keepAliveCtx); err != nil {
-						c.logger.Error("重新初始化失败", zap.Error(err))
+						c.logger.Error("重新初始化失败", zap.Error(err), response.SentinelField(err))
 					}
 				}
 			}
