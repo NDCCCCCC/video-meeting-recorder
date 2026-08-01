@@ -128,6 +128,98 @@ func TestIsKnownError(t *testing.T) {
 	assert.False(t, IsKnownError(errors.New("std error")))
 }
 
+// TestFirstKnownSentinelName verifies stable identifier lookup, wrapping support,
+// slice-order priority, and the explicit exclusions consumed by logging helpers.
+func TestFirstKnownSentinelName(t *testing.T) {
+	sentinels := []struct {
+		name string
+		err  error
+	}{
+		{"ErrNotFound", ErrNotFound},
+		{"ErrTaskNotFound", ErrTaskNotFound},
+		{"ErrVideoFileNotFound", ErrVideoFileNotFound},
+		{"ErrUserNotFound", ErrUserNotFound},
+		{"ErrRoleNotFound", ErrRoleNotFound},
+		{"ErrADAccountNotFound", ErrADAccountNotFound},
+		{"ErrPermissionNotFound", ErrPermissionNotFound},
+		{"ErrAPIKeyNotFound", ErrAPIKeyNotFound},
+		{"ErrPPTFileNotFound", ErrPPTFileNotFound},
+		{"ErrUnauthorized", ErrUnauthorized},
+		{"ErrForbidden", ErrForbidden},
+		{"ErrInvalidInput", ErrInvalidInput},
+		{"ErrInvalidFileType", ErrInvalidFileType},
+		{"ErrAlreadyExists", ErrAlreadyExists},
+		{"ErrTaskInProgress", ErrTaskInProgress},
+		{"ErrUsernameExists", ErrUsernameExists},
+		{"ErrEmailExists", ErrEmailExists},
+		{"ErrRoleNameExists", ErrRoleNameExists},
+		{"ErrRoleInUse", ErrRoleInUse},
+		{"ErrSystemAdminProtected", ErrSystemAdminProtected},
+		{"ErrSystemRoleProtected", ErrSystemRoleProtected},
+		{"ErrUserDisabled", ErrUserDisabled},
+		{"ErrAPIKeyDisabled", ErrAPIKeyDisabled},
+		{"ErrAPIKeyIPNotAllowed", ErrAPIKeyIPNotAllowed},
+		{"ErrTokenInvalid", ErrTokenInvalid},
+		{"ErrTokenExpired", ErrTokenExpired},
+		{"ErrTokenNotYetValid", ErrTokenNotYetValid},
+		{"ErrTokenReplayed", ErrTokenReplayed},
+		{"ErrAPIKeyInvalid", ErrAPIKeyInvalid},
+		{"ErrAPIKeyExpired", ErrAPIKeyExpired},
+		{"ErrInsufficientQuota", ErrInsufficientQuota},
+		{"ErrServiceUnavailable", ErrServiceUnavailable},
+		{"ErrADConfigError", ErrADConfigError},
+		{"ErrADUnreachable", ErrADUnreachable},
+		{"ErrTranscriptionUnavailable", ErrTranscriptionUnavailable},
+		{"ErrFFmpegFailed", ErrFFmpegFailed},
+		{"ErrTranscriptionFailed", ErrTranscriptionFailed},
+		{"ErrSplitFailed", ErrSplitFailed},
+		{"ErrInternal", ErrInternal},
+		{"ErrDuplicateRecord", ErrDuplicateRecord},
+		{"ErrForeignKeyConstraint", ErrForeignKeyConstraint},
+	}
+
+	t.Run("each sentinel hit by name", func(t *testing.T) {
+		for _, tc := range sentinels {
+			t.Run(tc.name, func(t *testing.T) {
+				name, ok := FirstKnownSentinelName(tc.err)
+				assert.True(t, ok)
+				assert.Equal(t, tc.name, name)
+			})
+		}
+	})
+
+	t.Run("wrapped sentinel", func(t *testing.T) {
+		name, ok := FirstKnownSentinelName(fmt.Errorf("ctx: %w", ErrTaskNotFound))
+		assert.True(t, ok)
+		assert.Equal(t, "ErrTaskNotFound", name)
+	})
+
+	t.Run("first hit wins", func(t *testing.T) {
+		multiWrapped := fmt.Errorf("combined: %w", errors.Join(ErrTaskNotFound, ErrNotFound))
+		name, ok := FirstKnownSentinelName(multiWrapped)
+		assert.True(t, ok)
+		assert.Equal(t, "ErrNotFound", name)
+	})
+
+	t.Run("BusinessError excluded", func(t *testing.T) {
+		name, ok := FirstKnownSentinelName(NewBusinessError(CodeInvalidInput, "x", nil))
+		assert.False(t, ok)
+		assert.Empty(t, name)
+	})
+
+	t.Run("nil", func(t *testing.T) {
+		name, ok := FirstKnownSentinelName(nil)
+		assert.False(t, ok)
+		assert.Empty(t, name)
+	})
+
+	t.Run("unknown", func(t *testing.T) {
+		name, ok := FirstKnownSentinelName(errors.New("random"))
+		assert.False(t, ok)
+		assert.Empty(t, name)
+	})
+}
+
 // TestFromGORM 覆盖 gorm.ErrRecordNotFound / 其他错误 / nil / fallback。
 func TestFromGORM(t *testing.T) {
 	t.Run("RecordNotFound→ErrNotFound", func(t *testing.T) {
@@ -172,7 +264,7 @@ func TestIsKnownError_ForeignKey_Sentinel(t *testing.T) {
 // TestDoubleWrap_ForeignKey_StillDetectable (Phase 19 D1) 验证 createWithDuplicateCheck
 // 的 `fmt.Errorf("%w: %w", ErrForeignKeyConstraint, err)` 双 %w wrap 仍可被 errors.Is
 // 检测到 ErrForeignKeyConstraint。
-//（Go 1.20+ errors 支持 multi-%w，"双 %w" 链中两个目标都可被 errors.Is 匹配。）
+// （Go 1.20+ errors 支持 multi-%w，"双 %w" 链中两个目标都可被 errors.Is 匹配。）
 func TestDoubleWrap_ForeignKey_StillDetectable(t *testing.T) {
 	inner := errors.New("FOREIGN KEY constraint failed: SQLite/driver message")
 	doubleWrapped := fmt.Errorf("%w: %w", ErrForeignKeyConstraint, inner)
