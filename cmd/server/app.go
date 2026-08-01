@@ -744,7 +744,7 @@ func (a *MinimalApp) initHandlers() error {
 	auditHandler.SetLogger(a.logger)
 
 	// 通知服务
-	notificationService := notification.NewNotificationService(a.db, a.logger, a.config)
+	notificationService := notification.New(a.db, a.logger, a.config)
 	notificationHandler := handlers.NewNotificationHandler(notificationService, auditService)
 	notificationHandler.SetLogger(a.logger)
 

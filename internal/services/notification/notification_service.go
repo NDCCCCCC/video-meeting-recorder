@@ -8,18 +8,24 @@ import (
 	"sync"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
-// NotificationService 通知服务
-type NotificationService struct {
+// Service 通知服务（STYLE-009：去掉包名冗余，外部引用统一为 notification.Service）。
+// HISTORY: 旧名 NotificationService 作为别名保留若干版本，现已全量切换为 Service，别名移除。
+type Service struct {
 	db     *gorm.DB
 	logger *zap.Logger
 	config *config.Config
+
+	// BUG-005/PR-D: 后台 worker 用 ctx (processQueue / handleMessage / sweeper)。
+	// 由 New 派生子 ctx,Stop() 取消,使 SQL 能被级联取消。
+	bgCtx    context.Context
+	bgCancel context.CancelFunc
 
 	// 消息队列
 	queue  chan *models.NotificationMessage
@@ -61,34 +67,49 @@ type UnreadCountResponse struct {
 	Count int64 `json:"count"`
 }
 
-// NewNotificationService 创建通知服务
-func NewNotificationService(db *gorm.DB, logger *zap.Logger, config *config.Config) *NotificationService {
-	service := &NotificationService{
-		db:     db,
-		logger: logger,
-		config: config,
-		queue:  make(chan *models.NotificationMessage, 1000),
+// New 创建通知服务（STYLE-009：导出构造器统一为 package.New）。
+func New(db *gorm.DB, logger *zap.Logger, config *config.Config) *Service {
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	service := &Service{
+		db:       db,
+		logger:   logger,
+		config:   config,
+		bgCtx:    bgCtx,
+		bgCancel: bgCancel,
+		queue:    make(chan *models.NotificationMessage, 1000),
 		// PERF-014: 无缓冲 channel 仅用作 stop 信号 (close-only)
 		// — 关闭后 processQueue 在 select 中收到零值并退出。
 		stopCh: make(chan struct{}),
 	}
 
-	// 启动处理goroutine
-	go service.processQueue()
+	// BUG-005/PR-D: 启动处理goroutine 并把 bgCtx 传入,SQL 可被 ctx 取消
+	go service.processQueue(bgCtx)
 
 	return service
 }
 
 // Stop 停止服务
-func (s *NotificationService) Stop() {
+func (s *Service) Stop() {
 	// 先关闭队列，停止接收新消息
 	close(s.queue)
 	// 再通知所有 worker 停止
 	close(s.stopCh)
+	// BUG-005/PR-D: 取消后台 ctx,让进行中 SQL 也能级联取消
+	if s.bgCancel != nil {
+		s.bgCancel()
+	}
+}
+
+// bgCtxOrBackground 返回当前服务持有的后台 ctx（若已 Stop 则降级为 Background()）。
+func (s *Service) bgCtxOrBackground() context.Context {
+	if s.bgCtx != nil {
+		return s.bgCtx
+	}
+	return context.Background()
 }
 
 // SendNotification 发送通知
-func (s *NotificationService) SendNotification(ctx context.Context, req *SendNotificationRequest) error {
+func (s *Service) SendNotification(ctx context.Context, req *SendNotificationRequest) error {
 	// 1. 获取用户通知配置
 	setting, err := s.getUserSetting(req.UserID)
 	if err != nil {
@@ -104,7 +125,7 @@ func (s *NotificationService) SendNotification(ctx context.Context, req *SendNot
 	}
 
 	// 3. 检查频率限制
-	if !s.checkRateLimit(req.UserID, setting) {
+	if !s.checkRateLimit(ctx, req.UserID, setting) {
 		return fmt.Errorf("超过频率限制: %w", apperrors.ErrInsufficientQuota)
 	}
 
@@ -132,8 +153,8 @@ func (s *NotificationService) SendNotification(ctx context.Context, req *SendNot
 		message.Data = string(dataJSON)
 	}
 
-	// 6. 保存到数据库
-	if err := s.db.Create(message).Error; err != nil {
+	// 6. 保存到数据库（BUG-005/PR-D: 传播 ctx 以使客户端断开时 SQL 也能级联取消）
+	if err := s.db.WithContext(ctx).Create(message).Error; err != nil {
 		return fmt.Errorf("保存消息失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
@@ -148,7 +169,7 @@ func (s *NotificationService) SendNotification(ctx context.Context, req *SendNot
 }
 
 // processQueue 处理发送队列 - 使用 worker pool 模式
-func (s *NotificationService) processQueue() {
+func (s *Service) processQueue(bgCtx context.Context) {
 	const numWorkers = 5
 	var wg sync.WaitGroup
 
@@ -165,6 +186,8 @@ func (s *NotificationService) processQueue() {
 					s.handleMessage(msg)
 				case <-s.stopCh:
 					return
+				case <-bgCtx.Done():
+					return
 				}
 			}
 		}()
@@ -175,7 +198,7 @@ func (s *NotificationService) processQueue() {
 }
 
 // handleMessage 处理消息
-func (s *NotificationService) handleMessage(msg *models.NotificationMessage) {
+func (s *Service) handleMessage(msg *models.NotificationMessage) {
 	channelStatus := msg.GetChannelStatusMap()
 
 	// 站内消息始终已发送
@@ -184,9 +207,11 @@ func (s *NotificationService) handleMessage(msg *models.NotificationMessage) {
 	// 这里可以添加其他渠道的发送逻辑
 	// 例如：邮件、短信、钉钉等
 
-	// 更新状态
+	// 更新状态（BUG-005/PR-D: 走 bgCtx —— processQueue 派生的 worker 上下文）
+	bgCtx, cancel := context.WithTimeout(s.bgCtxOrBackground(), 10*time.Second)
+	defer cancel()
 	msg.SetChannelStatusMap(channelStatus)
-	s.db.Model(msg).Update("channel_status", msg.ChannelStatus)
+	s.db.WithContext(bgCtx).Model(msg).Update("channel_status", msg.ChannelStatus)
 
 	s.logger.Info("消息处理完成",
 		zap.Uint("message_id", msg.ID),
@@ -196,8 +221,8 @@ func (s *NotificationService) handleMessage(msg *models.NotificationMessage) {
 }
 
 // Query 查询通知列表
-func (s *NotificationService) Query(ctx context.Context, userID uint, req *QueryRequest) (*QueryResponse, error) {
-	query := s.db.Model(&models.NotificationMessage{}).
+func (s *Service) Query(ctx context.Context, userID uint, req *QueryRequest) (*QueryResponse, error) {
+	query := s.db.WithContext(ctx).Model(&models.NotificationMessage{}).
 		Where("user_id = ?", userID)
 
 	// 筛选条件
@@ -241,9 +266,9 @@ func (s *NotificationService) Query(ctx context.Context, userID uint, req *Query
 }
 
 // MarkAsRead 标记为已读
-func (s *NotificationService) MarkAsRead(ctx context.Context, messageID, userID uint) error {
+func (s *Service) MarkAsRead(ctx context.Context, messageID, userID uint) error {
 	now := time.Now()
-	result := s.db.Model(&models.NotificationMessage{}).
+	result := s.db.WithContext(ctx).Model(&models.NotificationMessage{}).
 		Where("id = ? AND user_id = ?", messageID, userID).
 		Updates(map[string]interface{}{
 			"is_read": true,
@@ -261,9 +286,9 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, messageID, userID 
 }
 
 // MarkAllAsRead 全部标记为已读
-func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID uint) error {
+func (s *Service) MarkAllAsRead(ctx context.Context, userID uint) error {
 	now := time.Now()
-	return s.db.Model(&models.NotificationMessage{}).
+	return s.db.WithContext(ctx).Model(&models.NotificationMessage{}).
 		Where("user_id = ? AND is_read = ?", userID, false).
 		Updates(map[string]interface{}{
 			"is_read": true,
@@ -272,18 +297,18 @@ func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID uint) er
 }
 
 // GetUnreadCount 获取未读数量
-func (s *NotificationService) GetUnreadCount(ctx context.Context, userID uint) (int64, error) {
+func (s *Service) GetUnreadCount(ctx context.Context, userID uint) (int64, error) {
 	var count int64
-	err := s.db.Model(&models.NotificationMessage{}).
+	err := s.db.WithContext(ctx).Model(&models.NotificationMessage{}).
 		Where("user_id = ? AND is_read = ?", userID, false).
 		Count(&count).Error
 	return count, err
 }
 
 // GetUserSetting 获取用户通知配置
-func (s *NotificationService) GetUserSetting(ctx context.Context, userID uint) (*models.UserNotificationSetting, error) {
+func (s *Service) GetUserSetting(ctx context.Context, userID uint) (*models.UserNotificationSetting, error) {
 	var setting models.UserNotificationSetting
-	err := s.db.Where("user_id = ?", userID).First(&setting).Error
+	err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&setting).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 返回默认配置
@@ -295,10 +320,10 @@ func (s *NotificationService) GetUserSetting(ctx context.Context, userID uint) (
 }
 
 // UpdateUserSetting 更新用户通知配置
-func (s *NotificationService) UpdateUserSetting(ctx context.Context, userID uint, setting *models.UserNotificationSetting) (*models.UserNotificationSetting, *models.UserNotificationSetting, error) {
+func (s *Service) UpdateUserSetting(ctx context.Context, userID uint, setting *models.UserNotificationSetting) (*models.UserNotificationSetting, *models.UserNotificationSetting, error) {
 	// Snapshot pre-update state for audit OldData capture
 	var oldSetting models.UserNotificationSetting
-	if err := s.db.Where("user_id = ?", userID).First(&oldSetting).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&oldSetting).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Use default setting snapshot when no existing row
 			defaultSetting := s.getDefaultSetting(userID)
@@ -309,13 +334,13 @@ func (s *NotificationService) UpdateUserSetting(ctx context.Context, userID uint
 	}
 
 	setting.UserID = userID
-	if err := s.db.Save(setting).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(setting).Error; err != nil {
 		return nil, nil, err
 	}
 
 	// Reload committed state for NewData
 	var newSetting models.UserNotificationSetting
-	if err := s.db.Where("user_id = ?", userID).First(&newSetting).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&newSetting).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -323,7 +348,7 @@ func (s *NotificationService) UpdateUserSetting(ctx context.Context, userID uint
 }
 
 // getUserSetting 获取用户通知配置（内部方法）
-func (s *NotificationService) getUserSetting(userID uint) (*models.UserNotificationSetting, error) {
+func (s *Service) getUserSetting(userID uint) (*models.UserNotificationSetting, error) {
 	var setting models.UserNotificationSetting
 	err := s.db.Where("user_id = ?", userID).First(&setting).Error
 	if err != nil {
@@ -336,7 +361,7 @@ func (s *NotificationService) getUserSetting(userID uint) (*models.UserNotificat
 }
 
 // getDefaultSetting 获取默认配置
-func (s *NotificationService) getDefaultSetting(userID uint) *models.UserNotificationSetting {
+func (s *Service) getDefaultSetting(userID uint) *models.UserNotificationSetting {
 	return &models.UserNotificationSetting{
 		UserID:                  userID,
 		EmailEnabled:            true,
@@ -357,7 +382,7 @@ func (s *NotificationService) getDefaultSetting(userID uint) *models.UserNotific
 }
 
 // isQuietHours 检查是否在免打扰时段
-func (s *NotificationService) isQuietHours(setting *models.UserNotificationSetting) bool {
+func (s *Service) isQuietHours(setting *models.UserNotificationSetting) bool {
 	if !setting.EnableQuietHours {
 		return false
 	}
@@ -374,10 +399,10 @@ func (s *NotificationService) isQuietHours(setting *models.UserNotificationSetti
 }
 
 // checkRateLimit 检查频率限制
-func (s *NotificationService) checkRateLimit(userID uint, setting *models.UserNotificationSetting) bool {
+func (s *Service) checkRateLimit(ctx context.Context, userID uint, setting *models.UserNotificationSetting) bool {
 	// 统计当前小时已发送数量
 	var count int64
-	s.db.Model(&models.NotificationMessage{}).
+	s.db.WithContext(ctx).Model(&models.NotificationMessage{}).
 		Where("user_id = ? AND created_at >= ?", userID, time.Now().Truncate(time.Hour)).
 		Count(&count)
 
@@ -385,7 +410,7 @@ func (s *NotificationService) checkRateLimit(userID uint, setting *models.UserNo
 }
 
 // isTypeEnabled 检查通知类型是否启用
-func (s *NotificationService) isTypeEnabled(setting *models.UserNotificationSetting, msgType models.NotificationType) bool {
+func (s *Service) isTypeEnabled(setting *models.UserNotificationSetting, msgType models.NotificationType) bool {
 	switch msgType {
 	case models.TypeTask:
 		return setting.TaskEnabled
@@ -403,10 +428,13 @@ func (s *NotificationService) isTypeEnabled(setting *models.UserNotificationSett
 }
 
 // CleanupOldMessages 清理旧消息
-func (s *NotificationService) CleanupOldMessages(keepDays int) error {
+func (s *Service) CleanupOldMessages(keepDays int) error {
 	cutoffDate := time.Now().AddDate(0, 0, -keepDays)
 
-	result := s.db.Where("created_at < ? AND is_read = ?", cutoffDate, true).
+	// BUG-005/PR-D: 用 bgCtx 走 ctx-aware 路径
+	ctx, cancel := context.WithTimeout(s.bgCtxOrBackground(), 30*time.Second)
+	defer cancel()
+	result := s.db.WithContext(ctx).Where("created_at < ? AND is_read = ?", cutoffDate, true).
 		Delete(&models.NotificationMessage{})
 
 	if result.Error != nil {

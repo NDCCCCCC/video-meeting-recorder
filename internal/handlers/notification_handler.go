@@ -14,16 +14,16 @@ import (
 
 // NotificationHandler 通知处理器
 type NotificationHandler struct {
-	notificationService *notification.NotificationService
-	auditService        *audit.AuditLogService
-	logger              *zap.Logger
+	service     *notification.Service
+	auditService *audit.AuditLogService
+	logger      *zap.Logger
 }
 
 // NewNotificationHandler 创建通知处理器
-func NewNotificationHandler(notificationService *notification.NotificationService, auditService *audit.AuditLogService) *NotificationHandler {
+func NewNotificationHandler(service *notification.Service, auditService *audit.AuditLogService) *NotificationHandler {
 	return &NotificationHandler{
-		notificationService: notificationService,
-		auditService:        auditService,
+		service:      service,
+		auditService: auditService,
 	}
 }
 
@@ -34,8 +34,8 @@ func (h *NotificationHandler) SetLogger(logger *zap.Logger) {
 
 // Stop 停止处理器
 func (h *NotificationHandler) Stop() {
-	if h.notificationService != nil {
-		h.notificationService.Stop()
+	if h.service != nil {
+		h.service.Stop()
 	}
 }
 
@@ -73,7 +73,7 @@ func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 		req.PageSize = 20
 	}
 
-	result, err := h.notificationService.Query(c.Request.Context(), h.getUserID(c), &req)
+	result, err := h.service.Query(c.Request.Context(), h.getUserID(c), &req)
 	if err != nil {
 		h.logger.Warn("查询通知列表失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "查询失败")
@@ -98,7 +98,7 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 	}
 
 	userID := h.getUserID(c)
-	err = h.notificationService.MarkAsRead(c.Request.Context(), uint(id), userID)
+	err = h.service.MarkAsRead(c.Request.Context(), uint(id), userID)
 	if err != nil {
 		h.logger.Warn("标记已读失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "标记失败")
@@ -116,7 +116,7 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 // @Router /api/v1/notifications/read-all [put]
 func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
 	userID := h.getUserID(c)
-	err := h.notificationService.MarkAllAsRead(c.Request.Context(), userID)
+	err := h.service.MarkAllAsRead(c.Request.Context(), userID)
 	if err != nil {
 		h.logger.Warn("全部标记已读失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "标记失败")
@@ -134,7 +134,7 @@ func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
 // @Router /api/v1/notifications/unread-count [get]
 func (h *NotificationHandler) GetUnreadCount(c *gin.Context) {
 	userID := h.getUserID(c)
-	count, err := h.notificationService.GetUnreadCount(c.Request.Context(), userID)
+	count, err := h.service.GetUnreadCount(c.Request.Context(), userID)
 	if err != nil {
 		h.logger.Warn("获取未读数量失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取失败")
@@ -152,7 +152,7 @@ func (h *NotificationHandler) GetUnreadCount(c *gin.Context) {
 // @Router /api/v1/notifications/settings [get]
 func (h *NotificationHandler) GetUserSetting(c *gin.Context) {
 	userID := h.getUserID(c)
-	setting, err := h.notificationService.GetUserSetting(c.Request.Context(), userID)
+	setting, err := h.service.GetUserSetting(c.Request.Context(), userID)
 	if err != nil {
 		h.logger.Warn("获取通知配置失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "获取失败")
@@ -177,7 +177,7 @@ func (h *NotificationHandler) UpdateUserSetting(c *gin.Context) {
 	}
 
 	userID := h.getUserID(c)
-	oldSetting, newSetting, err := h.notificationService.UpdateUserSetting(c.Request.Context(), userID, &req)
+	oldSetting, newSetting, err := h.service.UpdateUserSetting(c.Request.Context(), userID, &req)
 	if err != nil {
 		h.logger.Warn("更新通知配置失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "更新失败")
