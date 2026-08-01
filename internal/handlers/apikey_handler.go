@@ -103,6 +103,7 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 		h.logger.Warn("创建API密钥失败",
 			zap.Uint("user_id", userID),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		response.HandleError(c, err)
 		return
@@ -153,6 +154,7 @@ func (h *APIKeyHandler) ListAPIKeys(c *gin.Context) {
 		h.logger.Error("获取API密钥列表失败",
 			zap.Uint("user_id", userID),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		response.HandleError(c, err)
 		return
@@ -247,6 +249,7 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.Uint("key_id", id),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		response.HandleError(c, err)
 		return
@@ -261,7 +264,7 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 		OldData:    oldAPIKey,
 		NewData:    apiKey,
 	}); err != nil {
-		h.logger.Warn("Failed to record apikey update change", zap.Error(err), zap.Uint("key_id", id))
+		h.logger.Warn("Failed to record apikey update change", zap.Error(err), response.SentinelField(err), zap.Uint("key_id", id))
 	}
 
 	h.logger.Info("API密钥更新成功",
@@ -305,6 +308,7 @@ func (h *APIKeyHandler) DeleteAPIKey(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.Uint("key_id", id),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		response.HandleError(c, err)
 		return
@@ -319,7 +323,7 @@ func (h *APIKeyHandler) DeleteAPIKey(c *gin.Context) {
 		OldData:    oldAPIKey,
 		NewData:    nil,
 	}); err != nil {
-		h.logger.Warn("Failed to record apikey delete change", zap.Error(err), zap.Uint("key_id", id))
+		h.logger.Warn("Failed to record apikey delete change", zap.Error(err), response.SentinelField(err), zap.Uint("key_id", id))
 	}
 
 	h.logger.Info("API密钥删除成功",
@@ -365,6 +369,7 @@ func (h *APIKeyHandler) ToggleAPIKeyStatus(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.Uint("key_id", id),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		response.HandleError(c, err)
 		return
@@ -379,7 +384,7 @@ func (h *APIKeyHandler) ToggleAPIKeyStatus(c *gin.Context) {
 		OldData:    oldAPIKey,
 		NewData:    apiKey,
 	}); err != nil {
-		h.logger.Warn("Failed to record apikey toggle change", zap.Error(err), zap.Uint("key_id", id))
+		h.logger.Warn("Failed to record apikey toggle change", zap.Error(err), response.SentinelField(err), zap.Uint("key_id", id))
 	}
 
 	h.logger.Info("API密钥状态切换成功",
@@ -434,6 +439,7 @@ func (h *APIKeyHandler) ListUsageLogs(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.Uint("key_id", id),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		response.HandleError(c, err)
 		return
@@ -478,6 +484,7 @@ func (h *APIKeyHandler) GetUsageLogSummary(c *gin.Context) {
 			zap.Uint("user_id", userID),
 			zap.Uint("key_id", id),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		response.HandleError(c, err)
 		return
