@@ -213,26 +213,26 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 
 	// 9. 保存文件记录
 	uploadedFile := &models.UploadedFile{
-		FileName:     fileName,
-		OriginalName: req.File.Filename,
-		FilePath:     result.FilePath,
-		FileSize:     req.File.Size,
-		MimeType:     req.File.Header.Get("Content-Type"),
-		FileMD5:      fileFingerprint,
-		StorageType:  string(models.StorageLocal),
-		StoragePath:  result.StoragePath,
-		IsPublic:     req.IsPublic,
-		AccessURL:    accessURL,
-		AccessToken:  accessToken,
-		ExpiresAt:    expiresAt,
-		UploadedBy:   userID,
-		UploadedAt:   time.Now(),
-		RelatedID:    req.RelatedID,
-		RelatedType:  req.RelatedType,
-		Status:       string(models.FileStatusActive),
+		FileName:        fileName,
+		OriginalName:    req.File.Filename,
+		FilePath:        result.FilePath,
+		FileSize:        req.File.Size,
+		MimeType:        req.File.Header.Get("Content-Type"),
+		FileFingerprint: fileFingerprint,
+		StorageType:     string(models.StorageLocal),
+		StoragePath:     result.StoragePath,
+		IsPublic:        req.IsPublic,
+		AccessURL:       accessURL,
+		AccessToken:     accessToken,
+		ExpiresAt:       expiresAt,
+		UploadedBy:      userID,
+		UploadedAt:      time.Now(),
+		RelatedID:       req.RelatedID,
+		RelatedType:     req.RelatedType,
+		Status:          string(models.FileStatusActive),
 	}
 
-	if err := s.db.Create(uploadedFile).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(uploadedFile).Error; err != nil {
 		// 回滚上传
 		s.defaultDriver.Delete(ctx, result.FilePath)
 		return nil, fmt.Errorf("保存文件记录失败: %w: %w", apperrors.ErrInternal, err)
@@ -262,7 +262,7 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 // Phase 19 D15: 5 散点统一 sentinel 化——文件不存在/过期/无权限/存储类型/下载失败。
 func (s *FileService) Download(ctx context.Context, accessToken string, userID uint) (io.ReadCloser, string, error) {
 	var file models.UploadedFile
-	err := s.db.Where("access_token = ? OR is_public = ?", accessToken, true).
+	err := s.db.WithContext(ctx).Where("access_token = ? OR is_public = ?", accessToken, true).
 		Where("status = ?", models.FileStatusActive).
 		First(&file).Error
 	if err != nil {
@@ -300,7 +300,7 @@ func (s *FileService) Download(ctx context.Context, accessToken string, userID u
 // Phase 19 D15: 2 散点 sentinel 化。
 func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*models.UploadedFile, error) {
 	var file models.UploadedFile
-	err := s.db.First(&file, fileID).Error
+	err := s.db.WithContext(ctx).First(&file, fileID).Error
 	if err != nil {
 		return nil, fmt.Errorf("文件不存在: %w", apperrors.ErrNotFound)
 	}
@@ -314,7 +314,7 @@ func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*mo
 	oldFile := file
 
 	// 软删除
-	if err := s.db.Model(&file).Update("status", models.FileStatusDeleted).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&file).Update("status", models.FileStatusDeleted).Error; err != nil {
 		return nil, err
 	}
 
@@ -356,7 +356,7 @@ func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*mo
 // Phase 19 D15: 2 散点 sentinel 化。
 func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, expiresIn time.Duration, password string) (*models.FileShare, *models.FileShare, string, error) {
 	var file models.UploadedFile
-	err := s.db.First(&file, fileID).Error
+	err := s.db.WithContext(ctx).First(&file, fileID).Error
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("文件不存在: %w", apperrors.ErrNotFound)
 	}
@@ -370,7 +370,7 @@ func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, e
 	// This is nil when no prior share exists; other errors are propagated.
 	var oldShare *models.FileShare
 	var existing models.FileShare
-	if err := s.db.Where("file_id = ? AND shared_by = ?", fileID, userID).
+	if err := s.db.WithContext(ctx).Where("file_id = ? AND shared_by = ?", fileID, userID).
 		Order("created_at DESC").First(&existing).Error; err == nil {
 		oldShare = &existing
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -387,7 +387,7 @@ func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, e
 		ExpiresAt:  time.Now().Add(expiresIn),
 	}
 
-	if err := s.db.Create(share).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(share).Error; err != nil {
 		return nil, nil, "", err
 	}
 
@@ -399,7 +399,7 @@ func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, e
 // Phase 19 D15: 6 散点 sentinel 化——链接不存在/过期/密码错/达到上限/存储类型/下载失败。
 func (s *FileService) GetShareDownload(ctx context.Context, shareToken, password string) (io.ReadCloser, string, error) {
 	var share models.FileShare
-	err := s.db.Preload("File").Where("share_token = ?", shareToken).First(&share).Error
+	err := s.db.WithContext(ctx).Preload("File").Where("share_token = ?", shareToken).First(&share).Error
 	if err != nil {
 		return nil, "", fmt.Errorf("分享链接不存在: %w", apperrors.ErrNotFound)
 	}
@@ -420,7 +420,7 @@ func (s *FileService) GetShareDownload(ctx context.Context, shareToken, password
 	}
 
 	// 更新访问次数
-	s.db.Model(&share).UpdateColumn("access_count", share.AccessCount+1)
+	s.db.WithContext(ctx).Model(&share).UpdateColumn("access_count", share.AccessCount+1)
 
 	// 获取文件
 	driver, ok := s.drivers[models.StorageType(share.File.StorageType)]
@@ -438,7 +438,7 @@ func (s *FileService) GetShareDownload(ctx context.Context, shareToken, password
 
 // Query 查询文件列表
 func (s *FileService) Query(ctx context.Context, userID uint, req *QueryRequest) (*QueryResponse, error) {
-	query := s.db.Model(&models.UploadedFile{}).
+	query := s.db.WithContext(ctx).Model(&models.UploadedFile{}).
 		Where("uploaded_by = ?", userID).
 		Where("status = ?", models.FileStatusActive)
 
@@ -484,7 +484,7 @@ func (s *FileService) Query(ctx context.Context, userID uint, req *QueryRequest)
 // GetUserQuota 获取用户存储配额
 func (s *FileService) GetUserQuota(ctx context.Context, userID uint) (*QuotaInfo, error) {
 	var quota models.UserStorageQuota
-	err := s.db.Where("user_id = ?", userID).First(&quota).Error
+	err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&quota).Error
 	if err != nil {
 		// STYLE-001 partial: 改用 errors.Is 替代 err == gorm.ErrRecordNotFound
 		// （与项目 internal/errors 错误链惯例一致；W6a 全库迁移 DEFERRED）
@@ -496,7 +496,7 @@ func (s *FileService) GetUserQuota(ctx context.Context, userID uint) (*QuotaInfo
 				UsedQuota:  0,
 				FileCount:  0,
 			}
-			s.db.Create(&quota)
+			s.db.WithContext(ctx).Create(&quota)
 		} else {
 			return nil, err
 		}
@@ -632,7 +632,7 @@ func calculateSHA256Reader(src io.Reader) (string, error) {
 // checkUserQuota 检查用户配额
 func (s *FileService) checkUserQuota(ctx context.Context, userID uint, fileSize int64) error {
 	var quota models.UserStorageQuota
-	err := s.db.Where("user_id = ?", userID).First(&quota).Error
+	err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&quota).Error
 	if err != nil {
 		// STYLE-001 partial: 改用 errors.Is 替代 err == gorm.ErrRecordNotFound
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -641,7 +641,7 @@ func (s *FileService) checkUserQuota(ctx context.Context, userID uint, fileSize 
 				UserID:     userID,
 				TotalQuota: defaultQuota,
 			}
-			s.db.Create(&quota)
+			s.db.WithContext(ctx).Create(&quota)
 		} else {
 			return err
 		}
@@ -665,7 +665,7 @@ func (s *FileService) updateUserQuota(ctx context.Context, userID uint, delta in
 		fileCountDelta = -1
 	}
 
-	s.db.Model(&models.UserStorageQuota{}).
+	s.db.WithContext(ctx).Model(&models.UserStorageQuota{}).
 		Where("user_id = ?", userID).
 		Updates(map[string]interface{}{
 			"used_quota": gorm.Expr("used_quota + ?", delta),
@@ -674,9 +674,9 @@ func (s *FileService) updateUserQuota(ctx context.Context, userID uint, delta in
 }
 
 // findExistingFile 查找已存在的文件（用于秒传）
-func (s *FileService) findExistingFile(ctx context.Context, userID uint, md5 string) *models.UploadedFile {
+func (s *FileService) findExistingFile(ctx context.Context, userID uint, fingerprint string) *models.UploadedFile {
 	var file models.UploadedFile
-	err := s.db.Where("file_md5 = ? AND uploaded_by = ? AND status = ?", md5, userID, models.FileStatusActive).
+	err := s.db.WithContext(ctx).Where("file_fingerprint = ? AND uploaded_by = ? AND status = ?", fingerprint, userID, models.FileStatusActive).
 		First(&file).Error
 	if err != nil {
 		return nil
@@ -721,7 +721,7 @@ func generateShareToken() string {
 func (s *FileService) generateUniqueFileName(ctx context.Context, folder, baseName string) string {
 	// 检查文件名是否已存在
 	var count int64
-	err := s.db.Model(&models.UploadedFile{}).
+	err := s.db.WithContext(ctx).Model(&models.UploadedFile{}).
 		Where("file_name = ? AND status = ?", baseName, models.FileStatusActive).
 		Count(&count).Error
 
@@ -737,7 +737,7 @@ func (s *FileService) generateUniqueFileName(ctx context.Context, folder, baseNa
 	// 尝试添加 (1), (2), ... 后缀
 	for i := 1; i <= 1000; i++ {
 		newName := fmt.Sprintf("%s (%d)%s", nameWithoutExt, i, ext)
-		err := s.db.Model(&models.UploadedFile{}).
+		err := s.db.WithContext(ctx).Model(&models.UploadedFile{}).
 			Where("file_name = ? AND status = ?", newName, models.FileStatusActive).
 			Count(&count).Error
 		if err != nil || count == 0 {
