@@ -54,7 +54,7 @@ func (h *RoleHandler) ListRoles(c *gin.Context) {
 
 	result, err := h.roleService.ListRoles(c.Request.Context(), &req)
 	if err != nil {
-		h.logger.Error("Failed to list roles", zap.Error(err))
+		h.logger.Error("Failed to list roles", zap.Error(err), response.SentinelField(err))
 		response.HandleError(c, err)
 		return
 	}
@@ -152,7 +152,7 @@ func (h *RoleHandler) UpdateRole(c *gin.Context) {
 		OldData:    oldRole,
 		NewData:    role,
 	}); err != nil {
-		h.logger.Warn("Failed to record role update change", zap.Error(err), zap.Uint("role_id", id))
+		h.logger.Warn("Failed to record role update change", zap.Error(err), response.SentinelField(err), zap.Uint("role_id", id))
 	}
 
 	h.logger.Info("Role updated", zap.Uint("role_id", id))
@@ -189,7 +189,7 @@ func (h *RoleHandler) DeleteRole(c *gin.Context) {
 		OldData:    oldRole,
 		NewData:    nil,
 	}); err != nil {
-		h.logger.Warn("Failed to record role delete change", zap.Error(err), zap.Uint("role_id", id))
+		h.logger.Warn("Failed to record role delete change", zap.Error(err), response.SentinelField(err), zap.Uint("role_id", id))
 	}
 
 	h.logger.Info("Role deleted", zap.Uint("role_id", id))
@@ -258,7 +258,7 @@ func (h *RoleHandler) AssignPermissions(c *gin.Context) {
 		OldData:    oldPermissions,
 		NewData:    newPermissions,
 	}); err != nil {
-		h.logger.Warn("Failed to record permission assignment change", zap.Error(err), zap.Uint("role_id", id))
+		h.logger.Warn("Failed to record permission assignment change", zap.Error(err), response.SentinelField(err), zap.Uint("role_id", id))
 	}
 
 	h.logger.Info("Role permissions assigned", zap.Uint("role_id", id))
