@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,6 +11,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -27,6 +30,9 @@ type AdminHandler struct {
 	encryptor     *services.CredentialEncryptor // Phase 18: 用于 MigrateInputConfigs 加密历史明文
 }
 
+// NewAdminHandler 构造 AdminHandler,集中处理 admin 路由组的配置/用户/迁移相关 handler。
+// cfg + authService 用于 /config 端点读写;db 直接用于管理级 SQL;encryptor 负责
+// 迁移期间的凭据信封封装(参见 SubmitAdminMigration)。
 func NewAdminHandler(cfg *config.Config, logger *zap.Logger, configService *services.ConfigService, authService *auth.Service, db *gorm.DB, encryptor *services.CredentialEncryptor) *AdminHandler {
 	return &AdminHandler{
 		cfg:           cfg,
@@ -234,9 +240,9 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 		}
 	}()
 
-	// Count existing huawei_configs
+	// Count existing huawei_configs（BUG-005: 透传 ctx 让客户端断开能级联取消）
 	var totalCount int64
-	if err := tx.Table("huawei_configs").Count(&totalCount).Error; err != nil {
+	if err := tx.WithContext(c.Request.Context()).Table("huawei_configs").Count(&totalCount).Error; err != nil {
 		h.logger.Error("Failed to count huawei_configs", zap.Error(err), response.SentinelField(err))
 		response.HandleError(c, err)
 		return
@@ -277,7 +283,7 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 	}
 
 	var huaweiConfigs []HuaweiConfigRow
-	if err := tx.Table("huawei_configs").Find(&huaweiConfigs).Error; err != nil {
+	if err := tx.WithContext(c.Request.Context()).Table("huawei_configs").Limit(1000).Find(&huaweiConfigs).Error; err != nil {
 		h.logger.Error("Failed to fetch huawei_configs", zap.Error(err), response.SentinelField(err))
 		response.HandleError(c, err)
 		return
@@ -430,3 +436,354 @@ func (h *AdminHandler) MigrateInputConfigs(c *gin.Context) {
 
 // migrateOneHuaweiConfig 已被内联到 MigrateHuaweiConfigsHandler 的 PERF-005 闭包中，
 // 因为 HuaweiConfigRow 是 handler 内本地类型，无法在包级 helper 中引用。
+
+// ============================================================================
+// PERF-005/PR-F: 异步 admin migration
+// ============================================================================
+//
+// 历史：MigrateInputConfigs 同事务内扫描全表 huawei_configs 并 worker pool 加密+写入
+// input_configs,典型 50+ 行配置一次会阻塞 HTTP 线程 10-60 秒;client timeout 与中间件
+// recover 都会触发,运维复测 "再迁一次" 会发现连接被服务端主动断开。
+//
+// 现拆为：
+//   POST /api/v1/admin/migrate-input-configs        → SubmitAdminMigration (202 + job_id)
+//   GET  /api/v1/admin/migrate-input-configs/:job_id → GetAdminMigrationStatus (200 + 进度)
+// 实现保持单一事务语义（进 goroutine 后重新开 tx），避免把 admin_handler 业务大幅改写。
+
+// SubmitAdminMigration 同步返回 202 + job_id,后台 goroutine 执行迁移。
+// 复制原 MigrateInputConfigs 的核心流程(并发 worker + CredentialEncryptor)到 runMigrationJob 内。
+//
+// @Summary 提交华为配置迁移任务
+// @Tags 系统管理
+// @Security Bearer
+// @Success 202 {object} response.Response{data=map[string]interface{}}
+// @Router /api/v1/admin/migrate-input-configs [post]
+func (h *AdminHandler) SubmitAdminMigration(c *gin.Context) {
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
+		return
+	}
+
+	// 立即插入 job 行 (Status=pending),让 progress endpoint 有数据可读。
+	job := models.AdminMigrationJob{
+		Status:      models.AdminMigrationStatusPending,
+		RequestedBy: userID,
+		StartedAt:   time.Now(),
+	}
+	// BUG-005: 透传请求 ctx
+	if err := h.db.WithContext(c.Request.Context()).Create(&job).Error; err != nil {
+		h.logger.Error("create admin migration job failed", zap.Error(err), response.SentinelField(err))
+		response.HandleError(c, err)
+		return
+	}
+
+	// 派生子 ctx：5 分钟超时；与请求 ctx 解耦（避免客户端断开取消整个迁移）。
+	jobCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	go func(jobID uint) {
+		defer cancel()
+		// panic 防护 — 与 BUG-002 一致。
+		defer func() {
+			if r := recover(); r != nil {
+				now := time.Now()
+				h.db.WithContext(jobCtx).Model(&models.AdminMigrationJob{}).Where("id = ?", jobID).Updates(map[string]interface{}{
+					"status":      models.AdminMigrationStatusFailed,
+					"finished_at": &now,
+					"error_msg":   fmt.Sprintf("panic: %v", r),
+				})
+				h.logger.Error("admin migration panicked",
+					zap.Uint("job_id", jobID),
+					zap.Any("recover", r),
+					zap.Stack("stack"))
+			}
+		}()
+
+		h.db.WithContext(jobCtx).Model(&models.AdminMigrationJob{}).Where("id = ?", jobID).Updates(map[string]interface{}{
+			"status": models.AdminMigrationStatusRunning,
+		})
+
+		total, migrated, skipped, err := h.runMigrationJob(jobCtx)
+		finishedAt := time.Now()
+		updates := map[string]interface{}{
+			"finished_at": &finishedAt,
+			"total":       total,
+			"migrated":    migrated,
+			"skipped":     skipped,
+		}
+		if err != nil {
+			updates["status"] = models.AdminMigrationStatusFailed
+			updates["error_msg"] = err.Error()
+		} else {
+			updates["status"] = models.AdminMigrationStatusCompleted
+		}
+		h.db.WithContext(jobCtx).Model(&models.AdminMigrationJob{}).Where("id = ?", jobID).Updates(updates)
+
+		h.logger.Info("admin migration finished",
+			zap.Uint("job_id", jobID),
+			zap.Int("total", total),
+			zap.Int("migrated", migrated),
+			zap.Int("skipped", skipped),
+			zap.Error(err),
+		)
+	}(job.ID)
+
+	c.Header("Location", fmt.Sprintf("/api/v1/admin/migrate-input-configs/%d", job.ID))
+	c.JSON(202, gin.H{
+		"code":    response.CodeSuccess,
+		"message": "已提交,异步执行中",
+		"data": gin.H{
+			"job_id":      job.ID,
+			"status":      models.AdminMigrationStatusPending,
+			"status_url":  fmt.Sprintf("/api/v1/admin/migrate-input-configs/%d", job.ID),
+		},
+	})
+}
+
+// GetAdminMigrationStatus 查询异步迁移进度
+//
+// @Summary 查询 admin migration 进度
+// @Tags 系统管理
+// @Security Bearer
+// @Param job_id path int true "任务 ID"
+// @Success 200 {object} response.Response{data=models.AdminMigrationJob}
+// @Router /api/v1/admin/migrate-input-configs/{job_id} [get]
+func (h *AdminHandler) GetAdminMigrationStatus(c *gin.Context) {
+	idStr := c.Param("job_id")
+	jobID, err := parseUintParam(c, "job_id")
+	if err != nil || jobID == 0 || idStr == "" {
+		response.GinError(c, response.CodeInvalidRequest, "无效的 job_id")
+		return
+	}
+
+	var job models.AdminMigrationJob
+	// BUG-005: 透传 ctx
+	if err := h.db.WithContext(c.Request.Context()).First(&job, jobID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.GinError(c, response.CodeNotFound, "job not found")
+			return
+		}
+		response.HandleError(c, err)
+		return
+	}
+	response.GinSuccess(c, job)
+}
+
+// runMigrationJob 抽离出原 MigrateInputConfigs 的核心事务逻辑,接收 ctx 便于 cancel。
+// 保留原 bounded-concurrency (cfg.Admin.MigrationConcurrency)。
+//
+// 实现要点（PERF-005 真实 worker pool 修复）：
+//   - 进 goroutine 后**重新开 tx**（request ctx 已断开，使用 jobCtx）
+//   - worker 数 = min(cfg.Admin.MigrationConcurrency, len(rows))，默认 4
+//   - 每 worker 独立 defer recover — panic 不会拖垮整个 job
+//   - 分发前检查 ctx.Err()，避免在 ctx 取消后还启动新 goroutine
+//   - first-error-wins via mu+firstErr；其他 worker 完成后会被 wg.Wait 收尾
+//   - 复用原 MigrateInputConfigs 的 CredentialEncryptor 信封（Phase 18）
+func (h *AdminHandler) runMigrationJob(ctx context.Context) (total, migrated, skipped int, err error) {
+	if cerr := ctx.Err(); cerr != nil {
+		return 0, 0, 0, cerr
+	}
+
+	// 在 goroutine 内新开 tx：避免使用外层 request tx（request ctx 已断开）。
+	tx := h.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return 0, 0, 0, tx.Error
+	}
+	committed := false
+	defer func() {
+		// 任何 panic 路径都触发 Rollback（commit 未执行时）；callSite 自行
+		// 在 SubmitAdminMigration 的外层 defer recover 写 status=failed。
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	// 1. 计数
+	var totalCount int64
+	if e := tx.WithContext(ctx).Table("huawei_configs").Count(&totalCount).Error; e != nil {
+		return 0, 0, 0, e
+	}
+
+	if totalCount == 0 {
+		if e := tx.Commit().Error; e != nil {
+			return 0, 0, 0, e
+		}
+		committed = true
+		return 0, 0, 0, nil
+	}
+
+	// 2. 拉取源行（沿用原 Limit(1000) — admin 一次迁移 < 1000 行可控）
+	type HuaweiConfigRow struct {
+		ID                  uint
+		Name                string
+		Description         string
+		Server              string
+		Port                int
+		Username            string
+		Password            string
+		TerminalNumber      string
+		ConferenceNumber    string
+		CameraBackend       string
+		USBCameraName       string
+		USBCameraDevice     string
+		CameraBindingStatus string
+		AudioBackend        string
+		USBAudioName        string
+		USBAudioDevice      string
+		AudioBindingStatus  string
+		OutputFormat        string
+		StreamProtocol      string
+		StreamURL           string
+		StreamUsername      string
+		StreamPassword      string
+		StreamEnabled       bool
+		IsActive            bool
+		IsLocked            bool
+		LockedBy            *uint
+		LockedAt            *time.Time
+		CreatedAt           time.Time
+		UpdatedAt           time.Time
+		DeletedAt           *time.Time
+	}
+
+	var huaweiConfigs []HuaweiConfigRow
+	if e := tx.WithContext(ctx).Table("huawei_configs").Limit(1000).Find(&huaweiConfigs).Error; e != nil {
+		return 0, 0, 0, e
+	}
+
+	// 3. bounded concurrency worker pool
+	concurrency := h.cfg.Admin.MigrationConcurrency
+	if concurrency <= 0 {
+		concurrency = 4
+	}
+	if concurrency > len(huaweiConfigs) {
+		concurrency = len(huaweiConfigs)
+	}
+
+	var migratedCount, skippedCount int
+	var mu sync.Mutex
+	var firstErr error
+	var wg sync.WaitGroup
+
+	sem := make(chan struct{}, concurrency)
+	for _, hc := range huaweiConfigs {
+		// 分发前再 check ctx — 已被取消时不再启动新 worker。
+		if cerr := ctx.Err(); cerr != nil {
+			mu.Lock()
+			if firstErr == nil {
+				firstErr = cerr
+			}
+			mu.Unlock()
+			break
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(hc HuaweiConfigRow) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					h.logger.Error("admin migration worker panicked",
+						zap.Any("recover", r), zap.Stack("stack"))
+				}
+			}()
+
+			// 已有同 name+created_at 记录 → 跳过
+			var existingCount int64
+			if e := tx.Table("input_configs").
+				Where("name = ? AND created_at = ?", hc.Name, hc.CreatedAt).
+				Count(&existingCount).Error; e != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = e
+				}
+				mu.Unlock()
+				return
+			}
+			if existingCount > 0 {
+				mu.Lock()
+				skippedCount++
+				mu.Unlock()
+				return
+			}
+
+			configType := "usb"
+			if hc.USBCameraDevice == "" && hc.StreamURL != "" {
+				configType = "stream"
+			}
+			hwEnabled := hc.Server != "" && hc.Username != "" && hc.TerminalNumber != ""
+
+			// Phase 18: INSERT 前用 encryptor 把明文 Password/StreamPassword 包成 envelope
+			pw := hc.Password
+			if pw != "" && h.encryptor != nil {
+				enc, eerr := h.encryptor.Encrypt(pw)
+				if eerr != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = fmt.Errorf("encrypt password (name=%s): %w", hc.Name, eerr)
+					}
+					mu.Unlock()
+					return
+				}
+				pw = enc
+			}
+			spw := hc.StreamPassword
+			if spw != "" && h.encryptor != nil {
+				enc, eerr := h.encryptor.Encrypt(spw)
+				if eerr != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = fmt.Errorf("encrypt stream_password (name=%s): %w", hc.Name, eerr)
+					}
+					mu.Unlock()
+					return
+				}
+				spw = enc
+			}
+
+			insertSQL := `
+				INSERT INTO input_configs (
+					created_at, updated_at, deleted_at,
+					name, description, config_type, huawei_enabled,
+					server, port, username, password, terminal_number, conference_number,
+					camera_backend, usb_camera_name, usb_camera_device, camera_binding_status,
+					audio_backend, usb_audio_name, usb_audio_device, audio_binding_status,
+					output_format,
+					stream_protocol, stream_url, stream_username, stream_password, stream_enabled,
+					is_active, is_locked, locked_by, locked_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`
+			if e := tx.Exec(insertSQL,
+				hc.CreatedAt, hc.UpdatedAt, hc.DeletedAt,
+				hc.Name, hc.Description, configType, hwEnabled,
+				hc.Server, hc.Port, hc.Username, pw, hc.TerminalNumber, hc.ConferenceNumber,
+				hc.CameraBackend, hc.USBCameraName, hc.USBCameraDevice, hc.CameraBindingStatus,
+				hc.AudioBackend, hc.USBAudioName, hc.USBAudioDevice, hc.AudioBindingStatus,
+				hc.OutputFormat,
+				hc.StreamProtocol, hc.StreamURL, hc.StreamUsername, spw, hc.StreamEnabled,
+				hc.IsActive, hc.IsLocked, hc.LockedBy, hc.LockedAt,
+			).Error; e != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = e
+				}
+				mu.Unlock()
+				return
+			}
+			mu.Lock()
+			migratedCount++
+			mu.Unlock()
+		}(hc)
+	}
+	wg.Wait()
+
+	if firstErr != nil {
+		return int(totalCount), migratedCount, skippedCount, firstErr
+	}
+
+	if e := tx.Commit().Error; e != nil {
+		return int(totalCount), migratedCount, skippedCount, e
+	}
+	committed = true
+
+	return int(totalCount), migratedCount, skippedCount, nil
+}
