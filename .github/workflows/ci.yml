@@ -41,6 +41,15 @@ jobs:
       - name: Build
         run: go build -trimpath -ldflags "-s -w" -o /tmp/record-v2-test ./cmd/server
 
+      - name: Verify errors doc sync
+        run: |
+          go generate ./internal/errors/...
+          if ! git diff --quiet docs/errors.md; then
+            echo "::error::docs/errors.md is out of sync with internal/errors — run 'go generate ./internal/errors/...' and commit the result"
+            git diff docs/errors.md
+            exit 1
+          fi
+
       - name: Test
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
         env:

@@ -117,13 +117,66 @@ func netHTTPStatusConsts() []httpStatusConst {
 	}
 }
 
+// resolveRelative returns the first path that exists when probed in this
+// order: as-given from cwd → from each ancestor directory up to the
+// module root (directory containing go.mod). If nothing matches, it
+// returns the as-given path (which will fail downstream with a clear
+// "no such file" error).
+func resolveRelative(p string) string {
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	// Walk up from cwd looking for go.mod, then try the path anchored at
+	// each ancestor directory.
+	dir, err := os.Getwd()
+	if err != nil {
+		return p
+	}
+	for {
+		candidate := filepath.Join(dir, p)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		// Stop at filesystem root.
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		// Stop at module root (directory containing go.mod).
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			break
+		}
+		dir = parent
+	}
+	return p
+}
+
 // Generate is the testable core of the generator. It scans the given Go
 // source files, computes HTTP statuses / call-site counts, and writes
 // the rendered markdown to outputPath. The repoRoot is used as the base
 // for the call-site grep (which searches "internal/" under repoRoot).
+//
+// If any of the path arguments is relative and not found as-given, the
+// generator walks up from the current working directory looking for a
+// go.mod file (the module root). This makes the generator robust when
+// invoked via `go generate ./internal/errors/...`, which sets the
+// working directory to the package directory containing the directive.
 func Generate(errorsPath, mappingPath, repoRoot, outputPath string) error {
 	if errorsPath == "" || mappingPath == "" || outputPath == "" {
 		return fmt.Errorf("Generate: all of errorsPath, mappingPath, outputPath must be non-empty")
+	}
+
+	if !filepath.IsAbs(errorsPath) {
+		errorsPath = resolveRelative(errorsPath)
+	}
+	if !filepath.IsAbs(mappingPath) {
+		mappingPath = resolveRelative(mappingPath)
+	}
+	if !filepath.IsAbs(repoRoot) {
+		repoRoot = resolveRelative(repoRoot)
+	}
+	if !filepath.IsAbs(outputPath) {
+		outputPath = resolveRelative(outputPath)
 	}
 
 	errorsSrc, err := os.ReadFile(errorsPath)

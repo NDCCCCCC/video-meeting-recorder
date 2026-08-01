@@ -1,3 +1,6 @@
+// Package errors defines the project's sentinel / typed-error vocabulary.
+//
+//go:generate go run ../../cmd/error-doc-gen -errors-file errors.go -mapping-file mapping.go -output ../../docs/errors.md -repo-root ../..
 package errors
 
 import (
