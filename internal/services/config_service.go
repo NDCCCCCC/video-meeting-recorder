@@ -9,6 +9,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -93,7 +94,7 @@ func (s *ConfigService) LoadAuthConfig(ctx context.Context) error {
 	if err := s.db.WithContext(ctx).Where("`key` = ?", keyAuthAD).First(&adSetting).Error; err == nil {
 		var adConfig auth.ADAuthConfig
 		if err := json.Unmarshal([]byte(adSetting.Value), &adConfig); err != nil {
-			s.logger.Error("Failed to unmarshal AD config from database", zap.Error(err))
+			s.logger.Error("Failed to unmarshal AD config from database", zap.Error(err), response.SentinelField(err))
 			return err
 		}
 		s.cfg.Auth.AD.Server = adConfig.Server
@@ -118,6 +119,7 @@ func (s *ConfigService) LoadAuthConfig(ctx context.Context) error {
 			s.logger.Fatal("Failed to decrypt AD password from database (Phase 18 fail-closed)",
 				zap.Uint("setting_id", pwdSetting.ID),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 			return fmt.Errorf("AD password 解密失败（进程已 Fatal）: %w", err)
 		}
@@ -155,7 +157,7 @@ func (s *ConfigService) SaveAuthConfig(ctx context.Context, mode string, adConfi
 	if adConfig.Password != "" {
 		encrypted, err := s.encryptor.Encrypt(adConfig.Password)
 		if err != nil {
-			s.logger.Error("Failed to encrypt AD password for database", zap.Error(err))
+			s.logger.Error("Failed to encrypt AD password for database", zap.Error(err), response.SentinelField(err))
 			return err
 		}
 		pwdSetting := models.SystemSetting{Key: keyAuthADPassword, Value: encrypted}
