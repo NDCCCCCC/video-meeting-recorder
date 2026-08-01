@@ -11,6 +11,7 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -168,7 +169,7 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	if err != nil {
 		s.logger.Error("Python merge script failed",
 			zap.String("stdout/stderr", string(output)),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("failed to merge slides: %w (output: %s)", err, string(output))
 	}
 
@@ -177,7 +178,7 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	if err := json.Unmarshal(output, &result); err != nil {
 		s.logger.Error("Failed to parse Python merge output",
 			zap.String("output", string(output)),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("failed to parse merge output: %w", err)
 	}
 
@@ -210,7 +211,7 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	if err := s.db.WithContext(ctx).Create(pptFile).Error; err != nil {
 		s.logger.Error("Failed to create merged PPT file record",
 			zap.Uint("video_file_id", req.VideoFileID),
-			zap.Error(err))
+			zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("failed to create PPT file record: %w", err)
 	}
 
