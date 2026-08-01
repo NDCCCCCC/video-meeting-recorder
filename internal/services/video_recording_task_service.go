@@ -9,6 +9,7 @@ import (
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -210,6 +211,7 @@ func (s *VideoRecordingTaskService) CreateTask(ctx context.Context, req *CreateT
 		s.logger.Error("开始时间解析失败",
 			zap.String("start_time", req.StartTime),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		return nil, apperrors.ErrInvalidInput
 	}
@@ -218,6 +220,7 @@ func (s *VideoRecordingTaskService) CreateTask(ctx context.Context, req *CreateT
 		s.logger.Error("结束时间解析失败",
 			zap.String("end_time", req.EndTime),
 			zap.Error(err),
+			response.SentinelField(err),
 		)
 		return nil, apperrors.ErrInvalidInput
 	}
@@ -281,6 +284,7 @@ func (s *VideoRecordingTaskService) CreateTask(ctx context.Context, req *CreateT
 			s.logger.Warn("加载华为配置失败，跳过关联",
 				zap.Uint("config_id", configID),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 			continue
 		}
@@ -337,6 +341,7 @@ func (s *VideoRecordingTaskService) CreateTask(ctx context.Context, req *CreateT
 				s.logger.Error("同步任务到调度器失败",
 					zap.Uint("task_id", task.ID),
 					zap.Error(err),
+					response.SentinelField(err),
 				)
 			} else {
 				s.logger.Info("任务已同步到调度器",
@@ -451,6 +456,7 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 				s.logger.Warn("更新调度器任务结束时间失败",
 					zap.Uint("task_id", id),
 					zap.Error(err),
+					response.SentinelField(err),
 				)
 				// 不阻止更新继续执行
 			}
@@ -710,7 +716,7 @@ func (s *VideoRecordingTaskService) StopTask(ctx context.Context, id uint, userI
 	// 取消任务执行（这会停止录制并创建文件记录、提交转换任务）
 	if s.scheduler != nil {
 		if err := s.scheduler.CancelTaskExecution(id); err != nil {
-			s.logger.Warn("取消任务执行失败", zap.Error(err))
+			s.logger.Warn("取消任务执行失败", zap.Error(err), response.SentinelField(err))
 			// 继续执行状态更新
 		}
 	}
@@ -767,7 +773,7 @@ func (s *VideoRecordingTaskService) CancelTask(ctx context.Context, id uint, use
 	// 从调度器移除
 	if s.scheduler != nil {
 		if err := s.scheduler.RemoveTask(id); err != nil {
-			s.logger.Warn("从调度器移除任务失败", zap.Error(err))
+			s.logger.Warn("从调度器移除任务失败", zap.Error(err), response.SentinelField(err))
 		}
 	}
 
@@ -833,6 +839,7 @@ func (s *VideoRecordingTaskService) RetryTask(ctx context.Context, id uint, user
 				s.logger.Error("重新调度任务失败",
 					zap.Uint("task_id", id),
 					zap.Error(err),
+					response.SentinelField(err),
 				)
 			}
 		}()
@@ -1063,6 +1070,7 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(ctx context.Context, timeout
 			s.logger.Error("更新任务状态失败",
 				zap.Uint("task_id", task.ID),
 				zap.Error(err),
+				response.SentinelField(err),
 			)
 			continue
 		}
