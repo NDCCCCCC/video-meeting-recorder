@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
 	"go.uber.org/zap"
@@ -67,7 +68,7 @@ func (s *DashboardService) GetDashboardStats(ctx context.Context) (*DashboardSta
 	// 获取任务统计
 	taskStats, err := s.getTaskStats(ctx)
 	if err != nil {
-		s.logger.Error("Failed to get task stats", zap.Error(err))
+		s.logger.Error("Failed to get task stats", zap.Error(err), response.SentinelField(err))
 		return nil, err
 	}
 	stats.TaskStats = *taskStats
@@ -75,7 +76,7 @@ func (s *DashboardService) GetDashboardStats(ctx context.Context) (*DashboardSta
 	// 获取文件统计
 	fileStats, err := s.getFileStats(ctx)
 	if err != nil {
-		s.logger.Error("Failed to get file stats", zap.Error(err))
+		s.logger.Error("Failed to get file stats", zap.Error(err), response.SentinelField(err))
 		return nil, err
 	}
 	stats.FileStats = *fileStats
@@ -83,7 +84,7 @@ func (s *DashboardService) GetDashboardStats(ctx context.Context) (*DashboardSta
 	// 获取系统统计
 	systemStats, err := s.getSystemStats(ctx)
 	if err != nil {
-		s.logger.Error("Failed to get system stats", zap.Error(err))
+		s.logger.Error("Failed to get system stats", zap.Error(err), response.SentinelField(err))
 		return nil, err
 	}
 	stats.SystemStats = *systemStats
@@ -205,14 +206,14 @@ func (s *DashboardService) getSystemStats(ctx context.Context) (*SystemStats, er
 		diskPath = os.Getenv("SystemDrive") + string(os.PathSeparator)
 	}
 	if usage, err := disk.Usage(diskPath); err != nil {
-		s.logger.Warn("获取磁盘使用率失败", zap.String("path", diskPath), zap.Error(err))
+		s.logger.Warn("获取磁盘使用率失败", zap.String("path", diskPath), zap.Error(err), response.SentinelField(err))
 	} else if usage.Total > 0 {
 		stats.DiskUsagePercent = roundPercent(usage.UsedPercent)
 	}
 
 	// 内存使用率
 	if vm, err := mem.VirtualMemory(); err != nil {
-		s.logger.Warn("获取内存使用率失败", zap.Error(err))
+		s.logger.Warn("获取内存使用率失败", zap.Error(err), response.SentinelField(err))
 	} else {
 		stats.MemoryUsagePercent = roundPercent(vm.UsedPercent)
 	}
