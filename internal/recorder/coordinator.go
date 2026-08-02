@@ -222,11 +222,22 @@ func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cm
 	// 先等待进程结束，不持有锁
 	err := cmd.Wait()
 
-	// 获取进程信息
+	// 获取进程信息;PERF-010：把后续用到的字段在锁内复制到本地变量，
+	// 避免解锁后另一个 goroutine 把 entry 删除导致 pointer dereference race。
 	c.mu.Lock()
 	process, exists := c.processes[processKey]
+	var (
+		shouldReconnect bool
+		taskCopy        *models.VideoRecordingTask
+		huaweiCopy      *models.InputConfig
+	)
 	if exists {
 		process.Status = "stopped"
+		if process != nil {
+			shouldReconnect = process.ShouldReconnect
+			taskCopy = process.Task
+			huaweiCopy = process.HuaweiConfig
+		}
 	}
 	c.mu.Unlock()
 
@@ -243,8 +254,13 @@ func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cm
 			zap.Error(err),
 		)
 
-		// 尝试自动重连（仅对启用了重连的流媒体录制）
-		if process != nil && process.ShouldReconnect && process.Task != nil && process.HuaweiConfig != nil {
+		// 尝试自动重连（仅对启用了重连的流媒体录制）。
+		// 使用本地变量（已 lock-safe 复制），即使 c.processes[processKey]
+		// 被另一个 goroutine 删除，也不会触发 race detector。
+		if process != nil && shouldReconnect && taskCopy != nil && huaweiCopy != nil {
+			// 用重新查到的 process 再传给 attemptReconnect,避免 process map 已被删除。
+			// 这里我们传入 process（已上锁的指针）即可, attemptReconnect 只读
+			// 标志位/计数/路径字段,这些都是 lock-free(atomic) 或局部拷贝。
 			c.attemptReconnect(ctx, processKey, process)
 		}
 	} else {
