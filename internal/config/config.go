@@ -446,8 +446,17 @@ func setDefaults(cfg *Config) {
 		cfg.Database.ConnMaxLifetime = 1800 // 30 minutes in seconds
 	}
 
+	// SEC-001/PR-B: 收窄默认 ALLOWED_TOKEN_URL_PREFIXES,移除过宽的 /api/v1/recordings/ 前缀。
+	// 注意:HLS stream 路由 (/api/v1/recordings/:id/preview/stream/:file) 在 a.router 上
+	// 直接注册,**不经过 MultiAuth**,因此它有自己的 c.Query("token") 校验,不受此白名单影响。
+	// 这里的白名单只控制 MultiAuth 内部对 Authorization 缺失时是否回退到 query token。
+	// 收紧到仅允许"明确需要 query token"的端点(下载/分享/PPT 静态文件)。
 	if cfg.Security.AllowedTokenURLPrefixes == nil {
-		cfg.Security.AllowedTokenURLPrefixes = []string{"/api/v1/files/download/", "/api/v1/recordings/", "/api/v1/ppts/"}
+		cfg.Security.AllowedTokenURLPrefixes = []string{
+			"/api/v1/files/download/",
+			"/api/v1/files/share/",
+			"/api/v1/ppts/",
+		}
 	}
 	// SEC-013: 出站 URL 白名单默认 nil（空列表 = 生产环境拒绝所有出站请求；
 	// 开发环境由 caller 的 development bypass 跳过）。BindEnv 留给调用方。
@@ -466,9 +475,11 @@ func setDefaults(cfg *Config) {
 	if cfg.Auth.MaxSessionDuration == 0 {
 		cfg.Auth.MaxSessionDuration = 30 * 24 * time.Hour
 	}
-	// SEC-001: HLS Token 密钥不再默认复用 SM4Secret；必须显式设置，否则启动校验告警。
+	// SEC-001/PR-B: 缩短 HLS Token 默认有效期 5min -> 30s。窗口越小则即便 URL/CDN 泄露，
+	// token 重放窗口越小。生产建议 ≤ 60s；现阶段每个 .ts 分片仍共用同一 token，需 m3u8
+	// 在 30s 内完成播放——若存在慢客户端可调大但请同步审计日志告警。
 	if cfg.Auth.HLSTokenDuration == 0 {
-		cfg.Auth.HLSTokenDuration = 5 * time.Minute
+		cfg.Auth.HLSTokenDuration = 30 * time.Second
 	}
 	// 解密失败速率限制默认值
 	if cfg.Auth.MaxDecryptFailures == 0 {
@@ -703,7 +714,8 @@ auth:
   refresh_token_duration: "168h"  # 7 days
   max_session_duration: "720h"   # 30 days
   hls_token_secret: "${HLS_TOKEN_SECRET:}"
-  hls_token_duration: "5m"
+  # SEC-001/PR-B: 缩短到 30s — 上一默认值 5m 在 CDN/浏览器历史中可被无限重放。
+  hls_token_duration: "30s"
 
 logging:
   level: "info"
