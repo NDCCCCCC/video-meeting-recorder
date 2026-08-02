@@ -1,6 +1,6 @@
 // 用户管理页面
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Table,
   Button,
@@ -34,7 +34,7 @@ import type {
 import { lookupADUser } from '../../../api/auth'
 
 // 解析 allowed_ips 字段（可能是 JSON 字符串或数组）
-const parseAllowedIPs = (ips: any): string[] => {
+const parseAllowedIPs = (ips: unknown): string[] => {
   if (!ips) return []
   if (Array.isArray(ips)) return ips
   if (typeof ips === 'string') {
@@ -66,7 +66,7 @@ export default function UserManagement() {
   })
 
   // 加载用户列表
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true)
     try {
       const response = await userApi.getUserList(params)
@@ -79,11 +79,11 @@ export default function UserManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params])
 
   useEffect(() => {
     loadUsers()
-  }, [params])
+  }, [loadUsers])
 
   // 搜索
   const handleSearch = (value: string) => {
@@ -110,7 +110,7 @@ export default function UserManagement() {
   }
 
   // 打开新建/编辑对话框
-  const openModal = (user: UserInfo | null = null) => {
+  const openModal = useCallback((user: UserInfo | null = null) => {
     setEditingUser(user)
     if (user) {
       form.setFieldsValue({
@@ -130,7 +130,7 @@ export default function UserManagement() {
       })
     }
     setModalVisible(true)
-  }
+  }, [form])
 
   // 关闭对话框
   const closeModal = () => {
@@ -218,7 +218,7 @@ export default function UserManagement() {
   }
 
   // 删除用户
-  const handleDelete = async (id: number) => {
+  const handleDelete = useCallback(async (id: number) => {
     try {
       await userApi.deleteUser(id)
       message.success('删除成功')
@@ -226,7 +226,7 @@ export default function UserManagement() {
     } catch (error) {
       message.error(error instanceof Error ? error.message : '删除失败')
     }
-  }
+  }, [loadUsers])
 
   // 切换用户状态
   const handleToggleStatus = async (id: number) => {
@@ -240,10 +240,10 @@ export default function UserManagement() {
   }
 
   // 打开重置密码对话框
-  const openPasswordModal = (id: number) => {
+  const openPasswordModal = useCallback((id: number) => {
     setSelectedUserId(id)
     setPasswordModalVisible(true)
-  }
+  }, [])
 
   // 关闭重置密码对话框
   const closePasswordModal = () => {
@@ -267,7 +267,7 @@ export default function UserManagement() {
   }
 
   // 表格列定义
-  const columns: ColumnsType<UserInfo> = [
+  const columns = useMemo<ColumnsType<UserInfo>>(() => [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -367,7 +367,7 @@ export default function UserManagement() {
         </Space>
       ),
     },
-  ]
+  ], [openModal, openPasswordModal, handleDelete])
 
   return (
     <div style={{ padding: '20px' }}>

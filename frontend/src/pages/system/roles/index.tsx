@@ -1,6 +1,6 @@
 // 角色管理页面
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Table,
   Button,
@@ -35,7 +35,7 @@ import type {
 } from '../../../types/role'
 
 // 解析 allowed_ips 字段（可能是 JSON 字符串或数组）
-const parseAllowedIPs = (ips: any): string[] => {
+const parseAllowedIPs = (ips: unknown): string[] => {
   if (!ips) return []
   if (Array.isArray(ips)) return ips
   if (typeof ips === 'string') {
@@ -67,7 +67,7 @@ export default function RoleManagement() {
   })
 
   // 加载角色列表
-  const loadRoles = async () => {
+  const loadRoles = useCallback(async () => {
     setLoading(true)
     try {
       const response = await roleApi.getRoleList(params)
@@ -80,10 +80,10 @@ export default function RoleManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params])
 
   // 加载所有权限
-  const loadAllPermissions = async () => {
+  const loadAllPermissions = useCallback(async () => {
     try {
       const response = await roleApi.getAllPermissions()
       if (response.data) {
@@ -92,11 +92,11 @@ export default function RoleManagement() {
     } catch (error) {
       message.error(error instanceof Error ? error.message : '加载权限列表失败')
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadRoles()
-  }, [params])
+  }, [loadRoles])
 
   // 搜索
   const handleSearch = (value: string) => {
@@ -113,7 +113,7 @@ export default function RoleManagement() {
   }
 
   // 打开新建/编辑对话框
-  const openModal = (role: RoleInfo | null = null) => {
+  const openModal = useCallback((role: RoleInfo | null = null) => {
     setEditingRole(role)
     if (role) {
       form.setFieldsValue({
@@ -125,7 +125,7 @@ export default function RoleManagement() {
       form.resetFields()
     }
     setModalVisible(true)
-  }
+  }, [form])
 
   // 关闭对话框
   const closeModal = () => {
@@ -166,7 +166,7 @@ export default function RoleManagement() {
   }
 
   // 删除角色
-  const handleDelete = async (id: number) => {
+  const handleDelete = useCallback(async (id: number) => {
     try {
       await roleApi.deleteRole(id)
       message.success('删除成功')
@@ -174,10 +174,10 @@ export default function RoleManagement() {
     } catch (error) {
       message.error(error instanceof Error ? error.message : '删除失败')
     }
-  }
+  }, [loadRoles])
 
   // 打开权限管理对话框
-  const openPermissionModal = async (role: RoleInfo) => {
+  const openPermissionModal = useCallback(async (role: RoleInfo) => {
     setSelectedRoleId(role.id)
     setEditingRole(role)
 
@@ -197,7 +197,7 @@ export default function RoleManagement() {
     }
 
     setPermissionModalVisible(true)
-  }
+  }, [allPermissions, loadAllPermissions])
 
   // 关闭权限管理对话框
   const closePermissionModal = () => {
@@ -229,7 +229,7 @@ export default function RoleManagement() {
   }
 
   // 表格列定义
-  const columns: ColumnsType<RoleInfo> = [
+  const columns = useMemo<ColumnsType<RoleInfo>>(() => [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -311,7 +311,7 @@ export default function RoleManagement() {
         </Space>
       ),
     },
-  ]
+  ], [openPermissionModal, openModal, handleDelete])
 
   // 权限穿梭框数据源
   const transferDataSource = allPermissions.map((p) => ({
