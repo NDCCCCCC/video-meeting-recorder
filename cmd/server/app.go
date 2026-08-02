@@ -337,7 +337,8 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.TranscriptionTask{},
 		&models.TranscriptionText{},
 		&models.SystemSetting{},
-		&models.HLSJtiRecord{}, // Phase 19 D3: HLS token 一次性 jti 持久化记录
+		&models.HLSJtiRecord{},      // Phase 19 D3: HLS token 一次性 jti 持久化记录
+		&models.AdminMigrationJob{}, // Phase 21 PERF-005/PR-F: admin migration job 持久化(runCustomMigrations dormant, 必须走 AutoMigrate)
 	)
 
 	if err != nil {
