@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -98,7 +99,7 @@ type huaweiDBAdapter struct {
 func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huaweiapi.HuaweiConfigDB, error) {
 	var config models.InputConfig
 	if err := a.db.First(&config, configID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("输入配置不存在: ID=%d", configID)
 		}
 		return nil, err
@@ -413,7 +414,7 @@ func (a *MinimalApp) seedDatabase() error {
 
 	for _, role := range roles {
 		var existing models.Role
-		if err := a.db.Where("name = ?", role.Name).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := a.db.Where("name = ?", role.Name).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			if err := a.db.Create(role).Error; err != nil {
 				return fmt.Errorf("failed to create role %s: %w", role.Name, err)
 			}
@@ -428,7 +429,7 @@ func (a *MinimalApp) seedDatabase() error {
 	}
 
 	var existingUser models.User
-	if err := a.db.Where("username = ?", "admin").First(&existingUser).Error; err == gorm.ErrRecordNotFound {
+	if err := a.db.Where("username = ?", "admin").First(&existingUser).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		admin := &models.User{
 			Username: "admin",
 			Email:    "admin@example.com",
@@ -513,7 +514,7 @@ func (a *MinimalApp) seedPermissions() error {
 
 		// 检查权限是否已存在
 		var existing models.Permission
-		if err := a.db.Where("resource = ? AND action = ?", resource, action).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := a.db.Where("resource = ? AND action = ?", resource, action).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			permission := &models.Permission{
 				Resource:    resource,
 				Action:      action,
@@ -563,7 +564,7 @@ func (a *MinimalApp) seedPermissions() error {
 	// shared_viewer 只控制是否能看到所有数据，操作权限由其他角色决定
 	var sharedViewerRole models.Role
 	if err := a.db.Where("name = ?", models.RoleSharedViewer).First(&sharedViewerRole).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			a.logger.Warn("shared_viewer role not found, skipping permission assignment")
 		} else {
 			return fmt.Errorf("failed to find shared_viewer role: %w", err)
