@@ -897,6 +897,10 @@ func (a *MinimalApp) registerRoutes() error {
 		adminGroup.PUT("/config", auditOp(models.ModuleAdmin, "update_config"), a.handlers.Admin.UpdateAuthConfig)
 		adminGroup.GET("/me", auditOp(models.ModuleAdmin, models.ActionRead), a.handlers.Admin.GetCurrentUser)
 		adminGroup.POST("/lookup-ad-user", auditOp(models.ModuleAdmin, "lookup_ad_user"), a.handlers.Admin.LookupADUser)
+		// PERF-005/PR-F: 异步 admin migration (huawei_configs → encrypted input_configs)。
+		// POST 立即返回 202 + job_id,GET 查进度。
+		adminGroup.POST("/migrate-input-configs", auditOp(models.ModuleAdmin, models.ActionCreate), a.handlers.Admin.SubmitAdminMigration)
+		adminGroup.GET("/migrate-input-configs/:job_id", auditOp(models.ModuleAdmin, models.ActionRead), a.handlers.Admin.GetAdminMigrationStatus)
 	}
 
 	// API路由组
