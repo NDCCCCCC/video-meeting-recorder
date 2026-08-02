@@ -129,8 +129,9 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	config := &Config{
 		Server: cfg.Server,
 		Port:   cfg.Port,
-		// SEC-003b deferred (per CONTEXT.md): 华为密码 DB 加密需独立迁移 + 前端/配置联动，
-		// 本 phase 仅完成 SEC-003a（TLS 三项 + ctx 透传），密码仍以明文形式从 DB 读取。
+		// SEC-003b/Phase 21: 密码已在 cmd/server/app.go 中的 huaweiDBAdapter 里经过
+		// CredentialEncryptor.Decrypt 解密后传入——此层视为**明文边界**。原始 DB 字段
+		// 走 Phase 18 的"SM4:<version>:<base64>"信封,不解密直接看是密文。
 		Username:           cfg.Username,
 		Password:           cfg.Password,
 		APITimeout:         30 * time.Second,

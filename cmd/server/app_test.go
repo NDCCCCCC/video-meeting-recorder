@@ -6,6 +6,8 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -43,3 +45,62 @@ func TestAuthService_SetAuditServiceWiring(t *testing.T) {
 		authService.SetAuditService(nil)
 	})
 }
+
+// TestHuaweiDBAdapter_ProductionDecrypts 验证 SEC-003b 修复：
+// 生产用 huaweiDBAdapter 必须经 CredentialEncryptor 解密后再返回明文密码。
+// 直接返回密文会让 manager 把 "SM4:<version>:<base64>" 当明文提交给华为终端,
+// 导致 401。这是 Phase 18 之后必须保证的不变式。
+func TestHuaweiDBAdapter_ProductionDecrypts(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("打开内存 sqlite 失败: %v", err)
+	}
+	if err := db.AutoMigrate(&models.InputConfig{}); err != nil {
+		t.Fatalf("migrate 失败: %v", err)
+	}
+
+	logger := zap.NewNop()
+
+	encryptor, err := services.NewCredentialEncryptor(
+		"v1",
+		strings.Repeat("c", 32),
+		"", "",
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("构造 CredentialEncryptor 失败: %v", err)
+	}
+
+	const plaintextPwd = "HuaweiP@ss-2026"
+	envelope, err := encryptor.Encrypt(plaintextPwd)
+	if err != nil {
+		t.Fatalf("Encrypt 失败: %v", err)
+	}
+	if !strings.HasPrefix(envelope, "SM4:v1:") {
+		t.Fatalf("意外 envelope 格式: %q", envelope)
+	}
+
+	// 插入密文形态的 InputConfig
+	cfg2 := models.InputConfig{
+		Name:           "test-huawei",
+		ConfigType:     "huawei",
+		Server:         "10.0.0.1",
+		Username:       "admin",
+		Password:       envelope,
+		TerminalNumber: "T01",
+	}
+	if err := db.Create(&cfg2).Error; err != nil {
+		t.Fatalf("insert InputConfig 失败: %v", err)
+	}
+
+	adapter := &huaweiDBAdapter{db: db, encryptor: encryptor}
+	got, err := adapter.GetHuaweiConfig(cfg2.ID)
+	if err != nil {
+		t.Fatalf("GetHuaweiConfig 失败: %v", err)
+	}
+	assert.Equal(t, plaintextPwd, got.Password,
+		"生产适配器必须解密密文 envelope,不应直接返回 'SM4:v1:...'")
+	assert.NotContains(t, got.Password, "SM4:",
+		"返回值不应再含 envelope 前缀")
+}
+
