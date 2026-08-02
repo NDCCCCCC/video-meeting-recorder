@@ -32,14 +32,10 @@ import {
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import * as inputConfigApi from '../../../api/input-config'
-import type { InputConfig, InputConfigListParams, USBDeviceInfo, ConfigType } from '../../../types/input-config'
-import {
-  resolveCameraDeviceId,
-  resolveAudioDeviceId,
-  buildCreatePayload,
-  buildUpdatePayload,
-} from './utils'
+import type { InputConfig, InputConfigListParams, ConfigType } from '../../../types/input-config'
+import { buildCreatePayload, buildUpdatePayload } from './utils'
 import { InputConfigDetailModal } from './components/InputConfigDetailModal'
+import { useUSBDeviceScan } from './hooks/useUSBDeviceScan'
 
 export default function InputConfigManagement() {
   const [configs, setConfigs] = useState<InputConfig[]>([])
@@ -55,10 +51,16 @@ export default function InputConfigManagement() {
   const [configType, setConfigType] = useState<ConfigType>('usb')
   const [huaweiEnabled, setHuaweiEnabled] = useState(false)
 
-  // USB设备扫描相关状态
-  const [scanningDevices, setScanningDevices] = useState(false)
-  const [detectedCameras, setDetectedCameras] = useState<USBDeviceInfo[]>([])
-  const [detectedAudios, setDetectedAudios] = useState<USBDeviceInfo[]>([])
+  // USB 设备扫描（封装为 hook）
+  const {
+    scanningDevices,
+    detectedCameras,
+    detectedAudios,
+    scanDevices,
+    selectCamera,
+    selectAudio,
+    clearDevices,
+  } = useUSBDeviceScan(form)
 
   const [params, setParams] = useState<InputConfigListParams>({
     page: 1,
@@ -137,15 +139,14 @@ export default function InputConfigManagement() {
     }
     setModalVisible(true)
     // 自动扫描 USB 设备，以便用户选择
-    handleScanDevices()
+    scanDevices()
   }
 
   const closeModal = () => {
     setModalVisible(false)
     setEditingConfig(null)
     form.resetFields()
-    setDetectedCameras([])
-    setDetectedAudios([])
+    clearDevices()
     setConfigType('usb')
     setHuaweiEnabled(false)
   }
@@ -197,45 +198,6 @@ export default function InputConfigManagement() {
   const viewDetail = (config: InputConfig) => {
     setViewingConfig(config)
     setDetailVisible(true)
-  }
-
-  // 扫描USB设备
-  const handleScanDevices = async () => {
-    setScanningDevices(true)
-    try {
-      const response = await inputConfigApi.scanUSBDevices()
-      if (response.data) {
-        setDetectedCameras(response.data.cameras || [])
-        setDetectedAudios(response.data.audios || [])
-        message.success(
-          `检测到 ${response.data.cameras?.length || 0} 个摄像头，${response.data.audios?.length || 0} 个音频设备`
-        )
-      }
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '扫描USB设备失败')
-    } finally {
-      setScanningDevices(false)
-    }
-  }
-
-  // 选择摄像头
-  const handleSelectCamera = (device: USBDeviceInfo) => {
-    form.setFieldsValue({
-      usb_camera_name: device.name,
-      usb_camera_device: resolveCameraDeviceId(device),
-      camera_backend: device.backend,
-    })
-    message.info(`已选择摄像头: ${device.name}`)
-  }
-
-  // 选择音频设备
-  const handleSelectAudio = (device: USBDeviceInfo) => {
-    form.setFieldsValue({
-      usb_audio_name: device.name,
-      usb_audio_device: resolveAudioDeviceId(device),
-      audio_backend: device.backend,
-    })
-    message.info(`已选择音频设备: ${device.name}`)
   }
 
   // 配置类型显示映射
@@ -583,7 +545,7 @@ export default function InputConfigManagement() {
                           <Button
                             type="primary"
                             icon={<ScanOutlined />}
-                            onClick={handleScanDevices}
+                            onClick={scanDevices}
                             loading={scanningDevices}
                           >
                             自动检测USB设备
@@ -598,7 +560,7 @@ export default function InputConfigManagement() {
                               placeholder="选择检测到的摄像头设备"
                               onChange={(value) => {
                                 const device = detectedCameras.find((d) => d.device_id === value)
-                                if (device) handleSelectCamera(device)
+                                if (device) selectCamera(device)
                               }}
                               options={detectedCameras.map((device) => ({
                                 label: (
@@ -655,7 +617,7 @@ export default function InputConfigManagement() {
                               placeholder="选择检测到的音频设备"
                               onChange={(value) => {
                                 const device = detectedAudios.find((d) => d.device_id === value)
-                                if (device) handleSelectAudio(device)
+                                if (device) selectAudio(device)
                               }}
                               options={detectedAudios.map((device) => ({
                                 label: (
