@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/common"
+	// common import removed (Phase 21: common.Service deleted)
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
@@ -243,10 +243,10 @@ func TestPhase18_Initialize_FailClosedWhenInvariantFails(t *testing.T) {
 	cfg.Auth.CredentialSM4Version = "v1"
 	cfg.Auth.CredentialSM4Secret = "0123456789abcdef0123456789abcdef"
 	app := &MinimalApp{
-		config:   cfg,
-		logger:   zap.NewNop(),
-		db:       db,
-		services: map[string]common.Service{},
+		config: cfg,
+		logger: zap.NewNop(),
+		db:     db,
+		// services 字段已删除 (Phase 21 common.Service removal)
 	}
 
 	// initCredentialEncryptor 应成功（构造逻辑简单）

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/common"
+	// "github.com/NDCCCCCC/video-meeting-recorder/internal/common" — Phase 21 删除 (无任何剩余用法)
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/frontend"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/handlers"
@@ -46,8 +46,8 @@ type MinimalApp struct {
 	tokenService    *auth.SM4TokenService
 	handlers        *Handlers
 	auditMiddleware *middleware.AuditMiddleware
-	services        map[string]common.Service
-	wg              sync.WaitGroup
+	// services map[string]common.Service — Phase 21 删除 dead field (无任何注册调用方)
+	wg sync.WaitGroup
 	// 调度器和协调器
 	scheduler            *scheduler.VideoSimpleScheduler
 	coordinator          *recorder.SimpleRecordingCoordinator
@@ -128,9 +128,8 @@ func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huaweiapi.HuaweiConfi
 // NewMinimalApp 创建应用实例
 func NewMinimalApp(cfg *config.Config, logger *zap.Logger) *MinimalApp {
 	return &MinimalApp{
-		config:   cfg,
-		logger:   logger,
-		services: make(map[string]common.Service),
+		config: cfg,
+		logger: logger,
 	}
 }
 
@@ -1164,13 +1163,8 @@ func (a *MinimalApp) Start() error {
 	// 华为管理器无需预先启动，客户端按需创建
 	a.logger.Info("华为管理器已初始化（客户端按需创建）")
 
-	// 启动所有服务
-	for name, service := range a.services {
-		a.logger.Info("正在启动服务", zap.String("name", name))
-		if err := service.Start(); err != nil {
-			return fmt.Errorf("failed to start service %s: %w", name, err)
-		}
-	}
+	// Phase 21: a.services map 已删除（common.Service 移除后无 caller）;
+	// 服务生命周期由各自的 init/Start 路径显式管理（见 NewMinimalApp + registerServices）。
 
 	// SEC-004 (Phase 19): 启动 HLS Token 的 jti 索引 sweeper（驱逐过期项）。
 	// 传入 background ctx——HLSToken.Start 内部派生可取消子 ctx，StopHLS 负责取消。
@@ -1276,16 +1270,8 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 		a.rateLimiter.Shutdown()
 	}
 
-	// 停止所有服务
-	for name, service := range a.services {
-		a.logger.Info("正在停止服务", zap.String("name", name))
-		if err := service.Stop(); err != nil {
-			a.logger.Error("停止服务失败",
-				zap.String("name", name),
-				zap.Error(err),
-			)
-		}
-	}
+	// Phase 21: a.services map 已删除 — 服务生命周期由 MinimalApp 字段各自的
+	// Stop 方法直接调用（hotswap 测试或资源回收场景）。不再反射式迭代 map。
 
 	// 关闭数据库连接
 	if a.db != nil {
@@ -1395,7 +1381,7 @@ func (a *MinimalApp) healthHandler(c *gin.Context) {
 // statsHandler 系统统计处理器
 func (a *MinimalApp) statsHandler(c *gin.Context) {
 	stats := map[string]interface{}{
-		"services": len(a.services),
+		"services": 0, // Phase 21: services map 已删除,统计保留字段以避免运维脚本误读
 		"uptime":   time.Since(time.Now()).Seconds(),
 	}
 
