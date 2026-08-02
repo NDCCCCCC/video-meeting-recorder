@@ -12,7 +12,6 @@ import {
   Popconfirm,
   Tag,
   Tabs,
-  Descriptions,
   Select,
   Divider,
   Switch,
@@ -40,6 +39,7 @@ import {
   buildCreatePayload,
   buildUpdatePayload,
 } from './utils'
+import { InputConfigDetailModal } from './components/InputConfigDetailModal'
 
 export default function InputConfigManagement() {
   const [configs, setConfigs] = useState<InputConfig[]>([])
@@ -784,132 +784,12 @@ export default function InputConfigManagement() {
       </Modal>
 
       {/* 配置详情对话框 */}
-      <Modal
-        title={
-          <Space>
-            <SettingOutlined />
-            配置详情 - {viewingConfig?.name}
-          </Space>
-        }
+      <InputConfigDetailModal
         open={detailVisible}
-        onCancel={() => setDetailVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setDetailVisible(false)}>
-            关闭
-          </Button>,
-        ]}
-        width={900}
-      >
-        {viewingConfig && (
-          <Descriptions column={2} size="small">
-            <Descriptions.Item label="配置ID">{viewingConfig.id}</Descriptions.Item>
-            <Descriptions.Item label="配置名称">{viewingConfig.name}</Descriptions.Item>
-            <Descriptions.Item label="配置类型" span={2}>
-              <Tag
-                color={configTypeMap[viewingConfig.config_type]?.color}
-                icon={configTypeMap[viewingConfig.config_type]?.icon}
-              >
-                {configTypeMap[viewingConfig.config_type]?.text || viewingConfig.config_type}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="华为终端控制" span={2}>
-              {viewingConfig.config_type === 'usb' ? (
-                <Tag color={viewingConfig.huawei_enabled ? 'green' : 'orange'}>
-                  {viewingConfig.huawei_enabled ? '启用自动控制' : '手动模式'}
-                </Tag>
-              ) : (
-                '-'
-              )}
-            </Descriptions.Item>
-            <Descriptions.Item label="状态" span={2}>
-              <Space>
-                <Tag color={viewingConfig.is_active ? 'green' : 'red'}>
-                  {viewingConfig.is_active ? '激活' : '禁用'}
-                </Tag>
-                {viewingConfig.is_locked && (
-                  <Tag color="orange" icon={<LockOutlined />}>
-                    已锁定
-                  </Tag>
-                )}
-              </Space>
-            </Descriptions.Item>
-            <Descriptions.Item label="描述" span={2}>
-              {viewingConfig.description || '-'}
-            </Descriptions.Item>
-
-            {/* 华为终端字段 */}
-            {viewingConfig.config_type === 'usb' && viewingConfig.huawei_enabled && (
-              <>
-                <Descriptions.Item label="服务器">{viewingConfig.server || '-'}</Descriptions.Item>
-                <Descriptions.Item label="端口">{viewingConfig.port || '-'}</Descriptions.Item>
-                <Descriptions.Item label="用户名">
-                  {viewingConfig.username || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="终端号">
-                  {viewingConfig.terminal_number || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="会议号" span={2}>
-                  {viewingConfig.conference_number || '-'}
-                </Descriptions.Item>
-              </>
-            )}
-
-            {/* USB设备字段 */}
-            {viewingConfig.config_type === 'usb' && (
-              <>
-                <Descriptions.Item label="摄像头名称" span={2}>
-                  {viewingConfig.usb_camera_name || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="摄像头设备" span={2}>
-                  {viewingConfig.usb_camera_device || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="摄像头后端" span={2}>
-                  {viewingConfig.camera_backend || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="音频设备名称" span={2}>
-                  {viewingConfig.usb_audio_name || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="音频设备" span={2}>
-                  {viewingConfig.usb_audio_device || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="音频后端" span={2}>
-                  {viewingConfig.audio_backend || '-'}
-                </Descriptions.Item>
-              </>
-            )}
-
-            {/* 流媒体字段 */}
-            {viewingConfig.config_type === 'stream' && (
-              <>
-                <Descriptions.Item label="流媒体协议" span={2}>
-                  {viewingConfig.stream_protocol ? (
-                    <Tag color="blue">{viewingConfig.stream_protocol.toUpperCase()}</Tag>
-                  ) : (
-                    '-'
-                  )}
-                </Descriptions.Item>
-                <Descriptions.Item label="流媒体URL" span={2}>
-                  {viewingConfig.stream_url || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="流媒体状态" span={2}>
-                  <Tag color={viewingConfig.stream_enabled ? 'green' : 'red'}>
-                    {viewingConfig.stream_enabled ? '启用' : '禁用'}
-                  </Tag>
-                </Descriptions.Item>
-              </>
-            )}
-
-            <Descriptions.Item label="输出格式" span={2}>
-              {viewingConfig.output_format || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="关联任务数" span={2}>
-              {viewingConfig.video_recording_tasks?.length || 0}
-            </Descriptions.Item>
-            <Descriptions.Item label="创建时间">{viewingConfig.created_at}</Descriptions.Item>
-            <Descriptions.Item label="更新时间">{viewingConfig.updated_at}</Descriptions.Item>
-          </Descriptions>
-        )}
-      </Modal>
+        config={viewingConfig}
+        configTypeMap={configTypeMap}
+        onClose={() => setDetailVisible(false)}
+      />
     </div>
   )
 }
