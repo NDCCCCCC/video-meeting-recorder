@@ -274,7 +274,7 @@ export default function VideoUploadModal({
                   uploading: 'processing',
                   success: 'success',
                   error: 'error',
-                }[task.status] as any
+                }[task.status]
 
                 const statusText = {
                   pending: '等待中',

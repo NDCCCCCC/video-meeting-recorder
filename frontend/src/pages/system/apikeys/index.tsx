@@ -109,8 +109,8 @@ const APIKeysPage: React.FC = () => {
       setFullKeyModalVisible(true)
 
       loadAPIKeys()
-    } catch (error: any) {
-      message.error(error.message || '创建失败')
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '创建失败')
     }
   }
 
@@ -120,7 +120,7 @@ const APIKeysPage: React.FC = () => {
     try {
       const processedValues = {
         ...values,
-        ip_whitelist: processIPWhitelist(values.ip_whitelist as any),
+        ip_whitelist: processIPWhitelist(values.ip_whitelist as unknown as string),
       }
       await apikeyAPI.updateAPIKey(currentKey.id, processedValues)
       message.success('API密钥更新成功')
@@ -128,8 +128,8 @@ const APIKeysPage: React.FC = () => {
       setCurrentKey(null)
       form.resetFields()
       loadAPIKeys()
-    } catch (error: any) {
-      message.error(error.message || '更新失败')
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '更新失败')
     }
   }
 
@@ -140,8 +140,8 @@ const APIKeysPage: React.FC = () => {
         await apikeyAPI.deleteAPIKey(id)
         message.success('API密钥删除成功')
         loadAPIKeys()
-      } catch (error: any) {
-        message.error(error.message || '删除失败')
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '删除失败')
       }
     },
     [loadAPIKeys]
@@ -154,8 +154,8 @@ const APIKeysPage: React.FC = () => {
         await apikeyAPI.toggleAPIKeyStatus(id)
         message.success('状态切换成功')
         loadAPIKeys()
-      } catch (error: any) {
-        message.error(error.message || '操作失败')
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '操作失败')
       }
     },
     [loadAPIKeys]

@@ -407,7 +407,7 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
               style={STYLES.video}
               preload="metadata"
               muted={muted}
-              {...({ volume: actualVolume } as any)}
+              {...({ volume: actualVolume } as unknown as React.VideoHTMLAttributes<HTMLVideoElement>)}
               onLoadedMetadata={() => {
                 const video = videoRef.current
                 if (video) {

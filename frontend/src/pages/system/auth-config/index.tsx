@@ -14,7 +14,7 @@ import {
 } from 'antd'
 import { WarningOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons'
 import { getAuthConfig, updateAuthConfig, testADConnection } from '@/api/auth'
-import type { AuthConfigResponse, ADValidationResult } from '@/types/auth'
+import type { AuthConfigResponse, ADValidationResult, UpdateAuthConfigRequest } from '@/types/auth'
 
 const { Option } = Select
 
@@ -60,8 +60,9 @@ const AuthConfigPage: React.FC = () => {
           message.error('AD连接测试失败: ' + response.data.errors?.join(', '))
         }
       }
-    } catch (error: any) {
-      message.error('连接测试失败: ' + (error.response?.data?.message || error.message))
+    } catch (error) {
+      const e = error as { response?: { data?: { message?: string } }; message?: string }
+      message.error('连接测试失败: ' + (e.response?.data?.message || e.message))
     } finally {
       setTesting(false)
     }
@@ -123,13 +124,14 @@ const AuthConfigPage: React.FC = () => {
     }
   }
 
-  const saveConfig = async (values: any) => {
+  const saveConfig = async (values: UpdateAuthConfigRequest) => {
     try {
       await updateAuthConfig(values)
       message.success('配置已更新')
       fetchConfig()
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '保存失败')
+    } catch (error) {
+      const e = error as { response?: { data?: { message?: string } }; message?: string }
+      message.error(e.response?.data?.message || '保存失败')
     }
   }
 

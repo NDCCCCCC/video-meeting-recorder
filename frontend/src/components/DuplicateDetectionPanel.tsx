@@ -18,6 +18,12 @@ import { detectDuplicates, deleteSlides, rollbackPPT, type DuplicateGroup } from
 
 const { Text } = Typography
 
+// 从 API 错误提取用户可见消息（apiRequest 抛 Error；response.data 为防御性兼容访问）
+function extractApiError(err: unknown, fallback: string): string {
+  const e = err as { response?: { data?: { error?: string } }; message?: string }
+  return e.response?.data?.error || e.message || fallback
+}
+
 interface DuplicateDetectionPanelProps {
   pptFileId: number
   visible: boolean
@@ -70,8 +76,8 @@ const DuplicateDetectionPanel: React.FC<DuplicateDetectionPanelProps> = ({
       } else {
         message.success(`检测到 ${groups.length} 组重复幻灯片`)
       }
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.error || err.message || '检测失败'
+    } catch (err) {
+      const errorMsg = extractApiError(err, '检测失败')
       setError(errorMsg)
       message.error(errorMsg)
     } finally {
@@ -129,8 +135,8 @@ const DuplicateDetectionPanel: React.FC<DuplicateDetectionPanelProps> = ({
           setSelectedForDeletion(new Set())
           onSlidesDeleted?.()
           onClose()
-        } catch (err: any) {
-          const errorMsg = err.response?.data?.error || err.message || '删除失败'
+        } catch (err) {
+          const errorMsg = extractApiError(err, '删除失败')
           message.error(errorMsg)
         } finally {
           setIsDeleting(false)
@@ -153,8 +159,8 @@ const DuplicateDetectionPanel: React.FC<DuplicateDetectionPanelProps> = ({
           message.success('回滚成功')
           onSlidesDeleted?.()
           onClose()
-        } catch (err: any) {
-          const errorMsg = err.response?.data?.error || err.message || '回滚失败'
+        } catch (err) {
+          const errorMsg = extractApiError(err, '回滚失败')
           message.error(errorMsg)
         } finally {
           setIsRollingBack(false)

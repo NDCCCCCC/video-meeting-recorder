@@ -161,15 +161,9 @@ export function uploadVideoFile(
 
     // Handle completion
     xhr.addEventListener('load', () => {
-      console.log('[Upload Debug] Status:', xhr.status, xhr.statusText)
-      console.log('[Upload Debug] Response:', xhr.responseText)
-
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText)
-          console.log('[Upload Debug] Parsed response:', response)
-          console.log('[Upload Debug] response.data:', response?.data)
-          console.log('[Upload Debug] response.data.file_id:', response?.data?.file_id)
 
           // Validate response structure
           if (!response) {

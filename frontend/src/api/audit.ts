@@ -54,7 +54,7 @@ export async function exportAuditLogs(params: AuditLogExportParams): Promise<Blo
 }
 
 // 获取审计日志统计
-export async function getAuditStatistics(days?: number): Promise<ApiResponse<any>> {
+export async function getAuditStatistics(days?: number): Promise<ApiResponse<unknown>> {
   const queryParams = new URLSearchParams()
   if (days) queryParams.append('days', days.toString())
 
