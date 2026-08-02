@@ -74,9 +74,9 @@ frontend/.env.production
 /.planning/
 
 # ============================================================================
-# 前端构建产物
+# 依赖目录 (根 + 所有子项目) 与前端构建产物
 # ============================================================================
-frontend/node_modules/
+node_modules/
 frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
