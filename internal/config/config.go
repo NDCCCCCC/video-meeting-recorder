@@ -46,7 +46,12 @@ type CORSConfig struct {
 
 // SecurityConfig contains transport security feature switches.
 type SecurityConfig struct {
-	CSRFEnabled             bool     `mapstructure:"csrf_enabled" json:"csrf_enabled" yaml:"csrf_enabled"`
+	CSRFEnabled bool `mapstructure:"csrf_enabled" json:"csrf_enabled" yaml:"csrf_enabled"`
+	// CSRFSafeOrigins: 用于 Double-Submit Cookie 的额外来源校验。
+	// 配置后: Origin 头必须与列表中任一项精确匹配才会接受写请求。
+	// 留空 (默认): 仅校验 cookie+header 双提交,允许任意来源 (前端通过 Bearer 头时适用)。
+	// 仅当 CSRFEnabled=true 时生效。
+	CSRFSafeOrigins       []string `mapstructure:"csrf_safe_origins" json:"csrf_safe_origins" yaml:"csrf_safe_origins"`
 	AllowedTokenURLPrefixes []string `mapstructure:"allowed_token_url_prefixes" json:"allowed_token_url_prefixes" yaml:"allowed_token_url_prefixes"`
 	// OutboundURLAllowlist guards all outbound HTTP requests (SEC-013: SSRF defense).
 	// Empty list means "allow all in non-production; deny all in production".
@@ -379,6 +384,10 @@ func Load() (*Config, error) {
 	}
 	if value := os.Getenv("ALLOWED_TOKEN_URL_PREFIXES"); value != "" {
 		cfg.Security.AllowedTokenURLPrefixes = splitCommaSeparated(value)
+	}
+	// CSRF_SAFE_ORIGINS 提供 comma-separated origin 列表; 空字符串表示不附加 origin 检查。
+	if value := os.Getenv("CSRF_SAFE_ORIGINS"); value != "" {
+		cfg.Security.CSRFSafeOrigins = splitCommaSeparated(value)
 	}
 
 	// 创建必要的目录
@@ -820,6 +829,7 @@ func bindSecretEnv(v *viper.Viper) {
 	_ = v.BindEnv("huawei.min_tls_version", "HUAWEI_MIN_TLS_VERSION")
 	_ = v.BindEnv("cors.allowed_origins", "CORS_ALLOWED_ORIGINS")
 	_ = v.BindEnv("security.csrf_enabled", "CSRF_ENABLED")
+	_ = v.BindEnv("security.csrf_safe_origins", "CSRF_SAFE_ORIGINS")
 	_ = v.BindEnv("security.allowed_token_url_prefixes", "ALLOWED_TOKEN_URL_PREFIXES")
 	// PERF-005/D-03.8: 三个 handler 的有界并发度可通过环境变量覆盖。
 	_ = v.BindEnv("admin.migration_concurrency", "ADMIN_MIGRATION_CONCURRENCY")

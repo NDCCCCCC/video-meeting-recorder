@@ -122,6 +122,30 @@ func TestCSRFEnabledEnvBinding(t *testing.T) {
 	}
 }
 
+func TestCSRFSafeOriginsEnvBinding(t *testing.T) {
+	// SEC-008 (Phase 21): 验证 CSRF_SAFE_ORIGINS 通过 splitCommaSeparated 被加载为列表。
+	t.Setenv("CSRF_SAFE_ORIGINS", "https://app.example.com,https://admin.example.com")
+	t.Setenv("CSRF_ENABLED", "true")
+	v := viper.New()
+	bindSecretEnv(v)
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Security.CSRFEnabled {
+		t.Fatal("CSRF_ENABLED=true was not bound")
+	}
+	want := []string{"https://app.example.com", "https://admin.example.com"}
+	if len(cfg.Security.CSRFSafeOrigins) != len(want) {
+		t.Fatalf("CSRFSafeOrigins length = %d, want %d", len(cfg.Security.CSRFSafeOrigins), len(want))
+	}
+	for i, w := range want {
+		if cfg.Security.CSRFSafeOrigins[i] != w {
+			t.Fatalf("CSRFSafeOrigins[%d] = %q, want %q", i, cfg.Security.CSRFSafeOrigins[i], w)
+		}
+	}
+}
+
 // ============================================================================
 // Phase 18: 凭据静态加密密钥族校验
 // ============================================================================

@@ -633,10 +633,12 @@ func (a *MinimalApp) initRouter() error {
 	a.router.Use(gin.Recovery())
 	a.router.Use(gin.Logger())
 
-	// SEC-008: 保留 CSRF 配置开关；Bearer-only 认证当前风险低，未来 Cookie 认证启用时接入中间件。
-	if a.config.Security.CSRFEnabled {
-		a.logger.Warn("csrf_enabled 已开启，但 CSRF 中间件尚未接入；Cookie 认证上线前必须实现")
-	}
+	// SEC-008 (Phase 21): CSRF Double-Submit Cookie 中间件已通过 middleware.CSRF
+	// 工厂实现。CSRFEnabled=false 时不挂载，启用时挂到 /api/v1 路由组（见下方
+	// registerRoutes 函数）。中间件内部对带 "Authorization: Bearer ..." 的写请求
+	// 视为 CSRF-safe 直接放行，保证现有 API 客户端不受影响；当未来引入 cookie 认证
+	// 时自动接管所有非 Bearer 写请求。CSRFSafeOrigins 空时不附加 Origin 头校验
+	// （默认）；配置后 Origin 须精确匹配列表。
 
 	// CORS中间件
 	a.router.Use(corsMiddleware(a.config.CORS.AllowedOrigins))
@@ -900,6 +902,13 @@ func (a *MinimalApp) registerRoutes() error {
 	// API路由组
 	api := a.router.Group("/api/v1")
 	api.Use(middleware.MultiAuth(a.db, a.tokenService, a.logger)) // 支持SM4 Token和API Key认证
+	// SEC-008 (Phase 21): CSRF Double-Submit Cookie 中间件。仅在启用时挂载；
+	// 中间件自身对 Bearer 头放行（保持现有 API 客户端兼容），未来切到 cookie 认证
+	// 时自动接管所有非 Bearer 写请求。
+	if a.config.Security.CSRFEnabled {
+		api.Use(middleware.CSRF(a.config.Security.CSRFSafeOrigins, a.logger))
+		a.logger.Info("CSRF middleware enabled", zap.Strings("safe_origins", a.config.Security.CSRFSafeOrigins))
+	}
 
 	// 用户管理
 	users := api.Group("/users")
