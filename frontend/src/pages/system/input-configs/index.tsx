@@ -12,10 +12,6 @@ import {
   Popconfirm,
   Tag,
   Tabs,
-  Select,
-  Divider,
-  Switch,
-  InputNumber,
 } from 'antd'
 import {
   PlusOutlined,
@@ -25,9 +21,7 @@ import {
   ReloadOutlined,
   SettingOutlined,
   LockOutlined,
-  ScanOutlined,
   VideoCameraOutlined,
-  AudioOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -36,6 +30,10 @@ import type { InputConfig, InputConfigListParams, ConfigType } from '../../../ty
 import { buildCreatePayload, buildUpdatePayload } from './utils'
 import { InputConfigDetailModal } from './components/InputConfigDetailModal'
 import { useUSBDeviceScan } from './hooks/useUSBDeviceScan'
+import { BasicConfigTab } from './components/BasicConfigTab'
+import { HuaweiConfigTab } from './components/HuaweiConfigTab'
+import { USBConfigTab } from './components/USBConfigTab'
+import { StreamConfigTab } from './components/StreamConfigTab'
 
 export default function InputConfigManagement() {
   const [configs, setConfigs] = useState<InputConfig[]>([])
@@ -371,98 +369,13 @@ export default function InputConfigManagement() {
                 key: 'basic',
                 label: '基本配置',
                 children: (
-                  <>
-                    <Form.Item
-                      name="name"
-                      label="配置名称"
-                      rules={[
-                        { required: true, message: '请输入配置名称' },
-                        { max: 100, message: '配置名称最多100个字符' },
-                      ]}
-                    >
-                      <Input placeholder="请输入配置名称" />
-                    </Form.Item>
-
-                    <Form.Item name="description" label="描述">
-                      <Input.TextArea placeholder="请输入配置描述" rows={2} />
-                    </Form.Item>
-
-                    {/* 配置类型选择器 - 这是关键的新字段 */}
-                    <Form.Item label="配置类型" required>
-                      <Select
-                        value={configType}
-                        onChange={(value) => {
-                          setConfigType(value)
-                          // 重置依赖字段
-                          if (value !== 'usb') {
-                            form.setFieldsValue({
-                              usb_camera_device: undefined,
-                              usb_camera_name: undefined,
-                              usb_audio_device: undefined,
-                              usb_audio_name: undefined,
-                              camera_backend: undefined,
-                              audio_backend: undefined,
-                            })
-                          }
-                          if (value !== 'stream') {
-                            form.setFieldsValue({
-                              stream_url: undefined,
-                              stream_protocol: undefined,
-                              stream_username: undefined,
-                              stream_password: undefined,
-                              stream_enabled: false,
-                            })
-                          }
-                        }}
-                        options={[
-                          { label: 'USB设备直录', value: 'usb' },
-                          { label: '流媒体录制', value: 'stream' },
-                        ]}
-                      />
-                    </Form.Item>
-
-                    {/* 华为终端控制开关 - 所有配置类型都可以启用 */}
-                    <Form.Item label="启用华为终端控制">
-                      <Space>
-                        <Switch
-                          checked={huaweiEnabled}
-                          onChange={(checked) => {
-                            setHuaweiEnabled(checked)
-                            form.setFieldsValue({ huawei_enabled: checked })
-                            if (!checked) {
-                              // 禁用时清空华为字段
-                              form.setFieldsValue({
-                                server: undefined,
-                                port: undefined,
-                                username: undefined,
-                                password: undefined,
-                                terminal_number: undefined,
-                                conference_number: undefined,
-                              })
-                            }
-                          }}
-                          checkedChildren="启用"
-                          unCheckedChildren="禁用"
-                        />
-                        <span style={{ color: '#666', fontSize: '12px' }}>
-                          {huaweiEnabled
-                            ? '启用后将自动控制华为终端（可选功能）'
-                            : '不使用华为终端控制'}
-                        </span>
-                      </Space>
-                    </Form.Item>
-
-                    {/* 输出格式 - 所有类型通用 */}
-                    <Form.Item name="output_format" label="输出格式" initialValue="mp4">
-                      <Select
-                        options={[
-                          { label: 'MP4', value: 'mp4' },
-                          { label: 'MKV', value: 'mkv' },
-                          { label: 'AVI', value: 'avi' },
-                        ]}
-                      />
-                    </Form.Item>
-                  </>
+                  <BasicConfigTab
+                    form={form}
+                    configType={configType}
+                    setConfigType={setConfigType}
+                    huaweiEnabled={huaweiEnabled}
+                    setHuaweiEnabled={setHuaweiEnabled}
+                  />
                 ),
               },
               {
@@ -470,67 +383,7 @@ export default function InputConfigManagement() {
                 label: '华为终端配置',
                 disabled: !huaweiEnabled,
                 children: (
-                  <>
-                    {huaweiEnabled ? (
-                      <>
-                        <Space size="large" style={{ width: '100%' }}>
-                          <Form.Item
-                            name="server"
-                            label="服务器地址"
-                            rules={[{ required: true, message: '请输入服务器地址' }]}
-                          >
-                            <Input placeholder="例如: 192.168.1.100" />
-                          </Form.Item>
-
-                          <Form.Item
-                            name="port"
-                            label="端口"
-                            rules={[{ required: true, message: '请输入端口' }]}
-                          >
-                            <InputNumber min={1} max={65535} style={{ width: 150 }} />
-                          </Form.Item>
-                        </Space>
-
-                        <Space size="large" style={{ width: '100%' }}>
-                          <Form.Item
-                            name="username"
-                            label="用户名"
-                            rules={[{ required: true, message: '请输入用户名' }]}
-                          >
-                            <Input placeholder="请输入用户名" />
-                          </Form.Item>
-
-                          <Form.Item
-                            name="password"
-                            label={editingConfig ? '密码（留空不修改）' : '密码'}
-                            rules={editingConfig ? [] : [{ required: true, message: '请输入密码' }]}
-                          >
-                            <Input.Password
-                              placeholder={editingConfig ? '留空则不修改密码' : '请输入密码'}
-                            />
-                          </Form.Item>
-                        </Space>
-
-                        <Space size="large" style={{ width: '100%' }}>
-                          <Form.Item
-                            name="terminal_number"
-                            label="终端号"
-                            rules={[{ required: true, message: '请输入终端号' }]}
-                          >
-                            <Input placeholder="请输入终端号" />
-                          </Form.Item>
-
-                          <Form.Item name="conference_number" label="会议号">
-                            <Input placeholder="请输入会议号（可选）" />
-                          </Form.Item>
-                        </Space>
-                      </>
-                    ) : (
-                      <div style={{ color: '#999', textAlign: 'center', padding: '40px' }}>
-                        请先启用华为终端控制
-                      </div>
-                    )}
-                  </>
+                  <HuaweiConfigTab huaweiEnabled={huaweiEnabled} editingConfig={editingConfig} />
                 ),
               },
               {
@@ -538,207 +391,22 @@ export default function InputConfigManagement() {
                 label: 'USB设备配置',
                 disabled: configType !== 'usb',
                 children: (
-                  <>
-                    {configType === 'usb' ? (
-                      <>
-                        <div style={{ marginBottom: 16 }}>
-                          <Button
-                            type="primary"
-                            icon={<ScanOutlined />}
-                            onClick={scanDevices}
-                            loading={scanningDevices}
-                          >
-                            自动检测USB设备
-                          </Button>
-                        </div>
-
-                        <Divider>摄像头设备</Divider>
-
-                        {detectedCameras.length > 0 && (
-                          <Form.Item label="检测到的摄像头">
-                            <Select
-                              placeholder="选择检测到的摄像头设备"
-                              onChange={(value) => {
-                                const device = detectedCameras.find((d) => d.device_id === value)
-                                if (device) selectCamera(device)
-                              }}
-                              options={detectedCameras.map((device) => ({
-                                label: (
-                                  <Space>
-                                    <VideoCameraOutlined />
-                                    {device.name}
-                                    <Tag color={device.status === 'available' ? 'green' : 'orange'}>
-                                      {device.status}
-                                    </Tag>
-                                    <span style={{ color: '#999', fontSize: '12px' }}>
-                                      ({device.backend})
-                                    </span>
-                                  </Space>
-                                ),
-                                value: device.device_id,
-                              }))}
-                            />
-                          </Form.Item>
-                        )}
-
-                        <Form.Item name="usb_camera_name" label="摄像头名称">
-                          <Input
-                            placeholder="请输入USB摄像头名称"
-                            addonBefore={<VideoCameraOutlined />}
-                          />
-                        </Form.Item>
-
-                        <Form.Item
-                          name="usb_camera_device"
-                          label="摄像头设备"
-                          rules={[
-                            { required: configType === 'usb', message: '请选择USB摄像头设备' },
-                          ]}
-                        >
-                          <Input placeholder="例如: /dev/video0 或 video0" />
-                        </Form.Item>
-
-                        <Form.Item name="camera_backend" label="摄像头后端">
-                          <Select
-                            placeholder="选择后端类型"
-                            options={[
-                              { label: 'V4L2 (Linux)', value: 'v4l2' },
-                              { label: 'DirectShow (Windows)', value: 'dshow' },
-                              { label: 'AVFoundation (macOS)', value: 'avfoundation' },
-                            ]}
-                          />
-                        </Form.Item>
-
-                        <Divider>音频设备</Divider>
-
-                        {detectedAudios.length > 0 && (
-                          <Form.Item label="检测到的音频设备">
-                            <Select
-                              placeholder="选择检测到的音频设备"
-                              onChange={(value) => {
-                                const device = detectedAudios.find((d) => d.device_id === value)
-                                if (device) selectAudio(device)
-                              }}
-                              options={detectedAudios.map((device) => ({
-                                label: (
-                                  <Space>
-                                    <AudioOutlined />
-                                    {device.name}
-                                    <Tag color={device.status === 'available' ? 'green' : 'orange'}>
-                                      {device.status}
-                                    </Tag>
-                                    <span style={{ color: '#999', fontSize: '12px' }}>
-                                      ({device.backend})
-                                    </span>
-                                  </Space>
-                                ),
-                                value: device.device_id,
-                              }))}
-                            />
-                          </Form.Item>
-                        )}
-
-                        <Form.Item name="usb_audio_name" label="音频设备名称">
-                          <Input
-                            placeholder="请输入USB音频设备名称"
-                            addonBefore={<AudioOutlined />}
-                          />
-                        </Form.Item>
-
-                        <Form.Item name="usb_audio_device" label="音频设备">
-                          <Input placeholder="例如: hw:1,0 或 audio=0" />
-                        </Form.Item>
-
-                        <Form.Item name="audio_backend" label="音频后端">
-                          <Select
-                            placeholder="选择后端类型"
-                            options={[
-                              { label: 'ALSA (Linux)', value: 'alsa' },
-                              { label: 'DirectShow (Windows)', value: 'dshow' },
-                              { label: 'CoreAudio (macOS)', value: 'coreaudio' },
-                            ]}
-                          />
-                        </Form.Item>
-                      </>
-                    ) : (
-                      <div style={{ color: '#999', textAlign: 'center', padding: '40px' }}>
-                        请先选择"USB设备直录"类型
-                      </div>
-                    )}
-                  </>
+                  <USBConfigTab
+                    configType={configType}
+                    scanningDevices={scanningDevices}
+                    detectedCameras={detectedCameras}
+                    detectedAudios={detectedAudios}
+                    onScan={scanDevices}
+                    onSelectCamera={selectCamera}
+                    onSelectAudio={selectAudio}
+                  />
                 ),
               },
               {
                 key: 'stream',
                 label: '流媒体配置',
                 disabled: configType !== 'stream',
-                children: (
-                  <>
-                    {configType === 'stream' ? (
-                      <>
-                        <Form.Item
-                          name="stream_enabled"
-                          label="启用流媒体录制"
-                          valuePropName="checked"
-                        >
-                          <Switch checkedChildren="启用" unCheckedChildren="禁用" />
-                        </Form.Item>
-
-                        <Form.Item
-                          noStyle
-                          shouldUpdate={(prev, curr) => prev.stream_enabled !== curr.stream_enabled}
-                        >
-                          {({ getFieldValue }) =>
-                            getFieldValue('stream_enabled') !== false ? (
-                              <>
-                                <Form.Item
-                                  name="stream_protocol"
-                                  label="流媒体协议"
-                                  rules={[{ required: true, message: '请选择流媒体协议' }]}
-                                >
-                                  <Select
-                                    placeholder="请选择协议类型"
-                                    options={[
-                                      { label: 'RTMP', value: 'rtmp' },
-                                      { label: 'RTSP', value: 'rtsp' },
-                                      { label: 'SRT', value: 'srt' },
-                                      { label: 'HLS', value: 'hls' },
-                                    ]}
-                                  />
-                                </Form.Item>
-
-                                <Form.Item
-                                  name="stream_url"
-                                  label="流媒体URL"
-                                  rules={[
-                                    { required: true, message: '请输入流媒体URL' },
-                                    { type: 'url', message: '请输入有效的URL' },
-                                  ]}
-                                >
-                                  <Input placeholder="例如: rtmp://example.com/live/stream" />
-                                </Form.Item>
-
-                                <Space size="large" style={{ width: '100%' }}>
-                                  <Form.Item name="stream_username" label="用户名（可选）">
-                                    <Input placeholder="请输入用户名" />
-                                  </Form.Item>
-
-                                  <Form.Item name="stream_password" label="密码（可选）">
-                                    <Input.Password placeholder="请输入密码" />
-                                  </Form.Item>
-                                </Space>
-                              </>
-                            ) : null
-                          }
-                        </Form.Item>
-                      </>
-                    ) : (
-                      <div style={{ color: '#999', textAlign: 'center', padding: '40px' }}>
-                        请先选择"流媒体录制"类型
-                      </div>
-                    )}
-                  </>
-                ),
+                children: <StreamConfigTab configType={configType} />,
               },
             ]}
           />
