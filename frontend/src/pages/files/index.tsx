@@ -284,7 +284,8 @@ export default function FileManagement() {
     }
 
     // 计算文件总大小
-    const selectedFiles = files.filter((f) => selectedRowKeys.includes(f.id))
+    const selectedKeySet = new Set(selectedRowKeys)
+    const selectedFiles = files.filter((f) => selectedKeySet.has(f.id))
     const totalSize = selectedFiles.reduce((sum, f) => sum + f.file_size, 0)
     const totalSizeGB = totalSize / (1024 * 1024 * 1024)
 
@@ -324,7 +325,8 @@ export default function FileManagement() {
     }
 
     // 检查是否都是视频文件
-    const selectedFiles = files.filter((f) => selectedRowKeys.includes(f.id))
+    const selectedKeySet = new Set(selectedRowKeys)
+    const selectedFiles = files.filter((f) => selectedKeySet.has(f.id))
     const nonVideoFiles = selectedFiles.filter((f) => f.format !== 'mp4' && f.format !== 'mkv')
 
     if (nonVideoFiles.length > 0) {

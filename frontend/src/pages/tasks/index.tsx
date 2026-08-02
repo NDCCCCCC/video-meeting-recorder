@@ -278,14 +278,15 @@ export default function TaskManagement() {
 
       closeModal()
       loadTasks()
-    } catch (error: any) {
-      if (error?.errorFields) {
-        const firstError = error.errorFields[0]
+    } catch (error: unknown) {
+      const err = error as Error & { errorFields?: Array<{ name?: string[]; errors?: string[] }> }
+      if (err.errorFields) {
+        const firstError = err.errorFields[0]
         const fieldName = firstError?.name?.[0] || '字段'
         const errorMessage = firstError?.errors?.[0] || '验证失败'
         message.error(`${fieldName}: ${errorMessage}`)
       } else {
-        message.error(error instanceof Error ? error.message : '操作失败')
+        message.error(err instanceof Error ? err.message : '操作失败')
       }
     }
   }, [editingTask, form, closeModal, loadTasks, huaweiConfigs])
@@ -389,8 +390,9 @@ export default function TaskManagement() {
       return
     }
 
+    const selectedKeySet = new Set(selectedRowKeys)
     const cannotDeleteTasks = tasks.filter(
-      (task) => selectedRowKeys.includes(task.id) && !DELETABLE_STATUSES.includes(task.status)
+      (task) => selectedKeySet.has(task.id) && !DELETABLE_STATUSES.includes(task.status)
     )
 
     if (cannotDeleteTasks.length > 0) {
