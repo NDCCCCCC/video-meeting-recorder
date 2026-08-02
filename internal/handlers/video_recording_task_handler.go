@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth/hlstoken"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
@@ -31,6 +32,15 @@ type VideoRecordingTaskHandler struct {
 	logger            *zap.Logger
 	config            *config.Config
 	hlsToken          *hlstoken.HLSToken
+	// PERF-005/FU-6: m3u8 rewrite cache (key=taskID|file|mtime, value=rewritten content).
+	// 同一播放器的多个并发 GET 与轮询 renewal 共享同一份结果,避免每次都跑 rewriteM3U8WithToken。
+	m3u8Cache sync.Map
+}
+
+// m3u8CacheEntry 缓存条目:同一 (task_id, 文件 mtime) 只需一次 rewrite。
+type m3u8CacheEntry struct {
+	mtime   time.Time
+	content []byte
 }
 
 // NewVideoRecordingTaskHandler 创建视频录制任务处理器
@@ -825,6 +835,24 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 
 	// 如果是 m3u8 文件，需要重写内容，在分段 URL 中添加 token
 	if strings.HasSuffix(filePath, ".m3u8") {
+		// PERF-005/FU-6: cache 命中判定:key = "taskID|filePath",value = mtime + rewritten content.
+		// mtime 未变则直接返回(并发请求/refresh renewal 共享)。
+		stat, statErr := os.Stat(fullPath)
+		if statErr != nil {
+			response.GinError(c, response.CodeInternalError, "读取文件失败")
+			return
+		}
+		cacheKey := fmt.Sprintf("%d|%s", id, filePath)
+		if v, ok := h.m3u8Cache.Load(cacheKey); ok {
+			entry := v.(m3u8CacheEntry)
+			if entry.mtime.Equal(stat.ModTime()) {
+				c.Header("X-Cache", "HIT")
+				c.String(200, string(entry.content))
+				return
+			}
+			// mtime changed -> stale, fall through to rewrite.
+		}
+
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
 			response.GinError(c, response.CodeInternalError, "读取文件失败")
@@ -833,6 +861,15 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 
 		// 重写 m3u8 内容：在分段 URL 中添加 token 参数
 		rewrittenContent := h.rewriteM3U8WithToken(string(content), token, id)
+		rewrittenBytes := []byte(rewrittenContent)
+		// 仅 cache 当 m3u8 在合理范围（< 64KB）— 太大留给路径上的 CDN。
+		if len(rewrittenBytes) < 64*1024 {
+			h.m3u8Cache.Store(cacheKey, m3u8CacheEntry{
+				mtime:   stat.ModTime(),
+				content: rewrittenBytes,
+			})
+		}
+		c.Header("X-Cache", "MISS")
 		c.String(200, rewrittenContent)
 		return
 	}
