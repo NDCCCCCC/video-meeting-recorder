@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import { Modal, Button, Space, InputNumber, Image, message, Slider, Select } from 'antd'
 import {
   CameraOutlined,
@@ -35,8 +35,8 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
   const [capturedFrame, setCapturedFrame] = useState<string | null>(null)
   const [isCapturing, setIsCapturing] = useState(false)
   const [isInserting, setIsInserting] = useState(false)
-  const [insertPosition, setInsertPosition] = useState<number>(currentSlide + 1)
   const [insertPositionOption, setInsertPositionOption] = useState<string>('after')
+  const [customInsertPosition, setCustomInsertPosition] = useState<number>(currentSlide + 1)
   const [videoState, setVideoState] = useState<VideoRefState>({
     currentTime: 0,
     duration: 0,
@@ -44,29 +44,21 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
   })
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // Update insert position when current slide changes
-  useEffect(() => {
-    if (insertPositionOption === 'after') {
-      setInsertPosition(currentSlide + 1)
-    } else if (insertPositionOption === 'before') {
-      setInsertPosition(currentSlide)
-    } else if (insertPositionOption === 'end') {
-      setInsertPosition(totalSlides + 1)
-    }
-  }, [currentSlide, totalSlides, insertPositionOption])
+  // 插入位置在渲染期派生（rerender-derived-state-no-effect）：
+  // after/before/end 由 currentSlide/totalSlides 决定，custom 用用户输入
+  const insertPosition = useMemo(() => {
+    if (insertPositionOption === 'after') return currentSlide + 1
+    if (insertPositionOption === 'before') return currentSlide
+    if (insertPositionOption === 'end') return totalSlides + 1
+    return customInsertPosition
+  }, [insertPositionOption, currentSlide, totalSlides, customInsertPosition])
 
-  // Handle insert position option change
   const handleInsertPositionOptionChange = (value: string) => {
-    setInsertPositionOption(value)
-    if (value === 'after') {
-      setInsertPosition(currentSlide + 1)
-    } else if (value === 'before') {
-      setInsertPosition(currentSlide)
-    } else if (value === 'end') {
-      setInsertPosition(totalSlides + 1)
-    } else if (value === 'custom') {
-      // Keep current insertPosition value
+    if (value === 'custom') {
+      // 切到 custom 时保留当前派生值作为起点
+      setCustomInsertPosition(insertPosition)
     }
+    setInsertPositionOption(value)
   }
 
   // Handle video time update
@@ -295,7 +287,7 @@ const SlideCapturePanel: React.FC<SlideCapturePanelProps> = ({
             {insertPositionOption === 'custom' && (
               <InputNumber
                 value={insertPosition}
-                onChange={(value) => setInsertPosition(value || 1)}
+                onChange={(value) => setCustomInsertPosition(value || 1)}
                 min={1}
                 max={totalSlides + 1}
                 style={{ width: '100%' }}

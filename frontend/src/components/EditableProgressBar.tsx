@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Input, Button, Space } from 'antd'
 
 interface EditableProgressBarProps {
@@ -35,12 +35,11 @@ export default function EditableProgressBar({
   duration,
   onSeek,
 }: EditableProgressBarProps) {
-  const [inputValue, setInputValue] = useState(formatTime(currentTime))
-
-  // Update input when currentTime changes (from video playback)
-  useEffect(() => {
-    setInputValue(formatTime(currentTime))
-  }, [currentTime])
+  // 时间输入框：未编辑时镜像 currentTime（渲染期派生，rerender-derived-state-no-effect），
+  // 编辑中保留用户输入草稿，避免播放时被覆盖（修复既有 bug）
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState(formatTime(currentTime))
+  const inputValue = isEditing ? draft : formatTime(currentTime)
 
   const handleJump = () => {
     const seconds = parseTimeToSeconds(inputValue)
@@ -60,7 +59,12 @@ export default function EditableProgressBar({
       {/* Current time input - always show HH:MM:SS */}
       <Input
         value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
+        onFocus={() => {
+          setDraft(formatTime(currentTime))
+          setIsEditing(true)
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => setIsEditing(false)}
         onKeyDown={handleKeyDown}
         placeholder="00:00:00"
         style={{ width: 100, fontFamily: 'monospace', textAlign: 'center' }}
