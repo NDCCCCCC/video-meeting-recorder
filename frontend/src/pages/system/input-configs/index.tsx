@@ -1,6 +1,6 @@
 // 输入配置管理页面
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Table,
   Button,
@@ -35,6 +35,12 @@ import { HuaweiConfigTab } from './components/HuaweiConfigTab'
 import { USBConfigTab } from './components/USBConfigTab'
 import { StreamConfigTab } from './components/StreamConfigTab'
 
+// 配置类型显示映射（模块级，保持引用稳定，供 columns useMemo 与详情 Modal 共用）
+const configTypeMap = {
+  usb: { text: 'USB直录', color: 'green', icon: <VideoCameraOutlined /> },
+  stream: { text: '流媒体', color: 'orange', icon: <PlayCircleOutlined /> },
+}
+
 export default function InputConfigManagement() {
   const [configs, setConfigs] = useState<InputConfig[]>([])
   const [total, setTotal] = useState(0)
@@ -65,7 +71,7 @@ export default function InputConfigManagement() {
     page_size: 20,
   })
 
-  const loadConfigs = async () => {
+  const loadConfigs = useCallback(async () => {
     setLoading(true)
     try {
       const response = await inputConfigApi.getInputConfigList(params)
@@ -78,11 +84,11 @@ export default function InputConfigManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params])
 
   useEffect(() => {
     loadConfigs()
-  }, [params])
+  }, [loadConfigs])
 
   const handleSearch = (value: string) => {
     setParams({ ...params, keyword: value, page: 1 })
@@ -96,7 +102,7 @@ export default function InputConfigManagement() {
     })
   }
 
-  const openModal = (config: InputConfig | null = null) => {
+  const openModal = useCallback((config: InputConfig | null = null) => {
     setEditingConfig(config)
     if (config) {
       setConfigType(config.config_type)
@@ -138,7 +144,7 @@ export default function InputConfigManagement() {
     setModalVisible(true)
     // 自动扫描 USB 设备，以便用户选择
     scanDevices()
-  }
+  }, [form, scanDevices])
 
   const closeModal = () => {
     setModalVisible(false)
@@ -183,28 +189,25 @@ export default function InputConfigManagement() {
     }
   }
 
-  const handleDelete = async (id: number) => {
-    try {
-      await inputConfigApi.deleteInputConfig(id)
-      message.success('删除成功')
-      loadConfigs()
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '删除失败')
-    }
-  }
+  const handleDelete = useCallback(
+    async (id: number) => {
+      try {
+        await inputConfigApi.deleteInputConfig(id)
+        message.success('删除成功')
+        loadConfigs()
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '删除失败')
+      }
+    },
+    [loadConfigs]
+  )
 
-  const viewDetail = (config: InputConfig) => {
+  const viewDetail = useCallback((config: InputConfig) => {
     setViewingConfig(config)
     setDetailVisible(true)
-  }
+  }, [])
 
-  // 配置类型显示映射
-  const configTypeMap = {
-    usb: { text: 'USB直录', color: 'green', icon: <VideoCameraOutlined /> },
-    stream: { text: '流媒体', color: 'orange', icon: <PlayCircleOutlined /> },
-  }
-
-  const columns: ColumnsType<InputConfig> = [
+  const columns = useMemo<ColumnsType<InputConfig>>(() => [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -302,7 +305,7 @@ export default function InputConfigManagement() {
         </Space>
       ),
     },
-  ]
+  ], [viewDetail, openModal, handleDelete])
 
   return (
     <div style={{ padding: '20px' }}>
