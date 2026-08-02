@@ -22,20 +22,14 @@ import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import SlideCapturePanel, { DirectCaptureButton } from '../../components/SlideCapturePanel'
 import { VideoPreviewPanel } from '../../components/VideoPreviewPanel'
 import SlideThumbnail from '../../components/SlideThumbnail'
-import {
-  getPptsByVideo,
-  getSlides,
-  deletePpt,
-  getPptDownloadUrl,
-  reorderSlides,
-  deleteSlides,
-  mergeSlides,
-} from '../../api/ppt'
+import { getPptsByVideo, getSlides, deletePpt, getPptDownloadUrl, deleteSlides } from '../../api/ppt'
 import { submitTranscriptionWithMode } from '../../api/transcription'
-import type { PPTResult, SlideImage, SelectedSlide, MergeSlideItem } from '../../types/ppt'
+import type { PPTResult, SlideImage } from '../../types/ppt'
 import type { TranscriptionMode } from '../../types/transcription'
 import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
 import { formatFileSize } from './utils'
+import { useSlideMerge } from './hooks/useSlideMerge'
+import { useDragReorder } from './hooks/useDragReorder'
 
 // Side-by-side preview layout styles
 const previewAreaStyle: React.CSSProperties = {
@@ -62,9 +56,6 @@ export default function ResultDetailPage() {
   const [slides, setSlides] = useState<SlideImage[]>([])
   const [currentSlide, setCurrentSlide] = useState(0)
   const [isLoadingSlides, setIsLoadingSlides] = useState(false)
-  const [isMergeMode, setIsMergeMode] = useState(false)
-  const [selectedSlides, setSelectedSlides] = useState<SelectedSlide[]>([])
-  const [isMerging, setIsMerging] = useState(false)
   const [videoName, setVideoName] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -86,10 +77,6 @@ export default function ResultDetailPage() {
 
   // Slide capture panel state
   const [isCapturePanelOpen, setIsCapturePanelOpen] = useState(false)
-
-  // Drag reorder mode state
-  const [isDragMode, setIsDragMode] = useState(false)
-  const [draggedSlide, setDraggedSlide] = useState<number | null>(null)
 
   // 当前选中的 PPT
   const currentPpt = ppts.find((p) => p.id === currentPptId)
@@ -243,81 +230,8 @@ export default function ResultDetailPage() {
   }, [])
 
   // 合并模式：切换选择
-  const handleToggleSelect = useCallback(
-    (slide: SlideImage, _index: number) => {
-      const slideId = `${currentPptId}_${slide.slide_number}`
-      const existing = selectedSlides.find((s) => s.id === slideId)
-
-      if (existing) {
-        // 取消选择
-        setSelectedSlides((prev) => prev.filter((s) => s.id !== slideId))
-      } else {
-        // 检查 200 页限制
-        if (selectedSlides.length >= 200) {
-          message.warning('最多只能选择 200 页幻灯片进行合并')
-          return
-        }
-
-        // 添加选择
-        const pptName = currentPpt?.file_name || `PPT ${currentPptId}`
-        setSelectedSlides((prev) => [
-          ...prev,
-          {
-            id: slideId,
-            ppt_file_id: currentPptId,
-            slide_number: slide.slide_number,
-            thumbnail_url: slide.thumbnail_url,
-            source_name: pptName,
-          },
-        ])
-      }
-    },
-    [currentPptId, selectedSlides, currentPpt]
-  )
-
-  // 合并模式：移除幻灯片（功能已移除，保留以备后用）
-  // const handleRemoveSlide = useCallback(
-  //   (slideId: string) => {
-  //     setSelectedSlides((prev) => prev.filter((s) => s.id !== slideId))
-  //   },
-  //   []
-  // )
-
-  // 合并模式：确认合并
-  const handleConfirmMerge = useCallback(async () => {
-    if (selectedSlides.length === 0) {
-      message.warning('请先选择要合并的幻灯片')
-      return
-    }
-
-    setIsMerging(true)
-    try {
-      const mergeItems: MergeSlideItem[] = selectedSlides.map((s) => ({
-        ppt_file_id: s.ppt_file_id,
-        slide_number: s.slide_number,
-      }))
-
-      const response = await mergeSlides({
-        slides: mergeItems,
-        video_file_id: videoFileIdNum,
-      })
-
-      if (response.data) {
-        message.success(`合并完成！已生成 ${response.data.page_count} 页 PPT。`)
-        // 刷新 PPT 列表
-        await loadPpts()
-        // 退出合并模式
-        setIsMergeMode(false)
-        setSelectedSlides([])
-        // 切换到新生成的 PPT
-        setCurrentPptId(response.data.ppt_file_id)
-      }
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '合并失败')
-    } finally {
-      setIsMerging(false)
-    }
-  }, [selectedSlides, videoFileIdNum, loadPpts])
+  const { isMergeMode, setIsMergeMode, selectedSlides, isMerging, handleToggleSelect, handleConfirmMerge } =
+    useSlideMerge({ currentPptId, currentPpt, videoFileIdNum, loadPpts, setCurrentPptId })
 
   // 下载 PPT
   const handleDownloadPpt = useCallback(() => {
@@ -468,53 +382,15 @@ export default function ResultDetailPage() {
   )
 
   // 拖拽排序处理函数
-  const handleDragStart = useCallback((slideNumber: number) => {
-    setDraggedSlide(slideNumber)
-  }, [])
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault() // 允许放置
-  }, [])
-
-  const handleDrop = useCallback(
-    async (e: React.DragEvent, targetSlideNumber: number) => {
-      e.preventDefault()
-      if (draggedSlide === null || draggedSlide === targetSlideNumber) {
-        setDraggedSlide(null)
-        return
-      }
-
-      // 创建新的幻灯片顺序
-      const newSlideOrder = slides.map((s) => s.slide_number)
-      const draggedIndex = newSlideOrder.indexOf(draggedSlide)
-      const targetIndex = newSlideOrder.indexOf(targetSlideNumber)
-
-      // 移除被拖拽的幻灯片
-      newSlideOrder.splice(draggedIndex, 1)
-      // 在目标位置插入
-      newSlideOrder.splice(targetIndex, 0, draggedSlide)
-
-      try {
-        const response = await reorderSlides(currentPptId, newSlideOrder)
-        if (response.data?.success) {
-          message.success('幻灯片顺序已更新')
-          // 重新加载幻灯片
-          await loadSlides(currentPptId)
-        } else {
-          message.error('更新幻灯片顺序失败')
-        }
-      } catch (error) {
-        message.error('更新幻灯片顺序失败: ' + (error as Error).message)
-      } finally {
-        setDraggedSlide(null)
-      }
-    },
-    [draggedSlide, slides, currentPptId, loadSlides]
-  )
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedSlide(null)
-  }, [])
+  const {
+    isDragMode,
+    setIsDragMode,
+    draggedSlide,
+    handleDragStart,
+    handleDragOver,
+    handleDrop,
+    handleDragEnd,
+  } = useDragReorder({ slides, currentPptId, loadSlides })
 
   // 自动滚动到当前幻灯片缩略图
   useEffect(() => {
