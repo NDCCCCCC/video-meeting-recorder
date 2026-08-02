@@ -16,6 +16,10 @@ type ADConfigValidator struct {
 	logger *zap.Logger
 }
 
+// NewADConfigValidator 构造 ADConfigValidator;四级验证(格式→网络→认证→功能)
+//
+// 不依赖 LDAP 全局状态 — 每实例独立持 logger,便于替换测试。
+// 业务调用方通常在 admin handler 收到 /config/test 或启动期校验时构造。
 func NewADConfigValidator(logger *zap.Logger) *ADConfigValidator {
 	return &ADConfigValidator{logger: logger}
 }
