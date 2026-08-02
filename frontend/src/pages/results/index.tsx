@@ -22,14 +22,15 @@ import DuplicateDetectionPanel from '../../components/DuplicateDetectionPanel'
 import SlideCapturePanel, { DirectCaptureButton } from '../../components/SlideCapturePanel'
 import { VideoPreviewPanel } from '../../components/VideoPreviewPanel'
 import SlideThumbnail from '../../components/SlideThumbnail'
-import { getPptsByVideo, getSlides, deletePpt, getPptDownloadUrl, deleteSlides } from '../../api/ppt'
+import { getPptsByVideo, deletePpt, getPptDownloadUrl, deleteSlides } from '../../api/ppt'
 import { submitTranscriptionWithMode } from '../../api/transcription'
-import type { PPTResult, SlideImage } from '../../types/ppt'
+import type { PPTResult } from '../../types/ppt'
 import type { TranscriptionMode } from '../../types/transcription'
 import TranscriptionProgressModal from '../../components/TranscriptionProgressModal'
 import { formatFileSize } from './utils'
 import { useSlideMerge } from './hooks/useSlideMerge'
 import { useDragReorder } from './hooks/useDragReorder'
+import { useSlidePolling } from './hooks/useSlidePolling'
 
 // Side-by-side preview layout styles
 const previewAreaStyle: React.CSSProperties = {
@@ -53,14 +54,9 @@ export default function ResultDetailPage() {
   // State
   const [ppts, setPpts] = useState<PPTResult[]>([])
   const [currentPptId, setCurrentPptId] = useState<number>(0)
-  const [slides, setSlides] = useState<SlideImage[]>([])
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [isLoadingSlides, setIsLoadingSlides] = useState(false)
   const [videoName, setVideoName] = useState('')
   const [loading, setLoading] = useState(false)
-
-  // Ref to track cleanup function for polling
-  const slidesPollCleanupRef = useRef<(() => void) | null>(null)
 
   // Ref for thumbnail container (for auto-scroll to current slide)
   const thumbnailContainerRef = useRef<HTMLDivElement>(null)
@@ -105,55 +101,8 @@ export default function ResultDetailPage() {
     }
   }, [videoFileIdNum])
 
-  // 加载幻灯片
-  const loadSlides = useCallback(async (pptId: number) => {
-    setIsLoadingSlides(true)
-    try {
-      const response = await getSlides(pptId)
-      if (response.data) {
-        if (response.data.status === 'extracting') {
-          // 轮询等待提取完成 - 使用取消标志
-          let cancelled = false
-          let intervalId: NodeJS.Timeout | null = null
-
-          const poll = async () => {
-            if (cancelled) return
-
-            try {
-              const pollResponse = await getSlides(pptId)
-              if (cancelled) return
-
-              if (pollResponse.data && pollResponse.data.status === 'ready') {
-                if (intervalId) clearInterval(intervalId)
-                if (!cancelled) {
-                  setSlides(pollResponse.data.slides)
-                  setIsLoadingSlides(false)
-                }
-              }
-            } catch (error) {
-              if (!cancelled) {
-                console.error('Polling error:', error)
-              }
-            }
-          }
-
-          intervalId = setInterval(poll, 2000)
-
-          // 存储清理函数到 ref
-          return () => {
-            cancelled = true
-            if (intervalId) clearInterval(intervalId)
-          }
-        } else {
-          setSlides(response.data.slides)
-          setIsLoadingSlides(false)
-        }
-      }
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '加载幻灯片失败')
-      setIsLoadingSlides(false)
-    }
-  }, [])
+  // 幻灯片轮询加载（slides/isLoadingSlides/loadSlides + currentPptId 轮询 effect 封装在 hook 内）
+  const { slides, isLoadingSlides, loadSlides } = useSlidePolling(currentPptId, setCurrentSlide)
 
   // 加载视频名称（从 PPT 文件名推断或使用 ID）
   const loadVideoName = useCallback(async () => {
@@ -167,62 +116,6 @@ export default function ResultDetailPage() {
     loadPpts()
     loadVideoName()
   }, [loadPpts, loadVideoName])
-
-  // 当 currentPptId 变化时加载幻灯片
-  useEffect(() => {
-    // 清理之前的轮询
-    if (slidesPollCleanupRef.current) {
-      slidesPollCleanupRef.current()
-      slidesPollCleanupRef.current = null
-    }
-
-    if (currentPptId <= 0) return
-
-    setCurrentSlide(0)
-    let cancelled = false
-    let intervalId: NodeJS.Timeout | null = null
-
-    const poll = async () => {
-      if (cancelled) return
-      try {
-        const response = await getSlides(currentPptId)
-        if (cancelled) return
-
-        if (response.data?.status === 'ready') {
-          if (intervalId) clearInterval(intervalId)
-          if (!cancelled) {
-            setSlides(response.data.slides)
-            setIsLoadingSlides(false)
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Polling error:', error)
-        }
-      }
-    }
-
-    // WR-03, WR-04: Add proper error handling for initial poll and prevent race conditions
-    poll()
-      .catch((error) => {
-        if (!cancelled) {
-          console.error('Initial poll error:', error)
-          message.error('加载幻灯片失败')
-          setIsLoadingSlides(false)
-        }
-      })
-      .then(() => {
-        // If still extracting, start polling
-        if (!cancelled && isLoadingSlides) {
-          intervalId = setInterval(poll, 2000)
-        }
-      })
-
-    return () => {
-      cancelled = true
-      if (intervalId) clearInterval(intervalId)
-    }
-  }, [currentPptId])
 
   // 切换幻灯片
   const handleSlideChange = useCallback((index: number) => {
