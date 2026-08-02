@@ -112,6 +112,15 @@ const (
 )
 
 // AuditLogData 审计日志数据
+//
+// PERF-009 (Phase 21) 决策：保留 OldData/NewData/Diff 为 interface{}。理由是
+// audit 系统需支持任意模块（用户/任务/配置/凭据）的异构 payload——若强制所有
+// 模块共用一对 typed struct,会要求 service 在写入前做 JSON round-trip,反而损失
+// 性能并耦合所有模块到 audit schema。
+//
+// 替代方案：对**有热路径性能需求的特定模块**（如 auth/profile 更新）使用下面的
+// 强类型 AuditLogOldDataPayload / AuditLogNewDataPayload 直接 marshal 到字符串。
+// 其它模块继续用 AuditLogData 通用路径，承受 reflection 开销但保持解耦。
 type AuditLogData struct {
 	OldData interface{} `json:"old_data,omitempty"`
 	NewData interface{} `json:"new_data,omitempty"`
