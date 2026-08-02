@@ -92,7 +92,7 @@ func SM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 		}
 
 		// 验证token
-		claims, err := tokenService.ValidateToken(tokenString)
+		claims, err := tokenService.ValidateToken(c.Request.Context(), tokenString)
 		if err != nil {
 			// Phase 19 D7: 走 response.HandleError 让 sentinel 决定 HTTP 状态码；
 			// 4 token sentinel 全部映射 401 + 中文化 message，frontend 由 respCode 1002 + 业务
@@ -117,7 +117,7 @@ func OptionalSM4Auth(tokenService *auth.SM4TokenService) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := tokenService.ValidateToken(tokenString)
+		claims, err := tokenService.ValidateToken(c.Request.Context(), tokenString)
 		if err != nil {
 			// Token 验证失败，允许继续（未认证场景）
 			c.Next()

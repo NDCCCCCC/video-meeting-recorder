@@ -204,8 +204,8 @@ func (h *SystemHandler) updateLogLevel(level string) error {
 
 // ClearFiles 清空文件数据库
 func (h *SystemHandler) ClearFiles(c *gin.Context) {
-	// 删除所有视频文件记录
-	if err := h.db.Exec("DELETE FROM video_files").Error; err != nil {
+	// BUG-005: 透传 ctx 让客户端断开能级联取消 DELETE
+	if err := h.db.WithContext(c.Request.Context()).Exec("DELETE FROM video_files").Error; err != nil {
 		h.logger.Error("清空文件表失败", zap.Error(err))
 		response.GinError(c, response.CodeInternalError, "清空文件表失败")
 		return

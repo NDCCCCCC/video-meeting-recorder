@@ -26,7 +26,8 @@ type Authenticator interface {
 	Logout(token string) error
 
 	// ValidateToken validates a token and returns the associated user
-	ValidateToken(token string) (*UserDTO, error)
+	// BUG-005/PR-D: ctx 用于底层 ORM 的 WithContext 传播。
+	ValidateToken(ctx context.Context, token string) (*UserDTO, error)
 
 	// Name returns the authenticator name
 	Name() string
@@ -262,9 +263,9 @@ func (s *Service) LogoutAll(userID uint) error {
 }
 
 // ChangePassword 修改密码
-func (s *Service) ChangePassword(userID uint, req *ChangePasswordRequest) error {
+func (s *Service) ChangePassword(ctx context.Context, userID uint, req *ChangePasswordRequest) error {
 	var user models.User
-	if err := s.db.First(&user, userID).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
 		return err
 	}
 
@@ -285,7 +286,7 @@ func (s *Service) ChangePassword(userID uint, req *ChangePasswordRequest) error 
 	}
 
 	// 保存
-	return s.db.Save(&user).Error
+	return s.db.WithContext(ctx).Save(&user).Error
 }
 
 // ValidatePassword 验证密码强度
@@ -294,9 +295,9 @@ func (s *Service) ValidatePassword(password string) *ValidationResult {
 }
 
 // GetUserByID 根据ID获取用户
-func (s *Service) GetUserByID(userID uint) (*UserDTO, error) {
+func (s *Service) GetUserByID(ctx context.Context, userID uint) (*UserDTO, error) {
 	var user models.User
-	if err := s.db.Preload("Roles.Permissions").First(&user, userID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, userID).Error; err != nil {
 		return nil, err
 	}
 	return s.toUserDTO(&user), nil

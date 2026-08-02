@@ -51,7 +51,7 @@ func (a *LocalAuthenticator) SetAuditService(auditLogger *audit.AuditLogService)
 func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	// 1. 查找用户（预加载角色和权限）
 	var user models.User
-	err := a.db.Preload("Roles.Permissions").Where("username = ?", req.Username).First(&user).Error
+	err := a.db.WithContext(ctx).Preload("Roles.Permissions").Where("username = ?", req.Username).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			a.logger.Warn("Login failed: user not found", zap.String("username", req.Username))
@@ -138,7 +138,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 	// 9. 更新最后登录时间
 	now := time.Now()
 	user.LastLoginAt = &now
-	if err := a.db.Save(&user).Error; err != nil {
+	if err := a.db.WithContext(ctx).Save(&user).Error; err != nil {
 		a.logger.Error("Login: failed to update last login", zap.Error(err), response.SentinelField(err))
 	}
 
@@ -175,16 +175,16 @@ func (a *LocalAuthenticator) Logout(token string) error {
 }
 
 // ValidateToken validates a token and returns the associated user
-func (a *LocalAuthenticator) ValidateToken(token string) (*UserDTO, error) {
+func (a *LocalAuthenticator) ValidateToken(ctx context.Context, token string) (*UserDTO, error) {
 	// Use existing token validation logic from token service
-	claims, err := a.tokenService.ValidateToken(token)
+	claims, err := a.tokenService.ValidateToken(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 
 	// Load user from database
 	var user models.User
-	if err := a.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
+	if err := a.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperrors.ErrUserNotFound
 		}

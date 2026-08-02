@@ -178,7 +178,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	}
 
-	if err := h.authService.ChangePassword(userID, &req); err != nil {
+	if err := h.authService.ChangePassword(c.Request.Context(), userID, &req); err != nil {
 		response.GinError(c, response.CodeInvalidPassword, err.Error())
 		return
 	}
@@ -205,7 +205,7 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.GetUserByID(userID)
+	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "用户不存在")
 		return

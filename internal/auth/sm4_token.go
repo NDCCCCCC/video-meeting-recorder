@@ -241,7 +241,7 @@ func (s *SM4TokenService) decryptToken(tokenString string) (*Claims, error) {
 }
 
 // ValidateToken 验证Access Token，返回解析后的Claims
-func (s *SM4TokenService) ValidateToken(tokenString string) (*Claims, error) {
+func (s *SM4TokenService) ValidateToken(ctx context.Context, tokenString string) (*Claims, error) {
 	claims, err := s.decryptToken(tokenString)
 	if err != nil {
 		return nil, err

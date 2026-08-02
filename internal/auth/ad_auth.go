@@ -144,7 +144,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	}
 
 	// Step 6: Find or create local user (transparent mapping per D-06, D-08)
-	localUser, err := a.findOrCreateLocalUser(adUser)
+	localUser, err := a.findOrCreateLocalUser(ctx, adUser)
 	if err != nil {
 		a.logger.Error("AD user mapping failed", zap.Error(err), response.SentinelField(err))
 		// Preserve sentinel error so handler can map to HTTP 403 instead of 500
@@ -167,7 +167,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	now := time.Now()
 	localUser.LastLoginAt = &now
 	localUser.LastADLogin = &now
-	a.db.Save(localUser)
+	a.db.WithContext(ctx).Save(localUser)
 
 	// Step 9: Create session
 	a.tokenService.CreateSession(localUser.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt)
@@ -228,16 +228,16 @@ func (a *ADAuthenticator) parseLDAPEntry(entry *ldap.Entry) *ADUser {
 }
 
 // findOrCreateLocalUser finds an existing local user or creates a new one (if allowed)
-func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, error) {
+func (a *ADAuthenticator) findOrCreateLocalUser(ctx context.Context, adUser *ADUser) (*models.User, error) {
 	// First, try to find existing user by ad_guid or username
 	var user models.User
-	err := a.db.Where("ad_guid = ? OR username = ?", adUser.ObjectGUID, adUser.Username).First(&user).Error
+	err := a.db.WithContext(ctx).Where("ad_guid = ? OR username = ?", adUser.ObjectGUID, adUser.Username).First(&user).Error
 
 	if err == nil {
 		// Found existing user, update AD information
-		a.updateADInfo(&user, adUser)
+		a.updateADInfo(ctx, &user, adUser)
 		// Reload with Roles.Permissions for toUserDTO
-		a.db.Preload("Roles.Permissions").First(&user, user.ID)
+		a.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, user.ID)
 		return &user, nil
 	}
 
@@ -283,39 +283,39 @@ func (a *ADAuthenticator) findOrCreateLocalUser(adUser *ADUser) (*models.User, e
 
 	// Assign default viewer role using models.RoleViewer constant
 	var defaultRole models.Role
-	err = a.db.Where("name = ?", models.RoleViewer).First(&defaultRole).Error
+	err = a.db.WithContext(ctx).Where("name = ?", models.RoleViewer).First(&defaultRole).Error
 	if err != nil {
 		a.logger.Error("Default viewer role not found", zap.Error(err), response.SentinelField(err))
 		return nil, fmt.Errorf("默认角色不存在: %w", apperrors.ErrADConfigError)
 	}
 
 	// Create user first
-	if err := a.db.Create(&user).Error; err != nil {
+	if err := a.db.WithContext(ctx).Create(&user).Error; err != nil {
 		return nil, err
 	}
 
 	// Then associate the role via users_roles junction table (many2many)
-	if err := a.db.Model(&user).Association("Roles").Append(&defaultRole); err != nil {
+	if err := a.db.WithContext(ctx).Model(&user).Association("Roles").Append(&defaultRole); err != nil {
 		a.logger.Error("Failed to assign default role to AD user", zap.Error(err), response.SentinelField(err))
 		// Cleanup: delete the user if role assignment fails
-		a.db.Delete(&user)
+		a.db.WithContext(ctx).Delete(&user)
 		return nil, fmt.Errorf("分配默认角色失败: %w", err)
 	}
 
 	a.logger.Info("Created local user for AD user", zap.String("username", adUser.Username))
 	// Reload with Roles.Permissions for toUserDTO
-	a.db.Preload("Roles.Permissions").First(&user, user.ID)
+	a.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, user.ID)
 	return &user, nil
 }
 
 // updateADInfo updates AD information for an existing user
-func (a *ADAuthenticator) updateADInfo(user *models.User, adUser *ADUser) {
+func (a *ADAuthenticator) updateADInfo(ctx context.Context, user *models.User, adUser *ADUser) {
 	user.ADUsername = adUser.Username
 	user.ADDN = adUser.DN
 	user.ADGUID = adUser.ObjectGUID
 	user.ADDepartment = adUser.Department
 	user.ADUPN = adUser.UserPrincipalName
-	a.db.Save(user)
+	a.db.WithContext(ctx).Save(user)
 }
 
 // Logout logs out a user by revoking their token
@@ -324,17 +324,17 @@ func (a *ADAuthenticator) Logout(token string) error {
 }
 
 // ValidateToken validates a token and returns the associated user
-func (a *ADAuthenticator) ValidateToken(token string) (*UserDTO, error) {
+func (a *ADAuthenticator) ValidateToken(ctx context.Context, token string) (*UserDTO, error) {
 	// Use existing token validation logic (same as local)
 	// Token validation doesn't depend on auth source
-	claims, err := a.tokenService.ValidateToken(token)
+	claims, err := a.tokenService.ValidateToken(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 
 	// Load user from database
 	var user models.User
-	if err := a.db.Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
+	if err := a.db.WithContext(ctx).Preload("Roles.Permissions").First(&user, claims.UserID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperrors.ErrUserNotFound
 		}
