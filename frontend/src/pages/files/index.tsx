@@ -11,14 +11,8 @@ import {
   Popconfirm,
   Tag,
   Select,
-  Card,
-  Statistic,
-  Row,
-  Col,
   Tooltip,
-  Radio,
   Spin,
-  Alert,
   Empty,
 } from 'antd'
 import {
@@ -26,7 +20,6 @@ import {
   ReloadOutlined,
   DeleteOutlined,
   DownloadOutlined,
-  FileOutlined,
   FolderOpenOutlined,
   VideoCameraOutlined,
   ScanOutlined,
@@ -61,10 +54,14 @@ import {
   STATUS_OPTIONS,
   DEFAULT_PAGE_SIZE,
   DEFAULT_FORMAT,
-  samplingRateOptions,
 } from './constants'
 import { formatFileSize, formatDuration } from './utils'
 import FileRowActions from './components/FileRowActions'
+import { FileStatsCards } from './components/FileStatsCards'
+import { FileDetailModal } from './components/FileDetailModal'
+import { RenameModal } from './components/RenameModal'
+import { BatchTranscribeConfigModal } from './components/BatchTranscribeConfigModal'
+import { TriggerTranscriptionModal } from './components/TriggerTranscriptionModal'
 
 // 渲染状态标签（纯函数，提升到模块层以保持引用稳定，供 columns useMemo 复用）
 function renderStatus(status: VideoFileStatus) {
@@ -641,8 +638,6 @@ export default function FileManagement() {
     },
   ], [renderActions, navigate])
 
-  const isReady = viewingFile?.status === 'ready'
-
   // D-05.1 / D-05.2 — 空态与错误态分支
   const isFiltered = Boolean(params.keyword || params.status)
   const showErrorState = !loading && Boolean(loadError)
@@ -723,34 +718,7 @@ export default function FileManagement() {
         </h2>
 
         {/* 统计卡片 */}
-        {stats && (
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={6}>
-              <Card>
-                <Statistic title="文件总数" value={stats.total} prefix={<FileOutlined />} />
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card>
-                <Statistic title="总大小" value={stats.total_size_gb.toFixed(2)} suffix="GB" />
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card>
-                <Statistic
-                  title="平均大小"
-                  value={stats.total > 0 ? (stats.total_size_gb / stats.total).toFixed(2) : 0}
-                  suffix="GB"
-                />
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card>
-                <Statistic title="当前页" value={files.length} suffix="/ 条" />
-              </Card>
-            </Col>
-          </Row>
-        )}
+        <FileStatsCards stats={stats} currentCount={files.length} />
       </div>
 
       <div style={{ marginBottom: '16px' }}>
@@ -867,147 +835,25 @@ export default function FileManagement() {
         />
       )}
 
+
       {/* 文件详情对话框 */}
-      <Modal
-        title={
-          <Space>
-            <FileOutlined />
-            文件详情 - {viewingFile?.file_name}
-          </Space>
-        }
+      <FileDetailModal
         open={detailVisible}
-        onCancel={() => setDetailVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setDetailVisible(false)}>
-            关闭
-          </Button>,
-          isReady && (
-            <Button
-              key="download"
-              type="primary"
-              icon={<DownloadOutlined />}
-              onClick={() => viewingFile && handleDownload(viewingFile.id, viewingFile.file_name)}
-            >
-              下载
-            </Button>
-          ),
-        ]}
-        width={700}
-      >
-        {viewingFile && (
-          <>
-            <Card size="small" style={{ marginBottom: 16 }}>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Statistic title="文件大小" value={formatFileSize(viewingFile.file_size)} />
-                </Col>
-                <Col span={12}>
-                  <Statistic title="时长" value={formatDuration(viewingFile.duration)} />
-                </Col>
-              </Row>
-            </Card>
-
-            <Card size="small" title="基本信息">
-              <Row gutter={[16, 8]}>
-                <Col span={8}>
-                  <strong>文件ID:</strong>
-                </Col>
-                <Col span={16}>{viewingFile.id}</Col>
-
-                <Col span={8}>
-                  <strong>文件名:</strong>
-                </Col>
-                <Col span={16}>{viewingFile.file_name}</Col>
-
-                <Col span={8}>
-                  <strong>文件路径:</strong>
-                </Col>
-                <Col span={16} style={{ wordBreak: 'break-all' }}>
-                  {viewingFile.file_path}
-                </Col>
-
-                <Col span={8}>
-                  <strong>格式:</strong>
-                </Col>
-                <Col span={16}>{viewingFile.format}</Col>
-
-                <Col span={8}>
-                  <strong>分辨率:</strong>
-                </Col>
-                <Col span={16}>{viewingFile.resolution}</Col>
-
-                <Col span={8}>
-                  <strong>码率:</strong>
-                </Col>
-                <Col span={16}>{viewingFile.bitrate} kbps</Col>
-
-                <Col span={8}>
-                  <strong>编码:</strong>
-                </Col>
-                <Col span={16}>{viewingFile.codec}</Col>
-
-                <Col span={8}>
-                  <strong>状态:</strong>
-                </Col>
-                <Col span={16}>{renderStatus(viewingFile.status)}</Col>
-
-                <Col span={8}>
-                  <strong>创建时间:</strong>
-                </Col>
-                <Col span={16}>{dayjs(viewingFile.created_at).format('YYYY-MM-DD HH:mm:ss')}</Col>
-              </Row>
-            </Card>
-
-            {viewingFile.task && (
-              <Card size="small" title="关联任务" style={{ marginTop: 16 }}>
-                <Row gutter={[16, 8]}>
-                  <Col span={8}>
-                    <strong>任务ID:</strong>
-                  </Col>
-                  <Col span={16}>{viewingFile.task.id}</Col>
-
-                  <Col span={8}>
-                    <strong>任务名称:</strong>
-                  </Col>
-                  <Col span={16}>{viewingFile.task.name}</Col>
-                </Row>
-              </Card>
-            )}
-          </>
-        )}
-      </Modal>
+        file={viewingFile}
+        onClose={() => setDetailVisible(false)}
+        onDownload={handleDownload}
+      />
 
       {/* 转录触发模态框 (采样率选择) */}
-      <Modal
-        title={`本地转录 - ${transcriptionVideoFile?.file_name || ''}`}
+      <TriggerTranscriptionModal
         open={triggerModalOpen}
-        onCancel={() => setTriggerModalOpen(false)}
+        file={transcriptionVideoFile}
+        samplingRate={selectedSamplingRate}
+        onSamplingRateChange={setSelectedSamplingRate}
+        loading={triggerLoading}
+        onClose={() => setTriggerModalOpen(false)}
         onOk={handleTranscriptionSubmit}
-        okText="开始转录"
-        cancelText="取消"
-        confirmLoading={triggerLoading}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ marginBottom: 8 }}>选择采样间隔:</div>
-          <Radio.Group
-            value={selectedSamplingRate}
-            onChange={(e) => setSelectedSamplingRate(e.target.value)}
-          >
-            {samplingRateOptions.map((opt) => (
-              <Radio
-                key={opt.value}
-                value={opt.value}
-                style={{ display: 'block', marginBottom: 8 }}
-              >
-                {opt.label} ({opt.description})
-              </Radio>
-            ))}
-          </Radio.Group>
-        </div>
-        <div style={{ color: '#faad14', fontSize: 13 }}>
-          提示: 转录过程可能需要几分钟，期间可以关闭此窗口继续使用系统。
-        </div>
-      </Modal>
+      />
 
       {/* 转录进度模态框 - 使用 Suspense 包裹动态导入 */}
       <Suspense fallback={<Spin />}>
@@ -1023,34 +869,15 @@ export default function FileManagement() {
       </Suspense>
 
       {/* 重命名文件对话框 */}
-      <Modal
-        title="重命名文件"
+      <RenameModal
         open={renameModalVisible}
+        file={renamingFile}
+        newFileName={newFileName}
+        onNewFileNameChange={setNewFileName}
+        loading={renameLoading}
+        onClose={() => setRenameModalVisible(false)}
         onOk={confirmRename}
-        onCancel={() => setRenameModalVisible(false)}
-        confirmLoading={renameLoading}
-        okButtonProps={{
-          disabled:
-            !newFileName.trim() ||
-            newFileName.trim() === renamingFile?.file_name.replace(/\.[^/.]+$/, ''),
-        }}
-      >
-        <Space orientation="vertical" style={{ width: '100%' }}>
-          <Input
-            value={newFileName}
-            onChange={(e) => setNewFileName(e.target.value)}
-            placeholder="新文件名（不含扩展名）"
-            maxLength={200}
-            autoFocus
-            onPressEnter={confirmRename}
-          />
-          {renamingFile && (
-            <div style={{ color: '#888', fontSize: 12 }}>
-              文件扩展名.{renamingFile.file_name.split('.').pop()} 将自动添加
-            </div>
-          )}
-        </Space>
-      </Modal>
+      />
 
       {/* 上传视频模态框 */}
       <VideoUploadModal
@@ -1063,66 +890,17 @@ export default function FileManagement() {
       />
 
       {/* 批量转录配置对话框 */}
-      <Modal
-        title="批量转录配置"
+      <BatchTranscribeConfigModal
         open={batchTranscribeModalOpen}
+        selectedCount={selectedRowKeys.length}
+        mode={batchTranscribeMode}
+        onModeChange={setBatchTranscribeMode}
+        samplingRate={batchSamplingRate}
+        onSamplingRateChange={setBatchSamplingRate}
+        loading={batchTranscribing}
+        onClose={() => setBatchTranscribeModalOpen(false)}
         onOk={confirmBatchTranscription}
-        onCancel={() => setBatchTranscribeModalOpen(false)}
-        okText="提交转录任务"
-        cancelText="取消"
-        confirmLoading={batchTranscribing}
-        width={600}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <span>已选择 {selectedRowKeys.length} 个文件进行批量转录</span>
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ marginBottom: 8, fontWeight: 500 }}>转录模式</div>
-          <Radio.Group
-            value={batchTranscribeMode}
-            onChange={(e) => setBatchTranscribeMode(e.target.value)}
-            disabled={batchTranscribing}
-          >
-            <Radio value="local">本地转录（快速，免费）</Radio>
-            <Radio value="cloud">云端转录（阿里通义听悟，更准确）</Radio>
-          </Radio.Group>
-        </div>
-
-        {batchTranscribeMode === 'local' && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ marginBottom: 8, fontWeight: 500 }}>采样率</div>
-            <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
-              采样率决定每秒提取的帧数，数值越小精度越高但文件越大
-            </div>
-            <Radio.Group
-              value={batchSamplingRate}
-              onChange={(e) => setBatchSamplingRate(e.target.value)}
-              disabled={batchTranscribing}
-            >
-              {samplingRateOptions.map((opt) => (
-                <Radio
-                  key={opt.value}
-                  value={opt.value}
-                  style={{ display: 'block', marginBottom: 8 }}
-                >
-                  {opt.label} ({opt.description})
-                </Radio>
-              ))}
-            </Radio.Group>
-          </div>
-        )}
-
-        {batchTranscribeMode === 'cloud' && (
-          <div style={{ marginBottom: 16 }}>
-            <Alert
-              title="云端转录使用阿里通义听悟服务，支持更准确的语音识别和PPT提取，但需要消耗API配额"
-              type="info"
-              showIcon
-            />
-          </div>
-        )}
-      </Modal>
+      />
     </div>
   )
 }
