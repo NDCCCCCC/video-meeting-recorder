@@ -406,8 +406,10 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 	return &apiResp, nil
 }
 
-// HuaweiClient 华为终端API客户端
-type HuaweiClient struct {
+// Client 华为终端API客户端
+// 命名遵循 STYLE-009（移除 package-qualified 冗余）：package 内直接称为 Client 而非
+// HuaweiClient。保留 HuaweiClient 别名以不破坏现有调用者。
+type Client struct {
 	config          *Config
 	httpClient      *HTTPClient
 	session         *Session
@@ -416,6 +418,9 @@ type HuaweiClient struct {
 	cancelKeepAlive context.CancelFunc
 	keepAliveWG     sync.WaitGroup
 }
+
+// HuaweiClient 华为终端API客户端（STYLE-009 兼容别名，等所有 caller 切换到 Client 后移除）
+type HuaweiClient = Client
 
 // NewHuaweiClient 创建华为终端API客户端
 func NewHuaweiClient(config *Config, logger *zap.Logger) *HuaweiClient {
