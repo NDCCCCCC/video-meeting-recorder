@@ -502,7 +502,7 @@ func (s *FFmpegConversionService) loadPendingTasks(ctx context.Context) error {
 		models.ConversionStatusPending,
 		models.ConversionStatusFailed,
 		models.ConversionStatusProcessing, // 处理可能卡住的 processing 任务
-	).Find(&tasks).Error; err != nil {
+	).Limit(1000).Find(&tasks).Error; err != nil {
 		return err
 	}
 

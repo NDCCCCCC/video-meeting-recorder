@@ -951,7 +951,7 @@ func (s *TranscriptionService) cleanupOrphanedOSSFiles(ctx context.Context) {
 		models.TranscriptionModeCloud,
 		[]string{models.TranscriptionStatusCompleted, models.TranscriptionStatusFailed},
 		cutoff,
-	).Find(&tasks).Error; err != nil {
+	).Limit(1000).Find(&tasks).Error; err != nil {
 		s.logger.Error("查询待清理OSS文件失败", zap.Error(err), response.SentinelField(err))
 		return
 	}
