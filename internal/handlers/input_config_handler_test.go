@@ -1,11 +1,7 @@
 package handlers
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
-
-	"github.com/gin-gonic/gin"
 )
 
 // TestInputConfigHandler_ListConfigs 测试GET /api/input-configs列表接口
@@ -41,20 +37,4 @@ func TestInputConfigHandler_TestConnection(t *testing.T) {
 // TestInputConfigHandler_ScanUSBDevices 测试GET /api/input-configs/usb-devices设备扫描接口
 func TestInputConfigHandler_ScanUSBDevices(t *testing.T) {
 	t.Skip("not implemented")
-}
-
-// helper function to setup test context
-func setupTestContext() (*gin.Engine, *httptest.Server) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	server := httptest.NewServer(router)
-	return router, server
-}
-
-// helper function to make test request
-func makeTestRequest(server *httptest.Server, method, path, body string) *http.Response {
-	req, _ := http.NewRequest(method, server.URL+path, nil)
-	client := &http.Client{}
-	resp, _ := client.Do(req)
-	return resp
 }

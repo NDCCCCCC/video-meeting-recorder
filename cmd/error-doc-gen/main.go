@@ -45,20 +45,6 @@ type Code struct {
 	Value string // e.g. "NOT_FOUND"
 }
 
-// sentinelRow is one rendered row in the sentinel table.
-type sentinelRow struct {
-	Name       string
-	HTTPStatus int
-	CallSites  int
-}
-
-// codeRow is one rendered row in the BusinessError table.
-type codeRow struct {
-	Name       string
-	HTTPStatus int
-	CallSites  int
-}
-
 // Pattern groups the regexes used to parse source files. Compiled once.
 type patterns struct {
 	sentinel     *regexp.Regexp

@@ -411,18 +411,6 @@ func (c *SimpleRecordingCoordinator) getOutputPath(task *models.VideoRecordingTa
 	return filepath.Join(outputDir, filename)
 }
 
-// getHLSPath 生成 HLS 输出目录路径
-// 格式: data/hls/task_{id}/{name}_{conf}_{timestamp}/
-func (c *SimpleRecordingCoordinator) getHLSPath(task *models.VideoRecordingTask) string {
-	safeName := sanitizeFilename(task.Name)
-	conferenceNumber := task.ConferenceNumber
-	timestamp := time.Now().Format("20060102150405")
-
-	dirname := fmt.Sprintf("%s_%s_%s", safeName, conferenceNumber, timestamp)
-	hlsDir := filepath.Join(c.config.Storage.HLSPath, fmt.Sprintf("task_%d", task.ID), dirname)
-	return hlsDir
-}
-
 // sanitizeFilename 清理文件名中的特殊字符
 func sanitizeFilename(name string) string {
 	replacements := map[rune]string{
@@ -445,60 +433,6 @@ func sanitizeFilename(name string) string {
 		result = result[:100]
 	}
 	return string(result)
-}
-
-// normalizePathForFFmpeg 将 Windows 路径转换为 FFmpeg 兼容格式（使用正斜杠）
-func normalizePathForFFmpeg(path string) string {
-	return strings.ReplaceAll(path, "\\", "/")
-}
-
-// escapePathForTeeMuxer 转义 tee muxer 输出路径中的特殊字符
-// 这用于方括号外的路径（第一个MKV路径和最后的m3u8路径）
-// 注意：m3u8路径在方括号之后，冒号也需要转义（除了盘符）
-func escapePathForTeeMuxer(path string) string {
-	// 对于方括号外的路径，也需要转义冒号
-	// 因为它在 tee spec 的方括号之后，FFmpeg可能会误解析
-	// 使用与 escapePathForTeeMuxerOptions 相同的逻辑
-	return escapePathForTeeMuxerOptions(path)
-}
-
-// escapePathForTeeMuxerOptions 转义 tee muxer 选项值中的路径特殊字符
-// 这用于 [f=hls:hls_segment_filename=...] 选项内部的路径
-// 选项值中的冒号需要转义，但盘符冒号（如 D:/）需要保留
-func escapePathForTeeMuxerOptions(path string) string {
-	// 先转换为正斜杠（Windows路径必须使用正斜杠）
-	normalized := normalizePathForFFmpeg(path)
-
-	// 检查是否有 Windows 盘符（如 D:/）
-	hasDriveLetter := len(normalized) >= 2 && normalized[1] == ':'
-
-	// 如果有盘符，分别处理盘符和剩余部分
-	if hasDriveLetter {
-		drive := normalized[:2] // 如 "D:"
-		rest := normalized[2:]  // 如 "/Record_V2/..."
-
-		// 转义剩余部分中的冒号（不包括盘符）
-		// Windows FFmpeg tee muxer 需要使用双反斜杠转义冒号
-		restEscaped := strings.ReplaceAll(rest, ":", "\\\\:")
-		// 转义空格
-		restEscaped = strings.ReplaceAll(restEscaped, " ", "\\ ")
-		// 转义方括号
-		restEscaped = strings.ReplaceAll(restEscaped, "[", "\\[")
-		restEscaped = strings.ReplaceAll(restEscaped, "]", "\\]")
-		// 转义单引号
-		restEscaped = strings.ReplaceAll(restEscaped, "'", "\\'")
-
-		return drive + restEscaped
-	}
-
-	// 没有盘符，全部转义
-	escaped := strings.ReplaceAll(normalized, ":", "\\:")
-	escaped = strings.ReplaceAll(escaped, " ", "\\ ")
-	escaped = strings.ReplaceAll(escaped, "[", "\\[")
-	escaped = strings.ReplaceAll(escaped, "]", "\\]")
-	escaped = strings.ReplaceAll(escaped, "'", "\\'")
-
-	return escaped
 }
 
 // startFFmpegProcess 启动FFmpeg进程并配置日志
@@ -643,42 +577,6 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 
 	c.logger.Info("录制已停止", zap.Uint("task_id", taskID), zap.Int("stopped_count", stoppedCount))
 	return nil
-}
-
-// monitorProcess 监控录制进程状态
-func (c *SimpleRecordingCoordinator) monitorProcess(taskID uint, cmd *exec.Cmd, ctx context.Context) {
-	// 先等待进程结束，不持有锁
-	err := cmd.Wait()
-
-	// 然后获取锁更新状态
-	c.mu.Lock()
-	// 尝试新格式（带配置类型）和旧格式（不带配置类型）
-	processKey := fmt.Sprintf("%d", taskID)
-	process, exists := c.processes[processKey]
-	if !exists {
-		// 尝试 USB 类型
-		processKey = fmt.Sprintf("%d_usb", taskID)
-		process, exists = c.processes[processKey]
-	}
-	if exists {
-		process.Status = "stopped"
-	}
-	c.mu.Unlock()
-
-	if err != nil {
-		if ctx.Err() != nil {
-			// Context 被取消，是主动停止
-			c.logger.Debug("录制进程已停止", zap.Uint("task_id", taskID))
-		} else {
-			// 非预期退出
-			c.logger.Error("录制进程异常退出",
-				zap.Uint("task_id", taskID),
-				zap.Error(err),
-			)
-		}
-	} else {
-		c.logger.Info("录制进程正常结束", zap.Uint("task_id", taskID))
-	}
 }
 
 // buildRecordingCommand 构建录制命令（使用 tee muxer 同时输出 MKV 和 HLS）

@@ -278,15 +278,6 @@ func TestCredentialEnvelopeVersion_Constant(t *testing.T) {
 // WarnOnKeyTruncation 测试（Phase 18 调试 sm4-encrypt-key-invalid 衍生修复）
 // ============================================================================
 
-// captureZapLogger 捕获 zap 日志条目到 slice，用于断言日志字段
-func captureZapLogger(t *testing.T) (*zap.Logger, *[]zap.Field) {
-	t.Helper()
-	// 用 zaptest observer 替代，但简单起见用 observable Core
-	// 这里使用最简实现：nil logger 跳过（大部分测试只关心 nil 行为）
-	// 真正字段断言测试在 TestWarnOnKeyTruncation_HexOverLength 里用 NewDevelopment + 解析
-	return zaptest.NewLogger(t), nil
-}
-
 func TestWarnOnKeyTruncation_NilLogger(t *testing.T) {
 	// nil logger 必须 no-op，不 panic
 	assert.NotPanics(t, func() {

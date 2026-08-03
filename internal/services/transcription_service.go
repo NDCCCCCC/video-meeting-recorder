@@ -40,7 +40,6 @@ type TranscriptionService struct {
 	taskQueue          chan *models.TranscriptionTask
 	workers            int
 	cancelFuncs        map[uint]context.CancelFunc
-	mu                 sync.RWMutex
 	wg                 sync.WaitGroup
 	ctx                context.Context
 	cancel             context.CancelFunc

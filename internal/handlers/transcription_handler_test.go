@@ -1,11 +1,7 @@
 package handlers
 
 import (
-	"bytes"
-	"encoding/json"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 // --- Phase 14 Batch Transcription Handler Test Stubs (Wave 0) ---
@@ -71,11 +67,4 @@ func TestTranscriptionHandler_GetBatchTranscriptionStatus_NotFound(t *testing.T)
 	// Setup: Create test handler
 	// Action: Call GetBatchTranscriptionStatus with invalid job_group_id
 	// Assert: HTTP 404 status, error message returned
-}
-
-// Helper function to create JSON request body
-func createJSONBody(t *testing.T, data interface{}) *bytes.Buffer {
-	body, err := json.Marshal(data)
-	require.NoError(t, err)
-	return bytes.NewBuffer(body)
 }

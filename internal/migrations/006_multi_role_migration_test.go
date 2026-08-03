@@ -3,7 +3,6 @@ package migrations
 import (
 	"testing"
 
-	"gorm.io/gorm"
 	_ "modernc.org/sqlite"
 )
 
@@ -100,20 +99,4 @@ func TestMultiRoleMigration_Down_drops_users_roles_table(t *testing.T) {
 	// TODO: Query sqlite_master for users_roles table
 	// TODO: Assert table does not exist
 	// TODO: Assert users.role_id column restored (not NULL)
-}
-
-// Helper function to create test database
-func setupTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	// TODO: Create in-memory SQLite database
-	// TODO: Return gorm.DB instance
-	// TODO: Handle cleanup in test defer
-	return nil
-}
-
-// Helper function to create users table for testing
-func createUsersTable(db *gorm.DB) error {
-	// TODO: Execute CREATE TABLE users SQL
-	// TODO: Include role_id column for migration testing
-	return nil
 }
