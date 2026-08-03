@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
-status: milestone_complete
-last_updated: 2026-08-03T04:13:43.402Z
+status: Awaiting next milestone
+last_updated: "2026-08-03T04:22:13.474Z"
 last_activity: 2026-08-03
 progress:
-  total_phases: 2
-  completed_phases: 1
-  total_plans: 11
+  total_phases: 25
+  completed_phases: 20
+  total_plans: 98
   completed_plans: 98
-  percent: 50
-stopped_at: Milestone complete (Phase 22 was final phase)
+  percent: 80
 ---
 
 # STATE.md - Project Memory
@@ -35,17 +34,16 @@ stopped_at: Milestone complete (Phase 22 was final phase)
 
 ### Current Focus
 
-Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and auto scan (all local, no external dependencies).
+v1.1 已交付归档（2026-08-03，phases 17-22）。等待下一个里程碑规划：`/gsd:new-milestone`（候选：phase 15/16 前端去 AI 味收尾、phase 1 字幕支持、或新方向）。
 
 ---
 
 ## Current Position
 
-Phase: 22 (address-v1-1-audit-tech-debt-regenerate-errors-md-backfill-v) — EXECUTING
-Plan: Not started
-**Phase:** 22
-**Status:** Milestone complete
-**Progress:** [███████░░░] 73%
+Phase: Milestone v1.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-03 — Milestone v1.1 completed and archived
 
 ### Phase Summary
 
@@ -301,6 +299,41 @@ Phase 17 完成。无即时 follow-up。可选：
 - Phase 15 added: 前端去 AI 味 (2026-07-28)
 - Phase 17 added: 后端代码审查 56 个发现修复 - P0/P1/P2 全量 (2026-07-30)
 - Phase 20 added: 错误处理统一收敛 + sentinel 体系增强（HandleError 全量替换 classify / zap logger errors.Is / 自动文档生成 / typed error kind） (2026-08-01)
+
+## Deferred Items
+
+Items acknowledged and deferred at v1.1 milestone close on 2026-08-03. All 24 items are **v1.0-era legacy planning metadata** (debug sessions, quick tasks, UAT gaps, verification gaps) — none are v1.1 deliverables. Acknowledged via `gsd-sdk query audit-open` pre-close check; recorded here for traceability, not blocking v1.1 archival.
+
+| Category | Item | Status | Notes |
+|----------|------|--------|-------|
+| debug | legacy-code-types-and-scripts | unknown | v1.0 debug session, no hypothesis recorded |
+| debug | REGRESSION-TEST | unknown | v1.0 debug session |
+| debug | token-expire-logout-fix | unknown | v1.0 debug session |
+| debug | VERIFY-RESULT | unknown | v1.0 debug session |
+| quick_task | 210421-ge3-compile-test | missing | v1.0 quick task, metadata stale |
+| quick_task | 260423-f7v-add-video-upload-feature | missing | v1.0 quick task |
+| quick_task | 260428-ad-whitelist | missing | v1.0 AD whitelist |
+| quick_task | 260428-m9t-sidebar | missing | v1.0 sidebar |
+| quick_task | 260428-mlh-sm4 | missing | v1.0 frontend SM4 |
+| quick_task | 260428-n0k-ad | missing | v1.0 AD persistence |
+| quick_task | 260428-pvs-ad-user-lookup | missing | v1.0 AD user lookup |
+| quick_task | 260729-kbf-audit-log-coverage | missing | pre-phase-17 audit探查 |
+| quick_task | 260729-lr4-100 | missing | pre-phase-17 审计 100% |
+| quick_task | 260729-m8l-olddata-update-delete | missing | pre-phase-17 OldData |
+| quick_task | 260729-mwt-input-config-system-file-olddata-6 | missing | pre-phase-17 OldData |
+| quick_task | 260730-bc3-38-recording-5-storage-3-ppts-4-apikey-3 | missing | pre-phase-17 OldData |
+| quick_task | 260730-dr8-42-get-high-14-medium-28 | missing | pre-phase-17 GET 审计 |
+| quick_task | 260730-eis-clean-build-blockers-line-ending-ctx | missing | pre-phase-17 build cleanup |
+| seed | SEED-001-totp-authenticator (001-totp-authenticator) | dormant | future feature seed |
+| uat | phase 03 (03-HUMAN-UAT.md) | deferred | 6 open scenarios |
+| uat | phase 06 (06-UAT.md) | deferred | 13 open scenarios |
+| uat | phase 07 (07-UAT.md) | deferred | 8 open scenarios |
+| uat | phase 08 (08-UAT.md) | all_passed | 0 open (auto-closed) |
+| verification | phase 01 (01-VERIFICATION.md) | gaps_found | v1.0 verification gap |
+
+**Total: 24 acknowledged items** (4 debug + 14 quick_task + 1 seed + 4 uat + 1 verification). Recommend `/gsd:cleanup` or `/gsd:audit-uat` in a future milestone to retroactively close the v1.0 UAT/verification gaps and stale debug sessions.
+
+---
 
 ## Accumulated Context
 
@@ -608,3 +641,7 @@ HANDOFF.json 待删除（一次性的）。
 - Commit `e2eac56` on main
 
 **下一步**: `/gsd-plan-phase 20` 生成 PLAN.md,或 `/gsd-plan-phase 20 --skip-research` 直接进入 plan
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

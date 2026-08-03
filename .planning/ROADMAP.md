@@ -3,7 +3,8 @@
 ## Milestones
 
 - ✅ **v1.0 视频切割与会议转录PPT** — Phases 01-14 (shipped 2026-05-06)
-- 📋 **v1.1** — Planning next milestone
+- ✅ **v1.1 文件管理与编辑增强 / 后端安全加固** — Phases 17-22 (shipped 2026-08-03)
+- 📋 **v2.0** — Planning next milestone
 
 ## Phases
 
@@ -31,6 +32,23 @@
 
 </details>
 
+<details>
+<summary>✅ v1.1 文件管理与编辑增强 / 后端安全加固 (Phases 17-22) — SHIPPED 2026-08-03</summary>
+
+- [x] Phase 17: 后端代码审查 56 项修复 P0/P1/P2 (4/4 plans) — completed 2026-07-30
+- [x] Phase 18: 凭据静态加密 + 密钥轮换 SEC-003b SM4-GCM (1/1 plan) — completed 2026-07-31
+- [x] Phase 19: ctx 全量级联 + SEC-004 jti + STYLE-001 error (4/4 plans) — completed 2026-07-31
+- [x] Phase 20: 错误处理统一收敛 + sentinel 体系增强 (5/5 plans) — completed 2026-08-01
+- [x] Phase 21: Close v1.1 gaps — retro-verify 17/18/19 + REQUIREMENTS.md + auth:57 fix (5/5 plans) — completed 2026-08-03
+- [x] Phase 22: Address v1.1 audit tech debt — regenerate errors.md + backfill VALIDATION.md (6/6 plans) — completed 2026-08-03
+
+**Total:** 25 plans completed
+
+**Audit:** 重审 `status: tech_debt`（gaps 全空，requirements 60/60、phases 5/5、integration 5/5、flows 4/4），5/5 phase VERIFICATION passed。
+**See** `.planning/milestones/v1.1-ROADMAP.md` **for full milestone details.**
+
+</details>
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -49,15 +67,16 @@
 | 12. Windows AD 域控 | v1.0 | 6/6 | Complete | 2026-04-30 |
 | 13. 重构华为配置，支持USB和流媒体 | v1.0 | 6/6 | Complete | 2026-04-29 |
 | 14. 批量操作 | v1.0 | 4/4 | Complete | 2026-04-30 |
-| 17. 后端代码审查 56 发现修复 P0/P1/P2 | v1.1 | 4/4 | Complete | 2026-07-30 |
-| 18. 凭据静态加密 + 密钥轮换 (SEC-003b) | v1.1 | 1/1 | Complete | 2026-07-31 |
-| 19. ctx 全量级联 + SEC-004 replay + STYLE-001 error | v1.1 | 4/4 | Complete | 2026-07-31 |
-| 20. 错误处理统一收敛 + sentinel 体系增强 | v1.1 | 5/5 | Complete    | 2026-08-01 |
-| 21. Close v1.1 gaps — retro-verify 17/18/19 + REQUIREMENTS.md + auth:57 fix | v1.1 | 5/5 | Complete    | 2026-08-03 |
+| 17. 后端代码审查 56 项修复 | v1.1 | 4/4 | Complete | 2026-07-30 |
+| 18. 凭据静态加密 SEC-003b | v1.1 | 1/1 | Complete | 2026-07-31 |
+| 19. ctx 全量级联 + SEC-004 + STYLE-001 | v1.1 | 4/4 | Complete | 2026-07-31 |
+| 20. 错误处理统一收敛 + sentinel | v1.1 | 5/5 | Complete | 2026-08-01 |
+| 21. Close v1.1 gaps | v1.1 | 5/5 | Complete | 2026-08-03 |
+| 22. v1.1 audit tech debt 收尾 | v1.1 | 6/6 | Complete | 2026-08-03 |
 
 ## Backlog
 
-(No backlog items)
+未归入已交付里程碑的候选项（下个里程碑 `/gsd:new-milestone` 裁定归属）：
 
 ### Phase 1: 新功能：在视频播放中添加外挂字幕支持（预览视频、切割视频、预览PPT页面）
 
@@ -72,12 +91,13 @@ Plans:
 - [ ] 01-02-PLAN.md -- Subtitle sync hook + SubtitlePanel component with style controls
 - [ ] 01-03-PLAN.md -- Integration into VideoPlayerModal and PPTPreview
 
-### Phase 15: 前端去 AI 味
+### Phase 15: 前端去 AI 味（6/6 complete — unassigned to milestone）
 
 **Goal:** 消除 Record V2 前端 UI 中的"AI 生成感"——替换模板化文案、删除硬编码 mock、补齐空/错/加载态、统一设计令牌与品牌基线、加入克制的微交互，并以 Playwright 截图回归保障全量改的回归风险。
 **Requirements**: D-01 through D-08 (from CONTEXT.md)
 **Depends on:** Phase 14
 **Plans:** 6/6 plans complete
+**Status:** 代码已全部落地（6 plans），但未归入 v1.0/v1.1 任何里程碑。下个里程碑可追溯归档或作为 v2.0 前端基线。
 
 Plans:
 
@@ -99,18 +119,18 @@ Plans:
 
 - [x] 15-06-PLAN.md -- Install @playwright/test + config + 4 visual regression specs with page.route mocks (R-1)
 
-### Phase 16: 视觉重塑（去 AI 模板感）
+### Phase 16: 视觉重塑（去 AI 模板感）（planned — 1/6 complete）
 
 **Goal:** Phase 15 的改动集中在基础设施层，用户视觉感受不到明显变化。本 phase 集中在用户每次打开页面**第一眼看到**的视觉重塑：登录页动效背景、统一页面壳组件、Dashboard 重新布局、列表页布局统一、字体排版分级。
 **Requirements**: D-01 through D-08 (from CONTEXT.md)
 **Depends on:** Phase 15
-**Plans:** 6 plans (planned)
+**Plans:** 6 plans (1 executed, 5 planned)
 
 Plans:
 
 **Wave 1** *(foundation — no blockers)*
 
-- [ ] 16-01-PLAN.md -- 登录页动效背景重做（深青渐变 + 漂浮光晕 + 点阵网格 + 鼠标光晕 + 磨砂玻璃卡）
+- [x] 16-01-PLAN.md -- 登录页动效背景重做（深青渐变 + 漂浮光晕 + 点阵网格 + 鼠标光晕 + 磨砂玻璃卡）
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -125,89 +145,3 @@ Plans:
 
 - [ ] 16-05-PLAN.md -- 字体排版统一（标题分级 + 等宽数字 + 字重 / 行高）
 - [ ] 16-06-PLAN.md -- 更新视觉回归 spec baseline（login / dashboard / files / tasks / audit）
-
-### Phase 17: 后端代码审查 56 个发现修复 - P0/P1/P2 全量
-
-**Goal:** 后端代码库通过 56 项审查发现的分级修复（P0 HIGH + P1 MEDIUM + P2 LOW），配齐 P0/P1 单测、同步部署文档，go build/vet/fmt 全绿、既有测试不回归。
-**Requirements**: SEC-001..015, BUG-001..016, PERF-001..016, STYLE-001..010 (per docs/audits/2026-07-30-backend-code-review.md; STYLE-001 全库迁移 / SEC-003b 华为密码 DB 加密 / STYLE-009 Get* rename 三项 deferred)
-**Depends on:** Phase 16
-**Plans:** 4 plans
-
-Plans:
-**Wave 1**
-
-- [x] 17-01-PLAN.md — P0 HIGH 发现修复（11 项 + 部署文档同步；SEC-003b deferred） — 4 atomic commits (4d3de0b/2bcee29/47ef805/4fc1d3c) on main, build+tests verified
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 17-02-PLAN.md — P1a 错误处理 + 安全加固（12 项：BUG-003..006 + SEC-005..010 + STYLE-004/005） — 12 atomic commits on main (d27903f..e040d2d, +b53cc8c regression), build+tests -race verified
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 17-03-PLAN.md — P1b 性能 + 接口归位（7 项：PERF-006..011 + STYLE-003） — 7 atomic commits on main (9150e95→0190f83), build+tests -race verified; STYLE-003 接口迁移到消费方包 + compile-level 断言
-
-**Wave 4** *(blocked on Wave 3 completion)*
-
-- [x] 17-04-PLAN.md — P2 LOW 发现清理（20 项；STYLE-001 partial / STYLE-002 误报 / STYLE-009 deferred） — 18 atomic commits on main (4f5579a..857bb55), go build/vet/fmt + 12 包 -race tests green
-
-### Phase 20: 错误处理统一收敛 + sentinel 体系增强
-
-**Goal:** 在 Phase 19（D18-D21 完成 24 个 sentinel 散点统一 + ~356 散点收敛）的基础上进一步深化错误处理体系：handler 层移除 ad-hoc classify 函数全部走 HandleError；zap logger 集成 errors.Is 链并输出 sentinel_type 字段；自动生成 sentinel 文档；引入 typed error kind 字段区分 Sentinel / BusinessError / ad-hoc。
-**Requirements**: D-22 候选清单（1）handler 错误处理统一收敛（移除 classify 函数，全部走 HandleError） / （2）zap logger 集成 errors.Is 链输出 sentinel_type 字段 / （3）自动生成 sentinel 文档 / （4）typed error kind 字段区分（Sentinel vs BusinessError vs ad-hoc）
-**Depends on:** Phase 19
-**Plans:** 5/5 plans complete
-
-Plans:
-
-**Wave 1** *(foundation — SentinelField helper + ErrADUserNotRegistered migration)*
-
-- [x] 20-01-PLAN.md — Foundation: FirstKnownSentinelName export + pkg/response.SentinelField helper + R-3 ErrADUserNotRegistered migration to internal/errors
-
-**Wave 2** *(blocked on Wave 1 — handler classify convergence)*
-
-- [x] 20-02-PLAN.md — 4 heavy handlers (ppt/video_recording_task/auth/input_config) + classifyAuthLoginError delete + ppt_file_service %w wrapping + table-driven tests
-- [x] 20-03-PLAN.md — 8 light handlers (file/video_file/admin/user/transcription/split/role/apikey) + table-driven tests  [parallel with 20-02, no file overlap]
-
-**Wave 3** *(blocked on Wave 2 — service zap upgrade + docs generator)*
-
-- [x] 20-04-PLAN.md — Service-layer ~160 zap.Error sites upgraded with SentinelField (services/auth/scheduler/huawei; middleware DEFERRED per D-03.7) [parallel with 20-05]
-- [x] 20-05-PLAN.md — cmd/error-doc-gen generator + docs/errors.md + //go:generate directive + CI sync-check (no Makefile per R-2) [parallel with 20-04]
-
-### Phase 21: Close v1.1 gaps: retro-verify phases 17/18/19 + create REQUIREMENTS.md + fix auth_handler.go:57 WARNING
-
-**Goal:** 关闭 v1.1 里程碑审计 (v1.1-MILESTONE-AUDIT.md gaps_found) 发现的 5 项过程缺口 (REQUIREMENTS.md 缺失 + phase 17/18/19 未验证 + auth_handler.go:57 WARNING), 使里程碑可在重审时诚实归档为 passed. 代码库本身已功能完整 (go test -race ./... 全绿), 本阶段不改业务功能 (仅 1 行 auth_handler.go 规范化), 只补齐过程产物.
-**Requirements**: P21-R1..P21-R5 (派生自 21-CONTEXT.md D-01..D-05; phase_req_ids=null by design — REQUIREMENTS.md 本身是交付物之一, 定义 v1.1 REQ-ID 体系)
-**Depends on:** Phase 20
-**Plans:** 5/5 plans complete
-
-Plans:
-
-**Wave 1** *(独立, 可并行 — 无文件重叠)*
-
-- [x] 21-01-PLAN.md — Retro-verify phase 17: 写 .planning/phases/17-56-p0-p1-p2/17-VERIFICATION.md (目录已齐全仅缺 VERIFICATION; status=passed 7/7 must-haves; 跨 phase deferred 项去向显式标注) — 1 commit (2c679f2) on main, 17-VERIFICATION.md 179 lines, 31 VERIFIED 标记
-- [x] 21-02-PLAN.md — Retro-verify phase 18: 重建 .planning/phases/18-credential-static-encryption-sec-003b/ 目录 + 复制 root 18-SUMMARY.md (root 原版不动) + 写 18-VERIFICATION.md (status=passed 11/11 must-haves; 9 wave commits W1a..W4d body 为准; 5d536ec 显式标预存证据 NOT phase 21 交付物) — 1 commit (d76d47d) on main, 18-VERIFICATION.md 174 lines, 39 VERIFIED 标记
-- [x] 21-03-PLAN.md — Retro-verify phase 19: 重建 .planning/phases/19-ctx-cascade-sec-004-style-001-error/ 目录 + 复制 root 19-SUMMARY.md + docs/audits/phase-19-D5-D21-summary.md (原版均不动) + 写 19-VERIFICATION.md (status=passed 10/10 must-haves, 41 VERIFIED, 220 行, 32+ commits + 24 sentinels + ~356 散点) — 1 commit (4b52463) on main
-- [x] 21-05-PLAN.md — Fix internal/handlers/auth_handler.go:57: if HandleError { return }; return → HandleError(c, err); return (控制流等价论据, 非 always-returns-true); 既有 10 sub-tests 回归网全绿; 单独 fix commit (4959e9c) 与 docs 分离; v1.1-MILESTONE-AUDIT WARNING 关闭
-
-**Wave 2** *(blocked on Wave 1: 21-01/02/03 落地 — REQUIREMENTS 引用其 VERIFICATION 路径作为验证证据)*
-
-- [x] 21-04-PLAN.md — Create .planning/REQUIREMENTS.md: v1.1 milestone (phase 17/18/19/20) REQ-ID 追溯表, 5 列结构 per D-03.3, 251 行, ~80 REQ-IDs (52 REQ-17 + 5 REQ-18 + 4 REQ-19 + 11 REQ-20), orphan=0, 跨 phase 兑现项显式标注 (SEC-003b→18 / PERF-003→19 / BUG-005→19 / HMAC-jti→19-D3), Out-of-scope phase 16 观察不裁定 — 1 commit (695b4fe) + SUMMARY (a00a1a3) on main
-
-
-### Phase 22: Address v1.1 audit tech debt: regenerate errors.md + backfill VALIDATION.md for 17/18/19/21
-
-**Goal:** Close v1.1 audit (v1.1-MILESTONE-AUDIT.md) tech debt: (1) regenerate docs/errors.md via go generate ./internal/errors/... so audit footer reflects current handler convergence state (current 16 ad-hoc branches; CI sync-check at .github/workflows/ci.yml:44-51 stays SYNC_OK); (2) backfill VALIDATION.md for phases 17/18/19/21 (Nyquist sampling contract retro-fitted from each phase VERIFICATION.md + SUMMARY.md), changing v1.1-MILESTONE-AUDIT.md §Nyquist Compliance 17/18/19 status from MISSING to present; (3) optional flip phase 20 VALIDATION.md frontmatter nyquist_compliant: false → true + sign-off checkboxes (only if all 6 honest verification items PASS). No production code changes, no new tests, no migration — pure process artifacts backfill.
-**Requirements**: TBD (phase_req_ids=null by design — process-closure phase does not introduce new REQ-IDs; operationalizes existing v1.1 ones)
-**Depends on:** Phase 21
-**Plans:** 6/6 plans complete
-
-Plans:
-
-**Wave 1** *(independent, parallel — no file overlap; process-only)*
-
-- [x] 22-01-PLAN.md — Regenerate docs/errors.md via `go generate ./internal/errors/...`; CI sync-check stays SYNC_OK; single commit containing only docs/errors.md
-- [x] 22-02-PLAN.md — Backfill `.planning/phases/17-56-p0-p1-p2/17-VALIDATION.md` retro-fitted from 17-VERIFICATION + 17-0[1-4]-SUMMARY (4 plans + housekeeping × 5 Per-Task rows; 12 test files + 3 cross-phase evidence Wave 0 checkboxes; 6 sign-off [x])
-- [x] 22-03-PLAN.md — Backfill `.planning/phases/18-credential-static-encryption-sec-003b/18-VALIDATION.md` retro-fitted from 18-VERIFICATION + 18-SUMMARY (9 waves W1a..W4d + 1 post-audit 5d536ec × 10 Per-Task rows; 2 test files + 6 indirect + cross-phase Wave 0 checkboxes; 6 sign-off [x])
-- [x] 22-04-PLAN.md — Backfill `.planning/phases/19-ctx-cascade-sec-004-style-001-error/19-VALIDATION.md` retro-fitted from 19-VERIFICATION + 19-SUMMARY + phase-19-D5-D21-summary (11 wave + 4 D1-D4 + 17 D5-D21 = 32+ Per-Task rows; 3 test files + 5 indirect + cross-phase Wave 0 checkboxes; 6 sign-off [x])
-- [x] 22-05-PLAN.md — Backfill `.planning/phases/21-close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem/21-VALIDATION.md` retro-fitted from 21-VERIFICATION + 21-0[1-5]-SUMMARY (5 plans × 5 Per-Task rows; 4 retro-VERIFICATION + REQUIREMENTS + auth fix Wave 0 checkboxes; 6 sign-off [x])
-- [x] 22-06-PLAN.md — (Optional) Flip `.planning/phases/20-handleerror-classify-convergence/20-VALIDATION.md` frontmatter nyquist_compliant: false → true + wave_0_complete: false → true + 6 sign-off checkboxes [ ] → [x] + Approval pending → approved, ONLY if all 6 sign-off items honest verification PASS
