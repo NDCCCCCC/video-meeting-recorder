@@ -68,7 +68,7 @@ func TestPollingBackoffParameters(t *testing.T) {
 	// Simulate backoff progression
 	delay := float64(initialDelay)
 	for i := 0; i < 10; i++ {
-		delay = delay * multiplier
+		delay *= multiplier
 		if delay > float64(maxDelay) {
 			delay = float64(maxDelay)
 		}

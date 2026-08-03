@@ -289,7 +289,7 @@ func (a *LocalAuthenticator) logLoginFailure(ctx context.Context, username, ipAd
 // toUserDTO converts a User model to UserDTO
 func (a *LocalAuthenticator) toUserDTO(user *models.User) *UserDTO {
 	// Extract role IDs
-	var roleIDs []uint
+	roleIDs := make([]uint, 0, len(user.Roles))
 	for _, role := range user.Roles {
 		roleIDs = append(roleIDs, role.ID)
 	}

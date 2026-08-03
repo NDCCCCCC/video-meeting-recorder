@@ -147,7 +147,7 @@ func (s *SM4TokenService) GenerateTokenPair(user *models.User) (*TokenPair, erro
 func (s *SM4TokenService) generateToken(user *models.User, tokenType string, duration time.Duration) (string, error) {
 	now := time.Now()
 
-	var permissions []string
+	var permissions []string //nolint:prealloc // 声明在 permMap 之前，无法用 len(permMap) 预分配
 	isAdmin := user.HasRole(models.RoleAdmin)
 
 	// Collect permissions from all roles (OR logic)
@@ -163,7 +163,7 @@ func (s *SM4TokenService) generateToken(user *models.User, tokenType string, dur
 	}
 
 	// Extract role IDs for token
-	var roleIDs []uint
+	roleIDs := make([]uint, 0, len(user.Roles))
 	for _, role := range user.Roles {
 		roleIDs = append(roleIDs, role.ID)
 	}

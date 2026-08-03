@@ -402,7 +402,7 @@ func Load() (*Config, error) {
 }
 
 // setDefaults 设置默认值
-func setDefaults(cfg *Config) {
+func setDefaults(cfg *Config) { //nolint:gocyclo,cyclop // 大量配置项默认值赋值，复杂度自然高，拆分收益低
 	if cfg.Server.Host == "" {
 		cfg.Server.Host = "0.0.0.0"
 	}

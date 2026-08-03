@@ -52,10 +52,8 @@ func (g *TranscriptionJobGroup) UpdateStatus() {
 	if g.IsCompleted() {
 		if g.FailedCount > 0 && g.CompletedCount == 0 {
 			g.Status = JobGroupStatusFailed
-		} else if g.FailedCount > 0 {
-			g.Status = JobGroupStatusCompleted // 部分成功也算完成
 		} else {
-			g.Status = JobGroupStatusCompleted
+			g.Status = JobGroupStatusCompleted // 全部成功或部分成功都算完成
 		}
 	} else if g.CompletedCount > 0 || g.FailedCount > 0 {
 		g.Status = JobGroupStatusProcessing

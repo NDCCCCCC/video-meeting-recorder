@@ -81,6 +81,6 @@ func TestErrorMapper_NoOpWhenNoErrors(t *testing.T) {
 }
 
 // errStr 是一个测试用的非 sentinel 错误。
-type errStr string
+type errStr string //nolint:errname // 测试 helper error，无需 xxxError 后缀
 
 func (e errStr) Error() string { return string(e) }

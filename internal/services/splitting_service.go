@@ -201,7 +201,7 @@ func (s *SplittingService) processSplit(ctx context.Context, task *SplitTask) {
 	segments = append(segments, segment{start: prev, end: 0})
 
 	// 4. Execute FFmpeg for each segment
-	parentID := uint(task.VideoFileID)
+	parentID := task.VideoFileID
 	sourceName := sourceFile.FileName
 	ext := filepath.Ext(sourceName)
 	baseName := sourceName[:len(sourceName)-len(ext)]

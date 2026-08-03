@@ -59,7 +59,7 @@ func TestNewHTTPClient_No3DESCipher(t *testing.T) {
 	assert.False(t, tlsCfg.InsecureSkipVerify)
 
 	for _, cs := range tlsCfg.CipherSuites {
-		assert.NotEqual(t, uint16(tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA), uint16(cs),
+		assert.NotEqual(t, tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA, cs,
 			"密码套件不应包含 3DES_EDE_CBC_SHA（SWEET32）")
 	}
 }

@@ -125,7 +125,7 @@ func (p *PPTFile) RecordDeletion(slides []int) error {
 // AddEditOperation adds an operation to the edit history
 func (p *PPTFile) AddEditOperation(operation string, slides []int) error {
 	// Parse existing history
-	var history []EditOperation
+	var history []EditOperation //nolint:prealloc // json.Unmarshal 目标，容量由 JSON 决定
 	if p.EditHistory != "" && p.EditHistory != "[]" {
 		if err := json.Unmarshal([]byte(p.EditHistory), &history); err != nil {
 			return fmt.Errorf("failed to parse edit history: %w: %w", apperrors.ErrInternal, err)

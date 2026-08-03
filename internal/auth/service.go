@@ -307,7 +307,7 @@ func (s *Service) GetUserByID(ctx context.Context, userID uint) (*UserDTO, error
 // toUserDTO 转换为UserDTO
 func (s *Service) toUserDTO(user *models.User) *UserDTO {
 	// Extract role IDs
-	var roleIDs []uint
+	roleIDs := make([]uint, 0, len(user.Roles))
 	for _, role := range user.Roles {
 		roleIDs = append(roleIDs, role.ID)
 	}

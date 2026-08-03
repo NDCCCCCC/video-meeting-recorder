@@ -52,7 +52,7 @@ func Success(w http.ResponseWriter, data interface{}) {
 func Error(w http.ResponseWriter, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 
-	httpStatus := http.StatusOK
+	var httpStatus int
 	switch code {
 	case CodeUnauthorized:
 		httpStatus = http.StatusUnauthorized
@@ -118,7 +118,7 @@ func GinSuccess(c *gin.Context, data interface{}) {
 
 // GinError Gin框架错误响应
 func GinError(c *gin.Context, code int, message string) {
-	httpStatus := http.StatusOK
+	var httpStatus int
 	switch code {
 	case CodeUnauthorized:
 		httpStatus = http.StatusUnauthorized

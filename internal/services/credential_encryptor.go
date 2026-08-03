@@ -339,7 +339,7 @@ type VersionCounts struct {
 // FormatForLog 把 VersionCounts 序列化成适合 zap logger 字段的扁平 map。
 // keys: column、total、by_version__<v>、empty、non_envelope、unknown_version。
 func (vc VersionCounts) FormatForLog() []zap.Field {
-	fields := []zap.Field{
+	fields := []zap.Field{ //nolint:prealloc // 字面量初始化 + 少量 append，预分配收益低
 		zap.String("column", vc.Column),
 		zap.Int("total", vc.Total),
 		zap.Int("empty_rows", vc.EmptyRows),

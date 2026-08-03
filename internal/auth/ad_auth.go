@@ -352,7 +352,7 @@ func (a *ADAuthenticator) ValidateToken(ctx context.Context, token string) (*Use
 // toUserDTO converts a User model to UserDTO
 func (a *ADAuthenticator) toUserDTO(user *models.User) *UserDTO {
 	// Extract role IDs
-	var roleIDs []uint
+	roleIDs := make([]uint, 0, len(user.Roles))
 	for _, role := range user.Roles {
 		roleIDs = append(roleIDs, role.ID)
 	}

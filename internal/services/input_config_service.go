@@ -512,7 +512,7 @@ func (s *InputConfigService) testStreamConnection(ctx context.Context, req *Test
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	args := []string{"-v", "error"}
+	args := []string{"-v", "error"} //nolint:prealloc // 字面量初始化 + 少量 append
 	args = append(args, inputArgs...)
 	args = append(args, "-f", "null", "-")
 

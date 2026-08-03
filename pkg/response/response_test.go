@@ -96,6 +96,6 @@ func TestHandleError_NoOpWhenAlreadyWritten(t *testing.T) {
 }
 
 // errUnknown 是一个非 sentinel、非 BusinessError 的测试错误。
-type errUnknown string
+type errUnknown string //nolint:errname // 测试 helper error，无需 xxxError 后缀
 
 func (e errUnknown) Error() string { return string(e) }
