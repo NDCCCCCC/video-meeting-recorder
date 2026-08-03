@@ -66,7 +66,7 @@ func main() {
 
 	// 创建证书目录
 	certDir := "./certs"
-	if err := os.MkdirAll(certDir, 0755); err != nil {
+	if err := os.MkdirAll(certDir, 0o755); err != nil {
 		fmt.Printf("Failed to create certs directory: %v\n", err)
 		os.Exit(1)
 	}
@@ -84,7 +84,7 @@ func main() {
 	}
 
 	// 写入私钥文件
-	keyOut, err := os.OpenFile(fmt.Sprintf("%s/server.key", certDir), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	keyOut, err := os.OpenFile(fmt.Sprintf("%s/server.key", certDir), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		fmt.Printf("Failed to create key file: %v\n", err)
 		os.Exit(1)
