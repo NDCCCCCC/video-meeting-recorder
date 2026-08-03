@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
 status: executing
-last_updated: "2026-08-03T01:20:06.642Z"
+last_updated: "2026-08-03T01:26:09.861Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 1
@@ -40,11 +40,11 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 
 ## Current Position
 
-Phase: 20 (handleerror-classify-convergence) — EXECUTING
-Plan: Not started
-**Phase:** 20
-**Status:** Ready to execute
-**Progress:** [██████████] 100%
+Phase: 21 (close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem) — EXECUTING
+Plan: 2 of 5 (21-01 done)
+**Phase:** 21
+**Status:** Executing Phase 21 — Plan 21-01 (retro-verify phase 17) landed on main (commit 2c679f2)
+**Progress:** [██░░░░░░░░] 20%
 
 ### Phase Summary
 
@@ -412,6 +412,12 @@ Phase 17 完成。无即时 follow-up。可选：
 ---
 
 ## Decisions Log
+
+### 2026-08-03 - Phase 17 retro-verify VERIFICATION.md reconstructed (Phase 21 Plan 01)
+
+**Decision:** 重建 `.planning/phases/17-56-p0-p1-p2/17-VERIFICATION.md` via goal-backward retro-verify; status: passed (7/7 must-haves); 31 VERIFIED 标记; 179 lines.
+**Rationale:** v1.1-MILESTONE-AUDIT.md gaps_found 标记 phase 17 "未验证" — 实际目录齐全 (CONTEXT + 4 PLAN + 4 SUMMARY + REVIEWS) 仅缺 VERIFICATION.md. 证据基于已落地的 SUMMARY + 45 git commits (`cf2d248..c04f805`) + 实时代码三源交叉 (per 21-CONTEXT D-02.3). 跨 phase deferred 项去向显式标注: SEC-003b→Phase 18 (live marker at manager.go:132-134) / PERF-003→Phase 19 (42 WithContext sites in video_recording_task_service.go) / HMAC jti→Phase 19 D3 (HLSJtiRecord AutoMigrate at app.go:340).
+**Outcome:** commit `2c679f2` on main (仅含 17-VERIFICATION.md, 未触其他 phase 17 文件); v1.1-MILESTONE-AUDIT.md 的 "phase-17 unverified" gap 可标记关闭. 后续 21-02/03 (phase 18/19 retro-verify) + 21-04 (REQUIREMENTS.md) + 21-05 (auth:57 fix) 继续.
 
 ### 2026-07-28 - Dashboard mock data removed entirely (Phase 15 Plan 04)
 
