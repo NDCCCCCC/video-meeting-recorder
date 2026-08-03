@@ -134,3 +134,16 @@ None — no authentication or external API access required for this documentatio
 ---
 
 *Plan completed: 2026-08-03 — 1 commit (`707dd6d`) on `main`.*
+
+---
+
+## Self-Check: PASSED
+
+- File FOUND: `.planning/phases/17-56-p0-p1-p2/17-VALIDATION.md` (102 lines, ≥100 required)
+- Commit FOUND: `707dd6d` (`docs(22): backfill 17-VALIDATION.md — Nyquist sampling contract retro-fitted`)
+- Frontmatter 6/6 fields confirmed (phase, slug, status, nyquist_compliant, wave_0_complete, created)
+- 6/6 required sections confirmed (Test Infrastructure / Sampling Rate / Per-Task Verification Map / Wave 0 Requirements / Manual-Only Verifications / Validation Sign-Off)
+- Per-Task Verification Map: 4 plan rows + 1 housekeeping row (≥1 per shipped plan, satisfies must-have)
+- Validation Sign-Off: 6/6 `[x]` items confirmed
+- Single-file commit confirmed (`git show --stat 707dd6d` lists only `17-VALIDATION.md`)
+- No historical artifacts modified (`17-VERIFICATION.md` / `17-0[1-4]-PLAN.md` / `17-0[1-4]-SUMMARY.md` untouched per `git log`)
