@@ -847,19 +847,19 @@ evidence_limitations:
 | A5 | phase 19 全部交付物由 11 wave commits + 21 D1-D21 commits 落地 | §4 | LOW — 19-SUMMARY body 与 STATE.md §Phase 19 Final Status 一致 [VERIFIED] |
 | A6 | CONTEXT D-04.2 "HandleError 始终非 false" 是事实错误 | §6 | HIGH — 已通过 Read `pkg/response/response.go:173-180` 验证；planner 必须用正确理由 [VERIFIED] |
 
-## Open Questions
+## Open Questions (RESOLVED — all 3 implemented in 21-0x plans)
 
-1. **REQUIREMENTS.md 是否登记根目录 `18-SUMMARY.md` / `19-SUMMARY.md` 为 canonical ref？**
+1. **RESOLVED (implemented in 21-04):** REQUIREMENTS.md 是否登记根目录 `18-SUMMARY.md` / `19-SUMMARY.md` 为 canonical ref？
    - What we know: CONTEXT D-02.6 让根目录 SUMMARY 保持原位，`.planning/phases/` 内只放副本
    - What's unclear: REQUIREMENTS.md 的"来源"列应指向哪个路径（根目录原版？副本？都登记？）
    - Recommendation: 在 REQUIREMENTS.md 加 `## Canonical References` 段，明确两路径都是 canonical（根目录 = git 历史 / `.planning/phases/` 副本 = phase 目录自洽），来源列指向 `.planning/phases/NN-*/NN-SUMMARY.md` 副本（与 VERIFICATION 同目录便于追溯）。
 
-2. **17-VERIFICATION 是否需要 opencode 等 reviewer 共识？**
+2. **RESOLVED (implemented in 21-01/02/03 — no new reviewer):** 17-VERIFICATION 是否需要 opencode 等 reviewer 共识？
    - What we know: 17-REVIEWS.md 是 post-execution 评审，仅 opencode 一位外部 reviewer
    - What's unclear: retro-verify 是否需要再请 reviewer
    - Recommendation: **不需要**。phase 21 的 retro-verify 是基于已有证据的文档重建，不是新代码评审。VERIFICATION.md 的 Evidence Limitations 段诚实记录"基于 SUMMARY + commit + 代码，非基于原始 PLAN"即可。
 
-3. **D-06.1 提交分组中 phase 17 / 18 / 19 / REQUIREMENTS 是 4 个独立 docs commit 还是合并？**
+3. **RESOLVED (implemented — Wave 2 = 21-04 depends_on [21-01,21-02,21-03]):** D-06.1 提交分组中 phase 17 / 18 / 19 / REQUIREMENTS 是 4 个独立 docs commit 还是合并？
    - What we know: CONTEXT D-06.1 明确 5 个 commit（4 docs + 1 fix）
    - What's unclear: 顺序与依赖（17 是否先于 18/19？REQUIREMENTS 是否最后？）
    - Recommendation: 按 D-06.1 顺序：17 → 18 → 19 → REQUIREMENTS → auth:57 fix。理由：REQUIREMENTS 引用 17/18/19 的 VERIFICATION 路径作为验证证据，需先有 VERIFICATION 文件；auth:57 fix 与 docs 完全独立，最后单独提交。
