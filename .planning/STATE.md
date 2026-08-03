@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
 status: executing
-last_updated: "2026-08-03T01:26:09.861Z"
+last_updated: "2026-08-03T01:58:51Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
-  percent: 0
+  completed_plans: 4
+  percent: 80
 ---
 
 # STATE.md - Project Memory
@@ -41,10 +41,10 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 ## Current Position
 
 Phase: 21 (close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem) — EXECUTING
-Plan: 4 of 5 (21-01, 21-02, 21-03 done)
+Plan: 4 of 5 done (21-01, 21-02, 21-03, 21-05 complete); 21-04 pending (Wave 2, depends_on [21-01,21-02,21-03] all done → unblocked)
 **Phase:** 21
-**Status:** Executing Phase 21 — Plan 21-03 (retro-verify phase 19) landed on main (commit 4b52463); 21-01 done (2c679f2); 21-02 done (d76d47d)
-**Progress:** [█████░░░░░░] 60%
+**Status:** Executing Phase 21 — Plan 21-05 (auth:57 fix) landed on main (commit 4959e9c); 21-03 done (4b52463); 21-01 done (2c679f2); 21-02 done (d76d47d)
+**Progress:** [████████░░] 80%
 
 ### Phase Summary
 
@@ -412,6 +412,12 @@ Phase 17 完成。无即时 follow-up。可选：
 ---
 
 ## Decisions Log
+
+### 2026-08-03 - auth_handler.go:57 canonical HandleError pattern (Phase 21 Plan 05)
+
+**Decision:** Collapse Login handler's 5-line pattern (`if response.HandleError(c, err) { return }; // 兜底：unknown error（response.HandleError 已写 500）。; return` at line 57-61) into the canonical 2-line form (`response.HandleError(c, err); return` at line 57-58). Delete the line-60 兜底 comment (fallback branch no longer exists). Retain the line 53-56 `// Phase 20 (20-02)...` mapping.go comment block (documents sentinel→HTTP-status mapping, separate concern from if-vs-canonical shape).
+**Rationale:** v1.1-MILESTONE-AUDIT.md §Cross-Phase Integration Findings flagged auth:57 as the only handler family (1/9) NOT using the canonical `HandleError(c, err); return` pattern — a latent CR-01 reintroduction vector if a future contributor appended a GinError after line 59. Behavior-equivalent per 21-RESEARCH §6 + CONTEXT D-04.2 (corrected): both branches of the original pattern (known→return inside if / unknown→fall through to bare return) "write response then return", identical to canonical `HandleError; return`. Key invariant: at auth:57 call site `c.Writer.Written()=false` (ShouldBindJSON failure already returned at line 36-39 with GinError; Warn log line 48-52 doesn't write HTTP), so HandleError must reach its GinErrorWithStatus write branch. **Pitfall 1 avoided**: commit body uses the control-flow argument, NOT the factually-wrong "HandleError always returns true" (it returns `errors.IsKnownError(err)` = false for unknown errors per pkg/response/response.go:179). Regression net intact: TestLogin_HandleError_ClassifyDrop 10 sub-tests (5 error classes × wrapped/unwrapped + R-3/R-4) all PASS, go build/test -race green. Tech_debt scope guard: RefreshToken :93 / ChangePassword :182 / LogoutAll raw `GinError + err.Error()` leaks NOT touched (D-04.4 — deferred to follow-up phase).
+**Outcome:** commit `4959e9c` on main (single-file: `internal/handlers/auth_handler.go`, 1 insertion, 4 deletions); v1.1-MILESTONE-AUDIT.md auth:57 WARNING can be marked closed. Phase 21 now 4/5 plans done (21-01/02/03/05); only 21-04 (REQUIREMENTS.md, Wave 2) remains — its depends_on [21-01,21-02,21-03] is satisfied.
 
 ### 2026-08-03 - Phase 19 retro-verify directory reconstructed + VERIFICATION.md (Phase 21 Plan 03)
 
