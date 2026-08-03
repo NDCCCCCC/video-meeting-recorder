@@ -53,6 +53,7 @@
 | 18. 凭据静态加密 + 密钥轮换 (SEC-003b) | v1.1 | 1/1 | Complete | 2026-07-31 |
 | 19. ctx 全量级联 + SEC-004 replay + STYLE-001 error | v1.1 | 4/4 | Complete | 2026-07-31 |
 | 20. 错误处理统一收敛 + sentinel 体系增强 | v1.1 | 5/5 | Complete    | 2026-08-01 |
+| 21. Close v1.1 gaps — retro-verify 17/18/19 + REQUIREMENTS.md + auth:57 fix | v1.1 | 5/5 | Complete | 2026-08-03 |
 
 ## Backlog
 
@@ -190,4 +191,4 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1: 21-01/02/03 落地 — REQUIREMENTS 引用其 VERIFICATION 路径作为验证证据)*
 
-- [ ] 21-04-PLAN.md — Create .planning/REQUIREMENTS.md: v1.1 milestone (phase 17/18/19/20) REQ-ID 追溯表, 5 列结构 per D-03.3, ~80 REQ-IDs, orphan=0, 跨 phase 兑现项显式标注, Out-of-scope phase 16 观察不裁定
+- [x] 21-04-PLAN.md — Create .planning/REQUIREMENTS.md: v1.1 milestone (phase 17/18/19/20) REQ-ID 追溯表, 5 列结构 per D-03.3, 251 行, ~80 REQ-IDs (52 REQ-17 + 5 REQ-18 + 4 REQ-19 + 11 REQ-20), orphan=0, 跨 phase 兑现项显式标注 (SEC-003b→18 / PERF-003→19 / BUG-005→19 / HMAC-jti→19-D3), Out-of-scope phase 16 观察不裁定 — 1 commit (695b4fe) + SUMMARY (a00a1a3) on main

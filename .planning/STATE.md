@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
 status: executing
-last_updated: "2026-08-03T01:58:51Z"
+last_updated: "2026-08-03T02:00:12Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # STATE.md - Project Memory
@@ -40,11 +40,11 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 
 ## Current Position
 
-Phase: 21 (close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem) — EXECUTING
-Plan: 4 of 5 done (21-01, 21-02, 21-03, 21-05 complete); 21-04 pending (Wave 2, depends_on [21-01,21-02,21-03] all done → unblocked)
+Phase: 21 (close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem) — EXECUTING (5/5 plans landed on main; pending final metadata/state commit)
+Plan: 5 of 5 done (21-01, 21-02, 21-03, 21-04, 21-05 complete)
 **Phase:** 21
-**Status:** Executing Phase 21 — Plan 21-05 (auth:57 fix) landed on main (commit 4959e9c); 21-03 done (4b52463); 21-01 done (2c679f2); 21-02 done (d76d47d)
-**Progress:** [████████░░] 80%
+**Status:** Executing Phase 21 — Plan 21-04 (REQUIREMENTS.md) landed on main (commit 695b4fe + SUMMARY a00a1a3); 21-05 done (4959e9c); 21-03 done (4b52463); 21-02 done (d76d47d); 21-01 done (2c679f2)
+**Progress:** [██████████] 100%
 
 ### Phase Summary
 
@@ -412,6 +412,12 @@ Phase 17 完成。无即时 follow-up。可选：
 ---
 
 ## Decisions Log
+
+### 2026-08-03 - REQUIREMENTS.md created — v1.1 milestone REQ-ID traceability (Phase 21 Plan 04)
+
+**Decision:** 创建 `.planning/REQUIREMENTS.md` (251 行, 5 列 per CONTEXT D-03.3), 覆盖 ~80 REQ-IDs 跨 v1.1 四 phase (52 REQ-17-* 计 SEC-003a/b 拆分 + 5 REQ-18-* + 4 REQ-19-* + 11 REQ-20-*). 跨 phase 兑现项显式标注 (REQ-17-SEC-003b→Phase 18 / REQ-17-PERF-003→Phase 19 / REQ-17-BUG-005→Phase 19 / REQ-17-HMAC-jti→Phase 19 D3). Coverage 段含 4 条 orphan 检测 grep 规则; Out-of-scope observation 段记录 phase 16 归属歧义 (不强行裁定 per D-03.4); Canonical References 段登记 root 18/19-SUMMARY.md + docs/audits/* + 4 个 VERIFICATION.md 路径.
+**Rationale:** v1.1-MILESTONE-AUDIT.md gaps_found 标记 "REQUIREMENTS.md missing, orphan 检测 impossible" — 本 plan 关闭该 gap. 关键设计选择: (1) 每个 audit finding 单独成行 (52 行而非 range 简写) 给出最干净审计轨迹, 超过 40 行门槛 30%; (2) BUG-007/008/009/010/012/013/014 审计报告 "0 处" 合并为单行 N/A 保留 orphan 检测完整性; (3) 跨 phase 兑现 IDs 保留原 phase-17 身份 (Phase column '17→18') 而非重新发 REQ-18-* IDs, 避免破坏 audit-finding 追溯; (4) 每 REQ-18-*/REQ-19-* 行显式标 "backfilled from deliverables, SUMMARY frontmatter was empty" per D-03.5 不伪造追溯; (5) phase 16 仅作 Out-of-scope 观察 (不裁定 per D-03.4), 留待 milestone 决策; (6) 双 canonical 路径登记 (root + phase-dir 副本) — root = git 历史原版, 副本 = VERIFICATION 同目录便于追溯. 全部 15 项 verify 检查 PASS (REQ-17 52 行 >= 40, REQ-18 5 行, REQ-19 4 行, REQ-20 11 行, 4 个 VERIFICATION 路径全引, 跨 phase 字样存在, "不强行裁定" 字样存在, 251 行 >= 120).
+**Outcome:** commit `695b4fe` on main (仅含 .planning/REQUIREMENTS.md, 未触业务代码 / docs/audits); SUMMARY commit `a00a1a3`. Phase 21 现在 5/5 plans done (21-01/02/03/04/05); v1.1-MILESTONE-AUDIT.md 的 5 项 gap 全部可标记关闭. 后续动作 (out-of-scope): 重跑 `/gsd:audit-milestone v1.1` 验证 gaps_found → passed (本 phase 不含此重跑); phase 16 归属裁定 (milestone-level 决策); 审计 tech_debt 10+ 项 (各为后续独立 phase).
 
 ### 2026-08-03 - auth_handler.go:57 canonical HandleError pattern (Phase 21 Plan 05)
 
