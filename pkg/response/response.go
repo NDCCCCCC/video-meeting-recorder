@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/gin-gonic/gin"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // Response 统一响应结构
@@ -77,7 +78,7 @@ func Error(w http.ResponseWriter, code int, message string) {
 }
 
 // ErrorWithStatus 带自定义状态码的错误响应 (http.ResponseWriter)
-func ErrorWithStatus(w http.ResponseWriter, httpStatus int, code int, message string) {
+func ErrorWithStatus(w http.ResponseWriter, httpStatus, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
 
@@ -141,7 +142,7 @@ func GinError(c *gin.Context, code int, message string) {
 }
 
 // GinErrorWithStatus Gin框架带自定义状态码的错误响应
-func GinErrorWithStatus(c *gin.Context, httpStatus int, code int, message string) {
+func GinErrorWithStatus(c *gin.Context, httpStatus, code int, message string) {
 	c.JSON(httpStatus, Response{
 		Code:    code,
 		Message: message,

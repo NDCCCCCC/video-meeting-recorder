@@ -4,9 +4,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
 )
 
 // GetUserID 从context获取用户ID

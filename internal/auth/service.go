@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 )
 
 // Authenticator 定义认证策略接口（STYLE-003：从 ad_config.go 迁移到本消费方包）。

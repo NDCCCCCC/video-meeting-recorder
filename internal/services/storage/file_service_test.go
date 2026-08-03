@@ -14,13 +14,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	_ "modernc.org/sqlite"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // setupTestDB 设置测试数据库
@@ -408,6 +409,7 @@ type stubStorageDriver struct{}
 func (stubStorageDriver) Upload(ctx context.Context, file *multipart.FileHeader, path string) (*UploadResult, error) {
 	return &UploadResult{FilePath: path}, nil
 }
+
 func (stubStorageDriver) Download(ctx context.Context, path string) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("")), nil
 }
@@ -416,6 +418,7 @@ func (stubStorageDriver) Exists(ctx context.Context, path string) (bool, error) 
 func (stubStorageDriver) GetURL(ctx context.Context, path string, expires time.Duration) (string, error) {
 	return "http://localhost/" + path, nil
 }
+
 func (stubStorageDriver) GetInfo(ctx context.Context, path string) (*FileInfo, error) {
 	return &FileInfo{Path: path, Name: filepath.Base(path)}, nil
 }

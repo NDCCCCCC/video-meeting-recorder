@@ -9,11 +9,13 @@ import (
 	"strings"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/common"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/common"
 )
 
 // APIKey API密钥模型

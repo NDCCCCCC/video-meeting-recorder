@@ -9,13 +9,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // requireExtractSlidesDeps 跳过无法在当前环境运行 PPT 抽取的集成测试。
@@ -62,9 +63,9 @@ func setupPPTEditorServiceTest(t *testing.T) (*PPTEditorService, *gorm.DB, strin
 	return service, db, tempDir
 }
 
-func createTestPPTFile(t *testing.T, tempDir string, filename string) string {
+func createTestPPTFile(t *testing.T, tempDir, filename string) string {
 	pptPath := filepath.Join(tempDir, filename)
-	require.NoError(t, os.WriteFile(pptPath, []byte("mock pptx content"), 0644))
+	require.NoError(t, os.WriteFile(pptPath, []byte("mock pptx content"), 0o644))
 	return pptPath
 }
 
@@ -78,7 +79,7 @@ func createTestSlideImage(t *testing.T, path string, width, height int) {
 	}
 
 	dir := filepath.Dir(path)
-	require.NoError(t, os.MkdirAll(dir, 0755))
+	require.NoError(t, os.MkdirAll(dir, 0o755))
 
 	file, err := os.Create(path)
 	require.NoError(t, err)
@@ -157,8 +158,8 @@ func TestPPTEditorService_DeleteSlides_Success(t *testing.T) {
 	cacheDir := filepath.Join(tempDir, "ppts", "1", "slides")
 	fullsizeDir := filepath.Join(cacheDir, "fullsize")
 	thumbnailDir := filepath.Join(cacheDir, "thumbnails")
-	require.NoError(t, os.MkdirAll(fullsizeDir, 0755))
-	require.NoError(t, os.MkdirAll(thumbnailDir, 0755))
+	require.NoError(t, os.MkdirAll(fullsizeDir, 0o755))
+	require.NoError(t, os.MkdirAll(thumbnailDir, 0o755))
 
 	// Create mock slide images
 	for i := 1; i <= 5; i++ {
@@ -271,7 +272,7 @@ func TestPPTEditorService_Rollback_Success(t *testing.T) {
 
 	// Create backup
 	backupPath := pptPath + ".bak.123456"
-	require.NoError(t, os.WriteFile(backupPath, []byte("original content"), 0644))
+	require.NoError(t, os.WriteFile(backupPath, []byte("original content"), 0o644))
 
 	pptFile := &models.PPTFile{
 		FileName:      "test.pptx",

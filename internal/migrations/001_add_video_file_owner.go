@@ -236,7 +236,6 @@ func (m *CreateTranscriptionTasksMigration) Up(db *gorm.DB) error {
 			deleted_at DATETIME
 		);
 	`).Error
-
 	if err != nil {
 		return fmt.Errorf("failed to create transcription_tasks table: %w: %w", apperrors.ErrInternal, err)
 	}

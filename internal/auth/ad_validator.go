@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -176,7 +177,8 @@ func (v *ADConfigValidator) formatBindError(err error) string {
 	)
 
 	// Return sanitized message to user (per D-18, D-19)
-	if ldapErr, ok := err.(*ldap.Error); ok {
+	ldapErr := &ldap.Error{}
+	if errors.As(err, &ldapErr) {
 		switch ldapErr.ResultCode {
 		case ldap.LDAPResultInvalidCredentials:
 			return "管理员用户名或密码错误"

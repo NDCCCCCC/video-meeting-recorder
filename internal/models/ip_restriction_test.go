@@ -38,10 +38,9 @@ func TestUser_GetAllowedIPs_Empty(t *testing.T) {
 // TestUser_GetAllowedIPs_JSONArray tests GetAllowedIPs() deserializes JSON array
 // Validates that JSON array stored in AllowedIPs field is correctly deserialized
 func TestUser_GetAllowedIPs_JSONArray(t *testing.T) {
-
 	user := &User{
-		Username:    "testuser",
-		AllowedIPs:  `["192.168.1.100","10.0.0.0/16","172.16.0.1-172.16.0.100"]`,
+		Username:   "testuser",
+		AllowedIPs: `["192.168.1.100","10.0.0.0/16","172.16.0.1-172.16.0.100"]`,
 	}
 
 	ips := user.GetAllowedIPs()
@@ -54,7 +53,6 @@ func TestUser_GetAllowedIPs_JSONArray(t *testing.T) {
 // TestUser_SetAllowedIPs_Serializes tests SetAllowedIPs() serializes to JSON
 // Validates that IP array is correctly serialized to JSON and stored
 func TestUser_SetAllowedIPs_Serializes(t *testing.T) {
-
 	user := &User{
 		Username: "testuser",
 	}
@@ -76,7 +74,6 @@ func TestUser_SetAllowedIPs_Serializes(t *testing.T) {
 // TestUser_AllowedIPs_RoundTrip tests round-trip serialization/deserialization
 // Validates that IPs can be set and retrieved without data loss
 func TestUser_AllowedIPs_RoundTrip(t *testing.T) {
-
 	user := &User{
 		Username: "testuser",
 	}
@@ -92,7 +89,6 @@ func TestUser_AllowedIPs_RoundTrip(t *testing.T) {
 // TestUser_AllowedIPs_EmptyArray tests setting empty array
 // Validates that setting empty array clears the field
 func TestUser_AllowedIPs_EmptyArray(t *testing.T) {
-
 	user := &User{
 		Username:   "testuser",
 		AllowedIPs: `["192.168.1.100"]`,
@@ -113,7 +109,6 @@ func TestUser_AllowedIPs_EmptyArray(t *testing.T) {
 // TestRole_GetAllowedIPs_Empty tests Role GetAllowedIPs() with empty field
 // Validates that empty AllowedIPs field returns empty slice
 func TestRole_GetAllowedIPs_Empty(t *testing.T) {
-
 	role := &Role{
 		Name: "testrole",
 	}
@@ -127,7 +122,6 @@ func TestRole_GetAllowedIPs_Empty(t *testing.T) {
 // TestRole_GetAllowedIPs_JSONArray tests Role GetAllowedIPs() deserializes JSON array
 // Validates that JSON array stored in AllowedIPs field is correctly deserialized
 func TestRole_GetAllowedIPs_JSONArray(t *testing.T) {
-
 	role := &Role{
 		Name:       "testrole",
 		AllowedIPs: `["192.168.1.0/24","10.0.0.1-10.0.0.254"]`,
@@ -142,7 +136,6 @@ func TestRole_GetAllowedIPs_JSONArray(t *testing.T) {
 // TestRole_SetAllowedIPs_Serializes tests Role SetAllowedIPs() serializes to JSON
 // Validates that IP array is correctly serialized to JSON and stored
 func TestRole_SetAllowedIPs_Serializes(t *testing.T) {
-
 	role := &Role{
 		Name: "testrole",
 	}
@@ -164,7 +157,6 @@ func TestRole_SetAllowedIPs_Serializes(t *testing.T) {
 // TestRole_AllowedIPs_RoundTrip tests role round-trip serialization/deserialization
 // Validates that role IPs can be set and retrieved without data loss
 func TestRole_AllowedIPs_RoundTrip(t *testing.T) {
-
 	role := &Role{
 		Name: "testrole",
 	}
@@ -180,7 +172,6 @@ func TestRole_AllowedIPs_RoundTrip(t *testing.T) {
 // TestAllowedIPs_GORMScan tests GORM Scan() interface implementation
 // Validates that GORM can correctly scan database value into AllowedIPs field
 func TestAllowedIPs_GORMScan(t *testing.T) {
-
 	db := setupIPTestDB(t)
 
 	// Create user with IP restrictions
@@ -209,7 +200,6 @@ func TestAllowedIPs_GORMScan(t *testing.T) {
 // TestAllowedIPs_GORMValue tests GORM Value() interface implementation
 // Validates that GORM can correctly serialize AllowedIPs field to database value
 func TestAllowedIPs_GORMValue(t *testing.T) {
-
 	db := setupIPTestDB(t)
 
 	// Create role with IP restrictions
@@ -239,7 +229,6 @@ func TestAllowedIPs_GORMValue(t *testing.T) {
 // TestAllowedIPs_DatabaseRoundTrip tests full database round-trip
 // Validates that IP restrictions survive database save and load cycle
 func TestAllowedIPs_DatabaseRoundTrip(t *testing.T) {
-
 	db := setupIPTestDB(t)
 
 	// Create user with various IP formats
@@ -248,8 +237,8 @@ func TestAllowedIPs_DatabaseRoundTrip(t *testing.T) {
 		Email:    "test@example.com",
 	}
 	userIPs := []string{
-		"192.168.1.100",        // Single IP
-		"10.0.0.0/16",          // CIDR
+		"192.168.1.100",           // Single IP
+		"10.0.0.0/16",             // CIDR
 		"172.16.0.1-172.16.0.100", // Range
 	}
 	err := user.SetAllowedIPs(userIPs)
@@ -289,10 +278,9 @@ func TestAllowedIPs_DatabaseRoundTrip(t *testing.T) {
 // TestAllowedIPs_InvalidJSON tests handling of invalid JSON in field
 // Validates that corrupt JSON data is handled gracefully
 func TestAllowedIPs_InvalidJSON(t *testing.T) {
-
 	user := &User{
-		Username:    "testuser",
-		AllowedIPs:  `invalid json`,
+		Username:   "testuser",
+		AllowedIPs: `invalid json`,
 	}
 
 	// Should return empty slice on invalid JSON
@@ -303,7 +291,6 @@ func TestAllowedIPs_InvalidJSON(t *testing.T) {
 // TestAllowedIPs_WhitespaceHandling tests handling of whitespace in IP entries
 // Validates that IP entries with whitespace are preserved or trimmed as expected
 func TestAllowedIPs_WhitespaceHandling(t *testing.T) {
-
 	user := &User{
 		Username: "testuser",
 	}

@@ -8,15 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // AdminHandler 管理员后台 handler：负责认证配置查询/更新、华为配置迁移、
@@ -95,11 +96,9 @@ func (h *AdminHandler) UpdateAuthConfig(c *gin.Context) {
 	currentUserID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 
 	// If switching to AD mode, validate AD config first (per D-17)
@@ -532,9 +531,9 @@ func (h *AdminHandler) SubmitAdminMigration(c *gin.Context) {
 		"code":    response.CodeSuccess,
 		"message": "已提交,异步执行中",
 		"data": gin.H{
-			"job_id":      job.ID,
-			"status":      models.AdminMigrationStatusPending,
-			"status_url":  fmt.Sprintf("/api/v1/admin/migrate-input-configs/%d", job.ID),
+			"job_id":     job.ID,
+			"status":     models.AdminMigrationStatusPending,
+			"status_url": fmt.Sprintf("/api/v1/admin/migrate-input-configs/%d", job.ID),
 		},
 	})
 }

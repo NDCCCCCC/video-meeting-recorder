@@ -8,9 +8,10 @@ import (
 	"io"
 	"strings"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/tjfoc/gmsm/sm4"
 	"go.uber.org/zap"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 const (
@@ -92,7 +93,7 @@ func DeriveSM4Key(secret string) []byte {
 // DecryptPasswordECB 使用 SM4-ECB 模式解密密码
 // 密文格式: SM4: 前缀 + Base64 编码的 SM4-ECB 加密数据
 // Phase 19 D18: 6 散点统一 -> apperrors.ErrInvalidInput (格式错 -> 400 BadRequest)。
-func DecryptPasswordECB(ciphertext string, sm4Secret string) (string, error) {
+func DecryptPasswordECB(ciphertext, sm4Secret string) (string, error) {
 	// 1. 验证输入
 	if err := ValidatePasswordInput(ciphertext); err != nil {
 		return "", fmt.Errorf("密码格式错误: %w", apperrors.ErrInvalidInput)
@@ -250,8 +251,9 @@ func DeriveCredentialSM4Key(secret string) []byte {
 // 都传入**拷贝**后的 nonce，避免污染。
 //
 // Phase 19 D18: 4 散点统一 sentinel 化——密钥长度/nonce 生成/加密失败 -> ErrInternal;
-//   tag 长度错 -> ErrInternal (gmsm 库 bug, 非用户输入)。
-func EncryptGCM(key []byte, plaintext []byte) ([]byte, error) {
+//
+//	tag 长度错 -> ErrInternal (gmsm 库 bug, 非用户输入)。
+func EncryptGCM(key, plaintext []byte) ([]byte, error) {
 	if len(key) != sm4.BlockSize {
 		return nil, fmt.Errorf("SM4-GCM 密钥长度错误: %d (期望 %d): %w",
 			len(key), sm4.BlockSize, apperrors.ErrInternal)
@@ -315,8 +317,9 @@ func pkcs7Unpad(padded []byte, blockSize int) ([]byte, error) {
 // DecryptGCM 解密 SM4-GCM ciphertext。失败时返回的 error 不暴露密钥。
 // 输入必须是 EncryptGCM 输出的原始字节（nonce | ct | tag）。
 // Phase 19 D18: 4 散点统一 sentinel——密钥错/cipher 长度 -> ErrInvalidInput
-//   (输入错); 解密失败 -> ErrInternal; tag 校验失败 -> ErrInvalidInput (密文被篡改)。
-func DecryptGCM(key []byte, data []byte) ([]byte, error) {
+//
+//	(输入错); 解密失败 -> ErrInternal; tag 校验失败 -> ErrInvalidInput (密文被篡改)。
+func DecryptGCM(key, data []byte) ([]byte, error) {
 	if len(key) != sm4.BlockSize {
 		return nil, fmt.Errorf("SM4-GCM 密钥长度错误: %d (期望 %d): %w",
 			len(key), sm4.BlockSize, apperrors.ErrInternal)

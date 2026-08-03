@@ -25,9 +25,9 @@ func TestInputConfig_Validate_HuaweiAuto_WithHuaweiEnabled(t *testing.T) {
 func TestInputConfig_Validate_HuaweiAuto_WithoutHuawei(t *testing.T) {
 	t.Run("有USB设备应该通过", func(t *testing.T) {
 		config := &InputConfig{
-			Name:           "测试配置",
-			ConfigType:     ConfigTypeHuaweiAuto,
-			HuaweiEnabled:  false,
+			Name:            "测试配置",
+			ConfigType:      ConfigTypeHuaweiAuto,
+			HuaweiEnabled:   false,
 			USBCameraDevice: "video0",
 		}
 
@@ -37,10 +37,10 @@ func TestInputConfig_Validate_HuaweiAuto_WithoutHuawei(t *testing.T) {
 
 	t.Run("有流媒体应该通过", func(t *testing.T) {
 		config := &InputConfig{
-			Name:       "测试配置",
-			ConfigType: ConfigTypeHuaweiAuto,
+			Name:          "测试配置",
+			ConfigType:    ConfigTypeHuaweiAuto,
 			HuaweiEnabled: false,
-			StreamURL:  "rtmp://example.com/live/stream",
+			StreamURL:     "rtmp://example.com/live/stream",
 		}
 
 		err := config.Validate()
@@ -64,8 +64,8 @@ func TestInputConfig_Validate_HuaweiAuto_WithoutHuawei(t *testing.T) {
 func TestInputConfig_Validate_USB_RequiresCameraDevice(t *testing.T) {
 	t.Run("有摄像头设备应该通过", func(t *testing.T) {
 		config := &InputConfig{
-			Name:           "测试配置",
-			ConfigType:     ConfigTypeUSB,
+			Name:            "测试配置",
+			ConfigType:      ConfigTypeUSB,
 			USBCameraDevice: "video0",
 		}
 

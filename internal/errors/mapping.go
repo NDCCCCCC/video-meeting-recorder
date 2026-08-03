@@ -29,7 +29,7 @@ const (
 //
 // 映射顺序：BusinessError（typed，按 Code 字段）优先，其次 sentinel（errors.Is 链匹配，
 // 兼容 Wrap/Wrapf 的 %w 包装）。
-func MapToHTTPStatus(err error) (httpStatus int, respCode int, message string) {
+func MapToHTTPStatus(err error) (httpStatus, respCode int, message string) {
 	if err == nil {
 		return http.StatusOK, 0, ""
 	}
@@ -206,7 +206,7 @@ var knownSentinels = []struct {
 // 其他错误返回 fallback（通常为原 err 或包装后的内部错误）。fallback 为 nil 时返回原 err。
 //
 // 用于 service 边界：防止 gorm 错误类型泄漏出 service 层（STYLE-001 决策 3）。
-func FromGORM(err error, fallback error) error {
+func FromGORM(err, fallback error) error {
 	if err == nil {
 		return nil
 	}

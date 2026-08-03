@@ -10,11 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // conversionCmdBufPool 复用 FFmpeg 转换时 stdout/stderr 捕获 buffer（PERF-007）。
@@ -255,7 +256,6 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 
 	// 执行转换
 	outputPath, err := s.convertMKVToMP4(ctx, &task)
-
 	if err != nil {
 		s.handleConversionError(ctx, &task, err)
 		return
@@ -338,7 +338,7 @@ func (s *FFmpegConversionService) convertMKVToMP4(ctx context.Context, task *mod
 	outputPath := s.generateMP4Path(inputPath)
 
 	// 确保输出目录存在
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return "", fmt.Errorf("创建输出目录失败: %w", err)
 	}
 

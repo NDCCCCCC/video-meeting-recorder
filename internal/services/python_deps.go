@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // PythonDependencyInfo contains information about Python dependencies

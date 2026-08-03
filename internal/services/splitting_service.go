@@ -11,11 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // SplitTask represents a pending split operation
@@ -172,7 +173,7 @@ func (s *SplittingService) processSplit(ctx context.Context, task *SplitTask) {
 
 	// 2. Create output directory
 	outputDir := filepath.Join(filepath.Dir(sourceFile.FilePath), "segments")
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		s.logger.Error("创建输出目录失败", zap.Error(err), response.SentinelField(err))
 		s.statusMu.Lock()
 		s.statusMap[task.VideoFileID] = "failed"

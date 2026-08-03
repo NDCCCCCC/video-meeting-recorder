@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // TestSubmitTranscriptionWithModeValidation tests mode parameter validation

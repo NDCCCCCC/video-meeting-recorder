@@ -12,13 +12,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tjfoc/gmsm/sm4"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/tjfoc/gmsm/sm4"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // TokenCacheEntry 缓存的 token 对条目
@@ -440,7 +441,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 }
 
 // CreateSession 创建会话记录
-func (s *SM4TokenService) CreateSession(userID uint, token string, ipAddress, userAgent string, expiresAt time.Time) error {
+func (s *SM4TokenService) CreateSession(userID uint, token, ipAddress, userAgent string, expiresAt time.Time) error {
 	session := &models.Session{
 		UserID:    userID,
 		Token:     token,

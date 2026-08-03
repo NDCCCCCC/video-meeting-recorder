@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	_ "modernc.org/sqlite"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // mockVideoFileService 模拟视频文件服务

@@ -10,22 +10,22 @@ import (
 // VideoRecordingTask 视频录制任务模型
 type VideoRecordingTask struct {
 	Base
-	Name               string                   `gorm:"type:varchar(200);not null" json:"name"`
-	Description        string                   `gorm:"type:text" json:"description"`
-	StartTime          time.Time                `gorm:"not null;index" json:"start_time"`
-	EndTime            time.Time                `gorm:"not null;index" json:"end_time"`
-	PreJoinMinutes     int                      `gorm:"default:5" json:"pre_join_minutes"`
-	RecordDelayMinutes int                      `gorm:"default:0" json:"record_delay_minutes"`
-	ConferenceNumber   string                   `gorm:"type:varchar(50);not null;index" json:"conference_number"`
+	Name               string    `gorm:"type:varchar(200);not null" json:"name"`
+	Description        string    `gorm:"type:text" json:"description"`
+	StartTime          time.Time `gorm:"not null;index" json:"start_time"`
+	EndTime            time.Time `gorm:"not null;index" json:"end_time"`
+	PreJoinMinutes     int       `gorm:"default:5" json:"pre_join_minutes"`
+	RecordDelayMinutes int       `gorm:"default:0" json:"record_delay_minutes"`
+	ConferenceNumber   string    `gorm:"type:varchar(50);not null;index" json:"conference_number"`
 	// InputConfigID 已废弃，请使用 TaskInputConfigs 关联表
 	// 保留此字段仅为兼容旧数据
-	InputConfigID      *uint                    `gorm:"index" json:"input_config_id,omitempty"`
-	InputConfig        *InputConfig             `gorm:"foreignKey:InputConfigID" json:"input_config,omitempty"`
-	RTSPStreamURL      string                   `gorm:"type:varchar(500)" json:"rtsp_stream_url"` // RTSP流地址（可选，与USB设备同级）
-	Status             VideoRecordingTaskStatus `gorm:"type:varchar(20);index" json:"status"`
-	RecordingFile      string                   `gorm:"type:varchar(500)" json:"recording_file"` // 兼容旧字段，指向MKV文件
-	RecordingDuration  int                      `json:"recording_duration"`                      // 秒
-	ErrorMsg           string                   `gorm:"type:text" json:"error_msg,omitempty"`
+	InputConfigID     *uint                    `gorm:"index" json:"input_config_id,omitempty"`
+	InputConfig       *InputConfig             `gorm:"foreignKey:InputConfigID" json:"input_config,omitempty"`
+	RTSPStreamURL     string                   `gorm:"type:varchar(500)" json:"rtsp_stream_url"` // RTSP流地址（可选，与USB设备同级）
+	Status            VideoRecordingTaskStatus `gorm:"type:varchar(20);index" json:"status"`
+	RecordingFile     string                   `gorm:"type:varchar(500)" json:"recording_file"` // 兼容旧字段，指向MKV文件
+	RecordingDuration int                      `json:"recording_duration"`                      // 秒
+	ErrorMsg          string                   `gorm:"type:text" json:"error_msg,omitempty"`
 	// MKV录制和MP4转换相关字段
 	MKVFilePath           string           `gorm:"type:varchar(500)" json:"mkv_file_path"`                      // MKV文件路径
 	HLSPreviewPath        string           `gorm:"type:varchar(500)" json:"hls_preview_path"`                   // HLS预览路径
@@ -39,7 +39,7 @@ type VideoRecordingTask struct {
 	Creator               *User            `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
 
 	// TaskInputConfigs 任务关联的输入配置列表
-	TaskInputConfigs  []TaskInputConfig  `gorm:"foreignKey:TaskID" json:"task_input_configs,omitempty"`
+	TaskInputConfigs []TaskInputConfig `gorm:"foreignKey:TaskID" json:"task_input_configs,omitempty"`
 }
 
 // VideoRecordingTaskStatus 任务状态枚举
@@ -52,7 +52,7 @@ const (
 	VideoStatusConverting VideoRecordingTaskStatus = "converting" // 转换中（MKV转MP4）
 	VideoStatusCompleted  VideoRecordingTaskStatus = "completed"  // 已完成
 	VideoStatusFailed     VideoRecordingTaskStatus = "failed"     // 执行失败
-	VideoStatusCancelled  VideoRecordingTaskStatus = "cancelled"  // 已取消
+	VideoStatusCancelled  VideoRecordingTaskStatus = "canceled"   // 已取消
 )
 
 // ConversionStatus 转换状态枚举

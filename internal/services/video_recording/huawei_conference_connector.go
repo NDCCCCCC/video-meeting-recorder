@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/huawei"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/huawei"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // HuaweiConferenceConnector 华为会议连接器

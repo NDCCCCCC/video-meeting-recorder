@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 )
 
 // fatalFunc 允许测试覆盖 logger.Fatal 行为（默认调用 logger.Fatal 触发 os.Exit）。
@@ -51,7 +53,7 @@ type SecurityConfig struct {
 	// 配置后: Origin 头必须与列表中任一项精确匹配才会接受写请求。
 	// 留空 (默认): 仅校验 cookie+header 双提交,允许任意来源 (前端通过 Bearer 头时适用)。
 	// 仅当 CSRFEnabled=true 时生效。
-	CSRFSafeOrigins       []string `mapstructure:"csrf_safe_origins" json:"csrf_safe_origins" yaml:"csrf_safe_origins"`
+	CSRFSafeOrigins         []string `mapstructure:"csrf_safe_origins" json:"csrf_safe_origins" yaml:"csrf_safe_origins"`
 	AllowedTokenURLPrefixes []string `mapstructure:"allowed_token_url_prefixes" json:"allowed_token_url_prefixes" yaml:"allowed_token_url_prefixes"`
 	// OutboundURLAllowlist guards all outbound HTTP requests (SEC-013: SSRF defense).
 	// Empty list means "allow all in non-production; deny all in production".
@@ -338,7 +340,8 @@ func Load() (*Config, error) {
 	// 读取配置文件
 	if err := v.ReadInConfig(); err != nil {
 		// 配置文件不存在时，创建默认配置文件
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
 			if err := createDefaultConfigFile(); err != nil {
 				return nil, fmt.Errorf("failed to create default config: %w: %w", apperrors.ErrInternal, err)
 			}
@@ -680,7 +683,7 @@ func ensureDirectories(cfg *Config) error {
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w: %w", dir, apperrors.ErrInternal, err)
 		}
 	}
@@ -811,7 +814,7 @@ python:
 `
 
 	// 写入配置文件
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil {
 		return fmt.Errorf("failed to write config file: %w: %w", apperrors.ErrInternal, err)
 	}
 

@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/go-ldap/ldap/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // MockLDAPConnection is a mock for LDAP connection

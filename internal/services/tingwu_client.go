@@ -15,9 +15,10 @@ import (
 	"strings"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // TingwuTaskStatus represents the status response from Tingwu API

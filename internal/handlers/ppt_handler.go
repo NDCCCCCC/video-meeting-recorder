@@ -11,14 +11,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // PPThandler handles PPT-related API requests
@@ -65,7 +66,7 @@ func (h *PPThandler) verifyPPTOwnership(c *gin.Context, pptFile *models.PPTFile)
 		return fmt.Errorf("PPT文件没有关联视频")
 	}
 
-	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),*pptFile.SourceVideoFileID)
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(), *pptFile.SourceVideoFileID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("关联视频不存在")
@@ -76,11 +77,9 @@ func (h *PPThandler) verifyPPTOwnership(c *gin.Context, pptFile *models.PPTFile)
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return fmt.Errorf("user not in context")
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 	roleIDs := middleware.GetRoleIDs(c)
@@ -179,7 +178,7 @@ func (h *PPThandler) GetPptsByVideo(c *gin.Context) {
 	isAdmin := middleware.GetIsAdmin(c)
 	roleIDs := middleware.GetRoleIDs(c)
 
-	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -231,11 +230,9 @@ func (h *PPThandler) BatchGetPptsByVideos(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
@@ -253,7 +250,7 @@ func (h *PPThandler) BatchGetPptsByVideos(c *gin.Context) {
 		}
 
 		// 权限检查
-		videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),videoID)
+		videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(), videoID)
 		if err != nil {
 			results[videoID] = gin.H{
 				"has_ppt": false,
@@ -347,7 +344,7 @@ func (h *PPThandler) MergeSlides(c *gin.Context) {
 	}
 
 	// Load video file to check ownership
-	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),req.VideoFileID)
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(), req.VideoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -404,7 +401,7 @@ func (h *PPThandler) DownloadPPT(c *gin.Context) {
 	// Determine download filename - use video name if available
 	downloadFilename := pptFile.FileName
 	if pptFile.SourceVideoFileID != nil {
-		videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),*pptFile.SourceVideoFileID)
+		videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(), *pptFile.SourceVideoFileID)
 		if err == nil && videoFile != nil {
 			// Use video filename without extension + .pptx
 			videoName := strings.TrimSuffix(videoFile.FileName, filepath.Ext(videoFile.FileName))
@@ -812,7 +809,7 @@ func (h *PPThandler) CaptureFrameHandler(c *gin.Context) {
 		return
 	}
 
-	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),*pptFile.SourceVideoFileID)
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(), *pptFile.SourceVideoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "关联视频不存在")
 		return
@@ -962,7 +959,7 @@ func (h *PPThandler) CapturedPreviewHandler(c *gin.Context) {
 		return
 	}
 
-	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(),*pptFile.SourceVideoFileID)
+	videoFile, err := h.videoFileService.GetFileByID(c.Request.Context(), *pptFile.SourceVideoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "关联视频不存在")
 		return

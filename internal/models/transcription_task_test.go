@@ -5,8 +5,9 @@ import (
 	"reflect"
 	"testing"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/stretchr/testify/assert"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // TestTranscriptionTaskModel tests that the TranscriptionTask model is properly defined

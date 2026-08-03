@@ -3,8 +3,9 @@ package auth
 import (
 	"testing"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/stretchr/testify/assert"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // TestValidateIP_ValidIP tests valid IPv4 addresses

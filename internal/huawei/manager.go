@@ -7,9 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"go.uber.org/zap"
 )
 
 // fatalFunc 允许测试覆盖 logger.Fatal 行为（默认触发 os.Exit）；测试可替换为 panic。

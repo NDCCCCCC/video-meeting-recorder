@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 )
 
 // New 创建日志器

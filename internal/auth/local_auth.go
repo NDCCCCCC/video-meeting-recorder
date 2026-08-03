@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"time"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // LocalAuthenticator 本地认证器
@@ -294,12 +295,12 @@ func (a *LocalAuthenticator) toUserDTO(user *models.User) *UserDTO {
 	}
 
 	dto := &UserDTO{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		FullName:  user.FullName,
-		RoleIDs:   roleIDs,
-		IsActive:  user.IsActive,
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		FullName: user.FullName,
+		RoleIDs:  roleIDs,
+		IsActive: user.IsActive,
 	}
 
 	// Check if user has any roles

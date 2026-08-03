@@ -8,14 +8,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/robfig/cron/v3"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/video_recording"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/robfig/cron/v3"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // ConversionService 定义转换服务接口（STYLE-003：原 services/conversion_service.go

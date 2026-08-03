@@ -11,8 +11,8 @@ type TaskInputConfig struct {
 	ConfigType    string    `gorm:"type:varchar(20);not null" json:"config_type"` // huawei_auto | usb | stream
 	CreatedAt     time.Time `json:"created_at"`
 
-	Task         *VideoRecordingTask `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE" json:"-"`
-	InputConfig  *InputConfig        `gorm:"foreignKey:InputConfigID;constraint:OnDelete:CASCADE" json:"-"`
+	Task        *VideoRecordingTask `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE" json:"-"`
+	InputConfig *InputConfig        `gorm:"foreignKey:InputConfigID;constraint:OnDelete:CASCADE" json:"-"`
 }
 
 // TableName 指定表名

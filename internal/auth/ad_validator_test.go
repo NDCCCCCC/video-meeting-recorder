@@ -8,10 +8,10 @@ import (
 func TestADConfigValidator_FormatValidation(t *testing.T) {
 	// Setup: Empty or invalid configuration fields
 	config := &ADAuthConfig{
-		Server:   "",
-		BindDN:   "",
-		BaseDN:   "",
-		UseTLS:   false,
+		Server: "",
+		BindDN: "",
+		BaseDN: "",
+		UseTLS: false,
 	}
 	_ = config // Used in TODO implementation
 
@@ -141,11 +141,11 @@ func TestADConfigValidator_Port389Warning(t *testing.T) {
 // TestADConfigValidator_TLSConfiguration tests TLS configuration validation
 func TestADConfigValidator_TLSConfiguration(t *testing.T) {
 	tests := []struct {
-		name                 string
-		useTLS               bool
-		insecureSkipVerify   bool
-		expectWarning        bool
-		expectMinimumTLS     bool
+		name               string
+		useTLS             bool
+		insecureSkipVerify bool
+		expectWarning      bool
+		expectMinimumTLS   bool
 	}{
 		{
 			name:               "LDAPS with secure TLS",

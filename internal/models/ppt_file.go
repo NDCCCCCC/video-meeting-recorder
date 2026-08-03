@@ -16,10 +16,10 @@ const (
 
 // EditOperation represents a single edit operation in the edit history
 type EditOperation struct {
-	Operation string   `json:"operation"` // "delete", "rollback", etc.
-	Slides    []int    `json:"slides"`    // Affected slide numbers
-	Timestamp string   `json:"timestamp"` // ISO 8601 timestamp
-	UserID    uint     `json:"user_id,omitempty"`
+	Operation string `json:"operation"` // "delete", "rollback", etc.
+	Slides    []int  `json:"slides"`    // Affected slide numbers
+	Timestamp string `json:"timestamp"` // ISO 8601 timestamp
+	UserID    uint   `json:"user_id,omitempty"`
 }
 
 // PPTFile PPT文件模型

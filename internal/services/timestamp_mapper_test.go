@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // TestTimestampMapper_GetTimestampMap tests retrieving timestamp maps

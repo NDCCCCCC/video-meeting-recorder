@@ -77,7 +77,7 @@ func (v *IPValidator) IsIPAllowed(clientIP string, allowedList []string) (bool, 
 
 	for _, allowed := range allowedList {
 		// Single IP
-		if strings.Contains(allowed, "/") == false && strings.Contains(allowed, "-") == false {
+		if !strings.Contains(allowed, "/") && !strings.Contains(allowed, "-") {
 			if clientIP == allowed {
 				return true, nil
 			}

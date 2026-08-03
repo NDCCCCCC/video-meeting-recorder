@@ -3,11 +3,12 @@ package services
 import (
 	"context"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // UserService 用户服务
@@ -113,8 +114,6 @@ func (s *UserService) GetUserByID(ctx context.Context, id uint) (*models.User, e
 	}
 	return &user, nil
 }
-
-
 
 // CreateUser 创建用户
 func (s *UserService) CreateUser(ctx context.Context, req *CreateUserRequest) (*models.User, error) {

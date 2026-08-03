@@ -4,12 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 )
 
 // newTestInputConfigService 构造带 CredentialEncryptor 的 InputConfigService。

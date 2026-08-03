@@ -11,10 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // SimpleRecordingCoordinator 简单的录制协调器
@@ -96,13 +97,13 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 
 	// 根据配置类型生成输出路径
 	mkvPath := c.getOutputPathWithType(task, configType, "mkv")
-	if err := os.MkdirAll(filepath.Dir(mkvPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(mkvPath), 0o755); err != nil {
 		return fmt.Errorf("创建输出目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	// 生成 HLS 输出路径
 	hlsPath := c.getHLSPathWithType(task, configType)
-	if err := os.MkdirAll(hlsPath, 0755); err != nil {
+	if err := os.MkdirAll(hlsPath, 0o755); err != nil {
 		return fmt.Errorf("创建HLS目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
@@ -183,7 +184,7 @@ func (c *SimpleRecordingCoordinator) getProcessKey(taskID uint, configType strin
 }
 
 // getOutputPathWithType 生成带配置类型的输出文件路径
-func (c *SimpleRecordingCoordinator) getOutputPathWithType(task *models.VideoRecordingTask, configType string, format string) string {
+func (c *SimpleRecordingCoordinator) getOutputPathWithType(task *models.VideoRecordingTask, configType, format string) string {
 	safeName := sanitizeFilename(task.Name)
 	conferenceNumber := task.ConferenceNumber
 	timestamp := time.Now().Format("20060102150405")
@@ -334,19 +335,19 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 
 	// 生成新的输出路径（使用新的时间戳）
 	mkvPath := c.getOutputPathWithType(task, configType, "mkv")
-	if err := os.MkdirAll(filepath.Dir(mkvPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(mkvPath), 0o755); err != nil {
 		return fmt.Errorf("创建输出目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	hlsPath := c.getHLSPathWithType(task, configType)
-	if err := os.MkdirAll(hlsPath, 0755); err != nil {
+	if err := os.MkdirAll(hlsPath, 0o755); err != nil {
 		return fmt.Errorf("创建HLS目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
 	input := c.buildRecordingInput(task, huaweiConfig)
 
 	// 计算剩余录制时长
-	remainingDuration := task.EndTime.Sub(time.Now())
+	remainingDuration := time.Until(task.EndTime)
 	if remainingDuration <= 0 {
 		return fmt.Errorf("任务已结束，无法继续录制: %w", apperrors.ErrTaskNotFound)
 	}
@@ -683,7 +684,7 @@ func (c *SimpleRecordingCoordinator) monitorProcess(taskID uint, cmd *exec.Cmd, 
 }
 
 // buildRecordingCommand 构建录制命令（使用 tee muxer 同时输出 MKV 和 HLS）
-func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput, mkvPath string, hlsPath string, duration time.Duration, taskID uint) ([]string, error) {
+func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput, mkvPath, hlsPath string, duration time.Duration, taskID uint) ([]string, error) {
 	args := []string{"-y"}
 
 	// 添加输入源

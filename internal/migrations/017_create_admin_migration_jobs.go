@@ -3,8 +3,9 @@ package migrations
 import (
 	"fmt"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"gorm.io/gorm"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // Migration017_CreateAdminMigrationJobs PR-F: 创建 admin_migration_jobs 表。

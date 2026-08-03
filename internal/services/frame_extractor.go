@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // FrameExtractor FFmpeg帧提取器
@@ -37,7 +38,7 @@ func NewFrameExtractor(ffmpegPath string, logger *zap.Logger) *FrameExtractor {
 }
 
 // ExtractFrames 从视频中提取帧 (D-02: 采样率转换为fps)
-func (e *FrameExtractor) ExtractFrames(ctx context.Context, videoPath string, outputDir string, samplingRateSeconds float64) ([]ExtractedFrame, error) {
+func (e *FrameExtractor) ExtractFrames(ctx context.Context, videoPath, outputDir string, samplingRateSeconds float64) ([]ExtractedFrame, error) {
 	// 验证输入
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("视频文件不存在: %s", videoPath)
@@ -52,7 +53,7 @@ func (e *FrameExtractor) ExtractFrames(ctx context.Context, videoPath string, ou
 	}
 
 	// 创建输出目录
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return nil, fmt.Errorf("创建输出目录失败: %w", err)
 	}
 
@@ -127,7 +128,7 @@ func (e *FrameExtractor) ExtractFrameAtTimestamp(ctx context.Context, videoPath 
 	}
 
 	// 确保输出目录存在
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("创建输出目录失败: %w", err)
 	}
 
@@ -173,7 +174,7 @@ func (e *FrameExtractor) CreateTempDir(baseDir string, videoFileID uint) (string
 	dirName := fmt.Sprintf("transcription_%d_%d", videoFileID, timestamp)
 	dirPath := filepath.Join(baseDir, dirName)
 
-	if err := os.MkdirAll(dirPath, 0755); err != nil {
+	if err := os.MkdirAll(dirPath, 0o755); err != nil {
 		return "", fmt.Errorf("创建临时目录失败: %w", err)
 	}
 

@@ -11,12 +11,13 @@ import (
 	"sync"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // TranscriptionProgress represents the progress of a transcription task per D-17
@@ -1099,7 +1100,7 @@ func (s *TranscriptionService) SubmitBatchTranscription(ctx context.Context, req
 }
 
 // GetJobGroupStatus 获取批量转录任务组状态
-func (s *TranscriptionService) GetJobGroupStatus(ctx context.Context, jobGroupID uint, userID uint, isAdmin bool) (*models.TranscriptionJobGroup, error) {
+func (s *TranscriptionService) GetJobGroupStatus(ctx context.Context, jobGroupID, userID uint, isAdmin bool) (*models.TranscriptionJobGroup, error) {
 	var jobGroup models.TranscriptionJobGroup
 	err := s.db.WithContext(ctx).Where("id = ?", jobGroupID).
 		Preload("Tasks").
@@ -1116,9 +1117,10 @@ func (s *TranscriptionService) GetJobGroupStatus(ctx context.Context, jobGroupID
 	// 重新计算进度
 	var completedCount, failedCount int
 	for _, task := range jobGroup.Tasks {
-		if task.Status == models.TranscriptionStatusCompleted {
+		switch task.Status {
+		case models.TranscriptionStatusCompleted:
 			completedCount++
-		} else if task.Status == models.TranscriptionStatusFailed {
+		case models.TranscriptionStatusFailed:
 			failedCount++
 		}
 	}
@@ -1140,9 +1142,10 @@ func (s *TranscriptionService) updateJobGroupProgress(ctx context.Context, jobGr
 
 	var completedCount, failedCount int
 	for _, task := range jobGroup.Tasks {
-		if task.Status == models.TranscriptionStatusCompleted {
+		switch task.Status {
+		case models.TranscriptionStatusCompleted:
 			completedCount++
-		} else if task.Status == models.TranscriptionStatusFailed {
+		case models.TranscriptionStatusFailed:
 			failedCount++
 		}
 	}

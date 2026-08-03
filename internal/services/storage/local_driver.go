@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // LocalStorageDriver 本地存储驱动
@@ -23,7 +24,7 @@ type LocalStorageDriver struct {
 // NewLocalStorageDriver 创建本地存储驱动
 func NewLocalStorageDriver(basePath, baseURL string, logger *zap.Logger) *LocalStorageDriver {
 	// 确保目录存在
-	os.MkdirAll(basePath, 0755)
+	os.MkdirAll(basePath, 0o755)
 
 	return &LocalStorageDriver{
 		basePath: basePath,
@@ -44,7 +45,7 @@ func (d *LocalStorageDriver) Upload(ctx context.Context, file *multipart.FileHea
 	// 创建目标文件
 	fullPath := filepath.Join(d.basePath, path)
 	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("创建目录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
@@ -132,7 +133,7 @@ func (d *LocalStorageDriver) Copy(ctx context.Context, srcPath, destPath string)
 
 	// 确保目标目录存在
 	dstDir := filepath.Dir(dst)
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
 		return err
 	}
 
@@ -153,7 +154,7 @@ func (d *LocalStorageDriver) Move(ctx context.Context, srcPath, destPath string)
 
 	// 确保目标目录存在
 	dstDir := filepath.Dir(dst)
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
 		return err
 	}
 

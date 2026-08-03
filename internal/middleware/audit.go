@@ -7,10 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 )
 
 // auditBodyBufPool 复用 Request.Body 读取缓冲（PERF-007）。

@@ -3,10 +3,11 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // RequirePermission 需要特定权限

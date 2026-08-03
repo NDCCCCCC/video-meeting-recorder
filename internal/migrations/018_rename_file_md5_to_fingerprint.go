@@ -3,9 +3,10 @@ package migrations
 import (
 	"fmt"
 
+	"gorm.io/gorm"
+
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"gorm.io/gorm"
 )
 
 // Migration018_RenameFileMD5ToFingerprint renames the legacy column

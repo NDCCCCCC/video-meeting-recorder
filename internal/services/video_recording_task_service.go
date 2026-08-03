@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // VideoRecordingTaskService 视频录制任务服务
@@ -599,7 +600,7 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 }
 
 // DeleteTask 删除任务
-func (s *VideoRecordingTaskService) DeleteTask(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) DeleteTask(ctx context.Context, id, userID uint, isAdmin bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, apperrors.ErrTaskNotFound
@@ -763,7 +764,7 @@ func (s *VideoRecordingTaskService) BatchDeleteTasks(ctx context.Context, ids []
 }
 
 // StartTask 手动启动任务
-func (s *VideoRecordingTaskService) StartTask(ctx context.Context, id uint, userID uint) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) StartTask(ctx context.Context, id, userID uint) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, nil, apperrors.ErrTaskNotFound
@@ -805,7 +806,7 @@ func (s *VideoRecordingTaskService) StartTask(ctx context.Context, id uint, user
 }
 
 // StopTask 手动停止任务
-func (s *VideoRecordingTaskService) StopTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) StopTask(ctx context.Context, id, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, *models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, nil, apperrors.ErrTaskNotFound
@@ -856,7 +857,7 @@ func (s *VideoRecordingTaskService) StopTask(ctx context.Context, id uint, userI
 		task.Status = models.VideoStatusCancelled
 		s.logger.Info("录制任务已取消（未开始录制）",
 			zap.Uint("task_id", id),
-			zap.Uint("cancelled_by", userID),
+			zap.Uint("canceled_by", userID),
 		)
 	}
 
@@ -868,7 +869,7 @@ func (s *VideoRecordingTaskService) StopTask(ctx context.Context, id uint, userI
 }
 
 // CancelTask 取消任务
-func (s *VideoRecordingTaskService) CancelTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) error {
+func (s *VideoRecordingTaskService) CancelTask(ctx context.Context, id, userID uint, hasSharedViewer bool) error {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return apperrors.ErrTaskNotFound
@@ -899,14 +900,14 @@ func (s *VideoRecordingTaskService) CancelTask(ctx context.Context, id uint, use
 
 	s.logger.Info("录制任务已取消",
 		zap.Uint("task_id", id),
-		zap.Uint("cancelled_by", userID),
+		zap.Uint("canceled_by", userID),
 	)
 
 	return nil
 }
 
 // RetryTask 重试失败任务
-func (s *VideoRecordingTaskService) RetryTask(ctx context.Context, id uint, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
+func (s *VideoRecordingTaskService) RetryTask(ctx context.Context, id, userID uint, hasSharedViewer bool) (*models.VideoRecordingTask, error) {
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, id).Error; err != nil {
 		return nil, apperrors.ErrTaskNotFound
@@ -1207,7 +1208,6 @@ func (s *VideoRecordingTaskService) ClearStuckTasks(ctx context.Context, timeout
 				zap.Int("unlocked_count", len(configIDs)),
 			)
 		}
-
 	}
 
 	result.TotalCleared = len(result.ClearedTaskIDs)

@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // AuditLogService 审计日志服务
@@ -369,7 +370,6 @@ func (s *AuditLogService) Query(ctx context.Context, req *QueryRequest, userID u
 	err := query.Offset((req.Page - 1) * req.PageSize).
 		Limit(req.PageSize).
 		Find(&logs).Error
-
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +390,7 @@ func (s *AuditLogService) Query(ctx context.Context, req *QueryRequest, userID u
 }
 
 // GetByID 获取单条日志详情
-func (s *AuditLogService) GetByID(ctx context.Context, id uint, userID uint, dataScope string) (*models.AuditLog, error) {
+func (s *AuditLogService) GetByID(ctx context.Context, id, userID uint, dataScope string) (*models.AuditLog, error) {
 	var log models.AuditLog
 	err := s.db.WithContext(ctx).First(&log, id).Error
 	if err != nil {

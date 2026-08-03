@@ -4,12 +4,13 @@ import (
 	"context"
 	"testing"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // setupTestDB creates an in-memory SQLite database for testing
@@ -75,7 +76,6 @@ func createTestUserWithRoles(t *testing.T, db *gorm.DB, username string, userIPs
 // TestCheckIPRestriction_UserOnly tests user-level IP restrictions only
 // Validates that when only user has IP restrictions, role IPs are not considered
 func TestCheckIPRestriction_UserOnly(t *testing.T) {
-
 	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -92,9 +92,9 @@ func TestCheckIPRestriction_UserOnly(t *testing.T) {
 		errContains string
 	}{
 		{
-			name:        "allowed IP",
-			clientIP:    "192.168.1.100",
-			wantErr:     false,
+			name:     "allowed IP",
+			clientIP: "192.168.1.100",
+			wantErr:  false,
 		},
 		{
 			name:        "disallowed IP",
@@ -126,7 +126,6 @@ func TestCheckIPRestriction_UserOnly(t *testing.T) {
 // TestCheckIPRestriction_RoleOnly tests role-level IP restrictions only
 // Validates that when only role has IP restrictions, user IPs are not considered
 func TestCheckIPRestriction_RoleOnly(t *testing.T) {
-
 	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -143,9 +142,9 @@ func TestCheckIPRestriction_RoleOnly(t *testing.T) {
 		errContains string
 	}{
 		{
-			name:        "within role CIDR",
-			clientIP:    "192.168.1.50",
-			wantErr:     false,
+			name:     "within role CIDR",
+			clientIP: "192.168.1.50",
+			wantErr:  false,
 		},
 		{
 			name:        "outside role CIDR",
@@ -177,7 +176,6 @@ func TestCheckIPRestriction_RoleOnly(t *testing.T) {
 // TestCheckIPRestriction_UserAndRole_OR tests OR logic merging user + role IPs per D-02
 // Validates that user and role IP restrictions are merged using OR logic
 func TestCheckIPRestriction_UserAndRole_OR(t *testing.T) {
-
 	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -233,7 +231,6 @@ func TestCheckIPRestriction_UserAndRole_OR(t *testing.T) {
 // TestCheckIPRestriction_NoRestrictions tests empty IP lists (allow all per D-03)
 // Validates that when neither user nor roles have IP restrictions, all IPs are allowed
 func TestCheckIPRestriction_NoRestrictions(t *testing.T) {
-
 	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -285,7 +282,6 @@ func TestCheckIPRestriction_NoRestrictions(t *testing.T) {
 // TestCheckIPRestriction_IPNotInList tests IP not allowed
 // Validates that IPs not matching any restriction rule are rejected
 func TestCheckIPRestriction_IPNotInList(t *testing.T) {
-
 	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -335,16 +331,15 @@ func TestCheckIPRestriction_IPNotInList(t *testing.T) {
 // TestCheckIPRestriction_MultiRoleMerge tests multiple roles' IPs merged correctly
 // Validates that IP restrictions from multiple roles are all merged (OR logic)
 func TestCheckIPRestriction_MultiRoleMerge(t *testing.T) {
-
 	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
 
 	// Create user with multiple roles, each with different IP restrictions
 	user := createTestUserWithRoles(t, db, "testuser", []string{}, map[string][]string{
-		"operator":  {"192.168.1.0/24"},
-		"viewer":    {"10.0.0.0/16"},
-		"admin":     {"172.16.0.1-172.16.0.100"},
+		"operator": {"192.168.1.0/24"},
+		"viewer":   {"10.0.0.0/16"},
+		"admin":    {"172.16.0.1-172.16.0.100"},
 	})
 
 	tests := []struct {
@@ -402,7 +397,6 @@ func TestCheckIPRestriction_MultiRoleMerge(t *testing.T) {
 // TestCheckIPRestriction_InvalidClientIP tests invalid client IP handling
 // Validates that malformed client IPs return appropriate errors
 func TestCheckIPRestriction_InvalidClientIP(t *testing.T) {
-
 	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}
@@ -455,7 +449,6 @@ func TestCheckIPRestriction_InvalidClientIP(t *testing.T) {
 // errors.Is 是稳定契约;Service.CheckIPRestriction 现在返回 ErrForbidden,
 // audit log 仍保留详细 message string 给运维 (与 sentinel err.Error() 分离)。
 func TestCheckIPRestriction_AuditLogOnFailure(t *testing.T) {
-
 	ctx := context.Background()
 	db := setupTestDB(t)
 	service := &Service{db: db}

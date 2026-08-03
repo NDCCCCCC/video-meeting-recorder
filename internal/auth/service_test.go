@@ -13,7 +13,7 @@ type stubAuthenticator struct{}
 func (stubAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	return &LoginResponse{}, nil
 }
-func (stubAuthenticator) Logout(token string) error                       { return nil }
+func (stubAuthenticator) Logout(token string) error { return nil }
 func (stubAuthenticator) ValidateToken(ctx context.Context, token string) (*UserDTO, error) {
 	return &UserDTO{}, nil
 }

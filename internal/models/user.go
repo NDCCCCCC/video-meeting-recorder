@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 
 	"golang.org/x/crypto/bcrypt"
 )

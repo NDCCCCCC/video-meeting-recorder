@@ -39,17 +39,20 @@ var csrfSafeMethods = map[string]bool{
 // double-submit 比对。CSRFEnabled=false 时不挂载 (工厂 nil-safe, 调用方可直接判空)。
 //
 // 安全 vs Bearer 认证:
-//   当前项目的认证以 Authorization: Bearer SM4 token 为主,该凭据浏览器攻击者无法
-//   通过跨站请求偷取 (无 cookie 可被自动附加),所以带 Bearer 头的请求视为 CSRF-safe,
-//   直接放行。这一行为让启用 CSRF 不会破坏现有 API 客户端,仍能在切换到 Cookie 认证时
-//   立即生效。
+//
+//	当前项目的认证以 Authorization: Bearer SM4 token 为主,该凭据浏览器攻击者无法
+//	通过跨站请求偷取 (无 cookie 可被自动附加),所以带 Bearer 头的请求视为 CSRF-safe,
+//	直接放行。这一行为让启用 CSRF 不会破坏现有 API 客户端,仍能在切换到 Cookie 认证时
+//	立即生效。
 //
 // originCheck (cs.SafeOrigins 非空):
-//   额外校验 Origin 头必须与列表中某项精确匹配;留空则不附加 origin 检查
-//   (仅依赖 double-submit + SameSite=Strict)。
+//
+//	额外校验 Origin 头必须与列表中某项精确匹配;留空则不附加 origin 检查
+//	(仅依赖 double-submit + SameSite=Strict)。
 //
 // 错误模式:
-//   任何被拒绝的请求 403 + JSON,logger 记录 path/ip/method 便于审计。
+//
+//	任何被拒绝的请求 403 + JSON,logger 记录 path/ip/method 便于审计。
 func CSRF(safeOrigins []string, logger *zap.Logger) gin.HandlerFunc {
 	originCheckEnabled := len(safeOrigins) > 0
 	allowed := make(map[string]struct{}, len(safeOrigins))

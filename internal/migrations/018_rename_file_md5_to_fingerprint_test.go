@@ -4,9 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // TestMigration018_RenameFileMD5ToFingerprint_Up exercises the rename end-to-end.

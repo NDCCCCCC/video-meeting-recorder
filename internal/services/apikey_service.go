@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // APIKeyService API密钥服务
@@ -184,12 +185,12 @@ func (s *APIKeyService) ListAPIKeys(ctx context.Context, userID uint, isAdmin bo
 }
 
 // GetAPIKey 获取API密钥详情
-func (s *APIKeyService) GetAPIKey(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.APIKey, error) {
+func (s *APIKeyService) GetAPIKey(ctx context.Context, id, userID uint, isAdmin bool) (*models.APIKey, error) {
 	return s.findAPIKeyForUser(ctx, id, userID, isAdmin)
 }
 
 // UpdateAPIKey 更新API密钥
-func (s *APIKeyService) UpdateAPIKey(ctx context.Context, id uint, userID uint, isAdmin bool, req *UpdateAPIKeyRequest) (*models.APIKey, *models.APIKey, error) {
+func (s *APIKeyService) UpdateAPIKey(ctx context.Context, id, userID uint, isAdmin bool, req *UpdateAPIKeyRequest) (*models.APIKey, *models.APIKey, error) {
 	apiKey, err := s.findAPIKeyForUser(ctx, id, userID, isAdmin)
 	if err != nil {
 		return nil, nil, err
@@ -242,7 +243,7 @@ func (s *APIKeyService) UpdateAPIKey(ctx context.Context, id uint, userID uint, 
 }
 
 // DeleteAPIKey 删除API密钥
-func (s *APIKeyService) DeleteAPIKey(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.APIKey, error) {
+func (s *APIKeyService) DeleteAPIKey(ctx context.Context, id, userID uint, isAdmin bool) (*models.APIKey, error) {
 	apiKey, err := s.findAPIKeyForUser(ctx, id, userID, isAdmin)
 	if err != nil {
 		return nil, err
@@ -264,7 +265,7 @@ func (s *APIKeyService) DeleteAPIKey(ctx context.Context, id uint, userID uint, 
 }
 
 // ToggleAPIKeyStatus 切换API密钥状态
-func (s *APIKeyService) ToggleAPIKeyStatus(ctx context.Context, id uint, userID uint, isAdmin bool) (*models.APIKey, *models.APIKey, error) {
+func (s *APIKeyService) ToggleAPIKeyStatus(ctx context.Context, id, userID uint, isAdmin bool) (*models.APIKey, *models.APIKey, error) {
 	apiKey, err := s.findAPIKeyForUser(ctx, id, userID, isAdmin)
 	if err != nil {
 		return nil, nil, err
@@ -288,7 +289,7 @@ func (s *APIKeyService) ToggleAPIKeyStatus(ctx context.Context, id uint, userID 
 }
 
 // ValidateAPIKey 验证API密钥（供中间件使用）
-func (s *APIKeyService) ValidateAPIKey(ctx context.Context, key string, clientIP string) (*models.APIKey, error) {
+func (s *APIKeyService) ValidateAPIKey(ctx context.Context, key, clientIP string) (*models.APIKey, error) {
 	var apiKey models.APIKey
 	if err := s.db.WithContext(ctx).Preload("User").Preload("User.Role").Where("key = ?", key).First(&apiKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

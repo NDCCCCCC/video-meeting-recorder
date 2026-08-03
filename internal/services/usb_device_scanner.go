@@ -10,8 +10,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // USBDeviceInfo USB设备信息

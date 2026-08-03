@@ -5,12 +5,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/storage"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // FileHandler 文件处理器

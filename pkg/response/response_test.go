@@ -6,9 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // TestHandleError_RecognizedSentinel 验证已知 sentinel 被映射并写入响应，返回 true。

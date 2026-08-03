@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-ldap/ldap/v3"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/go-ldap/ldap/v3"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // IsADUserNotRegistered reports whether err originates from the

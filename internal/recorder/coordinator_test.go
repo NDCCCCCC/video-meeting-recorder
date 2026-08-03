@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // TestNewSimpleRecordingCoordinator 测试协调器创建

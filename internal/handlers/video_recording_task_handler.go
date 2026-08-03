@@ -11,6 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth/hlstoken"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
@@ -19,9 +23,6 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // VideoRecordingTaskHandler 视频录制任务处理器
@@ -52,7 +53,7 @@ func NewVideoRecordingTaskHandler(taskService *services.VideoRecordingTaskServic
 		config:       cfg,
 		// Phase 19 D3: db!=nil 时 jti 索引持久化到 hls_jti_records 表（跨实例/重启
 		// 保留重放窗口）；db==nil 时回退到 in-memory map。生产路径 db 不为 nil。
-		hlsToken:     hlstoken.NewHLSTokenWithDB(cfg.Auth.HLSTokenSecret, cfg.Auth.HLSTokenDuration, db, logger),
+		hlsToken: hlstoken.NewHLSTokenWithDB(cfg.Auth.HLSTokenSecret, cfg.Auth.HLSTokenDuration, db, logger),
 	}
 }
 
@@ -189,11 +190,9 @@ func (h *VideoRecordingTaskHandler) CreateTask(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	task, err := h.taskService.CreateTask(c.Request.Context(), &req, userID)
 	if err != nil {
@@ -225,11 +224,9 @@ func (h *VideoRecordingTaskHandler) CreateTaskAuto(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	task, err := h.taskService.CreateTaskAuto(c.Request.Context(), &req, userID)
 	if err != nil {
@@ -268,11 +265,9 @@ func (h *VideoRecordingTaskHandler) UpdateTask(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	oldTask, task, err := h.taskService.UpdateTask(c.Request.Context(), id, &req, userID, hasSharedViewer)
@@ -315,11 +310,9 @@ func (h *VideoRecordingTaskHandler) DeleteTask(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 	oldTask, err := h.taskService.DeleteTask(c.Request.Context(), id, userID, isAdmin)
@@ -364,11 +357,9 @@ func (h *VideoRecordingTaskHandler) BatchDeleteTasks(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 	oldTasks, result, err := h.taskService.BatchDeleteTasks(c.Request.Context(), req.IDs, userID, isAdmin)
@@ -440,11 +431,9 @@ func (h *VideoRecordingTaskHandler) StartTask(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	oldTask, task, err := h.taskService.StartTask(c.Request.Context(), id, userID)
 	if err != nil {
@@ -486,11 +475,9 @@ func (h *VideoRecordingTaskHandler) StopTask(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	oldTask, task, err := h.taskService.StopTask(c.Request.Context(), id, userID, hasSharedViewer)
@@ -533,11 +520,9 @@ func (h *VideoRecordingTaskHandler) CancelTask(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	if err := h.taskService.CancelTask(c.Request.Context(), id, userID, hasSharedViewer); err != nil {
@@ -567,11 +552,9 @@ func (h *VideoRecordingTaskHandler) RetryTask(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 	task, err := h.taskService.RetryTask(c.Request.Context(), id, userID, hasSharedViewer)
@@ -881,7 +864,7 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 // rewriteM3U8WithToken 重写 m3u8 播放列表，在分段 URL 中添加 token 参数
 // PERF-005/D-03.8: 对 .ts/.m3u8 分段 URL 的 tokenize 改用 bounded concurrency，
 // 限制在 cfg.FFmpeg.HLSRewriteConcurrency（默认 2）以避免突发请求耗尽 FFmpeg 子进程槽位。
-func (h *VideoRecordingTaskHandler) rewriteM3U8WithToken(content string, token string, taskID uint) string {
+func (h *VideoRecordingTaskHandler) rewriteM3U8WithToken(content, token string, taskID uint) string {
 	lines := strings.Split(content, "\n")
 	tokenParam := fmt.Sprintf("?token=%s", token)
 	_ = taskID

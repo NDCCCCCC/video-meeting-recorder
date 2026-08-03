@@ -22,7 +22,7 @@ func GenerateToken() (string, error) {
 
 // EnsureDir 确保目录存在
 func EnsureDir(dir string) error {
-	return os.MkdirAll(dir, 0755)
+	return os.MkdirAll(dir, 0o755)
 }
 
 // FileExists 检查文件是否存在

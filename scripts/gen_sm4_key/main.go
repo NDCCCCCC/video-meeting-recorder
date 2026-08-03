@@ -1,9 +1,10 @@
 // gen_sm4_key.go — 生成 SM4 密钥并替换配置文件中的 sm4_secret
 //
 // 用法:
-//   go run scripts/gen_sm4_key.go                  # 替换当前目录的 config.yaml
-//   go run scripts/gen_sm4_key.go -f /path/to.yaml # 指定配置文件路径
-//   go run scripts/gen_sm4_key.go -dry-run         # 仅显示新密钥，不修改文件
+//
+//	go run scripts/gen_sm4_key.go                  # 替换当前目录的 config.yaml
+//	go run scripts/gen_sm4_key.go -f /path/to.yaml # 指定配置文件路径
+//	go run scripts/gen_sm4_key.go -dry-run         # 仅显示新密钥，不修改文件
 package main
 
 import (
@@ -61,7 +62,7 @@ func main() {
 	}
 
 	// 写回文件
-	if err := os.WriteFile(*configPath, []byte(newContent), 0644); err != nil {
+	if err := os.WriteFile(*configPath, []byte(newContent), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "写入配置文件失败: %v\n", err)
 		os.Exit(1)
 	}

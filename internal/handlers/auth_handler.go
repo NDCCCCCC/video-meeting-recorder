@@ -1,11 +1,12 @@
 package handlers
 
 import (
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // AuthHandler 认证处理器
@@ -168,11 +169,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 
 	if err := h.authService.ChangePassword(c.Request.Context(), userID, &req); err != nil {

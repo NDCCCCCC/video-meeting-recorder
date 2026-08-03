@@ -6,13 +6,14 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // TranscriptionHandler handles transcription API requests
@@ -88,7 +89,7 @@ func (h *TranscriptionHandler) SubmitTranscription(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "视频文件不存在")
 		return
@@ -127,7 +128,7 @@ func (h *TranscriptionHandler) GetTranscriptionStatus(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -170,7 +171,7 @@ func (h *TranscriptionHandler) GetTranscriptionText(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -312,7 +313,7 @@ func (h *TranscriptionHandler) GetTimestampMapHandler(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(c.Request.Context(),videoFileID)
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(), videoFileID)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "视频文件不存在")
 		return
@@ -399,7 +400,7 @@ func (h *TranscriptionHandler) SubmitBatchTranscription(c *gin.Context) {
 						zap.Any("recover", r), zap.Stack("stack"))
 				}
 			}()
-			file, err := h.videoFileService.GetFileByID(c.Request.Context(),id)
+			file, err := h.videoFileService.GetFileByID(c.Request.Context(), id)
 			if err != nil {
 				checkMu.Lock()
 				if checkErr == "" {
@@ -481,11 +482,9 @@ func (h *TranscriptionHandler) GetBatchTranscriptionStatus(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.CanAccessAllData(c)
 

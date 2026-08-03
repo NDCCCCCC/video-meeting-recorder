@@ -8,16 +8,17 @@ import (
 	"testing"
 
 	// common import removed (Phase 21: common.Service deleted)
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	_ "modernc.org/sqlite"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 )
 
 // TestPhase18_StartupFlow_PlaintextRowsMigratedToEnvelope 是 Phase 18 启动流程的

@@ -10,10 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // snapshotCopyBufPool 复用 snapshot 服务 partial-MKV copy 的 32KB chunk buffer（PERF-007）。
@@ -80,7 +81,7 @@ func (s *SnapshotService) generateSnapshotFilename(task models.VideoRecordingTas
 // GenerateSnapshot generates an MP4 snapshot from an active recording task's MKV file.
 // Per D-08/D-09: copies the partial MKV to temp, converts to MP4, registers via callback.
 // Per D-15: Incremental — each snapshot starts from the end of the previous snapshot.
-func (s *SnapshotService) GenerateSnapshot(ctx context.Context, taskID uint, createdBy uint, hasSharedViewer bool) (*models.VideoFile, error) {
+func (s *SnapshotService) GenerateSnapshot(ctx context.Context, taskID, createdBy uint, hasSharedViewer bool) (*models.VideoFile, error) {
 	// Acquire mutex for this task to prevent concurrent snapshots
 	mutex := s.getMutex(taskID)
 	mutex.Lock()
@@ -177,7 +178,7 @@ func (s *SnapshotService) GenerateSnapshot(ctx context.Context, taskID uint, cre
 
 	// 5. Copy partial MKV to temp file (avoid locking issues with active recording)
 	tempDir := filepath.Join(filepath.Dir(task.MKVFilePath), "snapshots")
-	if err := os.MkdirAll(tempDir, 0755); err != nil {
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
 		return nil, fmt.Errorf("创建快照目录失败: %w", err)
 	}
 

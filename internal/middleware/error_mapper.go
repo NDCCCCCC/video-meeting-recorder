@@ -1,9 +1,10 @@
 package middleware
 
 import (
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // ErrorMapper 是 backstop 错误映射中间件（STYLE-001 决策 3 组件 C）。

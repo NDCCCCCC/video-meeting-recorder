@@ -11,12 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // testSecret 返回长度 ≥ 32 的测试密钥。

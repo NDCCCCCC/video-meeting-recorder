@@ -13,12 +13,13 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // DuplicateGroup represents a group of duplicate slides
@@ -720,10 +721,10 @@ func (s *PPTEditorService) SaveCapturedFrame(pptFileID uint, frameBytes []byte, 
 	thumbnailDir := filepath.Join(cacheDir, "thumbnails")
 
 	// Create directories if they don't exist
-	if err := os.MkdirAll(fullsizeDir, 0755); err != nil {
+	if err := os.MkdirAll(fullsizeDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create fullsize directory: %w", err)
 	}
-	if err := os.MkdirAll(thumbnailDir, 0755); err != nil {
+	if err := os.MkdirAll(thumbnailDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create thumbnail directory: %w", err)
 	}
 
@@ -733,7 +734,7 @@ func (s *PPTEditorService) SaveCapturedFrame(pptFileID uint, frameBytes []byte, 
 	thumbnailPath := filepath.Join(thumbnailDir, filename)
 
 	// Save full-size image
-	if err := os.WriteFile(fullsizePath, frameBytes, 0644); err != nil {
+	if err := os.WriteFile(fullsizePath, frameBytes, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write full-size image: %w", err)
 	}
 
@@ -867,7 +868,7 @@ func (s *PPTEditorService) ReorderSlides(ctx context.Context, pptFileID uint, ne
 
 	// Backup current slides before reordering
 	backupDir := filepath.Join(slideDir, fmt.Sprintf("backup_before_reorder_%s", time.Now().Format("20060102_150405")))
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
@@ -888,7 +889,7 @@ func (s *PPTEditorService) ReorderSlides(ctx context.Context, pptFileID uint, ne
 
 	// Create temp directory for reordered slides
 	tempDir := filepath.Join(slideDir, "temp_reorder")
-	if err := os.MkdirAll(tempDir, 0755); err != nil {
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)

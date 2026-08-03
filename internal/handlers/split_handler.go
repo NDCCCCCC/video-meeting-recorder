@@ -3,11 +3,12 @@ package handlers
 import (
 	"strconv"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // SplitHandler 视频分割 HTTP handler：负责提交分割任务、查询分割状态、
@@ -70,7 +71,7 @@ func (h *SplitHandler) SubmitSplit(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 		return
 	}
-	file, err := h.videoFileService.GetFileByID(c.Request.Context(),uint(id))
+	file, err := h.videoFileService.GetFileByID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "视频文件不存在")
 		return
@@ -105,11 +106,9 @@ func (h *SplitHandler) GenerateSnapshot(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	hasSharedViewer := middleware.GetHasSharedViewer(c)
 
@@ -142,7 +141,7 @@ func (h *SplitHandler) GetSplitStatus(c *gin.Context) {
 	// If completed or empty, also return segment list
 	result := gin.H{"status": status}
 	if status == "completed" || status == "" {
-		segments, _ := h.videoFileService.GetSegmentsByParentID(c.Request.Context(),uint(id))
+		segments, _ := h.videoFileService.GetSegmentsByParentID(c.Request.Context(), uint(id))
 		result["segments"] = segments
 	}
 
@@ -158,7 +157,7 @@ func (h *SplitHandler) GetSegments(c *gin.Context) {
 		return
 	}
 
-	segments, err := h.videoFileService.GetSegmentsByParentID(c.Request.Context(),uint(id))
+	segments, err := h.videoFileService.GetSegmentsByParentID(c.Request.Context(), uint(id))
 	if err != nil {
 		response.GinError(c, response.CodeInternalError, "获取分割段落失败")
 		return

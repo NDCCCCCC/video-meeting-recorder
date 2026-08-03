@@ -18,8 +18,8 @@ import "time"
 // 控制，长 tokenDuration（如 24h）+ 高 QPS 时 1 天累计 ≤ tokenDuration * qps；常态
 // 远低于 100k 上限。
 type HLSJtiRecord struct {
-	Jti       string `gorm:"primaryKey;size:64;column:jti" json:"jti"`
-	ExpiresAt int64  `gorm:"index;not null;column:expires_at" json:"expires_at"` // Unix 秒
+	Jti       string    `gorm:"primaryKey;size:64;column:jti" json:"jti"`
+	ExpiresAt int64     `gorm:"index;not null;column:expires_at" json:"expires_at"` // Unix 秒
 	CreatedAt time.Time `gorm:"index;not null;column:created_at" json:"created_at"`
 }
 

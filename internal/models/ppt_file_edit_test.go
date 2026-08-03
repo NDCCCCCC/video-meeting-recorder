@@ -22,9 +22,9 @@ func TestPPTFileEditFields(t *testing.T) {
 	// Test 1: Create PPTFile with edit fields
 	t.Run("Create with edit fields", func(t *testing.T) {
 		ppt := PPTFile{
-			FileName:     "test.pptx",
-			FilePath:     "/path/to/test.pptx",
-			BackupPath:   "/path/to/backup.pptx",
+			FileName:      "test.pptx",
+			FilePath:      "/path/to/test.pptx",
+			BackupPath:    "/path/to/backup.pptx",
 			DeletedSlides: `[1,5,10]`,
 			EditHistory:   `[{"operation":"delete","slides":[1,5],"timestamp":"2026-04-20T00:00:00Z"}]`,
 		}
@@ -63,8 +63,8 @@ func TestPPTFileEditFields(t *testing.T) {
 	t.Run("GetDeletedSlides helper", func(t *testing.T) {
 		slidesJSON := `[1,5,10,15]`
 		ppt := PPTFile{
-			FileName:     "test4.pptx",
-			FilePath:     "/path/to/test4.pptx",
+			FileName:      "test4.pptx",
+			FilePath:      "/path/to/test4.pptx",
 			DeletedSlides: slidesJSON,
 		}
 		db.Create(&ppt)
@@ -75,8 +75,8 @@ func TestPPTFileEditFields(t *testing.T) {
 
 		// Test empty JSON
 		ppt2 := PPTFile{
-			FileName:     "test5.pptx",
-			FilePath:     "/path/to/test5.pptx",
+			FileName:      "test5.pptx",
+			FilePath:      "/path/to/test5.pptx",
 			DeletedSlides: "[]",
 		}
 		db.Create(&ppt2)
@@ -87,8 +87,8 @@ func TestPPTFileEditFields(t *testing.T) {
 
 		// Test invalid JSON
 		ppt3 := PPTFile{
-			FileName:     "test6.pptx",
-			FilePath:     "/path/to/test6.pptx",
+			FileName:      "test6.pptx",
+			FilePath:      "/path/to/test6.pptx",
 			DeletedSlides: "invalid",
 		}
 		db.Create(&ppt3)
@@ -101,8 +101,8 @@ func TestPPTFileEditFields(t *testing.T) {
 	// Test 4: RecordDeletion helper
 	t.Run("RecordDeletion helper", func(t *testing.T) {
 		ppt := PPTFile{
-			FileName:     "test7.pptx",
-			FilePath:     "/path/to/test7.pptx",
+			FileName:      "test7.pptx",
+			FilePath:      "/path/to/test7.pptx",
 			DeletedSlides: "[]",
 		}
 		db.Create(&ppt)

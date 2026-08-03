@@ -7,13 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // 用于存储请求开始时间
@@ -431,7 +432,8 @@ func RequireAPIKeyResourcePermission(resource, action string) gin.HandlerFunc {
 // 需要在 APIKeyAuth 或 MultiAuth 之后使用
 func RateLimitMiddleware(limiter interface {
 	CheckRateLimit(uint, services.RateLimitConfig) (bool, int64, time.Time)
-}) gin.HandlerFunc {
+},
+) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authType := c.GetString("auth_type")
 		// 只对 API Key 认证进行速率限制
@@ -478,7 +480,8 @@ func RateLimitMiddleware(limiter interface {
 // RateLimitByScope 根据作用域应用不同的速率限制
 func RateLimitByScope(limiter interface {
 	CheckRateLimit(uint, services.RateLimitConfig) (bool, int64, time.Time)
-}) gin.HandlerFunc {
+},
+) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authType := c.GetString("auth_type")
 		if authType != "apikey" {

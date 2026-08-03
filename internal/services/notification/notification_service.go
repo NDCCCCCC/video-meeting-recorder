@@ -8,11 +8,12 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // Service 通知服务（STYLE-009：去掉包名冗余，外部引用统一为 notification.Service）。
@@ -245,7 +246,6 @@ func (s *Service) Query(ctx context.Context, userID uint, req *QueryRequest) (*Q
 		Offset((req.Page - 1) * req.PageSize).
 		Limit(req.PageSize).
 		Find(&messages).Error
-
 	if err != nil {
 		return nil, err
 	}

@@ -11,10 +11,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 const (
@@ -210,7 +211,7 @@ func (s *SlideCacheService) InvalidateCache(ctx context.Context, pptFileID uint)
 
 // GetSlideImagePath returns the absolute path to a slide image file
 // SECURITY: Validates path is within allowed directory to prevent traversal (T-03-01)
-func (s *SlideCacheService) GetSlideImagePath(pptFileID uint, resolution string, filename string) (string, error) {
+func (s *SlideCacheService) GetSlideImagePath(pptFileID uint, resolution, filename string) (string, error) {
 	// Validate resolution
 	if resolution != "thumbnails" && resolution != "fullsize" {
 		return "", fmt.Errorf("invalid resolution: %s", resolution)

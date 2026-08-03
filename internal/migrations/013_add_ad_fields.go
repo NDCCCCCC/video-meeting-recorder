@@ -3,8 +3,10 @@ package migrations
 import (
 	"fmt"
 	"log"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // AddADFieldsMigration 添加AD相关字段到users表

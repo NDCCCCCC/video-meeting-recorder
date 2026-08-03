@@ -14,6 +14,13 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	// "github.com/NDCCCCCC/video-meeting-recorder/internal/common" — Phase 21 删除 (无任何剩余用法)
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+	_ "modernc.org/sqlite" // 纯Go SQLite驱动
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/frontend"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/handlers"
@@ -29,12 +36,6 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/storage"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/video_recording"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
-	_ "modernc.org/sqlite" // 纯Go SQLite驱动
 )
 
 // MinimalApp 应用程序结构
@@ -340,7 +341,6 @@ func (a *MinimalApp) migrateDatabase() error {
 		&models.HLSJtiRecord{},      // Phase 19 D3: HLS token 一次性 jti 持久化记录
 		&models.AdminMigrationJob{}, // Phase 21 PERF-005/PR-F: admin migration job 持久化(runCustomMigrations dormant, 必须走 AutoMigrate)
 	)
-
 	if err != nil {
 		return fmt.Errorf("AutoMigrate failed: %w", err)
 	}

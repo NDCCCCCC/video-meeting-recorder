@@ -52,7 +52,7 @@ func setupTestContext() (*gin.Engine, *httptest.Server) {
 }
 
 // helper function to make test request
-func makeTestRequest(server *httptest.Server, method, path string, body string) *http.Response {
+func makeTestRequest(server *httptest.Server, method, path, body string) *http.Response {
 	req, _ := http.NewRequest(method, server.URL+path, nil)
 	client := &http.Client{}
 	resp, _ := client.Do(req)

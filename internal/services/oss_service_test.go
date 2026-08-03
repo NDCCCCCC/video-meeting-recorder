@@ -3,8 +3,9 @@ package services
 import (
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 )
 
 func TestOSSServiceDisabledByDefault(t *testing.T) {

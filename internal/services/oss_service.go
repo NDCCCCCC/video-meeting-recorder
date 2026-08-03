@@ -8,9 +8,10 @@ import (
 
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // OSSService handles Aliyun OSS file operations
@@ -52,7 +53,7 @@ func NewOSSService(cfg *config.OSSConfig, logger *zap.Logger) (*OSSService, erro
 }
 
 // UploadFile uploads a local file to OSS and returns a presigned URL
-func (s *OSSService) UploadFile(ctx context.Context, localPath string, objectKey string) (string, error) {
+func (s *OSSService) UploadFile(ctx context.Context, localPath, objectKey string) (string, error) {
 	if !s.config.Enabled {
 		return "", fmt.Errorf("OSS服务未启用: %w", apperrors.ErrServiceUnavailable)
 	}
@@ -109,7 +110,7 @@ func (s *OSSService) UploadFile(ctx context.Context, localPath string, objectKey
 }
 
 // SetLifecycleRule sets an expiration rule for uploaded files (per OSS-02)
-func (s *OSSService) SetLifecycleRule(ctx context.Context, ruleID string, prefix string, days int) error {
+func (s *OSSService) SetLifecycleRule(ctx context.Context, ruleID, prefix string, days int) error {
 	if !s.config.Enabled {
 		return fmt.Errorf("OSS服务未启用")
 	}

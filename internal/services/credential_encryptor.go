@@ -9,11 +9,12 @@ import (
 	"sort"
 	"strings"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // CredentialEncryptor 是 Phase 18 引入的凭据静态加密抽象。
@@ -45,7 +46,7 @@ type CredentialEncryptor struct {
 //   - currentVersion / currentSecret 必须非空（与 ValidateCredentialSM4Config 等价约束）
 //   - previousVersion / previousSecret 配对存在时启用轮换；否则 previous 为零值
 //   - 内部把 secret 通过 utils.DeriveSM4Key 归一化为 16 字节密钥
-func NewCredentialEncryptor(currentVersion, currentSecret string, previousVersion, previousSecret string, logger *zap.Logger) (*CredentialEncryptor, error) {
+func NewCredentialEncryptor(currentVersion, currentSecret, previousVersion, previousSecret string, logger *zap.Logger) (*CredentialEncryptor, error) {
 	// Phase 19 D4: 配置验证错误用 BusinessError(CodeInvalidInput) 包装，
 	// 让 handleStart-up 错误能用统一 mapping 落到 400 而非 500。
 	if currentVersion == "" {

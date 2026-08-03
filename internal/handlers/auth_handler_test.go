@@ -8,10 +8,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // TestLogin_HandleError_ClassifyDrop exercises the Login error path's

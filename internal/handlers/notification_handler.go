@@ -4,19 +4,20 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/notification"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // NotificationHandler 通知处理器
 type NotificationHandler struct {
-	service     *notification.Service
+	service      *notification.Service
 	auditService *audit.AuditLogService
-	logger      *zap.Logger
+	logger       *zap.Logger
 }
 
 // NewNotificationHandler 创建通知处理器

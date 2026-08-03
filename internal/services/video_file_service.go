@@ -14,11 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // 常量定义
@@ -40,7 +41,7 @@ type VideoFileService struct {
 }
 
 // NewVideoFileService 创建视频文件服务
-func NewVideoFileService(db *gorm.DB, logger *zap.Logger, recordingsPath string, ffprobePath string) *VideoFileService {
+func NewVideoFileService(db *gorm.DB, logger *zap.Logger, recordingsPath, ffprobePath string) *VideoFileService {
 	if ffprobePath == "" {
 		ffprobePath = "./bin/ffprobe" // 默认使用项目内置的 ffprobe
 	}
@@ -308,7 +309,6 @@ func (s *VideoFileService) DeleteFile(ctx context.Context, id uint) (*models.Vid
 		}
 		return nil
 	})
-
 	if err != nil {
 		s.logger.Error("删除数据库记录失败", zap.Uint("file_id", id), zap.Error(err), response.SentinelField(err))
 		return nil, err
@@ -455,7 +455,6 @@ func (s *VideoFileService) deleteOrphanFile(ctx context.Context, file *models.Vi
 		}
 		return nil
 	})
-
 	if err != nil {
 		s.logger.Error("删除孤立文件数据库记录失败", zap.Uint("file_id", file.ID), zap.Error(err), response.SentinelField(err))
 		return err
@@ -490,7 +489,6 @@ func (s *VideoFileService) deleteByTaskID(ctx context.Context, taskID uint) erro
 		}
 		return nil
 	})
-
 	if err != nil {
 		s.logger.Error("删除数据库记录失败", zap.Uint("task_id", taskID), zap.Error(err), response.SentinelField(err))
 		return err
@@ -1206,7 +1204,6 @@ func (s *VideoFileService) handleExistingFile(ctx context.Context, file fileInfo
 		if err := s.db.WithContext(ctx).Select("id, "+
 			"conversion_status, "+
 			"status").First(&task, taskID).Error; err == nil {
-
 			// 如果任务还在转换中或转换失败，跳过元数据更新
 			// 因为此时文件可能不完整或数据不准确
 			if task.ConversionStatus == models.ConversionStatusProcessing ||
@@ -1329,7 +1326,7 @@ func (s *VideoFileService) validateTaskID(ctx context.Context, taskID uint) bool
 }
 
 // findVideoFiles 查找目录下所有视频文件
-func (s *VideoFileService) findVideoFiles(dir string, sourceType string) ([]fileInfoWithPath, error) {
+func (s *VideoFileService) findVideoFiles(dir, sourceType string) ([]fileInfoWithPath, error) {
 	var files []fileInfoWithPath
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -1411,7 +1408,7 @@ func (s *VideoFileService) RenameVideoFile(ctx context.Context, id uint, newName
 	err := s.db.WithContext(ctx).Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
 	if err == nil {
 		return fmt.Errorf("目标文件名已存在")
-	} else if err != gorm.ErrRecordNotFound {
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return fmt.Errorf("检查文件名重复失败: %w", err)
 	}
 
@@ -1491,7 +1488,7 @@ func (s *VideoFileService) extractTaskIDFromPath(path string) *uint {
 // 3. Filters by source_type IN ('split', 'snapshot') - never deletes original recordings
 // 4. Deletes physical files and thumbnails
 // 5. Deletes database records atomically
-func (s *VideoFileService) DeleteSplitSegmentsByParentID(ctx context.Context, parentID uint, userID uint) (int, error) {
+func (s *VideoFileService) DeleteSplitSegmentsByParentID(ctx context.Context, parentID, userID uint) (int, error) {
 	// 1. Query segments with ownership and source type validation
 	var segments []models.VideoFile
 	err := s.db.WithContext(ctx).Where("parent_id = ? AND created_by = ? AND source_type IN ?", parentID, userID, []string{"split", "snapshot"}).Limit(1000).Find(&segments).Error
@@ -1556,7 +1553,6 @@ func (s *VideoFileService) DeleteSplitSegmentsByParentID(ctx context.Context, pa
 		}
 		return nil
 	})
-
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete segments: %w", err)
 	}

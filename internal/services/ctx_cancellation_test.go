@@ -6,13 +6,14 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // openCtxTestDB 建立一个内存 sqlite 并迁移角色/权限/用户表用于取消传播测试。

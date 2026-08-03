@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -16,6 +14,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	_ "modernc.org/sqlite" // pure-Go sqlite driver (no CGO)
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/utils"
 )
 
 // newTestEncryptor 构造一个仅 current 版本、密钥为 cur 的 encryptor。

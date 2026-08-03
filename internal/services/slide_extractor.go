@@ -45,7 +45,7 @@ type pythonSlideImageData struct {
 }
 
 // ExtractSlides extracts slide images from a PPTX file
-func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath string, outputDir string) (int, error) {
+func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath, outputDir string) (int, error) {
 	// Check for early cancellation
 	select {
 	case <-ctx.Done():
@@ -64,7 +64,7 @@ func (e *SlideExtractor) ExtractSlides(ctx context.Context, pptxPath string, out
 	}
 
 	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return 0, fmt.Errorf("failed to create output directory: %w", err)
 	}
 

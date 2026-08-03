@@ -4,12 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 )
 
 // TestVideoRecordingTaskService_CancellationPropagation (Phase 19 D2)
@@ -17,7 +18,7 @@ import (
 // 重命名自 TestTaskServiceAdapter_CancellationPropagation (Wave 4)。
 //
 // 验证 Phase 19 Wave 4 (PERF-003/BUG-005) 的取消传播——
-// pre-cancelled ctx 经 .WithContext(ctx) 传递到 GORM/database/sql 后，
+// pre-canceled ctx 经 .WithContext(ctx) 传递到 GORM/database/sql 后，
 // VideoRecordingTaskService 的 GetTask / UpdateTaskStatus / GetPendingTasks /
 // UpdateRecordingPaths / GetInputConfig 均应返回错误（ctx.Err() = context.Canceled）。
 //
@@ -64,27 +65,27 @@ func TestVideoRecordingTaskService_CancellationPropagation(t *testing.T) {
 
 	t.Run("GetTask", func(t *testing.T) {
 		_, err := svc.GetTask(ctx, seedTask.ID)
-		assert.Error(t, err, "pre-cancelled ctx 应使 GetTask 返回错误")
+		assert.Error(t, err, "pre-canceled ctx 应使 GetTask 返回错误")
 	})
 
 	t.Run("GetPendingTasks", func(t *testing.T) {
 		_, err := svc.GetPendingTasks(ctx)
-		assert.Error(t, err, "pre-cancelled ctx 应使 GetPendingTasks 返回错误")
+		assert.Error(t, err, "pre-canceled ctx 应使 GetPendingTasks 返回错误")
 	})
 
 	t.Run("UpdateTaskStatus", func(t *testing.T) {
 		err := svc.UpdateTaskStatus(ctx, seedTask.ID, models.VideoStatusFailed, "should not apply")
-		assert.Error(t, err, "pre-cancelled ctx 应使 UpdateTaskStatus 返回错误")
+		assert.Error(t, err, "pre-canceled ctx 应使 UpdateTaskStatus 返回错误")
 	})
 
 	t.Run("UpdateRecordingPaths", func(t *testing.T) {
 		err := svc.UpdateRecordingPaths(ctx, seedTask.ID, "/tmp/a.mkv", "/tmp/a.m3u8")
-		assert.Error(t, err, "pre-cancelled ctx 应使 UpdateRecordingPaths 返回错误")
+		assert.Error(t, err, "pre-canceled ctx 应使 UpdateRecordingPaths 返回错误")
 	})
 
 	t.Run("GetInputConfig", func(t *testing.T) {
 		_, err := svc.GetInputConfig(ctx, seedCfg.ID)
-		assert.Error(t, err, "pre-cancelled ctx 应使 GetInputConfig 返回错误")
+		assert.Error(t, err, "pre-canceled ctx 应使 GetInputConfig 返回错误")
 	})
 
 	// 对照：正常 ctx 下 GetTask 应成功 —— 证明上述错误来自 ctx 取消，而非查询本身有误
@@ -92,7 +93,7 @@ func TestVideoRecordingTaskService_CancellationPropagation(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, seedTask.ID, gotTask.ID)
 	// 确认 UpdateTaskStatus 因 ctx 取消未实际写入（状态仍为 Pending）
-	assert.Equal(t, models.VideoStatusPending, gotTask.Status, "pre-cancelled ctx 不应改变任务状态")
+	assert.Equal(t, models.VideoStatusPending, gotTask.Status, "pre-canceled ctx 不应改变任务状态")
 }
 
 // TestVideoRecordingTaskService_SatisfiesTaskServiceInterface (Phase 19 D2)

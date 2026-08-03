@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // TimestampMapper handles slide-to-video timestamp mapping
@@ -70,7 +71,6 @@ func (m *TimestampMapper) GetTimestampMap(ctx context.Context, videoFileID uint)
 	err := m.db.WithContext(ctx).Where("video_file_id = ? AND status = ?", videoFileID, models.TranscriptionStatusCompleted).
 		Order("created_at DESC").
 		First(&task).Error
-
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("transcription task not found for video file %d", videoFileID)

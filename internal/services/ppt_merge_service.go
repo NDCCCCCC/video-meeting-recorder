@@ -9,11 +9,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // PPTMergeService handles merging slides from multiple PPT files
@@ -122,7 +123,7 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	// 5. Execute merge: Call Python merge script
 	// Generate output path: recordings/ppts/merged/merged_{timestamp}_{random}.pptx
 	mergedDir := filepath.Join(s.config.Storage.RecordingsPath, "ppts", "merged")
-	if err := os.MkdirAll(mergedDir, 0755); err != nil {
+	if err := os.MkdirAll(mergedDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create merged output directory: %w", err)
 	}
 

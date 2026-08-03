@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 // newTestDB 构造 SQLite 内存数据库并迁移本测试所需的三张表。
@@ -158,7 +159,7 @@ func TestVideoRecordingTaskService_CancellationPropagation(t *testing.T) {
 	svc := NewVideoRecordingTaskService(db, zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // pre-cancelled: 任何后续 DB 操作都应立即失败
+	cancel() // pre-canceled: 任何后续 DB 操作都应立即失败
 
 	t.Run("ListTasks", func(t *testing.T) {
 		_, err := svc.ListTasks(ctx, &ListTasksRequest{Page: 1, PageSize: 10})

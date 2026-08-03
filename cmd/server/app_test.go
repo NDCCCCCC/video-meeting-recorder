@@ -4,15 +4,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 // TestAuthService_SetAuditServiceWiring 验证 SEC-002 修复：authService 可以被注入
@@ -103,4 +104,3 @@ func TestHuaweiDBAdapter_ProductionDecrypts(t *testing.T) {
 	assert.NotContains(t, got.Password, "SM4:",
 		"返回值不应再含 envelope 前缀")
 }
-

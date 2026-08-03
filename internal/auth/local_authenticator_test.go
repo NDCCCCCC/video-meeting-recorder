@@ -92,7 +92,7 @@ func TestLocalAuthenticator_Login_IPRestriction(t *testing.T) {
 		Password: "testpass123",
 	}
 	ipAddress := "192.168.1.100"
-	_ = req // Used in TODO implementation
+	_ = req       // Used in TODO implementation
 	_ = ipAddress // Used in TODO implementation
 
 	// Expected: IP restriction error

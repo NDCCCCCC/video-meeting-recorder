@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestADConfig_DefaultValues tests default AD configuration values
@@ -90,8 +90,8 @@ func TestADConfig_Validation(t *testing.T) {
 		{
 			name: "Valid AD configuration",
 			config: map[string]interface{}{
-				"auth.mode": "ad",
-				"auth.ad.server": "ad.example.com:636",
+				"auth.mode":       "ad",
+				"auth.ad.server":  "ad.example.com:636",
 				"auth.ad.bind_dn": "cn=admin,cn=users,dc=example,dc=com",
 				"auth.ad.base_dn": "dc=example,dc=com",
 				"auth.ad.use_tls": true,
@@ -102,8 +102,8 @@ func TestADConfig_Validation(t *testing.T) {
 		{
 			name: "Missing server address",
 			config: map[string]interface{}{
-				"auth.mode": "ad",
-				"auth.ad.server": "",
+				"auth.mode":       "ad",
+				"auth.ad.server":  "",
 				"auth.ad.bind_dn": "cn=admin,cn=users,dc=example,dc=com",
 				"auth.ad.base_dn": "dc=example,dc=com",
 			},
@@ -113,8 +113,8 @@ func TestADConfig_Validation(t *testing.T) {
 		{
 			name: "Missing base DN",
 			config: map[string]interface{}{
-				"auth.mode": "ad",
-				"auth.ad.server": "ad.example.com:636",
+				"auth.mode":       "ad",
+				"auth.ad.server":  "ad.example.com:636",
 				"auth.ad.bind_dn": "cn=admin,cn=users,dc=example,dc=com",
 				"auth.ad.base_dn": "",
 			},
@@ -124,8 +124,8 @@ func TestADConfig_Validation(t *testing.T) {
 		{
 			name: "Invalid port format",
 			config: map[string]interface{}{
-				"auth.mode": "ad",
-				"auth.ad.server": "ad.example.com", // Missing port
+				"auth.mode":       "ad",
+				"auth.ad.server":  "ad.example.com", // Missing port
 				"auth.ad.bind_dn": "cn=admin,cn=users,dc=example,dc=com",
 				"auth.ad.base_dn": "dc=example,dc=com",
 			},

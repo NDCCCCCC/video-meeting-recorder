@@ -7,13 +7,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // VideoFileHandler 视频文件处理器
@@ -81,7 +82,7 @@ func (h *VideoFileHandler) GetFile(c *gin.Context) {
 		return
 	}
 
-	file, err := h.fileService.GetFileByID(c.Request.Context(),id)
+	file, err := h.fileService.GetFileByID(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "文件不存在")
 		return
@@ -100,7 +101,7 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 
 	// 注意：token 验证由 SM4Auth 中间件处理（支持 Authorization 头和 token 查询参数）
 
-	file, err := h.fileService.GetFileByID(c.Request.Context(),id)
+	file, err := h.fileService.GetFileByID(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "文件不存在")
 		return
@@ -332,7 +333,7 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 	}
 
 	// Load file to check ownership
-	file, err := h.fileService.GetFileByID(c.Request.Context(),id)
+	file, err := h.fileService.GetFileByID(c.Request.Context(), id)
 	if err != nil {
 		response.GinError(c, response.CodeNotFound, "文件不存在")
 		return
@@ -360,7 +361,7 @@ func (h *VideoFileHandler) RenameFile(c *gin.Context) {
 	}
 
 	// Get updated file info
-	file, err = h.fileService.GetFileByID(c.Request.Context(),id)
+	file, err = h.fileService.GetFileByID(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error("重命名成功但无法获取更新后的文件信息", zap.Error(err), response.SentinelField(err))
 		response.GinSuccess(c, gin.H{

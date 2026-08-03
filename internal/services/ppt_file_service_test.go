@@ -6,13 +6,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
 func setupPPTServiceTest(t *testing.T) (*PPTFileService, *gorm.DB, string) {
@@ -43,7 +44,7 @@ func TestPPTFileService_RenamePPTFile_Success(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	pptPath := filepath.Join(tempDir, "test.pptx")
-	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0644))
+	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0o644))
 
 	pptFile := &models.PPTFile{
 		FileName:          "test.pptx",
@@ -76,7 +77,7 @@ func TestPPTFileService_RenamePPTFile_PreservesExtension(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	pptPath := filepath.Join(tempDir, "test.pptx")
-	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0644))
+	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0o644))
 
 	pptFile := &models.PPTFile{
 		FileName:          "test.pptx",
@@ -110,7 +111,7 @@ func TestPPTFileService_RenamePPTFile_OwnershipValidation(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	pptPath := filepath.Join(tempDir, "test.pptx")
-	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0644))
+	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0o644))
 
 	pptFile := &models.PPTFile{
 		FileName:          "test.pptx",
@@ -140,7 +141,7 @@ func TestPPTFileService_RenamePPTFile_RollbackOnFilesystemError(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	pptPath := filepath.Join(tempDir, "test.pptx")
-	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0644))
+	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0o644))
 
 	pptFile := &models.PPTFile{
 		FileName:          "test.pptx",
@@ -175,7 +176,7 @@ func TestPPTFileService_RenamePPTFile_DuplicateDetection(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	pptPath1 := filepath.Join(tempDir, "existing.pptx")
-	require.NoError(t, os.WriteFile(pptPath1, []byte("pptx1"), 0644))
+	require.NoError(t, os.WriteFile(pptPath1, []byte("pptx1"), 0o644))
 
 	pptFile1 := &models.PPTFile{
 		FileName:          "existing.pptx",
@@ -188,7 +189,7 @@ func TestPPTFileService_RenamePPTFile_DuplicateDetection(t *testing.T) {
 	require.NoError(t, db.Create(pptFile1).Error)
 
 	pptPath2 := filepath.Join(tempDir, "test.pptx")
-	require.NoError(t, os.WriteFile(pptPath2, []byte("pptx2"), 0644))
+	require.NoError(t, os.WriteFile(pptPath2, []byte("pptx2"), 0o644))
 
 	pptFile2 := &models.PPTFile{
 		FileName:          "test.pptx",
@@ -218,10 +219,10 @@ func TestPPTFileService_RenamePPTFile_UpdatesSlideCachePath(t *testing.T) {
 	require.NoError(t, db.Create(videoFile).Error)
 
 	cacheDir := filepath.Join(tempDir, "cache")
-	require.NoError(t, os.MkdirAll(cacheDir, 0755))
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 
 	pptPath := filepath.Join(tempDir, "test.pptx")
-	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0644))
+	require.NoError(t, os.WriteFile(pptPath, []byte("pptx"), 0o644))
 
 	pptFile := &models.PPTFile{
 		FileName:          "test.pptx",

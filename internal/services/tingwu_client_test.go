@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 )
 
 func TestTingwuClientDisabledByDefault(t *testing.T) {

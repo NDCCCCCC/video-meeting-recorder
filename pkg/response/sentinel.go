@@ -11,8 +11,9 @@ package response
 import (
 	"fmt"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"go.uber.org/zap"
+
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // sentinelTypeKey is the structured-logging key emitted alongside err when

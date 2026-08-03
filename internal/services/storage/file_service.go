@@ -14,12 +14,13 @@ import (
 	"strings"
 	"time"
 
-	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 const (
@@ -298,7 +299,7 @@ func (s *FileService) Download(ctx context.Context, accessToken string, userID u
 
 // Delete 删除文件
 // Phase 19 D15: 2 散点 sentinel 化。
-func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*models.UploadedFile, error) {
+func (s *FileService) Delete(ctx context.Context, fileID, userID uint) (*models.UploadedFile, error) {
 	var file models.UploadedFile
 	err := s.db.WithContext(ctx).First(&file, fileID).Error
 	if err != nil {
@@ -354,7 +355,7 @@ func (s *FileService) Delete(ctx context.Context, fileID uint, userID uint) (*mo
 
 // ShareFile 生成分享链接
 // Phase 19 D15: 2 散点 sentinel 化。
-func (s *FileService) ShareFile(ctx context.Context, fileID uint, userID uint, expiresIn time.Duration, password string) (*models.FileShare, *models.FileShare, string, error) {
+func (s *FileService) ShareFile(ctx context.Context, fileID, userID uint, expiresIn time.Duration, password string) (*models.FileShare, *models.FileShare, string, error) {
 	var file models.UploadedFile
 	err := s.db.WithContext(ctx).First(&file, fileID).Error
 	if err != nil {
@@ -536,8 +537,10 @@ func (s *FileService) validateFile(file *multipart.FileHeader) error {
 	allowedExtensions := s.config.Storage.AllowedExtensions
 	if len(allowedExtensions) == 0 {
 		// 默认允许的扩展名
-		allowedExtensions = []string{".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx",
-			".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".zip", ".rar", ".mp4", ".mkv", ".avi"}
+		allowedExtensions = []string{
+			".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx",
+			".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".zip", ".rar", ".mp4", ".mkv", ".avi",
+		}
 	}
 
 	allowed := false
@@ -578,7 +581,7 @@ func detectFileMIME(file *multipart.FileHeader) (string, error) {
 
 	head := make([]byte, 512)
 	n, err := io.ReadFull(src, head)
-	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		return "", err
 	}
 

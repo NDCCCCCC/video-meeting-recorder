@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -14,17 +15,17 @@ func main() {
 
 	// 获取 users 表的实际列
 	type ColumnInfo struct {
-		Cid      int
-		Name     string
-		Type     string
-		NotNull  int
+		Cid       int
+		Name      string
+		Type      string
+		NotNull   int
 		DfltValue string
-		Pk       int
+		Pk        int
 	}
-	
+
 	var columns []ColumnInfo
 	db.Raw("PRAGMA table_info(users)").Scan(&columns)
-	
+
 	fmt.Println("=== 实际数据库 users 表结构 ===")
 	for _, col := range columns {
 		notNull := ""

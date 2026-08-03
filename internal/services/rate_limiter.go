@@ -243,7 +243,7 @@ func (rl *RateLimiter) GetAPIKeyStats(apiKeyID uint) (minuteCount, hourCount, da
 	hourCount = countRequestsAfter(window.requests, now.Add(-time.Hour))
 	dayCount = countRequestsAfter(window.requests, now.Add(-24*time.Hour))
 
-	return
+	return minuteCount, hourCount, dayCount
 }
 
 // Shutdown 关闭速率限制器

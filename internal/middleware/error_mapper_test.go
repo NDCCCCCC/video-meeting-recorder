@@ -5,10 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 )
 
 // TestErrorMapper_MapsUnwrittenError 验证：handler 通过 c.Error 记录错误但未写响应时，

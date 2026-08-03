@@ -13,9 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"go.uber.org/zap"
 )
 
 // Config 华为终端API配置
@@ -288,7 +289,8 @@ func (c *HTTPClient) SetOutboundURLAllowlist(allowlist []string, environment str
 
 // guardOutboundURL 校验 baseURL 是否在出站白名单。SEC-013 SSRF 防御。
 // Phase 19 D17: URL config 错误包装 apperrors.ErrServiceUnavailable (503),
-//   与 tingwu_client (D14) 行为对称——区分配置错与传输错。
+//
+//	与 tingwu_client (D14) 行为对称——区分配置错与传输错。
 func (c *HTTPClient) guardOutboundURL() error {
 	if c.baseURL == nil {
 		return fmt.Errorf("client 未初始化 baseURL: %w", apperrors.ErrServiceUnavailable)

@@ -3,13 +3,14 @@ package handlers
 import (
 	"fmt"
 
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // APIKeyHandler API密钥处理器
@@ -91,11 +92,9 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 
 	apiKey, fullKey, err := h.apiKeyService.CreateAPIKey(c.Request.Context(), userID, &req)
@@ -141,11 +140,9 @@ func (h *APIKeyHandler) ListAPIKeys(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
@@ -191,11 +188,9 @@ func (h *APIKeyHandler) GetAPIKey(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
@@ -235,11 +230,9 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
@@ -294,11 +287,9 @@ func (h *APIKeyHandler) DeleteAPIKey(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
@@ -355,11 +346,9 @@ func (h *APIKeyHandler) ToggleAPIKeyStatus(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
@@ -425,11 +414,9 @@ func (h *APIKeyHandler) ListUsageLogs(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
@@ -470,11 +457,9 @@ func (h *APIKeyHandler) GetUsageLogSummary(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 
 	if !ok {
-
 		c.AbortWithStatusJSON(401, gin.H{"error": "user not in context"})
 
 		return
-
 	}
 	isAdmin := middleware.GetIsAdmin(c)
 
