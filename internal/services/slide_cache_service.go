@@ -230,7 +230,8 @@ func (s *SlideCacheService) GetSlideImagePath(pptFileID uint, resolution, filena
 	recordingsPath := filepath.Clean(s.config.Storage.RecordingsPath)
 	resolvedPath := filepath.Clean(absolutePath)
 
-	if !filepath.HasPrefix(resolvedPath, recordingsPath) {
+	rel, relErr := filepath.Rel(recordingsPath, resolvedPath)
+	if relErr != nil || strings.HasPrefix(rel, "..") {
 		return "", fmt.Errorf("path traversal detected: %s", filename)
 	}
 

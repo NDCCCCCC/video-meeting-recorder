@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"go.uber.org/zap"
@@ -88,7 +89,7 @@ func TestOSSServiceUploadFileValidatesInputs(t *testing.T) {
 	svc, _ := NewOSSService(cfg, zap.NewNop())
 
 	// Test with disabled service
-	_, err := svc.UploadFile(nil, "/tmp/test.mp4", "test-key")
+	_, err := svc.UploadFile(context.Background(), "/tmp/test.mp4", "test-key")
 	if err == nil {
 		t.Error("UploadFile on disabled service should return error")
 	}
@@ -101,12 +102,12 @@ func TestOSSServiceUploadFileValidatesInputs(t *testing.T) {
 	cfg.AccessKeySecret = "test-key-secret"
 	svc, _ = NewOSSService(cfg, zap.NewNop())
 
-	_, err = svc.UploadFile(nil, "", "test-key")
+	_, err = svc.UploadFile(context.Background(), "", "test-key")
 	if err == nil {
 		t.Error("UploadFile should return error when localPath is empty")
 	}
 
-	_, err = svc.UploadFile(nil, "/tmp/test.mp4", "")
+	_, err = svc.UploadFile(context.Background(), "/tmp/test.mp4", "")
 	if err == nil {
 		t.Error("UploadFile should return error when objectKey is empty")
 	}
@@ -115,7 +116,7 @@ func TestOSSServiceUploadFileValidatesInputs(t *testing.T) {
 func TestOSSServiceDisabledUploadFails(t *testing.T) {
 	cfg := &config.OSSConfig{Enabled: false}
 	svc, _ := NewOSSService(cfg, zap.NewNop())
-	_, err := svc.UploadFile(nil, "/tmp/test.mp4", "test-key")
+	_, err := svc.UploadFile(context.Background(), "/tmp/test.mp4", "test-key")
 	if err == nil {
 		t.Error("UploadFile on disabled service should return error")
 	}
@@ -124,7 +125,7 @@ func TestOSSServiceDisabledUploadFails(t *testing.T) {
 func TestOSSServiceDisabledDeleteFails(t *testing.T) {
 	cfg := &config.OSSConfig{Enabled: false}
 	svc, _ := NewOSSService(cfg, zap.NewNop())
-	err := svc.DeleteFile(nil, "test-key")
+	err := svc.DeleteFile(context.Background(), "test-key")
 	if err == nil {
 		t.Error("DeleteFile on disabled service should return error")
 	}
@@ -133,7 +134,7 @@ func TestOSSServiceDisabledDeleteFails(t *testing.T) {
 func TestOSSServiceDisabledLifecycleFails(t *testing.T) {
 	cfg := &config.OSSConfig{Enabled: false}
 	svc, _ := NewOSSService(cfg, zap.NewNop())
-	err := svc.SetLifecycleRule(nil, "rule-1", "prefix/", 1)
+	err := svc.SetLifecycleRule(context.Background(), "rule-1", "prefix/", 1)
 	if err == nil {
 		t.Error("SetLifecycleRule on disabled service should return error")
 	}

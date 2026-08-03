@@ -92,7 +92,7 @@ func (s *USBDeviceScanner) scanWindowsVideoDevices() ([]USBDeviceInfo, error) {
 	}
 
 	output := stdout.String()
-	if strings.TrimSpace(output) == "" || strings.TrimSpace(output) == "" {
+	if strings.TrimSpace(output) == "" {
 		// 空输出，尝试使用ffmpeg
 		return s.scanWindowsVideoDevicesFFmpeg()
 	}

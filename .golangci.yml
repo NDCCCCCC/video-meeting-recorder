@@ -10,19 +10,20 @@ output:
 linters:
   default: none
   enable:
-    # --- 持续生效（迁移到 v2.12.2 时基线 0 告警）---
+    # --- 持续生效（迁移到 v2.12.2 后基线 0 告警）---
     - govet
     - errorlint
     - misspell
+    - staticcheck
     - whitespace
     # --- 技术债 linter（历史积累告警，暂关闭，按计划逐个开启）---
     # TODO(tech-debt): 以下 linter 因 CI 此前受 golangci-lint 版本不兼容阻塞、
     # 从未真正运行过，首次基线（v2.12.2）存在历史告警。清理方法：
     #   1) 将 linter 加入上方 enable；2) `golangci-lint run` 修掉告警；3) 提交。
-    # 基线告警数：staticcheck ~20 · errcheck 135 · gosec 134 · unused 25
-    # · gocritic 20 · gocyclo 9 · prealloc 8 · cyclop 1 · errname 2
-    # · ineffassign 2 · unconvert 2
-    # 建议开启顺序：staticcheck → errcheck → gosec → unused → 其余。
+    # 剩余基线告警数：errcheck 135 · gosec 134 · unused 25 · gocritic 20
+    # · gocyclo 9 · prealloc 8 · cyclop 1 · errname 2 · ineffassign 2 · unconvert 2
+    # 建议开启顺序：errcheck → gosec → unused → 其余。
+    # (staticcheck 已于首轮清理开启，排除 ST1005——见 settings.staticcheck)
   settings:
     cyclop:
       max-complexity: 25
@@ -41,6 +42,10 @@ linters:
   exclusions:
     generated: lax
     rules:
+      # ST1005（error string 首字母大写）对中文 error message 误报——项目 error 以
+      # 中文+英文专有名词开头（如 "Python依赖..."、"Tingwu服务..."），专有名词大写正确。
+      - linters: [staticcheck]
+        text: 'ST1005'
       - linters:
           - cyclop
           - gocyclo

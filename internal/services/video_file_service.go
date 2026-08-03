@@ -108,7 +108,7 @@ func (s *VideoFileService) ListFiles(ctx context.Context, req *ListFilesRequest)
 	query := s.db.WithContext(ctx).Model(&models.VideoFile{}).Preload("Task")
 
 	// 应用筛选条件
-	s.applyFilters(query, req)
+	query = s.applyFilters(query, req)
 
 	// 统计总数和总大小
 	stats, err := s.getStats(query)
@@ -183,7 +183,7 @@ func (s *VideoFileService) getStats(query *gorm.DB) (*statsResult, error) {
 }
 
 // applyFilters 应用筛选条件
-func (s *VideoFileService) applyFilters(query *gorm.DB, req *ListFilesRequest) {
+func (s *VideoFileService) applyFilters(query *gorm.DB, req *ListFilesRequest) *gorm.DB {
 	if req.Keyword != "" {
 		query = query.Where("file_name LIKE ? OR file_path LIKE ?",
 			"%"+req.Keyword+"%", "%"+req.Keyword+"%")
@@ -246,6 +246,8 @@ func (s *VideoFileService) applyFilters(query *gorm.DB, req *ListFilesRequest) {
 			query = query.Where("created_at < ?", endTime)
 		}
 	}
+
+	return query
 }
 
 // parseDate 解析日期字符串
@@ -1683,7 +1685,7 @@ func (s *VideoFileService) addFileToZip(zipWriter *zip.Writer, file *models.Vide
 		Name:   zipPath,
 		Method: zip.Deflate, // 使用压缩
 	}
-	header.SetModTime(time.Now())
+	header.Modified = time.Now()
 
 	// 创建ZIP写入器
 	writer, err := zipWriter.CreateHeader(header)

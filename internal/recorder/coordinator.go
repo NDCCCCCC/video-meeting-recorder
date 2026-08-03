@@ -232,13 +232,11 @@ func (c *SimpleRecordingCoordinator) monitorProcessWithKey(processKey string, cm
 		taskCopy        *models.VideoRecordingTask
 		huaweiCopy      *models.InputConfig
 	)
-	if exists {
+	if exists && process != nil {
 		process.Status = "stopped"
-		if process != nil {
-			shouldReconnect = process.ShouldReconnect
-			taskCopy = process.Task
-			huaweiCopy = process.HuaweiConfig
-		}
+		shouldReconnect = process.ShouldReconnect
+		taskCopy = process.Task
+		huaweiCopy = process.HuaweiConfig
 	}
 	c.mu.Unlock()
 
@@ -760,9 +758,7 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 			normalized = normalized[2:]
 		}
 		// 去除开头的 /（如果转换后产生）
-		if strings.HasPrefix(normalized, "/") {
-			normalized = normalized[1:]
-		}
+		normalized = strings.TrimPrefix(normalized, "/")
 		return normalized
 	}
 

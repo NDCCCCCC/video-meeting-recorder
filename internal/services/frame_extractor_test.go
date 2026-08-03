@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -109,7 +110,7 @@ func TestExtractFramesInvalidVideo(t *testing.T) {
 	defer extractor.CleanupTempDir(outputDir)
 
 	// Try to extract from non-existent video
-	_, err := extractor.ExtractFrames(nil, "/nonexistent/video.mp4", outputDir, 1.0)
+	_, err := extractor.ExtractFrames(context.Background(), "/nonexistent/video.mp4", outputDir, 1.0)
 	if err == nil {
 		t.Error("Expected error for non-existent video file")
 	}
