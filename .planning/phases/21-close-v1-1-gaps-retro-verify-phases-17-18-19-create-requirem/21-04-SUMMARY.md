@@ -166,6 +166,17 @@ All 15 `<verify>` checks from 21-04-PLAN.md passed:
 - Every 19-SUMMARY high-level deliverable maps to a REQ-19-* ID (4/4)
 - Every 20-01/20-05 PLAN frontmatter REQ-20-* ID is present (11/11, incl. deferred REQ-20-typed-kind from 20-CONTEXT D-01.1)
 
+## Self-Check: PASSED
+
+- `.planning/REQUIREMENTS.md` exists on disk (251 lines, commit `695b4fe`) — FOUND
+- `.planning/phases/21-close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem/21-04-SUMMARY.md` exists (commit `a00a1a3`) — FOUND
+- Plan task commit `695b4fe` (`docs(21): create REQUIREMENTS.md — v1.1 REQ-ID traceability`) on main — FOUND
+- SUMMARY metadata commit `a00a1a3` (`docs(21-04): complete REQUIREMENTS.md plan`) on main — FOUND
+- STATE/ROADMAP metadata commit `69720a0` on main — FOUND
+- All 15 plan `<verify>` automated checks PASS (see "Verification Evidence" section above)
+- All 13 plan `<acceptance_criteria>` PASS (covered by the 15 verify checks; 1:1 mapping)
+- Reverse assertion PASS: commit `695b4fe` contains ONLY `.planning/REQUIREMENTS.md` — no business code, no `docs/audits/` mutation, no other `.planning/` files affected
+
 ---
 
 *Phase: 21-close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem*
