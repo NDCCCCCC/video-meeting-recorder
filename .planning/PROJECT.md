@@ -98,7 +98,7 @@ This document evolves at phase transitions and milestone boundaries.
 ## Milestone Status
 
 - **v1.0** — 已交付归档（phase 01-14，产品功能完整）
-- **v1.1 文件管理与编辑增强** — 全部 phase 完成（17 后端代码审查 56 项修复 / 18 凭据静态加密 SEC-003b SM4-GCM / 19 ctx 全量级联 + SEC-004 jti + STYLE-001 error / 20 HandleError 收敛 / 21 v1.1 过程缺口闭环）。Phase 21 (is_last_phase) 已关闭 `v1.1-MILESTONE-AUDIT.md` 的 5 项过程缺口（REQUIREMENTS.md 建成 + phase 17/18/19 retro-VERIFICATION + auth_handler.go:57 规范化），里程碑可重审诚实归档为 `passed`。下一步：`/gsd:complete-milestone` 归档 v1.1，或 `/gsd:new-milestone` 规划下一里程碑。
+- **v1.1 文件管理与编辑增强** — 全部 phase 完成（17 后端代码审查 56 项修复 / 18 凭据静态加密 SEC-003b SM4-GCM / 19 ctx 全量级联 + SEC-004 jti + STYLE-001 error / 20 HandleError 收敛 / 21 v1.1 过程缺口闭环 / 22 审计 tech debt 收尾）。Phase 22 (is_last_phase) 关闭 `v1.1-MILESTONE-AUDIT.md` 剩余 tech debt：重新生成 `docs/errors.md`（SYNC_OK，footer=16）+ 回填 phase 17/18/19/21 的 Nyquist VALIDATION.md（§Nyquist Compliance MISSING→present）+ 翻转 phase 20 VALIDATION.md 签核（nyquist_compliant/wave_0_complete→true，6/6 sign-off，honest verification 经 20-VERIFICATION 10/10 独立佐证）。里程碑可重审诚实归档为 `passed`。下一步：`/gsd:complete-milestone` 归档 v1.1，或 `/gsd:new-milestone` 规划下一里程碑。
 
 ---
-*Last updated: 2026-08-03 after Phase 21 (v1.1 milestone process-gap closure, is_last_phase)*
+*Last updated: 2026-08-03 after Phase 22 (v1.1 audit tech-debt closure, is_last_phase)*
