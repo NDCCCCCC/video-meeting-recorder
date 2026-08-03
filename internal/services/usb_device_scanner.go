@@ -557,7 +557,7 @@ func (s *USBDeviceScanner) isDeviceInUse(devicePath string) bool {
 	if err != nil {
 		return true
 	}
-	file.Close()
+	_ = file.Close()
 	return false
 }
 

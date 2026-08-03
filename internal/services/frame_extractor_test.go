@@ -34,7 +34,7 @@ func TestCreateTempDir(t *testing.T) {
 	}
 
 	// Cleanup
-	os.RemoveAll(tempDir)
+	_ = os.RemoveAll(tempDir)
 }
 
 // TestCleanupTempDir tests that temp directories are removed
@@ -107,7 +107,7 @@ func TestExtractFramesInvalidVideo(t *testing.T) {
 
 	baseDir := os.TempDir()
 	outputDir, _ := extractor.CreateTempDir(baseDir, 789)
-	defer extractor.CleanupTempDir(outputDir)
+	defer func() { _ = extractor.CleanupTempDir(outputDir) }()
 
 	// Try to extract from non-existent video
 	_, err := extractor.ExtractFrames(context.Background(), "/nonexistent/video.mp4", outputDir, 1.0)

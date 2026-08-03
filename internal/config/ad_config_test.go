@@ -39,12 +39,12 @@ func TestADConfig_DefaultValues(t *testing.T) {
 func TestADConfig_EnvironmentVariablePassword(t *testing.T) {
 	// Setup
 	testPassword := "test_ad_password_123"
-	os.Setenv("AD_PASSWORD", testPassword)
-	defer os.Unsetenv("AD_PASSWORD")
+	_ = os.Setenv("AD_PASSWORD", testPassword)
+	defer func() { _ = os.Unsetenv("AD_PASSWORD") }()
 
 	v := viper.New()
 	v.SetDefault("auth.ad.password", "")
-	v.BindEnv("auth.ad.password", "AD_PASSWORD")
+	_ = v.BindEnv("auth.ad.password", "AD_PASSWORD")
 
 	// Expected: Password loaded from environment variable
 	// TODO: Load configuration with environment variable binding

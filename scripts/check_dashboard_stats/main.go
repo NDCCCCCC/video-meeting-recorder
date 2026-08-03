@@ -30,14 +30,14 @@ import (
 
 func main() {
 	logger, _ := zap.NewProduction()
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// in-memory sqlite — no dependency on project db file
 	sqlDB, err := sql.Open("sqlite", "file::memory:?cache=shared")
 	if err != nil {
 		log.Fatalf("sql.Open: %v", err)
 	}
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	db, err := gorm.Open(sqlite.New(sqlite.Config{Conn: sqlDB}), &gorm.Config{})
 	if err != nil {

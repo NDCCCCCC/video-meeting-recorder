@@ -203,7 +203,7 @@ func (s *Service) CheckIPRestriction(ctx context.Context, user *models.User, cli
 		}
 		// Log validation failure to audit trail per D-14
 		if s.auditLogger != nil {
-			s.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
+			_ = s.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
 				UserID:    user.ID,
 				Username:  user.Username,
 				Action:    models.ActionIPRestrictionFailed,
@@ -222,7 +222,7 @@ func (s *Service) CheckIPRestriction(ctx context.Context, user *models.User, cli
 	if !allowed {
 		// Log IP restriction failure to audit trail per D-14
 		if s.auditLogger != nil {
-			s.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
+			_ = s.auditLogger.LogOperation(context.Background(), &audit.LogOperationRequest{
 				UserID:    user.ID,
 				Username:  user.Username,
 				Action:    models.ActionIPRestrictionFailed,

@@ -382,7 +382,7 @@ func (c *HTTPClient) Post(ctx context.Context, actionID string, body interface{}
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w: %w", apperrors.ErrInternal, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

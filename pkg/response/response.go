@@ -45,7 +45,7 @@ func Success(w http.ResponseWriter, data interface{}) {
 		Data:    data,
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // Error 错误响应 (http.ResponseWriter)
@@ -74,7 +74,7 @@ func Error(w http.ResponseWriter, code int, message string) {
 		Data:    nil,
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // ErrorWithStatus 带自定义状态码的错误响应 (http.ResponseWriter)
@@ -88,7 +88,7 @@ func ErrorWithStatus(w http.ResponseWriter, httpStatus, code int, message string
 		Data:    nil,
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // Created 创建成功响应 (http.ResponseWriter)
@@ -102,7 +102,7 @@ func Created(w http.ResponseWriter, data interface{}) {
 		Data:    data,
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // ========== Gin框架兼容函数 ==========

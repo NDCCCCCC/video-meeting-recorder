@@ -45,7 +45,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func cleanupTestDB(t *testing.T, db *gorm.DB) {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
-	sqlDB.Close()
+	_ = sqlDB.Close()
 }
 
 // setupTestService 创建测试服务
@@ -876,7 +876,7 @@ func BenchmarkListFiles(b *testing.B) {
 			Page:     1,
 			PageSize: 20,
 		}
-		service.ListFiles(context.Background(), req)
+		_, _ = service.ListFiles(context.Background(), req)
 	}
 }
 

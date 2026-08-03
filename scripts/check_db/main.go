@@ -13,7 +13,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// 检查 SQLite 版本
 	var version string
@@ -28,7 +28,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	fmt.Println("\n当前 users 表结构:")
 	fmt.Println("────────────────────────────────────────────────────────────────────────")
@@ -86,7 +86,7 @@ func main() {
 
 		// 检查版本是否支持 DROP COLUMN (>= 3.35.0)
 		major, minor, patch := 0, 0, 0
-		fmt.Sscanf(version, "%d.%d.%d", &major, &minor, &patch)
+		_, _ = fmt.Sscanf(version, "%d.%d.%d", &major, &minor, &patch)
 		supportsDrop := (major > 3) || (major == 3 && minor >= 35)
 
 		if supportsDrop {

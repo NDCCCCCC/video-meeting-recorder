@@ -132,7 +132,7 @@ func (h *FileHandler) Download(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	// 获取文件信息用于设置响应头
 	// 注意：这里需要将 reader 转换为可Seek的接口或使用临时文件
@@ -261,7 +261,7 @@ func (h *FileHandler) ShareDownload(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.DataFromReader(200, -1, "application/octet-stream", reader, nil)

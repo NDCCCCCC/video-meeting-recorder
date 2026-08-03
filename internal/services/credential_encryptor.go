@@ -383,7 +383,7 @@ func (e *CredentialEncryptor) countColumnByVersion(ctx context.Context, db *gorm
 	if err != nil {
 		return counts, fmt.Errorf("countColumnByVersion: 扫描 %s.%s 失败: %w", table, column, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var v string
@@ -448,7 +448,7 @@ func (e *CredentialEncryptor) CountByVersion(ctx context.Context, db *gorm.DB) (
 	if err != nil {
 		return nil, fmt.Errorf("CountByVersion: 扫描 system_settings[auth.ad.password] 失败: %w", err)
 	}
-	defer adRows.Close()
+	defer func() { _ = adRows.Close() }()
 	for adRows.Next() {
 		var v string
 		if err := adRows.Scan(&v); err != nil {

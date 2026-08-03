@@ -235,7 +235,7 @@ func (s *FileService) Upload(ctx context.Context, userID uint, req *UploadReques
 
 	if err := s.db.WithContext(ctx).Create(uploadedFile).Error; err != nil {
 		// 回滚上传
-		s.defaultDriver.Delete(ctx, result.FilePath)
+		_ = s.defaultDriver.Delete(ctx, result.FilePath)
 		return nil, fmt.Errorf("保存文件记录失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
@@ -577,7 +577,7 @@ func detectFileMIME(file *multipart.FileHeader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	head := make([]byte, 512)
 	n, err := io.ReadFull(src, head)
@@ -619,7 +619,7 @@ func (s *FileService) calculateSHA256(file *multipart.FileHeader) (string, error
 	if err != nil {
 		return "", err
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	return calculateSHA256Reader(src)
 }

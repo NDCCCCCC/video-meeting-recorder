@@ -134,7 +134,7 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 // @Router /api/v1/apikeys [get]
 func (h *APIKeyHandler) ListAPIKeys(c *gin.Context) {
 	var req services.ListAPIKeysRequest
-	c.ShouldBindQuery(&req)
+	_ = c.ShouldBindQuery(&req)
 	req.Page, req.PageSize = normalizePagination(req.Page, req.PageSize)
 
 	userID, ok := middleware.GetUserID(c)
@@ -408,7 +408,7 @@ func (h *APIKeyHandler) ListUsageLogs(c *gin.Context) {
 	}
 
 	var req services.ListUsageLogsRequest
-	c.ShouldBindQuery(&req)
+	_ = c.ShouldBindQuery(&req)
 	req.Page, req.PageSize = normalizePagination(req.Page, req.PageSize)
 
 	userID, ok := middleware.GetUserID(c)

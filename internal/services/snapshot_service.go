@@ -205,7 +205,7 @@ func (s *SnapshotService) GenerateSnapshot(ctx context.Context, taskID, createdB
 	if err := copyFile(task.MKVFilePath, tempMKV); err != nil {
 		return nil, fmt.Errorf("复制录制文件失败: %w", err)
 	}
-	defer os.Remove(tempMKV) // Clean up temp MKV after conversion
+	defer func() { _ = os.Remove(tempMKV) }() // Clean up temp MKV after conversion
 
 	// 6. Convert temp MKV to MP4 with incremental offset (D-15)
 	outputMP4 := filepath.Join(tempDir, filename)
@@ -298,13 +298,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	// Read from source in chunks (allows reading partial files being written to)
 	bufPtr := snapshotCopyBufPool.Get().(*[]byte)

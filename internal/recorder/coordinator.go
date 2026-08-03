@@ -358,7 +358,7 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 
 	// 关闭旧的日志文件
 	if process.logFile != nil {
-		process.logFile.Close()
+		_ = process.logFile.Close()
 	}
 
 	// 创建新的录制进程
@@ -470,7 +470,7 @@ func (c *SimpleRecordingCoordinator) startFFmpegProcess(cmd *exec.Cmd, outputPat
 	)
 
 	if err := cmd.Start(); err != nil {
-		logFile.Close()
+		_ = logFile.Close()
 		return nil, fmt.Errorf("启动FFmpeg进程失败: %w: %w", apperrors.ErrFFmpegFailed, err)
 	}
 
@@ -559,7 +559,7 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 			if process != nil && process.Status == "running" {
 				process.CancelFunc()
 				if process.logFile != nil {
-					process.logFile.Close()
+					_ = process.logFile.Close()
 				}
 				stoppedCount++
 			}
@@ -570,7 +570,7 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 	if process, ok := c.processes[fmt.Sprintf("%d", taskID)]; ok && process.Status == "running" {
 		process.CancelFunc()
 		if process.logFile != nil {
-			process.logFile.Close()
+			_ = process.logFile.Close()
 		}
 		stoppedCount++
 	}

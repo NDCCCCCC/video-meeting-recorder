@@ -77,7 +77,7 @@ func main() {
 		fmt.Printf("Failed to create cert file: %v\n", err)
 		os.Exit(1)
 	}
-	defer certOut.Close()
+	defer func() { _ = certOut.Close() }()
 	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
 		fmt.Printf("Failed to write cert: %v\n", err)
 		os.Exit(1)
@@ -89,7 +89,7 @@ func main() {
 		fmt.Printf("Failed to create key file: %v\n", err)
 		os.Exit(1)
 	}
-	defer keyOut.Close()
+	defer func() { _ = keyOut.Close() }()
 	privBytes, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
 		fmt.Printf("Failed to marshal private key: %v\n", err)

@@ -150,7 +150,7 @@ func (a *LocalAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAdd
 
 	// 11. Audit log
 	if a.auditLogger != nil {
-		a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
+		_ = a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
 			UserID:    user.ID,
 			Username:  user.Username,
 			Action:    models.ActionLogin,
@@ -236,7 +236,7 @@ func (a *LocalAuthenticator) checkIPRestrictions(ctx context.Context, user *mode
 		}
 		// Log validation failure to audit trail
 		if a.auditLogger != nil {
-			a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
+			_ = a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
 				UserID:    user.ID,
 				Username:  user.Username,
 				Action:    models.ActionIPRestrictionFailed,
@@ -252,7 +252,7 @@ func (a *LocalAuthenticator) checkIPRestrictions(ctx context.Context, user *mode
 	if !allowed {
 		// Log IP restriction failure to audit trail
 		if a.auditLogger != nil {
-			a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
+			_ = a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
 				UserID:    user.ID,
 				Username:  user.Username,
 				Action:    models.ActionIPRestrictionFailed,
@@ -275,7 +275,7 @@ func (a *LocalAuthenticator) logLoginFailure(ctx context.Context, username, ipAd
 	if a.auditLogger == nil {
 		return
 	}
-	a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
+	_ = a.auditLogger.LogOperation(ctx, &audit.LogOperationRequest{
 		Username:  username,
 		Action:    models.ActionLogin,
 		Module:    models.ModuleUser,

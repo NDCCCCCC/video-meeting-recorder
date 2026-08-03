@@ -1555,9 +1555,9 @@ func (s *VideoFileService) BatchDownloadFiles(ctx context.Context, ids []uint, u
 					zap.Any("recover", r), zap.Stack("stack"))
 			}
 		}()
-		defer pw.Close()
+		defer func() { _ = pw.Close() }()
 		zipWriter := zip.NewWriter(pw)
-		defer zipWriter.Close()
+		defer func() { _ = zipWriter.Close() }()
 
 		for _, file := range validFiles {
 			folder := s.getFileFolder(file)
@@ -1603,7 +1603,7 @@ func (s *VideoFileService) addFileToZip(zipWriter *zip.Writer, file *models.Vide
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// 创建ZIP内文件路径
 	zipPath := filepath.Join(folder, filepath.Base(file.FilePath))

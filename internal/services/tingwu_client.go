@@ -146,7 +146,7 @@ func (c *TingwuClient) SubmitTask(ctx context.Context, fileURL string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("提交任务请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -188,7 +188,7 @@ func (c *TingwuClient) GetStatus(ctx context.Context, taskID string) (*TingwuTas
 	if err != nil {
 		return nil, fmt.Errorf("查询状态请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("查询状态失败: HTTP %d: %w", resp.StatusCode, apperrors.ErrTranscriptionFailed)
@@ -221,7 +221,7 @@ func (c *TingwuClient) GetResult(ctx context.Context, taskID string) (*TingwuTas
 	if err != nil {
 		return nil, fmt.Errorf("获取结果请求失败: %w: %w", apperrors.ErrTranscriptionFailed, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("获取结果失败: HTTP %d: %w", resp.StatusCode, apperrors.ErrTranscriptionFailed)

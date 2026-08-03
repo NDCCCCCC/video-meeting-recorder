@@ -135,7 +135,7 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	defer fileHandle.Close()
+	defer func() { _ = fileHandle.Close() }()
 
 	// 获取文件信息
 	fileInfo, err := fileHandle.Stat()
@@ -412,7 +412,7 @@ func (h *VideoFileHandler) BatchDownloadFiles(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
-	defer resp.Reader.Close()
+	defer func() { _ = resp.Reader.Close() }()
 
 	// 设置响应头
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", resp.Filename))

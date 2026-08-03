@@ -11,6 +11,7 @@ linters:
   default: none
   enable:
     # --- 持续生效（基线 0 告警）---
+    - errcheck
     - govet
     - errorlint
     - misspell
@@ -21,10 +22,10 @@ linters:
     # TODO(tech-debt): 以下 linter 因 CI 此前受 golangci-lint 版本不兼容阻塞、
     # 从未真正运行过，首次基线（v2.12.2）存在历史告警。清理方法：
     #   1) 将 linter 加入上方 enable；2) `golangci-lint run` 修掉告警；3) 提交。
-    # 剩余基线告警数：errcheck ~100 · gosec 134 · gocritic 20 · gocyclo 9
-    # · prealloc 8 · cyclop 1 · errname 2 · ineffassign 2 · unconvert 2
-    # 建议开启顺序：errcheck → gosec → 其余。
-    # (staticcheck、unused 已清理开启)
+    # 剩余基线告警数：gosec 134 · gocritic 20 · gocyclo 9 · prealloc 8
+    # · cyclop 1 · errname 2 · ineffassign 2 · unconvert 2
+    # 建议开启顺序：gosec → 其余。
+    # (staticcheck、unused、errcheck 已清理开启)
   settings:
     cyclop:
       max-complexity: 25

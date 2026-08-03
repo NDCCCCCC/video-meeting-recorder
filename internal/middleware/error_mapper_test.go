@@ -23,7 +23,7 @@ func TestErrorMapper_MapsUnwrittenError(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/tasks/999", nil)
 
 	// 模拟 handler 记录错误但未写响应。
-	c.Error(errors.ErrNotFound)
+	_ = c.Error(errors.ErrNotFound)
 
 	mw(c)
 
@@ -39,7 +39,7 @@ func TestErrorMapper_MapsUnknownErrorTo500(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/x", nil)
 
-	c.Error(errStr("weird internal failure"))
+	_ = c.Error(errStr("weird internal failure"))
 
 	mw(c)
 
@@ -58,7 +58,7 @@ func TestErrorMapper_NoOpWhenWritten(t *testing.T) {
 	// handler 已写入响应。
 	c.String(http.StatusOK, "handled inline")
 	originalBody := w.Body.String()
-	c.Error(errors.ErrInternal) // 即使有未处理错误，也不应覆盖已有响应。
+	_ = c.Error(errors.ErrInternal) // 即使有未处理错误，也不应覆盖已有响应。
 
 	mw(c)
 

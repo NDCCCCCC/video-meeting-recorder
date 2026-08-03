@@ -83,7 +83,7 @@ func createTestSlideImage(t *testing.T, path string, width, height int) {
 
 	file, err := os.Create(path)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Write a simple JPEG header (mock)
 	_, err = file.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0}) // JPEG SOI

@@ -78,7 +78,7 @@ func (v *VideoFile) Delete() error {
 	}
 	// 删除缩略图
 	if v.ThumbnailPath != nil {
-		os.Remove(*v.ThumbnailPath)
+		_ = os.Remove(*v.ThumbnailPath)
 	}
 	return nil
 }

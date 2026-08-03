@@ -69,7 +69,7 @@ func (s *OSSService) UploadFile(ctx context.Context, localPath, objectKey string
 	if err != nil {
 		return "", fmt.Errorf("打开本地文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	fileInfo, err := file.Stat()
 	if err != nil {

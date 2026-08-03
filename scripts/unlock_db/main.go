@@ -15,7 +15,7 @@ func main() {
 		fmt.Printf("无法打开数据库: %v\n", err)
 		return
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// 执行 checkpoint 来完成 WAL 事务
 	_, err = db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")

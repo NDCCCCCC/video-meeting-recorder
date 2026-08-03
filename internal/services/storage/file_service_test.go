@@ -52,7 +52,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func cleanupTestDB(t *testing.T, db *gorm.DB) {
 	sqlDB, err := db.DB()
 	assert.NoError(t, err)
-	sqlDB.Close()
+	_ = sqlDB.Close()
 }
 
 // NewTestFileService 创建测试文件服务
@@ -118,7 +118,7 @@ func TestLocalStorageDriver(t *testing.T) {
 		assert.Equal(t, content, downloadedContent)
 
 		// 显式关闭 reader 以释放文件句柄（特别是在 Windows 上）
-		reader.Close()
+		_ = reader.Close()
 
 		// 删除文件
 		err = driver.Delete(ctx, "uploads/test.txt")
@@ -275,7 +275,7 @@ func TestFileServiceShare(t *testing.T) {
 		reader, filename, err := service.GetShareDownload(ctx, token, "")
 		assert.NoError(t, err)
 		assert.Equal(t, "share.txt", filename)
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 
 		downloadedContent, err := io.ReadAll(reader)
 		assert.NoError(t, err)
@@ -310,7 +310,7 @@ func TestFileServiceShare(t *testing.T) {
 		reader, filename, err := service.GetShareDownload(ctx, token, "password123")
 		assert.NoError(t, err)
 		assert.Equal(t, "protected.txt", filename)
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 
 		downloadedContent, err := io.ReadAll(reader)
 		assert.NoError(t, err)

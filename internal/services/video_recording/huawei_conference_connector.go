@@ -75,14 +75,14 @@ func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, tas
 	}
 
 	if err := c.manager.SafeCallConference(ctx, configID, callReq); err != nil {
-		c.unlockTerminal(ctx, config.ID) // 释放锁
+		_ = c.unlockTerminal(ctx, config.ID) // 释放锁
 		return fmt.Errorf("呼叫会议失败: %w", err)
 	}
 
 	// 5. 等待连接确认
 	waitTimeout := 30 * time.Second
 	if err := c.manager.WaitForConnection(ctx, configID, task.ConferenceNumber, config.TerminalNumber, waitTimeout); err != nil {
-		c.unlockTerminal(ctx, config.ID)
+		_ = c.unlockTerminal(ctx, config.ID)
 		return fmt.Errorf("等待连接失败: %w", err)
 	}
 

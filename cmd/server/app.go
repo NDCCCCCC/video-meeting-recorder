@@ -1260,7 +1260,7 @@ func (a *MinimalApp) Stop(ctx context.Context) error {
 	if a.db != nil {
 		sqlDB, _ := a.db.DB()
 		if sqlDB != nil {
-			sqlDB.Close()
+			_ = sqlDB.Close()
 		}
 	}
 
@@ -1348,7 +1348,7 @@ func (a *MinimalApp) checkPort(addr string) error {
 	if err != nil {
 		return err
 	}
-	ln.Close()
+	_ = ln.Close()
 	return nil
 }
 
@@ -1485,7 +1485,7 @@ func (a *MinimalApp) registerFrontendRoutes() {
 			serveFile(c, staticFS, "index.html")
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		// 检查是否是目录
 		stat, err := file.Stat()
@@ -1509,7 +1509,7 @@ func serveFile(c *gin.Context, fs http.FileSystem, name string) {
 		c.String(http.StatusNotFound, "File not found")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	stat, err := file.Stat()
 	if err != nil {

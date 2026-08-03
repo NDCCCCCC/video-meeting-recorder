@@ -178,7 +178,7 @@ func (m *AuditMiddleware) AuditLogin(c *gin.Context) {
 		req.Status = models.StatusSuccess
 	}
 
-	m.auditService.LogOperation(c.Request.Context(), req)
+	_ = m.auditService.LogOperation(c.Request.Context(), req)
 }
 
 // AuditLogout 审计登出操作
@@ -211,5 +211,5 @@ func (m *AuditMiddleware) AuditLogout(c *gin.Context) {
 		req.Username = name
 	}
 
-	m.auditService.LogOperation(c.Request.Context(), req)
+	_ = m.auditService.LogOperation(c.Request.Context(), req)
 }

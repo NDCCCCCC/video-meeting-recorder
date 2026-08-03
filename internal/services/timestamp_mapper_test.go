@@ -32,7 +32,7 @@ func TestTimestampMapper_GetTimestampMap(t *testing.T) {
 			name: "Returns cached timestamp map on second call",
 			setup: func(mapper *TimestampMapper) {
 				// First call should populate cache
-				mapper.GetTimestampMap(context.Background(), 1)
+				_, _ = mapper.GetTimestampMap(context.Background(), 1)
 			},
 			videoFileID: 1,
 			expectError: false,

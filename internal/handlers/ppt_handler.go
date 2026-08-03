@@ -978,7 +978,7 @@ func (h *PPThandler) CapturedPreviewHandler(c *gin.Context) {
 
 	// Serve file and clean up
 	defer func() {
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 	}()
 
 	c.File(tempFile)

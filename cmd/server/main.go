@@ -26,7 +26,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// SEC-001: 生产环境启动时强制校验 SM4/HLS Token 密钥（缺失或 < 32 字符则 logger.Fatal 退出）。
 	cfg.ValidateProductionSecrets(logger)

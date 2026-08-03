@@ -293,7 +293,7 @@ func setupDBBackedHLS(t *testing.T) *HLSToken {
 	t.Cleanup(func() {
 		sqlDB, _ := db.DB()
 		if sqlDB != nil {
-			sqlDB.Close()
+			_ = sqlDB.Close()
 		}
 	})
 	h := NewHLSTokenWithDB(testSecret(), 5*time.Minute, db, zap.NewNop())

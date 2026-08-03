@@ -71,7 +71,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	}
 	// STYLE-008: nil 防御——connectAD 失败时 conn 为 nil，defer Close 会 panic
 	if conn != nil {
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 	}
 
 	// Step 2: Bind as admin to search for user
@@ -171,7 +171,7 @@ func (a *ADAuthenticator) Login(ctx context.Context, req *LoginRequest, ipAddres
 	a.db.WithContext(ctx).Save(localUser)
 
 	// Step 9: Create session
-	a.tokenService.CreateSession(localUser.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt)
+	_ = a.tokenService.CreateSession(localUser.ID, tokenPair.AccessToken, ipAddress, userAgent, tokenPair.ExpiresAt)
 
 	a.logger.Info("AD user logged in", zap.String("username", req.Username), zap.Uint("user_id", localUser.ID))
 
@@ -213,7 +213,7 @@ func (a *ADAuthenticator) connectAD() (*ldap.Conn, error) {
 func (a *ADAuthenticator) parseLDAPEntry(entry *ldap.Entry) *ADUser {
 	userAccountControl := uint32(0)
 	if attr := entry.GetAttributeValue("userAccountControl"); attr != "" {
-		fmt.Sscanf(attr, "%d", &userAccountControl)
+		_, _ = fmt.Sscanf(attr, "%d", &userAccountControl)
 	}
 
 	return &ADUser{
@@ -398,7 +398,7 @@ func (a *ADAuthenticator) LookupUser(username string) (*ADUserLookupResult, erro
 	}
 	// STYLE-008: nil 防御——connectAD 失败时 conn 为 nil，defer Close 会 panic
 	if conn != nil {
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 	}
 
 	// Bind as admin to search for user

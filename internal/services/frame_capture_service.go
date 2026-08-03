@@ -137,12 +137,12 @@ func (s *FrameCaptureService) CaptureFrameToBytes(ctx context.Context, videoPath
 	data, err := os.ReadFile(tempFile)
 	if err != nil {
 		// Clean up temp file on error
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 		return nil, "", fmt.Errorf("failed to read captured frame: %w", err)
 	}
 
 	// Clean up temp file after reading
-	os.Remove(tempFile)
+	_ = os.Remove(tempFile)
 
 	s.logger.Debug("Frame captured to bytes",
 		zap.Float64("timestamp", timestamp),
