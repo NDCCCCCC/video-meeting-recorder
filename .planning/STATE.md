@@ -41,10 +41,10 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 ## Current Position
 
 Phase: 21 (close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem) — EXECUTING
-Plan: 3 of 5 (21-01, 21-02 done)
+Plan: 4 of 5 (21-01, 21-02, 21-03 done)
 **Phase:** 21
-**Status:** Executing Phase 21 — Plan 21-02 (retro-verify phase 18) landed on main (commit d76d47d); 21-01 done (2c679f2)
-**Progress:** [████░░░░░░░] 40%
+**Status:** Executing Phase 21 — Plan 21-03 (retro-verify phase 19) landed on main (commit 4b52463); 21-01 done (2c679f2); 21-02 done (d76d47d)
+**Progress:** [█████░░░░░░] 60%
 
 ### Phase Summary
 
@@ -412,6 +412,12 @@ Phase 17 完成。无即时 follow-up。可选：
 ---
 
 ## Decisions Log
+
+### 2026-08-03 - Phase 19 retro-verify directory reconstructed + VERIFICATION.md (Phase 21 Plan 03)
+
+**Decision:** 重建 `.planning/phases/19-ctx-cascade-sec-004-style-001-error/` (目录被早期清理/从未建但代码已全部落地 main); 复制 root `19-SUMMARY.md` + `docs/audits/phase-19-D5-D21-summary.md` 入目录 (原版均不动 per D-02.6); 新写 `19-VERIFICATION.md` via goal-backward retro-verify, status: passed (10/10 must-haves), 220 行, 41 VERIFIED 标记.
+**Rationale:** v1.1-MILESTONE-AUDIT.md gaps_found 标记 phase 19 "missing-directory" — 实际交付物全部落地 main (11 wave commits W0-W6 + 21 D1-D21 sentinel 化 commits = 32+ commits 总计, 新增 24 sentinels, 迁移 ~356 散点). 证据基于 root 19-SUMMARY (33KB) + D5-D21 summary (8.5KB) + 32+ commits + STATE.md §Phase 19 + 实时代码 (42 WithContext sites in video_recording_task_service.go + HLSJtiRecord AutoMigrate at app.go:340 + 42 knownSentinels slice in mapping.go) 多源交叉 (per 21-CONTEXT D-02.5). body 为准 per Pitfall 2: 32+ commits 全列 (W0 ad7d0a8 / W1 6fbdad4 / W2 cacc294 / W3 213710c..a6c21b6 / W4 9a00cbe+2281927 / W5 34b07f7+e2b0b6b+7828fc3+7a5a1cc+1ae6be0+b08255d / W6 3d171de / D1 20ee289 / D2 3b2d41f / D3 1f0ec35 / D4 f4291f5 / docs 6edb772), 不只信 frontmatter 的 W2 终点 cacc294. 4 项 19-SUMMARY §DEFERRED 中 3 项实际在 D1-D4 收尾阶段交付 (D2 adapter 合并 / D3 hls_jti_records 表 / D4 errors 包增量), 仅 video_file_service:891 strings.Contains 真正 deferred (低价值诊断日志).
+**Outcome:** commit `4b52463` on main (仅含 .planning/phases/19-*/ 内 4 文件: .gitkeep + 19-SUMMARY.md 副本 + phase-19-D5-D21-summary.md 副本 + 19-VERIFICATION.md, 未触业务代码); v1.1-MILESTONE-AUDIT.md 的 "phase-19 missing-directory" gap 可标记关闭. 后续 21-04 (REQUIREMENTS.md, wave 2 — depends_on [21-01,21-02,21-03] 已就绪) + 21-05 (auth:57 fix) 继续.
 
 ### 2026-08-03 - Phase 18 retro-verify directory reconstructed + VERIFICATION.md (Phase 21 Plan 02)
 
