@@ -100,19 +100,6 @@ func NewSM4TokenService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *SM
 	}
 }
 
-// cleanupExpiredCache 清理过期的缓存条目（应在后台定期调用）
-func (s *SM4TokenService) cleanupExpiredCache() {
-	s.tokenCacheMutex.Lock()
-	defer s.tokenCacheMutex.Unlock()
-
-	now := time.Now()
-	for token, entry := range s.tokenCache {
-		if now.After(entry.ExpiresAt) {
-			delete(s.tokenCache, token)
-		}
-	}
-}
-
 // deriveSM4Key 将 32 字符 hex 格式的 SM4 secret 直接解码为 16 字节原始密钥。
 // SEC-011: 不再使用 SHA256 截断派生（entropy 损失）；16 字节等价 32 hex 字符，
 // 对齐前端 sm4.ts 的密钥格式约定。调用方应保证 secret 为 32 hex 字符（SEC-001

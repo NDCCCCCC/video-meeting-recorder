@@ -34,38 +34,6 @@ func NewHuaweiConferenceConnector(
 	}
 }
 
-// huaweiDBAdapter 实现 huawei.DBInterface 接口
-//
-// Deprecated: 这是**不解密**华为密码的 DB 适配器——直接返回 models.InputConfig.Password
-// 字段(DB 中已是 Phase 18 信封格式 SM4:<version>:<base64>),在生产环境会让 manager 拿到
-// 密文形态的密码,导致华为认证失败。
-//
-// 生产路径请改用 cmd/server/app.go 中的 huaweiDBAdapter 实现,它通过 CredentialEncryptor
-// 解密后再传给 manager。本 adapter 保留仅为旧测试与 unit test,请勿在新代码中构造。
-// 若被实例化,将仅在内部 logger 留下提示(此处无 logger 字段,故已在 godoc 上明确警示)。
-type huaweiDBAdapter struct {
-	db *gorm.DB
-}
-
-func (a *huaweiDBAdapter) GetHuaweiConfig(configID uint) (*huawei.HuaweiConfigDB, error) {
-	var config models.InputConfig
-	if err := a.db.First(&config, configID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("输入配置不存在: ID=%d", configID)
-		}
-		return nil, err
-	}
-
-	return &huawei.HuaweiConfigDB{
-		ID:             config.ID,
-		Server:         config.Server,
-		Port:           config.Port,
-		Username:       config.Username,
-		Password:       config.Password, // Deprecated: 此处直接返回密文形态;生产请用 cmd/server huaweiDBAdapter。
-		TerminalNumber: config.TerminalNumber,
-	}, nil
-}
-
 // ConnectToConference 连接到华为会议
 // 执行流程：1. 加载配置 2. 锁定终端 3. 呼叫会议 4. 等待连接确认
 func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, task *models.VideoRecordingTask) error {

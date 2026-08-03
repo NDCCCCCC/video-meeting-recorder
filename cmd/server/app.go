@@ -26,7 +26,6 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/handlers"
 	huaweiapi "github.com/NDCCCCCC/video-meeting-recorder/internal/huawei"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/migrations"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/recorder"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
@@ -368,37 +367,6 @@ func (a *MinimalApp) widenPasswordColumns() error {
 	if err := a.db.Migrator().AlterColumn(&models.InputConfig{}, "StreamPassword"); err != nil {
 		return fmt.Errorf("alter stream_password column: %w", err)
 	}
-	return nil
-}
-
-// runCustomMigrations 执行自定义迁移（SQL迁移）
-func (a *MinimalApp) runCustomMigrations() error {
-	a.logger.Info("正在执行自定义数据库迁移...")
-
-	// 获取注册的迁移
-	migrations := migrations.GetRegisteredMigrations()
-
-	// 执行每个迁移的 Up 方法
-	for _, m := range migrations {
-		migrationName := ""
-		if mi, ok := m.(interface{ Name() string }); ok {
-			migrationName = mi.Name()
-		}
-
-		a.logger.Info("执行迁移", zap.String("migration", migrationName))
-
-		if mu, ok := m.(interface{ Up(*gorm.DB) error }); ok {
-			if err := mu.Up(a.db); err != nil {
-				a.logger.Error("迁移失败",
-					zap.String("migration", migrationName),
-					zap.Error(err),
-				)
-				return fmt.Errorf("migration %s failed: %w", migrationName, err)
-			}
-			a.logger.Info("迁移成功", zap.String("migration", migrationName))
-		}
-	}
-
 	return nil
 }
 

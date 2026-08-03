@@ -1046,48 +1046,6 @@ func (s *VideoRecordingTaskService) UpdateRecordingPaths(ctx context.Context, id
 	return nil
 }
 
-// validateConfigTypes 验证配置类型（不能多选同类型）
-func (s *VideoRecordingTaskService) validateConfigTypes(ctx context.Context, configIDs []uint) error {
-	if len(configIDs) == 0 {
-		return nil
-	}
-
-	var configs []models.InputConfig
-	if err := s.db.WithContext(ctx).Where("id IN ?", configIDs).Limit(1000).Find(&configs).Error; err != nil {
-		return err
-	}
-
-	usbCount := 0
-	streamCount := 0
-
-	for _, config := range configs {
-		// 判断配置类型：有USB设备配置或启用了流媒体
-		hasUSB := config.USBCameraDevice != "" || config.USBAudioDevice != ""
-		hasStream := config.StreamEnabled && config.StreamURL != ""
-
-		if hasUSB {
-			usbCount++
-		}
-		if hasStream {
-			streamCount++
-		}
-
-		// 既不是USB也不是流媒体的配置
-		if !hasUSB && !hasStream {
-			return fmt.Errorf("配置 %s 未配置USB设备或流媒体", config.Name)
-		}
-	}
-
-	if usbCount > 1 {
-		return apperrors.ErrInvalidInput
-	}
-	if streamCount > 1 {
-		return apperrors.ErrInvalidInput
-	}
-
-	return nil
-}
-
 // GetInputConfig 获取输入配置（供调度器使用）
 // GetInputConfig 获取输入配置
 //

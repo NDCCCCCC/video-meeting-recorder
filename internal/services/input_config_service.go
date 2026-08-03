@@ -443,20 +443,6 @@ func (s *InputConfigService) ValidateConfig(config *models.InputConfig) error {
 	return nil
 }
 
-// validateHuaweiFields 验证华为终端必填字段
-func (s *InputConfigService) validateHuaweiFields(config *models.InputConfig) error {
-	if config.Server == "" {
-		return fmt.Errorf("华为服务器地址不能为空: %w", apperrors.ErrInvalidInput)
-	}
-	if config.Username == "" {
-		return fmt.Errorf("用户名不能为空: %w", apperrors.ErrInvalidInput)
-	}
-	if config.TerminalNumber == "" {
-		return fmt.Errorf("终端号码不能为空: %w", apperrors.ErrInvalidInput)
-	}
-	return nil
-}
-
 // TestConnection 测试输入配置连接
 func (s *InputConfigService) TestConnection(ctx context.Context, req *TestConnectionRequest) error {
 	s.logger.Info("测试输入配置连接",
@@ -548,17 +534,4 @@ func (s *InputConfigService) testStreamConnection(ctx context.Context, req *Test
 
 	s.logger.Info("流媒体连接测试成功")
 	return nil
-}
-
-// testHuaweiConnection 测试华为终端连接
-func (s *InputConfigService) testHuaweiConnection(req *TestConnectionRequest) error {
-	s.logger.Info("测试华为终端连接",
-		zap.String("server", req.Server),
-		zap.String("terminal", req.TerminalNumber),
-	)
-
-	// TODO: 实现实际的华为API连接测试
-	// 这应该与现有的 HuaweiConferenceConnector 集成
-
-	return fmt.Errorf("华为终端连接测试尚未实现: %w", apperrors.ErrServiceUnavailable)
 }
