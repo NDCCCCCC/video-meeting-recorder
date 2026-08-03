@@ -54,10 +54,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		// errors.Is 链自动识别 sentinel → 对应 401/403/404/503/500 状态码。
 		//   - ErrADUserNotRegistered → 403 (R-3 要求)。
 		//   - ErrADConfigError / ErrADUnreachable → 503 (R-4: 500 → 503)。
-		if response.HandleError(c, err) {
-			return
-		}
-		// 兜底：unknown error（response.HandleError 已写 500）。
+		response.HandleError(c, err)
 		return
 	}
 
