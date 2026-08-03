@@ -53,7 +53,7 @@
 | 18. 凭据静态加密 + 密钥轮换 (SEC-003b) | v1.1 | 1/1 | Complete | 2026-07-31 |
 | 19. ctx 全量级联 + SEC-004 replay + STYLE-001 error | v1.1 | 4/4 | Complete | 2026-07-31 |
 | 20. 错误处理统一收敛 + sentinel 体系增强 | v1.1 | 5/5 | Complete    | 2026-08-01 |
-| 21. Close v1.1 gaps — retro-verify 17/18/19 + REQUIREMENTS.md + auth:57 fix | v1.1 | 5/5 | Complete | 2026-08-03 |
+| 21. Close v1.1 gaps — retro-verify 17/18/19 + REQUIREMENTS.md + auth:57 fix | v1.1 | 5/5 | Complete    | 2026-08-03 |
 
 ## Backlog
 
@@ -178,7 +178,7 @@ Plans:
 **Goal:** 关闭 v1.1 里程碑审计 (v1.1-MILESTONE-AUDIT.md gaps_found) 发现的 5 项过程缺口 (REQUIREMENTS.md 缺失 + phase 17/18/19 未验证 + auth_handler.go:57 WARNING), 使里程碑可在重审时诚实归档为 passed. 代码库本身已功能完整 (go test -race ./... 全绿), 本阶段不改业务功能 (仅 1 行 auth_handler.go 规范化), 只补齐过程产物.
 **Requirements**: P21-R1..P21-R5 (派生自 21-CONTEXT.md D-01..D-05; phase_req_ids=null by design — REQUIREMENTS.md 本身是交付物之一, 定义 v1.1 REQ-ID 体系)
 **Depends on:** Phase 20
-**Plans:** 5 plans
+**Plans:** 5/5 plans complete
 
 Plans:
 
