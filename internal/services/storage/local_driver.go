@@ -24,7 +24,9 @@ type LocalStorageDriver struct {
 // NewLocalStorageDriver 创建本地存储驱动
 func NewLocalStorageDriver(basePath, baseURL string, logger *zap.Logger) *LocalStorageDriver {
 	// 确保目录存在
-	os.MkdirAll(basePath, 0o755)
+	if err := os.MkdirAll(basePath, 0o755); err != nil {
+		logger.Warn("创建存储目录失败", zap.String("path", basePath), zap.Error(err))
+	}
 
 	return &LocalStorageDriver{
 		basePath: basePath,
@@ -40,7 +42,7 @@ func (d *LocalStorageDriver) Upload(ctx context.Context, file *multipart.FileHea
 	if err != nil {
 		return nil, fmt.Errorf("打开文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	// 创建目标文件
 	fullPath := filepath.Join(d.basePath, path)
@@ -53,7 +55,7 @@ func (d *LocalStorageDriver) Upload(ctx context.Context, file *multipart.FileHea
 	if err != nil {
 		return nil, fmt.Errorf("创建文件失败: %w: %w", apperrors.ErrInternal, err)
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 
 	// 复制文件
 	if _, err := io.Copy(dst, src); err != nil {
@@ -129,7 +131,7 @@ func (d *LocalStorageDriver) Copy(ctx context.Context, srcPath, destPath string)
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	// 确保目标目录存在
 	dstDir := filepath.Dir(dst)
@@ -141,7 +143,7 @@ func (d *LocalStorageDriver) Copy(ctx context.Context, srcPath, destPath string)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	_, err = io.Copy(dstFile, srcFile)
 	return err

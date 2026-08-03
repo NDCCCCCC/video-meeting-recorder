@@ -272,7 +272,7 @@ func (s *PPTEditorService) CreateBackup(ctx context.Context, pptFileID uint) err
 	// Update database
 	if err := s.db.WithContext(ctx).Model(&pptFile).Update("backup_path", backupPath).Error; err != nil {
 		// Cleanup backup file if DB update fails
-		os.Remove(backupPath)
+		_ = os.Remove(backupPath)
 		return fmt.Errorf("failed to update backup path: %w", err)
 	}
 
@@ -513,7 +513,7 @@ func (s *PPTEditorService) loadImage(path string) (image.Image, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open image file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	img, _, err := image.Decode(file)
 	if err != nil {
@@ -528,13 +528,13 @@ func (s *PPTEditorService) copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	_, err = io.Copy(destFile, sourceFile)
 	return err
@@ -641,9 +641,9 @@ func (s *PPTEditorService) InsertCapturedFrame(ctx context.Context, pptFileID ui
 	slideCount, err := s.pptxGenerator.GeneratePPTX(ctx, allSlidePaths, outputPath)
 	if err != nil {
 		// Clean up captured frame on failure
-		os.Remove(framePath)
+		_ = os.Remove(framePath)
 		thumbnailPath := strings.Replace(framePath, "/fullsize/", "/thumbnails/", 1)
-		os.Remove(thumbnailPath)
+		_ = os.Remove(thumbnailPath)
 		return fmt.Errorf("failed to generate new PPTX: %w", err)
 	}
 
@@ -764,7 +764,7 @@ func (s *PPTEditorService) generateThumbnail(inputPath, outputPath string) error
 	if err != nil {
 		return fmt.Errorf("failed to open image: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	img, err := jpeg.Decode(file)
 	if err != nil {
@@ -796,7 +796,7 @@ func (s *PPTEditorService) generateThumbnail(inputPath, outputPath string) error
 	if err != nil {
 		return fmt.Errorf("failed to create thumbnail file: %w", err)
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	if err := jpeg.Encode(outFile, thumbnail, &jpeg.Options{Quality: 85}); err != nil {
 		return fmt.Errorf("failed to encode thumbnail: %w", err)
@@ -892,7 +892,7 @@ func (s *PPTEditorService) ReorderSlides(ctx context.Context, pptFileID uint, ne
 	if err := os.MkdirAll(tempDir, 0o755); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Copy slides to new positions in temp directory
 	// Note: newOrder is 0-based from frontend, and files are also 0-based (slide_000.jpg, slide_001.jpg, ...)

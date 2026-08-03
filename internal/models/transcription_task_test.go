@@ -182,7 +182,7 @@ func TestTranscriptionTask_SlideTimestamps(t *testing.T) {
 					{SlideNumber: 2, Timestamp: 15.5},
 					{SlideNumber: 3, Timestamp: 30.0},
 				}
-				task.SetSlideTimestamps(timestamps)
+				_ = task.SetSlideTimestamps(timestamps)
 			},
 			expectError: false,
 			validate: func(t *testing.T, task *TranscriptionTask) {
@@ -199,7 +199,7 @@ func TestTranscriptionTask_SlideTimestamps(t *testing.T) {
 					{SlideNumber: 1, Timestamp: 0.0},
 					{SlideNumber: 2, Timestamp: 15.5},
 				}
-				task.SetSlideTimestamps(timestamps)
+				_ = task.SetSlideTimestamps(timestamps)
 			},
 			expectError: true,
 			validate: func(t *testing.T, task *TranscriptionTask) {
@@ -212,8 +212,8 @@ func TestTranscriptionTask_SlideTimestamps(t *testing.T) {
 			name: "AddSlideTimestamp adds new timestamp",
 			task: &TranscriptionTask{},
 			setup: func(task *TranscriptionTask) {
-				task.AddSlideTimestamp(1, 0.0)
-				task.AddSlideTimestamp(2, 15.5)
+				_ = task.AddSlideTimestamp(1, 0.0)
+				_ = task.AddSlideTimestamp(2, 15.5)
 			},
 			expectError: false,
 			validate: func(t *testing.T, task *TranscriptionTask) {
@@ -230,8 +230,8 @@ func TestTranscriptionTask_SlideTimestamps(t *testing.T) {
 			name: "AddSlideTimestamp updates existing timestamp",
 			task: &TranscriptionTask{},
 			setup: func(task *TranscriptionTask) {
-				task.AddSlideTimestamp(1, 0.0)
-				task.AddSlideTimestamp(1, 5.5) // Update slide 1
+				_ = task.AddSlideTimestamp(1, 0.0)
+				_ = task.AddSlideTimestamp(1, 5.5) // Update slide 1
 			},
 			expectError: false,
 			validate: func(t *testing.T, task *TranscriptionTask) {
@@ -248,7 +248,7 @@ func TestTranscriptionTask_SlideTimestamps(t *testing.T) {
 					{SlideNumber: 1, Timestamp: 0.0},
 					{SlideNumber: -1, Timestamp: 10.0}, // Invalid
 				}
-				task.SetSlideTimestamps(timestamps)
+				_ = task.SetSlideTimestamps(timestamps)
 			},
 			expectError: false,
 			validate: func(t *testing.T, task *TranscriptionTask) {
@@ -267,7 +267,7 @@ func TestTranscriptionTask_SlideTimestamps(t *testing.T) {
 					{SlideNumber: 1, Timestamp: 0.0},
 					{SlideNumber: 2, Timestamp: -5.0}, // Invalid
 				}
-				task.SetSlideTimestamps(timestamps)
+				_ = task.SetSlideTimestamps(timestamps)
 			},
 			expectError: false,
 			validate: func(t *testing.T, task *TranscriptionTask) {
