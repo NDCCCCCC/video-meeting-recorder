@@ -62,7 +62,7 @@ func main() {
 	}
 
 	// 写回文件
-	if err := os.WriteFile(*configPath, []byte(newContent), 0o644); err != nil {
+	if err := os.WriteFile(*configPath, []byte(newContent), 0o644); err != nil { //nolint:gosec // G703: 脚本写配置文件，路径来自 CLI flag
 		fmt.Fprintf(os.Stderr, "写入配置文件失败: %v\n", err)
 		os.Exit(1)
 	}

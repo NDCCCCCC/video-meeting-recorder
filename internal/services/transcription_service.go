@@ -745,7 +745,7 @@ func (s *TranscriptionService) processCloudTranscription(ctx context.Context, ta
 	}
 
 	// Trigger OSS lifecycle cleanup (24h) per OSS-02
-	go func() {
+	go func() { //nolint:gosec // G118: 故意 fire-and-forget，OSS cleanup 不应随请求取消
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		ruleID := fmt.Sprintf("expire-transcription-%d", task.ID)

@@ -523,7 +523,7 @@ func grepCount(dir string, pattern *regexp.Regexp, excludeTests bool) int {
 		if excludeTests && strings.HasSuffix(name, "_test.go") {
 			return nil
 		}
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) //nolint:gosec // G122: 代码生成器在 Walk callback 读源文件，非生产路径
 		if err != nil {
 			return nil
 		}

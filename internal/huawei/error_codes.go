@@ -35,7 +35,7 @@ const (
 )
 
 // ErrorMessages 错误码对应的中文消息
-var ErrorMessages = map[int]string{
+var ErrorMessages = map[int]string{ //nolint:gosec // G101: 错误码→中文消息映射，非凭据
 	ErrCodeAuthFailed:           "认证失败，请检查用户名和密码",
 	ErrCodeSessionExpired:       "会话已过期，请重新登录",
 	ErrCodeSessionInvalid:       "会话无效",

@@ -1338,7 +1338,7 @@ func (a *MinimalApp) createRedirectHandler() http.Handler {
 		target := fmt.Sprintf("https://%s:%d%s", host, a.config.Server.HTTPSPort, r.RequestURI)
 
 		// 永久重定向到 HTTPS
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		http.Redirect(w, r, target, http.StatusMovedPermanently) //nolint:gosec // G710: HTTP→HTTPS 重定向标准模式，host 来自受信请求
 	})
 }
 
