@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: 文件管理与编辑增强
-status: milestone_complete
-last_updated: 2026-08-03T02:11:38.489Z
+status: executing
+last_updated: "2026-08-03T03:10:51.809Z"
 last_activity: 2026-08-03
 progress:
-  total_phases: 1
-  completed_phases: 0
-  total_plans: 5
-  completed_plans: 92
-  percent: 0
-stopped_at: Milestone complete (Phase 21 was final phase)
+  total_phases: 2
+  completed_phases: 1
+  total_plans: 11
+  completed_plans: 5
+  percent: 45
 ---
 
 # STATE.md - Project Memory
@@ -44,7 +43,7 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 Phase: 21 (close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem) — EXECUTING (5/5 plans landed on main; pending final metadata/state commit)
 Plan: Not started
 **Phase:** 21
-**Status:** Milestone complete
+**Status:** Ready to execute
 **Progress:** [██████████] 100%
 
 ### Phase Summary
@@ -142,6 +141,7 @@ Phase 17 完成。无即时 follow-up。可选：
 - Phase 21 added: Close v1.1 gaps — retro-verify phases 17/18/19 + create REQUIREMENTS.md + fix auth_handler.go:57 WARNING (driven by /gsd-audit-milestone gaps_found, 2026-08-01)
 
 ---
+- Phase 22 added: Address v1.1 audit tech debt: regenerate errors.md + backfill VALIDATION.md for 17/18/19/21
 
 ## Phase 19 — ctx 全量级联 + SEC-004 replay 修复 + STYLE-001 error 迁移
 

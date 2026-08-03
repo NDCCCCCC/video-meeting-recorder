@@ -192,3 +192,22 @@ Plans:
 **Wave 2** *(blocked on Wave 1: 21-01/02/03 落地 — REQUIREMENTS 引用其 VERIFICATION 路径作为验证证据)*
 
 - [x] 21-04-PLAN.md — Create .planning/REQUIREMENTS.md: v1.1 milestone (phase 17/18/19/20) REQ-ID 追溯表, 5 列结构 per D-03.3, 251 行, ~80 REQ-IDs (52 REQ-17 + 5 REQ-18 + 4 REQ-19 + 11 REQ-20), orphan=0, 跨 phase 兑现项显式标注 (SEC-003b→18 / PERF-003→19 / BUG-005→19 / HMAC-jti→19-D3), Out-of-scope phase 16 观察不裁定 — 1 commit (695b4fe) + SUMMARY (a00a1a3) on main
+
+
+### Phase 22: Address v1.1 audit tech debt: regenerate errors.md + backfill VALIDATION.md for 17/18/19/21
+
+**Goal:** Close v1.1 audit (v1.1-MILESTONE-AUDIT.md) tech debt: (1) regenerate docs/errors.md via go generate ./internal/errors/... so audit footer reflects current handler convergence state (current 16 ad-hoc branches; CI sync-check at .github/workflows/ci.yml:44-51 stays SYNC_OK); (2) backfill VALIDATION.md for phases 17/18/19/21 (Nyquist sampling contract retro-fitted from each phase VERIFICATION.md + SUMMARY.md), changing v1.1-MILESTONE-AUDIT.md §Nyquist Compliance 17/18/19 status from MISSING to present; (3) optional flip phase 20 VALIDATION.md frontmatter nyquist_compliant: false → true + sign-off checkboxes (only if all 6 honest verification items PASS). No production code changes, no new tests, no migration — pure process artifacts backfill.
+**Requirements**: TBD (phase_req_ids=null by design — process-closure phase does not introduce new REQ-IDs; operationalizes existing v1.1 ones)
+**Depends on:** Phase 21
+**Plans:** 6 plans
+
+Plans:
+
+**Wave 1** *(independent, parallel — no file overlap; process-only)*
+
+- [ ] 22-01-PLAN.md — Regenerate docs/errors.md via `go generate ./internal/errors/...`; CI sync-check stays SYNC_OK; single commit containing only docs/errors.md
+- [ ] 22-02-PLAN.md — Backfill `.planning/phases/17-56-p0-p1-p2/17-VALIDATION.md` retro-fitted from 17-VERIFICATION + 17-0[1-4]-SUMMARY (4 plans + housekeeping × 5 Per-Task rows; 12 test files + 3 cross-phase evidence Wave 0 checkboxes; 6 sign-off [x])
+- [ ] 22-03-PLAN.md — Backfill `.planning/phases/18-credential-static-encryption-sec-003b/18-VALIDATION.md` retro-fitted from 18-VERIFICATION + 18-SUMMARY (9 waves W1a..W4d + 1 post-audit 5d536ec × 10 Per-Task rows; 2 test files + 6 indirect + cross-phase Wave 0 checkboxes; 6 sign-off [x])
+- [ ] 22-04-PLAN.md — Backfill `.planning/phases/19-ctx-cascade-sec-004-style-001-error/19-VALIDATION.md` retro-fitted from 19-VERIFICATION + 19-SUMMARY + phase-19-D5-D21-summary (11 wave + 4 D1-D4 + 17 D5-D21 = 32+ Per-Task rows; 3 test files + 5 indirect + cross-phase Wave 0 checkboxes; 6 sign-off [x])
+- [ ] 22-05-PLAN.md — Backfill `.planning/phases/21-close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem/21-VALIDATION.md` retro-fitted from 21-VERIFICATION + 21-0[1-5]-SUMMARY (5 plans × 5 Per-Task rows; 4 retro-VERIFICATION + REQUIREMENTS + auth fix Wave 0 checkboxes; 6 sign-off [x])
+- [ ] 22-06-PLAN.md — (Optional) Flip `.planning/phases/20-handleerror-classify-convergence/20-VALIDATION.md` frontmatter nyquist_compliant: false → true + wave_0_complete: false → true + 6 sign-off checkboxes [ ] → [x] + Approval pending → approved, ONLY if all 6 sign-off items honest verification PASS
