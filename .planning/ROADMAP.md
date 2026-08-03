@@ -184,7 +184,7 @@ Plans:
 **Wave 1** *(独立, 可并行 — 无文件重叠)*
 
 - [x] 21-01-PLAN.md — Retro-verify phase 17: 写 .planning/phases/17-56-p0-p1-p2/17-VERIFICATION.md (目录已齐全仅缺 VERIFICATION; status=passed 7/7 must-haves; 跨 phase deferred 项去向显式标注) — 1 commit (2c679f2) on main, 17-VERIFICATION.md 179 lines, 31 VERIFIED 标记
-- [ ] 21-02-PLAN.md — Retro-verify phase 18: 重建 .planning/phases/18-credential-static-encryption-sec-003b/ 目录 + 复制 root 18-SUMMARY.md (root 原版不动) + 写 18-VERIFICATION.md (status=passed 11/11 must-haves; 5d536ec 显式标预存证据)
+- [x] 21-02-PLAN.md — Retro-verify phase 18: 重建 .planning/phases/18-credential-static-encryption-sec-003b/ 目录 + 复制 root 18-SUMMARY.md (root 原版不动) + 写 18-VERIFICATION.md (status=passed 11/11 must-haves; 9 wave commits W1a..W4d body 为准; 5d536ec 显式标预存证据 NOT phase 21 交付物) — 1 commit (d76d47d) on main, 18-VERIFICATION.md 174 lines, 39 VERIFIED 标记
 - [ ] 21-03-PLAN.md — Retro-verify phase 19: 重建 .planning/phases/19-ctx-cascade-sec-004-style-001-error/ 目录 + 复制 root 19-SUMMARY.md + docs/audits/phase-19-D5-D21-summary.md (原版均不动) + 写 19-VERIFICATION.md (status=passed 10/10 must-haves)
 - [ ] 21-05-PLAN.md — Fix internal/handlers/auth_handler.go:57: if HandleError { return }; return → HandleError(c, err); return (控制流等价论据, 非 always-returns-true); 既有 10 sub-tests 回归网; 单独 fix commit 与 docs 分离
 

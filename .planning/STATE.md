@@ -41,10 +41,10 @@ Phase 1: Video Splitting - Multi-point video splitting, recording snapshot, and 
 ## Current Position
 
 Phase: 21 (close-v1-1-gaps-retro-verify-phases-17-18-19-create-requirem) — EXECUTING
-Plan: 2 of 5 (21-01 done)
+Plan: 3 of 5 (21-01, 21-02 done)
 **Phase:** 21
-**Status:** Executing Phase 21 — Plan 21-01 (retro-verify phase 17) landed on main (commit 2c679f2)
-**Progress:** [██░░░░░░░░] 20%
+**Status:** Executing Phase 21 — Plan 21-02 (retro-verify phase 18) landed on main (commit d76d47d); 21-01 done (2c679f2)
+**Progress:** [████░░░░░░░] 40%
 
 ### Phase Summary
 
@@ -412,6 +412,12 @@ Phase 17 完成。无即时 follow-up。可选：
 ---
 
 ## Decisions Log
+
+### 2026-08-03 - Phase 18 retro-verify directory reconstructed + VERIFICATION.md (Phase 21 Plan 02)
+
+**Decision:** 重建 `.planning/phases/18-credential-static-encryption-sec-003b/` (目录被早期清理/从未建但代码已全部落地 main); 复制 root `18-SUMMARY.md` 入目录 (root 原版保持不动 per D-02.6); 新写 `18-VERIFICATION.md` via goal-backward retro-verify, status: passed (11/11 must-haves), 174 lines, 39 VERIFIED 标记.
+**Rationale:** v1.1-MILESTONE-AUDIT.md gaps_found 标记 phase 18 "missing-directory" — 实际交付物全部落地 main (9 wave commits W1a..W4d 共 9 个原子 commit + 1 post-audit 5d536ec). 证据基于 root 18-SUMMARY (21.7KB) + 10 commits + STATE.md §Phase 18 + 实时代码四源交叉 (per 21-CONTEXT D-02.4). body 为准 per Pitfall 2: 9 wave commits 全列 (W1a e6315ce / W1b 1dbb3b0 / W1c edaa4ae / W2 558f723 / W3 bd84fe2 / W4a 8796ca3 / W4b 3822497 / W4c a182cd6 / W4d 0c018f2), 不只信 frontmatter 的 W3 终点 bd84fe2. 5d536ec 显式标预存证据 (2026-08-02 commit 早于 phase 21 启动 2026-08-03, 不是 phase 21 交付物 per Pitfall 6).
+**Outcome:** commit `d76d47d` on main (仅含 .planning/phases/18-*/ 内 3 文件: .gitkeep + 18-SUMMARY.md 副本 + 18-VERIFICATION.md, 未触业务代码); v1.1-MILESTONE-AUDIT.md 的 "phase-18 missing-directory" gap 可标记关闭. 后续 21-03 (phase 19 retro-verify) + 21-04 (REQUIREMENTS.md) + 21-05 (auth:57 fix) 继续.
 
 ### 2026-08-03 - Phase 17 retro-verify VERIFICATION.md reconstructed (Phase 21 Plan 01)
 
