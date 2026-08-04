@@ -27,14 +27,14 @@
 | ErrInsufficientQuota | Sentinel | 429 | 12 |
 | ErrInternal | Sentinel | 500 | 108 |
 | ErrInvalidFileType | Sentinel | 400 | 5 |
-| ErrInvalidInput | Sentinel | 400 | 146 |
+| ErrInvalidInput | Sentinel | 400 | 141 |
 | ErrNotFound | Sentinel | 404 | 31 |
 | ErrPPTFileNotFound | Sentinel | 404 | 9 |
 | ErrPermissionNotFound | Sentinel | 404 | 5 |
 | ErrRoleInUse | Sentinel | 409 | 5 |
 | ErrRoleNameExists | Sentinel | 409 | 5 |
 | ErrRoleNotFound | Sentinel | 404 | 15 |
-| ErrServiceUnavailable | Sentinel | 503 | 18 |
+| ErrServiceUnavailable | Sentinel | 503 | 17 |
 | ErrSplitFailed | Sentinel | 500 | 8 |
 | ErrSystemAdminProtected | Sentinel | 403 | 6 |
 | ErrSystemRoleProtected | Sentinel | 403 | 8 |
