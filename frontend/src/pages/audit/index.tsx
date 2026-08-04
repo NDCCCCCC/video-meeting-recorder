@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { PageHeader } from '@ant-design/pro-layout'
-import { Space, Empty, Button } from 'antd'
+import { Space, Empty, Button, Typography } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { AuditTable } from './components/AuditTable'
 import { FilterBar } from './components/FilterBar'
@@ -55,7 +54,7 @@ export default function AuditLogsPage() {
 
   return (
     <div style={{ padding: 24, background: '#f0f2f5', minHeight: '100vh' }}>
-      <PageHeader title="审计日志" />
+      <Typography.Title level={3} style={{ marginTop: 0 }}>审计日志</Typography.Title>
       <div style={{ marginBottom: 16 }}>
         <Space size="middle">
           <FilterBar onFilter={handleFilter} onReset={handleReset} loading={loading} />

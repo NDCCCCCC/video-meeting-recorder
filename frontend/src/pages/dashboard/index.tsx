@@ -1,6 +1,6 @@
 // Dashboard main page
 
-import { PageHeader } from '@ant-design/pro-layout'
+import { Typography } from 'antd'
 import { m } from 'framer-motion'
 import { StatCards } from './components/StatCards'
 import { ChartsSection } from './components/ChartsSection'
@@ -15,7 +15,7 @@ export default function DashboardPage() {
   if (error) {
     return (
       <m.div variants={fadeIn} initial="hidden" animate="visible" style={{ padding: 24 }}>
-        <PageHeader title="管理员仪表板" />
+        <Typography.Title level={3} style={{ marginTop: 0 }}>管理员仪表板</Typography.Title>
         <div>加载失败: {error.message}</div>
       </m.div>
     )
@@ -24,7 +24,7 @@ export default function DashboardPage() {
   if (!stats) {
     return (
       <m.div variants={fadeIn} initial="hidden" animate="visible" style={{ padding: 24 }}>
-        <PageHeader title="管理员仪表板" />
+        <Typography.Title level={3} style={{ marginTop: 0 }}>管理员仪表板</Typography.Title>
         <div>加载中...</div>
       </m.div>
     )
@@ -50,7 +50,7 @@ export default function DashboardPage() {
       animate="visible"
       style={{ padding: 24, background: designTokens.colors.surface, minHeight: '100vh' }}
     >
-      <PageHeader title="管理员仪表板" />
+      <Typography.Title level={3} style={{ marginTop: 0 }}>管理员仪表板</Typography.Title>
       <QuickActions onRefresh={refresh} />
       <div style={{ marginBottom: 24 }}>
         <StatCards
