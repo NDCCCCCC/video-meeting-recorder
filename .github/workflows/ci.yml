@@ -223,6 +223,7 @@ jobs:
         run: sha256sum * > SHA256SUMS && cat SHA256SUMS
 
       - name: Create GitHub Release (draft)
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
@@ -236,6 +237,13 @@ jobs:
             dist/record-v2-darwin-amd64
             dist/record-v2-darwin-arm64
             dist/SHA256SUMS
+
+      - name: Report release URL
+        if: always()
+        run: |
+          echo "Release URL: ${{ steps.create_release.outputs.url }}"
+          echo "Release ID:  ${{ steps.create_release.outputs.id }}"
+          echo "Upload URL:  ${{ steps.create_release.outputs.upload_url }}"
 
   # ---------------------------------------------------------------------------
   # 汇总：所有 job 成功后输出
