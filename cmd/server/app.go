@@ -1522,10 +1522,33 @@ func serveFile(c *gin.Context, fs http.FileSystem, name string) {
 	c.Header("Content-Type", contentType)
 
 	// 设置缓存头
-	c.Header("Cache-Control", "public, max-age=3600")
+	c.Header("Cache-Control", cacheControlFor(name))
 
 	// 使用 http.ServeContent 服务文件
 	http.ServeContent(c.Writer, c.Request, name, stat.ModTime(), file)
+}
+
+// cacheControlFor 按静态资源类型返回缓存策略。
+//
+// Vite 产物是内容哈希的（assets/index-Dku1sN1D.js），可以永久缓存；
+// index.html 是唯一引用这些哈希名的入口，必须每次校验，否则发布新版本后
+// 浏览器会在 TTL 内继续按旧哈希名加载旧 bundle，表现为"代码改了但页面没变"。
+// 注意 embed.FS 的 ModTime 为零值，http.ServeContent 不会发 Last-Modified，
+// 因此 index.html 无法靠条件请求击穿缓存，只能不缓存。
+func cacheControlFor(name string) string {
+	name = strings.TrimPrefix(name, "/")
+
+	switch {
+	case strings.HasPrefix(name, "assets/"):
+		// 内容哈希产物：文件名变了才会请求新内容，可以永久缓存
+		return "public, max-age=31536000, immutable"
+	case strings.HasSuffix(strings.ToLower(name), ".html"):
+		// SPA 入口：必须每次拿最新的，才能拿到新的 asset 哈希名
+		return "no-cache, must-revalidate"
+	default:
+		// favicon 等无哈希的零散资源：短 TTL 折中
+		return "public, max-age=3600"
+	}
 }
 
 // getContentType 根据文件名获取 Content-Type

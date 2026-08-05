@@ -104,3 +104,28 @@ func TestHuaweiDBAdapter_ProductionDecrypts(t *testing.T) {
 	assert.NotContains(t, got.Password, "SM4:",
 		"返回值不应再含 envelope 前缀")
 }
+
+// TestCacheControlFor 验证静态资源缓存策略分流。
+// 回归背景：serveFile 曾对所有文件统一设 max-age=3600，含 index.html。
+// 由于 Vite 产物是内容哈希的，index.html 是唯一的缓存破除入口，缓存它会让
+// 浏览器在 TTL 内继续按旧哈希名加载旧 bundle，表现为"发了新版本但页面没变"。
+func TestCacheControlFor(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+		want string
+	}{
+		{"SPA 入口必须每次校验", "index.html", "no-cache, must-revalidate"},
+		{"带前导斜杠的入口同样不缓存", "/index.html", "no-cache, must-revalidate"},
+		{"大写扩展名也识别为 html", "INDEX.HTML", "no-cache, must-revalidate"},
+		{"内容哈希 JS 永久缓存", "assets/index-Dku1sN1D.js", "public, max-age=31536000, immutable"},
+		{"内容哈希 CSS 永久缓存", "/assets/index-uAopjGxH.css", "public, max-age=31536000, immutable"},
+		{"无哈希零散资源用短 TTL", "vite.svg", "public, max-age=3600"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, cacheControlFor(tt.file))
+		})
+	}
+}
