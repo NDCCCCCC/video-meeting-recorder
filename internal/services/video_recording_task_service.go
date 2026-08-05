@@ -104,6 +104,8 @@ type UpdateTaskRequest struct {
 	EndTime            *string `json:"end_time" binding:"omitempty"`   // RFC3339
 	PreJoinMinutes     *int    `json:"pre_join_minutes" binding:"omitempty,min=0,max=60"`
 	RecordDelayMinutes *int    `json:"record_delay_minutes" binding:"omitempty,min=0,max=60"`
+	// InputConfigIDs 同步任务-输入配置关联表。nil 表示不修改；非 nil（含空切片）表示同步为该列表。
+	InputConfigIDs *[]uint `json:"input_config_ids,omitempty"`
 }
 
 // attachTaskExtras PERF-001/PR-E: 把原本靠 GORM 链式 Preload 触发的 N+1 (1+3×N 次查询)
@@ -580,6 +582,72 @@ func (s *VideoRecordingTaskService) UpdateTask(ctx context.Context, id uint, req
 
 	if err := s.db.WithContext(ctx).Model(&task).Updates(updates).Error; err != nil {
 		return nil, nil, err
+	}
+
+	// 同步输入配置关联表（仅当请求中显式携带 input_config_ids；nil = 不动）
+	if req.InputConfigIDs != nil && !isRecording {
+		// 1. 删除该任务所有旧关联
+		if err := s.db.WithContext(ctx).
+			Where("task_id = ?", id).
+			Delete(&models.TaskInputConfig{}).Error; err != nil {
+			return nil, nil, fmt.Errorf("清除旧输入配置关联失败: %w: %w", apperrors.ErrInternal, err)
+		}
+
+		// 2. 按新列表插入（参照 CreateTask line 396-433 模式：确定 configType + 跳过空配置）
+		ids := *req.InputConfigIDs
+		for _, configID := range ids {
+			var config models.InputConfig
+			if err := s.db.WithContext(ctx).First(&config, configID).Error; err != nil {
+				s.logger.Warn("更新时加载输入配置失败，跳过关联",
+					zap.Uint("config_id", configID),
+					zap.Uint("task_id", id),
+					zap.Error(err),
+					response.SentinelField(err),
+				)
+				continue
+			}
+
+			var configType string
+			if config.HuaweiEnabled {
+				configType = models.ConfigTypeHuaweiAuto
+			} else if config.StreamEnabled && config.StreamURL != "" {
+				configType = models.ConfigTypeStream
+			} else if config.USBCameraDevice != "" || config.USBAudioDevice != "" {
+				configType = models.ConfigTypeUSB
+			} else {
+				s.logger.Warn("配置未指定任何输入源（华为/USB/流媒体），跳过",
+					zap.Uint("config_id", configID),
+					zap.String("config_name", config.Name),
+				)
+				continue
+			}
+
+			taskConfig := models.TaskInputConfig{
+				TaskID:        id,
+				InputConfigID: configID,
+				ConfigType:    configType,
+			}
+			if err := s.db.WithContext(ctx).Create(&taskConfig).Error; err != nil {
+				s.logger.Warn("更新时创建输入配置关联失败",
+					zap.Uint("config_id", configID),
+					zap.Uint("task_id", id),
+					zap.Error(err),
+					response.SentinelField(err),
+				)
+			}
+		}
+
+		// 3. 同步主 input_config_id 列（用于 IsValid 兼容检查；空切片时设为 nil）
+		var primaryConfigID *uint
+		if len(ids) > 0 {
+			primaryConfigID = &ids[0]
+		}
+		if err := s.db.WithContext(ctx).
+			Model(&models.VideoRecordingTask{}).
+			Where("id = ?", id).
+			Update("input_config_id", primaryConfigID).Error; err != nil {
+			return nil, nil, fmt.Errorf("同步主输入配置ID失败: %w: %w", apperrors.ErrInternal, err)
+		}
 	}
 
 	// 重新加载数据

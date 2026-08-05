@@ -1,4 +1,5 @@
 import { ApiResponse } from './auth'
+import type { InputConfig } from './input-config'
 
 // 任务列表请求参数
 export interface TaskListParams {
@@ -39,8 +40,10 @@ export interface VideoRecordingTask {
   pre_join_minutes: number
   record_delay_minutes: number
   conference_number: string
-  huawei_config_id: number
-  huawei_config?: HuaweiConfig
+  // 输入配置（旧字段 input_config_id 兼容保留；Phase 13 后多配置请使用 task_input_configs）
+  input_config_id?: number | null
+  input_config?: InputConfig
+  task_input_configs?: TaskInputConfig[]
   status: VideoRecordingTaskStatus
   recording_file: string
   recording_duration: number // 秒
@@ -51,11 +54,13 @@ export interface VideoRecordingTask {
   conference_record_id?: number
 }
 
-// 华为配置（简要）
-export interface HuaweiConfig {
+// 任务-输入配置关联（来自 task_input_configs 表）
+export interface TaskInputConfig {
   id: number
-  name: string
-  site_url: string
+  task_id: number
+  input_config_id: number
+  config_type: string
+  created_at: string
 }
 
 // 任务创建者
@@ -85,6 +90,8 @@ export interface UpdateTaskRequest {
   end_time?: string // RFC3339
   pre_join_minutes?: number
   record_delay_minutes?: number
+  // 输入配置 ID 列表；后端 nil = 不动、非 nil = 同步为该列表（包含空数组 = 清空）
+  input_config_ids?: number[]
 }
 
 // API 响应类型扩展

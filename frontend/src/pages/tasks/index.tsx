@@ -195,6 +195,13 @@ export default function TaskManagement() {
     (task: VideoRecordingTask | null = null) => {
       setEditingTask(task)
       if (task) {
+        // 输入配置回显：
+        //   - 首选 task.task_input_configs（Phase 13 后的多对多关联，由 backend attachTaskExtras 填充）
+        //   - 兜底 task.input_config_id（旧字段 / 兼容单配置场景）
+        //   - 表单 form field 名仍是 huawei_config_id（与 TaskFormModal / handleSubmit 保持一致）
+        const taskInputConfigIds =
+          task.task_input_configs?.map((tic) => tic.input_config_id) ??
+          (task.input_config_id != null ? [task.input_config_id] : [])
         form.setFieldsValue({
           name: task.name,
           description: task.description,
@@ -203,7 +210,7 @@ export default function TaskManagement() {
           pre_join_minutes: task.pre_join_minutes,
           record_delay_minutes: task.record_delay_minutes,
           conference_number: task.conference_number,
-          huawei_config_id: task.huawei_config_id,
+          huawei_config_id: taskInputConfigIds,
         })
       } else {
         form.resetFields()
@@ -266,6 +273,7 @@ export default function TaskManagement() {
               end_time: requestData.end_time,
               pre_join_minutes: requestData.pre_join_minutes,
               record_delay_minutes: requestData.record_delay_minutes,
+              input_config_ids: requestData.input_config_ids,
             }
 
         await taskApi.updateTask(editingTask.id, req)
