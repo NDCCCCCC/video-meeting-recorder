@@ -60,7 +60,11 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // sourcemap: false — frontend 被打进 Go 二进制(//go:embed dist),
+    // sourcemap 文件(~16 MB)随 dist 全部嵌入,推高 binary 体积且运行时无价值
+    // (Go 端栈追踪走 .gopclntab,无需 sourcemap;前端 DevTools 反查在生产环境用不到)。
+    // 若 DevTools 需要原始源码,临时改回 true 调试用,生产构建前恢复 false。
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
