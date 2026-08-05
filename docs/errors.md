@@ -25,7 +25,7 @@
 | ErrForbidden | Sentinel | 403 | 24 |
 | ErrForeignKeyConstraint | Sentinel | 500 | 15 |
 | ErrInsufficientQuota | Sentinel | 429 | 12 |
-| ErrInternal | Sentinel | 500 | 108 |
+| ErrInternal | Sentinel | 500 | 110 |
 | ErrInvalidFileType | Sentinel | 400 | 5 |
 | ErrInvalidInput | Sentinel | 400 | 141 |
 | ErrNotFound | Sentinel | 404 | 31 |
