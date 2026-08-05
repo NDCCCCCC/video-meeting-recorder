@@ -818,8 +818,17 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 
 	// 如果是 m3u8 文件，需要重写内容，在分段 URL 中添加 token
 	if strings.HasSuffix(filePath, ".m3u8") {
+		// SEC-005/HLS-TTL-FIX: 为 .ts 分段 URL 注入**新签发**的 token,而非用入参 token。
+		// 入参 token 仅用于本请求的合法性验证（上方 Verify 已通过），但其 TTL 即将到期；
+		// 若直接用于 .ts URL,客户端拉 .ts 时可能已过期 → 401 "token expired"。
+		// 每次 .m3u8 请求都 Generate() 一个 fresh token,保证接下来 30s 内 .ts 拉取均有效。
+		// 下次 .m3u8 轮询（hls.js liveMaxLatencyDuration ~10s）会再次触发本路径续签。
+		freshToken := h.hlsToken.Generate(id, claims.UserID)
+
 		// PERF-005/FU-6: cache 命中判定:key = "taskID|filePath",value = mtime + rewritten content.
-		// mtime 未变则直接返回(并发请求/refresh renewal 共享)。
+		// mtime 未变则直接返回(并发请求/refresh renewal 共享)。注:cache 中的 content
+		// 注入的是上次请求时的 freshToken,而 freshToken TTL=30s 与 m3u8 mtime 变更间隔(~10s)
+		// 同量级,所以 cache HIT 命中的 .ts URL 仍处于 TTL 窗口内,客户端可正常拉取。
 		stat, statErr := os.Stat(fullPath)
 		if statErr != nil {
 			response.GinError(c, response.CodeInternalError, "读取文件失败")
@@ -842,8 +851,8 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 			return
 		}
 
-		// 重写 m3u8 内容：在分段 URL 中添加 token 参数
-		rewrittenContent := h.rewriteM3U8WithToken(string(content), token, id)
+		// 重写 m3u8 内容：在分段 URL 中添加 fresh token 参数
+		rewrittenContent := h.rewriteM3U8WithToken(string(content), freshToken, id)
 		rewrittenBytes := []byte(rewrittenContent)
 		// 仅 cache 当 m3u8 在合理范围（< 64KB）— 太大留给路径上的 CDN。
 		if len(rewrittenBytes) < 64*1024 {
