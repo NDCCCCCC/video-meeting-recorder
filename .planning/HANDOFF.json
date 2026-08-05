@@ -52,8 +52,24 @@
     {"decision": "v2 H 信号用现有 HuaweiClient.GetMailboxData() 复用，仅扩展 8 个 struct 字段", "rationale": "零新增基础设施、零新增依赖；改造成本极低（~3.5h phase A）", "status": "v2"},
     {"decision": "v2 MSG 推送方案暂不接（Phase 2.1）", "rationale": "项目零 websocket 基础设施；30s 轮询已满足业务时效", "status": "v2"},
     {"decision": "v2 取消原 Phase 2.1 计划（华为 API 加速信号）", "rationale": "v2 已将主信号提前到 Phase 1", "status": "v2"},
-    {"decision": "v2 新增 Phase 2.2 候选：T.140 字幕信号", "rationale": "isSupportT140=1 && isOpenT140=1 时作为辅助活动信号（避免纯静音会议被 A+B 误杀）", "status": "v2"}
+    {"decision": "v2 新增 Phase 2.2 候选：T.140 字幕信号", "rationale": "isSupportT140=1 && isOpenT140=1 时作为辅助活动信号（避免纯静音会议被 A+B 误杀）", "status": "v2"},
+    {"decision": "v2 后续发现（不修改设计文档）：MSG_END_CONFTIME_IND + MSG_END_CONF_IND 推送消息（消息接口→会议控制类子章节 6707ecbb）", "rationale": "MSG_END_CONFTIME_IND = 会议自然到点结束指示（Param2=结束时间分），MSG_END_CONF_IND = 结束会议指示（Param2=会议结束原因）。两者都比 MSG_CONF_STATE_CHANGE 更精确。但所有 MSG_* 推送都需先订阅 WEB_SubscribeMsgAPI + HTTP 长轮询（项目零基础设施），v2 主信号 H 维持 30s 轮询方案。", "status": "v2_NOTE_FOR_PHASE_2", "user_decision": "仅记录在 HANDOFF，不改设计文档"}
   ],
+  "additional_findings_post_v2": {
+    "date": "2026-08-06",
+    "chapter": "消息接口 → 会议控制类 (6707ecbb)",
+    "end_signals_found": [
+      {"msg": "MSG_END_CONF_RSP", "auto_push": false, "fields": "Param1=主动/非主动挂断; Param2=成功/失败; Data=失败原因", "trigger": "响应 WEB_EndConfAPI 主席主动结束"},
+      {"msg": "MSG_END_CONF_IND", "auto_push": false, "fields": "Data=会议结束原因", "trigger": "WEB_EndConfAPI 结束会议后推送"},
+      {"msg": "MSG_END_CONFTIME_IND", "auto_push": false, "fields": "Param2=结束时间(分钟)", "trigger": "会议时间到点自然结束指示"},
+      {"msg": "MSG_HANGUP_SITE_RSP", "auto_push": false, "fields": "Param2=成功/失败; Data=失败原因", "trigger": "响应 WEB_ConfHangupSiteAPI 挂断会场"}
+    ],
+    "other_useful_signals": [
+      {"msg": "MSG_UPDATE_SITELIST", "trigger": "会场列表/状态变化（添加/删除/呼叫/挂断）", "use": "可作 A+B 兜底辅助信号"},
+      {"msg": "MSG_AUXTOKEN_STATUS", "auto_push": true, "trigger": "辅流令牌状态变化", "use": "判断会议是否还在用辅流（PPT 演示）"}
+    ],
+    "user_decision": "仅记录不改文档（v2 主信号 H 维持 30s 轮询方案）"
+  },
   "uncommitted_files": [
     "docs/plans/2026-08-05-smart-meeting-recording-end-design.md (v2 修订)",
     ".planning/.continue-here.md (v2 状态更新)",
