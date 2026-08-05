@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-05T15:32:41Z",
+  "phase": null,
+  "phase_name": "smart-meeting-recording-end-brainstorm",
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "context": "brainstorming_research_design",
+  "completed_tasks": [
+    {"id": 1, "name": "联网搜索 ffmpeg silencedetect / -progress / WebRTC / RTSP 字节流", "status": "done"},
+    {"id": 2, "name": "Explore agent 扫描 internal/ 找会议录制/调度/视频流代码", "status": "done"},
+    {"id": 3, "name": "用户确认主信号 / 延时策略 / 容忍阈值（首轮决策）", "status": "done"},
+    {"id": 4, "name": "生成设计文档 docs/plans/2026-08-05-smart-meeting-recording-end-design.md", "status": "done"},
+    {"id": 5, "name": "分析 AND 条件漏判/误判场景", "status": "done"},
+    {"id": 6, "name": "验证华为 API 参与者信号（结论：不可行——硬件 SMC 无参与者列表）", "status": "done"},
+    {"id": 7, "name": "验证 info.Status 字段（结论：GetConferenceInfo 是 stub，永远空字符串）", "status": "done"},
+    {"id": 8, "name": "联网验证 TE40 HTTP API（结论：WebFetch 被拦截；用户贴官方文档证实无会议级结束接口）", "status": "done"},
+    {"id": 9, "name": "agent-browser 打开 TE40 V600R019C00 第 1 章", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 10, "name": "用户手动列出 TE40 文档左侧其他章节（会场状态类/系统信息类等）", "status": "blocked_on_human"},
+    {"id": 11, "name": "agent-browser 继续浏览剩余章节找\"会议级状态/参会者\"接口", "status": "pending"},
+    {"id": 12, "name": "用户最终确认信号组合（A/B/C/D 选项）", "status": "blocked_on_human"},
+    {"id": 13, "name": "更新设计文档 §3/§4/§5/§14（修订三重 AND 或退回双重 AND）", "status": "pending"},
+    {"id": 14, "name": "git add -f .planning/ commit as WIP", "status": "pending"}
+  ],
+  "blockers": [
+    {"description": "TE40 文档其他章节未浏览，无法 100% 确认是否有\"会议级状态/参会者列表/会议结束\"接口", "type": "technical", "workaround": "用户手动列出章节名后我用 agent-browser 继续"},
+    {"description": "用户尚未在最终 4 选项（A/B/C/D）中确认信号组合", "type": "human_action", "workaround": null}
+  ],
+  "human_actions_pending": [
+    {"action": "手动浏览 TE40 文档左侧导航，列出所有章节名给我", "context": "agent-browser 当前停在第 1 章 '会议、呼叫类'，文档还有别的章节可能含会议状态/参会者接口", "blocking": true},
+    {"action": "在 4 选项（A/B/C/D）中确认信号组合", "context": "用户已 reject 一次 AskUserQuestion，未明确选哪个方向", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "主信号 silencedetect + 文件大小停滞（双重 AND）", "rationale": "用户首轮确认"},
+    {"decision": "延时 30min × 4 次（2h 上限）", "rationale": "用户首轮确认"},
+    {"decision": "容忍 30s 静音 + 120s 文件停滞", "rationale": "用户首轮确认"},
+    {"decision": "采样对象 = MKV 文件（非 HLS ts 切片）", "rationale": "HLS 切片持续生成会假增长"},
+    {"decision": "加连续 N=3 次采样要求", "rationale": "降误杀率"},
+    {"decision": "放弃华为 API 参与者信号", "rationale": "硬件 SMC 无参与者列表 API"},
+    {"decision": "放弃 info.Status 信号", "rationale": "GetConferenceInfo 是 stub，老设备 Status 永远空字符串"}
+  ],
+  "uncommitted_files": [
+    "docs/plans/2026-08-05-smart-meeting-recording-end-design.md"
+  ],
+  "next_action": "用户列出 TE40 文档左侧章节名；agent-browser 继续浏览找会议级结束/参会者接口；用户在 4 选项中确认信号组合；我据此更新设计文档 §3/§4/§5/§14",
+  "context_notes": "已完成 9 次联网搜索 + 1 次 Explore agent 扫描 + 5 轮 AskUserQuestion + 1 次设计文档生成 + 1 次 agent-browser 验证。agent-browser 当前打开 https://support.huawei.com/enterprise/zh/doc/EDOC1100074790/6cb5425f 停在第 1 章'会议、呼叫类'，是 V600R019C00 版本。Context 65% 暂停。"
+}
