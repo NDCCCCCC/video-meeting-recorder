@@ -61,6 +61,8 @@ config.*.local.yaml
 certs/*.crt
 certs/*.pem
 certs/*.key
+# CA chain 文本（含服务器证书描述，非敏感但与构建无关）
+certs/*.txt
 
 # 前端 .env（含 VITE_SM4_SECRET、内网 IP 等敏感信息）
 frontend/.env.development
