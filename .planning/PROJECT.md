@@ -42,7 +42,32 @@
 
 <!-- Next milestone scope. -->
 
-(None — plan next milestone with /gsd-new-milestone)
+#### Milestone v2.0 — 智能录制收尾（Smart Recording End）
+
+**Goal:** 让华为会议录制时长智能贴合会议真实时长——到点未结束自动延时（30min × 4 = 2h 上限），提前结束由 TE40 `WEB_GetMailboxDataAPI`（`confState=="" && joinSum==0`）主信号 + silencedetect + 文件停滞双兜底任一触发即收尾转码，无需人工干预。
+
+**Target features:**
+
+- **主信号 H（业务权威）**：在 `recorder/coordinator.go` 启 `HuaweiStatePoller goroutine`，每 30s 调 `HuaweiClient.GetConferenceState()`（底层调 `WEB_GetMailboxDataAPI`），判据 `confState=="" && joinSum==0` 持续 `huawei_persist_s`（默认 30s）→ 视为会议已结束。
+- **兜底信号 A + B（双 AND）**：在 `recorder/coordinator.go` 给 ffmpeg 加 `silencedetect` 过滤器 + 输出文件大小采样（ticker 5s）。silencedetect 持续 ≥ 30s **且** 文件大小停滞 ≥ 120s → 也判定为结束（华为 API 不可达时仍可工作）。
+- **scheduler 多信号驱动**：`monitorTask` 改为 `select` on EndTime timer + `taskEndedCh` + `taskUpdateChans`。EndTime 到点先问 watcher 决定延时/结束；若到点但任一判定信号活跃 → `EndTime += 30min`，累计 ≤ 4 次（2h 上限）。
+- **可降级**：silencedetect 解析失败 → 切纯文件停滞 + 华为信号；`HuaweiClient.GetConferenceState()` 连续失败 → 降级关闭 H 信号只用 A+B；全部信号失效 → 不影响原有 EndTime 兜底。
+- **可观测**：每次"延时"和"提前结束"写 audit log（含 `snapshot: silence_since / last_file_growth / file_size_bytes / file_growth_bps`）；新增 `smart_extend` / `smart_early_end` / `max_extend_reached` / `activity_watcher_degraded` 日志字段；可选 Prometheus counter（如项目无 prometheus 集成则仅做日志）。
+- **可配置**：阈值/开关放 `app config`（`smart_end:` 段，含 `silence_db / silence_duration_s / file_stall_s / file_min_growth_bps / huawei_enabled / huawei_poll_interval_s / huawei_persist_s / huawei_failure_threshold / check_interval_s / extend_step_min / max_extend_count / stat_failure_threshold / degrade_on_silence_loss`）。
+- **审计字段**：GORM 加 `ExtensionCount / LastExtensionReason / EndedEarly / EndedEarlyReason / EndedByHuaWeAPI`（AutoMigrate 列表同步；走 AutoMigrate 不进 dormant `runCustomMigrations`）。
+
+**非目标（明确不做）：**
+
+- 不改 `VideoRecordingTaskStatus` 枚举（沿用 `completed / failed / canceled`）。
+- 不做"会议提前结束预测"（无 ML/ASR）。
+- 不重写 `monitorProcessWithKey` 现有的断流重连逻辑（watcher 在重连期间保持静音/文件计时不重置）。
+- 不动前端 UI（仅后端 + config；后续 Phase 2.4 单独做前端可视化）。
+- 不接 `MSG_CONF_STATE_CHANGE` 推送通道（文档示例是 HTTP 长轮询而非 WebSocket；项目零 websocket 基础设施；30s 轮询已能满足"提前结束"判定时效）。
+
+**候选后续 Phase（本期不做）：** 2.1 MSG_CONF_STATE_CHANGE 推送接入 / 2.2 T.140 字幕信号 / 2.3 跨 input 一致性 / 2.4 前端可视化 / 2.5 机器学习预测。
+
+**PRD 来源：** `docs/plans/2026-08-05-smart-meeting-recording-end-design.md`（v2：纳入 TE40 邮箱 API 主信号；2026-08-05 调研）。
+**项目内已有基础设施（无需新增）：** `HuaweiClient.GetMailboxData()`（`huawei/client.go:702-744`）仅需扩展 8 个 struct 字段；零新增依赖、零 websocket/SSE/long-polling 基建。
 
 ### Out of Scope
 
@@ -111,7 +136,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 - **v1.0** — 已交付归档（phase 01-14，产品功能完整，shipped 2026-05-06）
 - **v1.1 文件管理与编辑增强 / 后端安全加固** — 已交付归档（phase 17-22，shipped 2026-08-03）。6 phase / 25 plans：17 后端代码审查 56 项修复 / 18 凭据静态加密 SEC-003b SM4-GCM / 19 ctx 全量级联 + SEC-004 jti + STYLE-001 error / 20 HandleError 收敛 / 21 v1.1 过程缺口闭环（REQUIREMENTS.md + retro-verify 17/18/19）/ 22 审计 tech debt 收尾（errors.md regenerate + 4 VALIDATION.md 回填 + phase 20 Nyquist 签核翻转）。重审审计 `status: tech_debt`，gaps 全空（requirements 60/60、phases 5/5、integration 5/5、flows 4/4）。
-- **下一步** — `/gsd:new-milestone` 规划下一里程碑（候选：phase 15/16 前端去 AI 味收尾、phase 1 字幕支持、或新方向）
+- **v2.0 智能录制收尾（Smart Recording End）** — 规划中（2026-08-06 start）。PRD 源 `docs/plans/2026-08-05-smart-meeting-recording-end-design.md`：主信号 H（华为 `WEB_GetMailboxDataAPI` confState+joinSum）+ 兜底 A+B（silencedetect + 文件停滞）OR 判定；scheduler 多信号驱动（EndTime + taskEndedCh + taskUpdateChans）；自动延时 30min × 4（2h 上限）+ 提前结束 + 强制截断（max_extend_reached）；GORM 字段 + audit log + 配置项全可观测可降级。预期 phase 23+。
 
 ---
-*Last updated: 2026-08-03 after v1.1 milestone (archived via /gsd-complete-milestone)*
+*Last updated: 2026-08-06 — v2.0 智能录制收尾 milestone started*

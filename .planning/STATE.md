@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: milestone
-status: Awaiting next milestone
-last_updated: "2026-08-05T06:43:48.526Z"
-last_activity: 2026-08-03
+milestone: v2.0
+milestone_name: 智能录制收尾
+status: planning
+last_updated: "2026-08-05T16:12:03.072Z"
+last_activity: 2026-08-05
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md - Project Memory
@@ -40,10 +40,10 @@ v1.1 已交付归档（2026-08-03，phases 17-22）。等待下一个里程碑�
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-03 — Milestone v1.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-05 — Milestone v2.0 started
 
 ### Phase Summary
 
