@@ -83,7 +83,10 @@ frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
 *.tsbuildinfo
-frontend/tsconfig.tsbuildinfo
+# tsc --noEmit vs. emit 也会产出 vite.config.{js,d.ts};0e83baa 已删过但被后续 commit 重新引入。
+# 这里双保险：本地未 emit 时不命中，已 emit 时被 ignore 拦住。
+frontend/vite.config.js
+frontend/vite.config.d.ts
 internal/frontend/dist/
 
 # ============================================================================
