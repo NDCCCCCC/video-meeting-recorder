@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: 智能录制收尾（Smart Recording End）
-status: phase_25_planned
-last_updated: 2026-08-06T16:55:00.000Z
+status: in_progress
+last_updated: "2026-08-06T09:40:00.000Z"
 last_activity: 2026-08-06
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 2
   total_plans: 14
   completed_plans: 10
   percent: 71
-stopped_at: Phase 25 planned (4 plans ready to execute)
 ---
 
 # STATE.md - Project Memory
@@ -35,7 +34,7 @@ stopped_at: Phase 25 planned (4 plans ready to execute)
 
 ### Current Focus
 
-v2.0 智能录制收尾（Smart Recording End）— roadmap 已创建（3 phases: 23/24/25，34 REQ-IDs 全映射）。下一步：`/gsd:plan-phase 23` 拆解 Phase 23 为可执行 plans。
+v2.0 智能录制收尾（Smart Recording End）— Phase 25 计划 4 plans, plan 01 已执行（ActivitySnapshot 2 字段扩 + service 单入口）。下一步：执行 plan 02 (scheduler select 三路)。
 
 **v2.0 Goal:** 让华为会议录制时长智能贴合会议真实时长——到点未结束自动延时（30min × 4 = 2h 上限），提前结束由 TE40 `WEB_GetMailboxDataAPI`（`confState=="" && joinSum==0`）主信号 + silencedetect + 文件停滞双兜底任一触发即收尾转码，无需人工干预。
 
@@ -47,22 +46,29 @@ v2.0 智能录制收尾（Smart Recording End）— roadmap 已创建（3 phases
 
 | Phase | 名称 | Goal | REQ-IDs | Plans |
 |-------|------|------|---------|-------|
-| 23 | 华为 API 扩展 + GORM 字段 + sentinel 错误码 | 落地 H 信号数据通路与可观测基线 | DETECT-01/04, AUDIT-01/05, CFG-01/02 (6) | TBD |
-| 24 | ActivityWatcher + silencedetect + 文件停滞 | 整合 H+A+B + 多级降级 | DETECT-02/03, WATCH-01..05, EXTEND-03 (8) | TBD |
-| 25 | scheduler 多信号驱动 + service 封装 + E2E + CI | 端到端闭环 + 余项 | SCHED-01..04, EXTEND-01/02, EARLY-01..04, AUDIT-02/03/04, CFG-03/04, OBS-01..05 (20) | TBD |
+| 23 | 华为 API 扩展 + GORM 字段 + sentinel 错误码 | 落地 H 信号数据通路与可观测基线 | DETECT-01/04, AUDIT-01/05, CFG-01/02 (6) | 5/5 |
+| 24 | ActivityWatcher + silencedetect + 文件停滞 | 整合 H+A+B + 多级降级 | DETECT-02/03, WATCH-01..05, EXTEND-03 (8) | 3/4 |
+| 25 | scheduler 多信号驱动 + service 封装 + E2E + CI | 端到端闭环 + 余项 | SCHED-01..04, EXTEND-01/02, EARLY-01..04, AUDIT-02/03/04, CFG-03/04, OBS-01..05 (20) | 1/4 |
+| 26 | 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix) | 私有 CA 加载到 RootCAs | SEC-003a-01..05 (5) | 1/1 |
 
 ---
 
 ## Current Position
 
-Phase: 26
-Plan: Not started
-Next phase: 25 (scheduler 多信号驱动 + E2E + CI) — not yet planned
-Status: Milestone complete
-Last activity: 2026-08-06 -- Phase 26 plan 01 executed (4 commits: c8ef568 + f311e86 + c2357d7 + 7818db5)
+Phase: 25
+Plan: 01 (ActivitySnapshot + service entry points) — COMPLETED
+Plan 02: scheduler select 三路 + multi-input merge + CFG-03 双守门 — next
+Status: In Progress
+Last activity: 2026-08-06 -- Phase 25 plan 01 executed (3 commits: f8f8f6b + e527ecb + fbae631)
 
 > 注：HANDOFF.json + .continue-here.md (2026-08-05 旧版 design-v2-review pause) 已删除。
 > 实际进度：Phase 23 验证通过 (5/5)；Phase 24 plans 1-3 done；24-04 待执行。
+> Phase 25 plan 01 (AUDIT-02/03/04 + EXTEND-01 + EARLY-01/02) 已执行：
+> - ActivitySnapshot 2 字段扩 (FileSizeBytes + FileGrowthBps) + fileTicker 维护 lastFileGrowthBps
+> - VideoRecordingTaskService 增 auditSvc + cfg 字段 + SetAuditService/SetConfig setters
+> - UpdateTaskExtension (含 cfg.SmartEnd.MaxExtendCount 守门 wrapped ErrRecordingSmartExtend) + MarkTaskEndedEarly 单入口
+> - SmartEndSnapshot JSON 序列化结构 (8 字段) 供 audit log 使用
+> - 5 个新单元测试 + 1 个 audit snapshot 测试均通过
 > Phase 26 (TLS CA SEC-003a hotfix) 26-01 已执行完毕，4 commits（3 feat + 1 docs）。
 > SEC-003a-01..05 全部 satisfied：atomic SetCABundle + caCertPool RootCAs + cmd/server fail-closed 启动 + CABundleFile + BindEnv + 5-scenario 回归测试。
 
@@ -72,6 +78,7 @@ Last activity: 2026-08-06 -- Phase 26 plan 01 executed (4 commits: c8ef568 + f31
 
 | Phase | Duration | Tasks | Files |
 |-------|----------|-------|-------|
+| Phase 25 P01 | 25min | 2 tasks | 4 files |
 | Phase 26 P01 | 27min | 3 tasks | 7 files |
 
 ### Requirements Coverage
@@ -143,6 +150,12 @@ Last activity: 2026-08-06 -- Phase 26 plan 01 executed (4 commits: c8ef568 + f31
 
 ## Decisions Log
 
+### 2026-08-06 - Phase 25 Plan 01 ActivitySnapshot + service entry points executed
+
+**Decision:** ActivitySnapshot 2 字段扩 (FileSizeBytes / FileGrowthBps) + VideoRecordingTaskService 增 UpdateTaskExtension / MarkTaskEndedEarly 单入口 + SetAuditService / SetConfig setter 注入 + SmartEndSnapshot JSON 序列化结构。
+**Rationale:** Phase 25 scheduler 多信号驱动需要 (1) audit log 含 snapshot 6 字段 (AUDIT-02/03)，其中 `file_size_bytes` / `file_growth_bps` 此前 ActivitySnapshot 未暴露 — Phase 24 RESEARCH.md Pitfall 8 已标注；(2) 收敛 smart-end 写入入口到 service 层 (AUDIT-04)，避免 scheduler 直 GORM 散落调用导致 audit log 漏写。Setter 注入 (vs 增 variadic) 保留 Phase 19 D2 encryptor 变参兼容性,deps 渐进注入不破坏既有调用点。
+**Outcome:** 2 feat commits (f8f8f6b / e527ecb) + 1 docs commit (fbae631). 5 个新单元测试 (TestUpdateTaskExtension_Exists / _AuditSnapshot / _MaxLimit / TestMarkTaskEndedEarly_HuaweiSignal / _BothSilenceAndStall) + 原 5 个 Phase 24 recorder 测仍绿。`MaxExtendCount` 守门 wrapped ErrRecordingSmartExtend,errors.Is 可达 — scheduler 据此走 EXTEND-02 max_extend_reached 路径。5 deviations auto-fixed (1 JSON omitempty bug, 1 audit Stop race, 3 test infra bugs)。
+
 ### 2026-08-06 - Phase 26 Plan 01 SEC-003a hotfix executed
 
 **Decision:** Atomic PEM bundle publish under Manager.mu + caCertPool *x509.CertPool parameter on NewHTTPClient + fail-closed startup wiring in cmd/server/app.go + HUAWEI_CA_BUNDLE_FILE env override.
@@ -169,13 +182,13 @@ Last activity: 2026-08-06 -- Phase 26 plan 01 executed (4 commits: c8ef568 + f31
 
 ### Last Session
 
-2026-08-06 — Phase 26 plan 01 SEC-003a hotfix executed (4 commits landed: c8ef568 + f311e86 + c2357d7 + 7818db5). Huawei private CA bundle loader with fail-closed startup wiring + 5-scenario regression suite. All SEC-003a-01..05 requirements satisfied.
+2026-08-06 — Phase 25 plan 01 executed (3 commits landed: f8f8f6b + e527ecb + fbae631). ActivitySnapshot FileSizeBytes/FileGrowthBps 扩展 + VideoRecordingTaskService UpdateTaskExtension / MarkTaskEndedEarly 单入口 + audit 注入 + 5 个新单元测试。6/6 must_haves satisfied, 5 deviations auto-fixed.
 
 ### Next Steps
 
-1. `/gsd:verify-phase 26` — 验证 Phase 26 plan 01（x509 chain validation against injected pool + InsecureSkipVerify=false preservation）
-2. `/gsd:execute-phase 24` — 执行 24-04 Nyquist 测试（10 Test* + nyquist_compliant 翻 true），现在可以驱动真实 Huawei HTTPS 路径
-3. `/gsd:plan-phase 25` — 24 收尾后拆解 Phase 25 (SCHED/EXTEND/EARLY/AUDIT-余/CFG-余/OBS)
+1. `/gsd:execute-phase 25` — 执行 25-02 plan (scheduler monitorTask select 三路 + WatcherChannels 多 input merge + CFG-03 双守门)
+2. `/gsd:plan-phase 25` 后续：25-03 (OBS 5 类日志 + smart_end_metrics.go atomic) + 25-04 (Nyquist E2E 7+ 场景 + audit golden JSON)
+3. 24-04 Nyquist 仍待执行 — 与 25-02 可并行（24-04 不依赖 25 反之亦然）
 
 ### Open Questions
 
@@ -187,6 +200,6 @@ Last activity: 2026-08-06 -- Phase 26 plan 01 executed (4 commits: c8ef568 + f31
 
 ---
 
-*STATE.md updated: 2026-08-06 — Phase 26 plan 01 SEC-003a hotfix executed (4 commits landed), Phase 24-04 Nyquist next*
+*STATE.md updated: 2026-08-06 — Phase 25 plan 01 executed (3 commits landed), plan 02 next*
 
-**Planned Phase:** 25 (after Phase 24-04 verifies) — TBD plans — TBD date
+**Active Phase:** 25 (4 plans, 1/4 done)

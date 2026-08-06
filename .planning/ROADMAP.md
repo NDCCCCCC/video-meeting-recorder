@@ -113,7 +113,13 @@ Plans:
   6. service 层封装 `UpdateTaskExtension(task, deltaMin, reason)` + `MarkTaskEndedEarly(task, reason, byHuaWeiAPI bool)`，统一写入 GORM 字段 + audit log；每次延时/提前结束事件写 audit log 含 snapshot（`silence_since` / `last_file_growth` / `file_size_bytes` / `file_growth_bps` + `extension_count` + `new_end_time`）
   7. `smart_end.enabled=false` 时系统退回纯 EndTime 行为（scheduler 不读 `taskEndedCh`，watcher 不启）；`smart_end.huawei_enabled=false` 时系统降级只用兜底 A+B（华为轮询 goroutine 不启）
   8. 5 类可观测日志字段全部输出：`smart_extend` / `smart_early_end` / `max_extend_reached` / `activity_watcher_degraded` / 可选 Prometheus counter 接入点（项目无 prometheus 集成则仅做日志）
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [x] 25-01-PLAN.md -- ActivitySnapshot 2-file telemetry field + UpdateTaskExtension + MarkTaskEndedEarly service 单入口 + audit 注入 (AUDIT-02/03/04, EXTEND-01, EARLY-01/02)
+- [ ] 25-02-PLAN.md -- scheduler monitorTask select 三路 + WatcherChannels 多 input OR merge + CFG-03 双守门 (SCHED-01..04, EXTEND-02, EARLY-03/04)
+- [ ] 25-03-PLAN.md -- 5 类 OBS 日志字段 + smart_end_metrics.go atomic 计数器接入点 (OBS-01..05, CFG-04)
+- [ ] 25-04-PLAN.md -- 7+ Nyquist E2E 场景 + audit snapshot golden JSON + antipattern grep (AUDIT-02/03/04 scheduler-level)
 
 ### Phase 26: 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix)
 **Goal**: 加载 `certs/huawei-10.62.10.3-ca.pem`（含 server cert + huawei_ca 自签根）到 `tls.Config.RootCAs`，让 Go crypto/tls 信任华为私有自签根；修复"锁定终端失败: x509: certificate signed by unknown authority"硬阻塞——v2.0 三 phase（23/24/25）的 H 信号链路全部依赖此修复，否则 `HuaweiClient.GetConferenceState()` 始终无法建立连接
@@ -156,7 +162,7 @@ Plans:
 | 22. v1.1 audit tech debt 收尾 | v1.1 | 6/6 | Complete | 2026-08-03 |
 | 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 5/5 | Complete    | 2026-08-06 |
 | 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 3/4 | In Progress|  |
-| 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 0/TBD | Planning | - |
+| 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 1/4 | In Progress|  |
 | 26. 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix) | v2.0 | 1/1 | Complete    | 2026-08-06 |
 
 ## Backlog
