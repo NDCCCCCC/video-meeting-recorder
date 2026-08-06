@@ -42,6 +42,9 @@ func TestMapToHTTPStatus_Sentinels(t *testing.T) {
 		{"ErrTranscriptionFailed", ErrTranscriptionFailed, http.StatusInternalServerError, respCodeInternalError},
 		{"ErrSplitFailed", ErrSplitFailed, http.StatusInternalServerError, respCodeInternalError},
 		{"ErrInternal", ErrInternal, http.StatusInternalServerError, respCodeInternalError},
+		{"ErrRecordingSmartExtend", ErrRecordingSmartExtend, http.StatusInternalServerError, respCodeInternalError},
+		{"ErrRecordingSmartEarlyEnd", ErrRecordingSmartEarlyEnd, http.StatusInternalServerError, respCodeInternalError},
+		{"ErrRecordingHuaWeiStateFetchFailed", ErrRecordingHuaWeiStateFetchFailed, http.StatusInternalServerError, respCodeInternalError},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -176,6 +179,9 @@ func TestFirstKnownSentinelName(t *testing.T) {
 		{"ErrInternal", ErrInternal},
 		{"ErrDuplicateRecord", ErrDuplicateRecord},
 		{"ErrForeignKeyConstraint", ErrForeignKeyConstraint},
+		{"ErrRecordingSmartExtend", ErrRecordingSmartExtend},
+		{"ErrRecordingSmartEarlyEnd", ErrRecordingSmartEarlyEnd},
+		{"ErrRecordingHuaWeiStateFetchFailed", ErrRecordingHuaWeiStateFetchFailed},
 	}
 
 	t.Run("each sentinel hit by name", func(t *testing.T) {

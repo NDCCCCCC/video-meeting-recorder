@@ -89,7 +89,10 @@ func MapToHTTPStatus(err error) (httpStatus, respCode int, message string) {
 		return http.StatusServiceUnavailable, respCodeInternalError, "服务暂不可用"
 	case errors.Is(err, ErrFFmpegFailed),
 		errors.Is(err, ErrTranscriptionFailed),
-		errors.Is(err, ErrSplitFailed):
+		errors.Is(err, ErrSplitFailed),
+		errors.Is(err, ErrRecordingSmartExtend),
+		errors.Is(err, ErrRecordingSmartEarlyEnd),
+		errors.Is(err, ErrRecordingHuaWeiStateFetchFailed):
 		return http.StatusInternalServerError, respCodeInternalError, "内部处理失败"
 	default:
 		return http.StatusInternalServerError, respCodeInternalError, "内部服务器错误"
@@ -200,6 +203,9 @@ var knownSentinels = []struct {
 	{"ErrInternal", ErrInternal},
 	{"ErrDuplicateRecord", ErrDuplicateRecord},
 	{"ErrForeignKeyConstraint", ErrForeignKeyConstraint},
+	{"ErrRecordingSmartExtend", ErrRecordingSmartExtend},
+	{"ErrRecordingSmartEarlyEnd", ErrRecordingSmartEarlyEnd},
+	{"ErrRecordingHuaWeiStateFetchFailed", ErrRecordingHuaWeiStateFetchFailed},
 }
 
 // FromGORM 把 gorm 错误转换为 sentinel：gorm.ErrRecordNotFound → ErrNotFound，

@@ -95,6 +95,14 @@ var (
 	// ErrTranscriptionUnavailable (503) 用于 service 未启用 / URL 白名单错
 	// ——这些是配置/环境问题而非传输问题。
 	ErrTranscriptionUnavailable = errors.New("transcription service unavailable")
+
+	// Smart-end recording sentinels (Phase 23 AUDIT-05):
+	// 录制智能延长失败（录像时长已到，自动延长失败）
+	ErrRecordingSmartExtend = errors.New("recording smart extend failed")
+	// 录制智能早停失败（提前停止条件触发，停止失败）
+	ErrRecordingSmartEarlyEnd = errors.New("recording smart early end failed")
+	// 华为会议状态获取失败（拉取实时会议状态/参会人失败）
+	ErrRecordingHuaWeiStateFetchFailed = errors.New("Huawei conference state fetch failed")
 )
 
 // Wrap 包装错误，添加上下文信息
