@@ -120,31 +120,31 @@
 | WATCH-03 | Phase 24 | Pending | 华为 API 连续失败 3 次降级关闭 H |
 | WATCH-04 | Phase 24 | Pending | os.Stat 连续失败视为流死亡 |
 | WATCH-05 | Phase 24 | Pending | ffmpeg 重连保持 watcher 计时不重置 |
-| SCHED-01 | Phase 25 | Complete | monitorTask 改 select 驱动 |
-| SCHED-02 | Phase 25 | Complete | EndTime 到点先问 watcher.IsActive() |
-| SCHED-03 | Phase 25 | Complete | taskEndedCh 永远优先于 EndTime timer |
-| SCHED-04 | Phase 25 | Complete | 用户手动 UpdateTaskEndTime 时 ExtensionCount 不重置 |
-| EXTEND-01 | Phase 25 | Pending | ExtensionCount 上限 = 4 (2h 总上限) |
-| EXTEND-02 | Phase 25 | Complete | 上限达 4 次后强制 completeTask("max_extend_reached") |
+| SCHED-01 | Phase 25 | Complete | 25-02-PLAN.md (monitorTask three-signal select); TestMonitorTask_TripleSelect PASS under -race |
+| SCHED-02 | Phase 25 | Complete | 25-02-PLAN.md (handleEndTimeReached: IsActive -> UpdateTaskExtension, else completeTask); TestMonitorTask_OnTimerActive_Extends PASS |
+| SCHED-03 | Phase 25 | Complete | 25-02-PLAN.md (case <-taskEndedCh placed first in select); TestMonitorTask_TaskEnded_PreemptsTimer PASS |
+| SCHED-04 | Phase 25 | Complete | 25-02-PLAN.md (manual updateChan path only reassigns endTime local, never calls UpdateTaskExtension); TestMonitorTask_ManualUpdateDoesNotResetCount PASS |
+| EXTEND-01 | Phase 25 | Complete | 25-01-PLAN.md (service UpdateTaskExtension cap guard wraps ErrRecordingSmartExtend); TestUpdateTaskExtension_MaxLimit PASS |
+| EXTEND-02 | Phase 25 | Complete | 25-02-PLAN.md (handleEndTimeReached max_extend_reached branch emits OBS-03 WARN and completeTask); TestMonitorTask_MaxExtendReached PASS |
 | EXTEND-03 | Phase 24 | Pending | 默认 extend_step_min=30（可配） |
-| EARLY-01 | Phase 25 | Complete | H 信号触发 → smart_early_end + EndedByHuaWeAPI=true |
-| EARLY-02 | Phase 25 | Complete | A+B 双 AND 命中 → smart_early_end |
-| EARLY-03 | Phase 25 | Complete | 提前结束信号永远优先于 EndTime timer |
-| EARLY-04 | Phase 25 | Complete | 多 input 任一 watcher 触发整体结束 |
+| EARLY-01 | Phase 25 | Complete | 25-01+25-02 (MarkTaskEndedEarly + monitorTask <-taskEndedCh case with LastHuaWeiStateEmpty=true); TestMarkTaskEndedEarly_HuaweiSignal PASS |
+| EARLY-02 | Phase 25 | Complete | 25-01+25-02 (MarkTaskEndedEarly with reason=both_silence_and_stall, byHuaWeiAPI=false); TestMarkTaskEndedEarly_BothSilenceAndStall PASS |
+| EARLY-03 | Phase 25 | Complete | 25-02 (case <-taskEndedCh first in select); TestMonitorTask_TaskEnded_PreemptsTimer PASS |
+| EARLY-04 | Phase 25 | Complete | 25-02 (mergeWatchers fan-in helper + WatcherChannels interface); TestMonitorTask_MultiInput_AnyEndsAll PASS |
 | AUDIT-01 | Phase 23 | Pending | GORM 加 5 字段（AutoMigrate 列表同步） |
-| AUDIT-02 | Phase 25 | Pending | 延时事件 audit log 含 snapshot |
-| AUDIT-03 | Phase 25 | Pending | 提前结束事件 audit log 含 snapshot |
-| AUDIT-04 | Phase 25 | Pending | service 层封装 UpdateTaskExtension + MarkTaskEndedEarly |
+| AUDIT-02 | Phase 25 | Complete | 25-01+25-04 (UpdateTaskExtension writes 6 snapshot fields to RecordChange); TestUpdateTaskExtension_AuditSnapshot PASS |
+| AUDIT-03 | Phase 25 | Complete | 25-01+25-04 (MarkTaskEndedEarly writes 5 fields); TestMarkTaskEndedEarly_AuditSnapshot PASS |
+| AUDIT-04 | Phase 25 | Complete | 25-01+25-04 (service layer is single entry point; UpdateTaskExtension + MarkTaskEndedEarly; TestServiceEntrypoint_OnlyPath + TestScheduler_DoesNotDirectlyUpdateTask defined in plan 04 sole owner) |
 | AUDIT-05 | Phase 23 | Pending | 3 个 sentinel + docs/errors.md 同步 + CI sync-check |
 | CFG-01 | Phase 23 | Pending | SmartEndConfig 结构体 + 默认值 |
 | CFG-02 | Phase 23 | Pending | config.yaml smart_end 段（14 项） |
-| CFG-03 | Phase 25 | Complete | smart_end.enabled=false 退回纯 EndTime |
-| CFG-04 | Phase 25 | Pending | smart_end.huawei_enabled=false 只用 A+B |
-| OBS-01 | Phase 25 | Pending | smart_extend 日志 |
-| OBS-02 | Phase 25 | Pending | smart_early_end 日志 |
-| OBS-03 | Phase 25 | Pending | max_extend_reached 日志 |
-| OBS-04 | Phase 25 | Pending | activity_watcher_degraded 日志 |
-| OBS-05 | Phase 25 | Pending | 可选 Prometheus counter（无 prometheus 集成则仅做日志） |
+| CFG-03 | Phase 25 | Complete | 25-02 (monitorTask !cfg.SmartEnd.Enabled gate routes to monitorTaskEndTimeOnly); TestMonitorTask_SmartEndDisabled PASS |
+| CFG-04 | Phase 25 | Complete | Phase 24 (huaweiPoller 入口直接 return on HuaweiEnabled=false; Phase 25 没有改 watcher 接线) |
+| OBS-01 | Phase 25 | Complete | 25-01+25-03 (UpdateTaskExtension emits INFO smart_extend with task/count/new_end/reason; RecordSmartExtend atomic) |
+| OBS-02 | Phase 25 | Complete | 25-01+25-03 (MarkTaskEndedEarly emits INFO smart_early_end with task/reason/snapshot; RecordSmartEarlyEnd atomic) |
+| OBS-03 | Phase 25 | Complete | 25-02+25-03 (handleEndTimeReached emits WARN max_extend_reached with task_id/force_end) |
+| OBS-04 | Phase 25 | Complete | 25-03 (RecordWatcherDegraded wired to all 3 Phase 24 activity_watcher_degraded branches) |
+| OBS-05 | Phase 25 | Complete | 25-03 (smart_end_metrics.go: 3 atomic.Int64 + Record* accessors; prometheus client_golang explicitly absent) |
 | SEC-003a-01 | Phase 26 | Complete | HuaweiConfig.CABundleFile 非空注入 RootCAs（commits c8ef568 + f311e86） |
 | SEC-003a-02 | Phase 26 | Complete | SetCABundle wrapped error 含路径+cause（commit c8ef568） |
 | SEC-003a-03 | Phase 26 | Complete | cmd/server 启动 fail-closed logger.Fatal（commit c2357d7） |
