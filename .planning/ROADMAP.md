@@ -118,7 +118,7 @@ Plans:
 Plans:
 - [x] 25-01-PLAN.md -- ActivitySnapshot 2-file telemetry field + UpdateTaskExtension + MarkTaskEndedEarly service 单入口 + audit 注入 (AUDIT-02/03/04, EXTEND-01, EARLY-01/02)
 - [x] 25-02-PLAN.md -- scheduler monitorTask select 三路 + WatcherChannels 多 input OR merge + CFG-03 双守门 (SCHED-01..04, EXTEND-02, EARLY-03/04)
-- [ ] 25-03-PLAN.md -- 5 类 OBS 日志字段 + smart_end_metrics.go atomic 计数器接入点 (OBS-01..05, CFG-04)
+- [x] 25-03-PLAN.md -- 5 类 OBS 日志字段 + smart_end_metrics.go atomic 计数器接入点 (OBS-01..05, CFG-04)
 - [ ] 25-04-PLAN.md -- 7+ Nyquist E2E 场景 + audit snapshot golden JSON + antipattern grep (AUDIT-02/03/04 scheduler-level)
 
 ### Phase 26: 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix)
@@ -162,7 +162,7 @@ Plans:
 | 22. v1.1 audit tech debt 收尾 | v1.1 | 6/6 | Complete | 2026-08-03 |
 | 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 5/5 | Complete    | 2026-08-06 |
 | 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 3/4 | In Progress|  |
-| 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 2/4 | In Progress|  |
+| 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 3/4 | In Progress|  |
 | 26. 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix) | v2.0 | 1/1 | Complete    | 2026-08-06 |
 
 ## Backlog

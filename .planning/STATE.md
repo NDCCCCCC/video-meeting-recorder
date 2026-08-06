@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: 智能录制收尾（Smart Recording End）
 status: executing
-last_updated: "2026-08-06T09:59:04.308Z"
+last_updated: "2026-08-06T10:13:00.000Z"
 last_activity: 2026-08-06
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 14
-  completed_plans: 12
-  percent: 75
+  completed_plans: 13
+  percent: 79
 ---
 
 # STATE.md - Project Memory
@@ -48,7 +48,7 @@ v2.0 智能录制收尾（Smart Recording End）— Phase 25 计划 4 plans, pla
 |-------|------|------|---------|-------|
 | 23 | 华为 API 扩展 + GORM 字段 + sentinel 错误码 | 落地 H 信号数据通路与可观测基线 | DETECT-01/04, AUDIT-01/05, CFG-01/02 (6) | 5/5 |
 | 24 | ActivityWatcher + silencedetect + 文件停滞 | 整合 H+A+B + 多级降级 | DETECT-02/03, WATCH-01..05, EXTEND-03 (8) | 3/4 |
-| 25 | scheduler 多信号驱动 + service 封装 + E2E + CI | 端到端闭环 + 余项 | SCHED-01..04, EXTEND-01/02, EARLY-01..04, AUDIT-02/03/04, CFG-03/04, OBS-01..05 (20) | 1/4 |
+| 25 | scheduler 多信号驱动 + service 封装 + E2E + CI | 端到端闭环 + 余项 | SCHED-01..04, EXTEND-01/02, EARLY-01..04, AUDIT-02/03/04, CFG-03/04, OBS-01..05 (20) | 3/4 |
 | 26 | 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix) | 私有 CA 加载到 RootCAs | SEC-003a-01..05 (5) | 1/1 |
 
 ---
@@ -56,10 +56,10 @@ v2.0 智能录制收尾（Smart Recording End）— Phase 25 计划 4 plans, pla
 ## Current Position
 
 Phase: 25
-Plan: 01 (ActivitySnapshot + service entry points) — COMPLETED
-Plan 02: scheduler select 三路 + multi-input merge + CFG-03 双守门 — next
+Plan: 03 (OBS-01..05 contract wire-up) — COMPLETED
+Plan 04: Nyquist E2E 7+ scenarios + audit snapshot golden JSON + antipattern grep — next
 Status: In Progress
-Last activity: 2026-08-06 -- Phase 25 plan 01 executed (3 commits: f8f8f6b + e527ecb + fbae631)
+Last activity: 2026-08-06 -- Phase 25 plan 03 executed (3 commits: 81e51b3 + 39f93f3 + e31a6b5)
 
 > 注：HANDOFF.json + .continue-here.md (2026-08-05 旧版 design-v2-review pause) 已删除。
 > 实际进度：Phase 23 验证通过 (5/5)；Phase 24 plans 1-3 done；24-04 待执行。
@@ -69,6 +69,15 @@ Last activity: 2026-08-06 -- Phase 25 plan 01 executed (3 commits: f8f8f6b + e52
 > - UpdateTaskExtension (含 cfg.SmartEnd.MaxExtendCount 守门 wrapped ErrRecordingSmartExtend) + MarkTaskEndedEarly 单入口
 > - SmartEndSnapshot JSON 序列化结构 (8 字段) 供 audit log 使用
 > - 5 个新单元测试 + 1 个 audit snapshot 测试均通过
+> Phase 25 plan 02 (SCHED-01..04 + EXTEND-02 + EARLY-03/04 + CFG-03) 已执行（2 commits: ef060d3 + 9e53ddf）。
+> Phase 25 plan 03 (OBS-01..05 + CFG-04) 已执行（3 commits: 81e51b3 + 39f93f3 + e31a6b5）：
+> - internal/observability 包：3 atomic.Int64 计数器 + 3 Record* 函数 + 3 getter + ResetForTest helper
+> - 4 个新单元测试（每个 counter + reset 路径）均通过 + race-detector 全绿
+> - service.UpdateTaskExtension / MarkTaskEndedEarly 调 RecordSmartExtend / RecordSmartEarlyEnd（success-path only）
+> - scheduler.handleEndTimeReached max-extend WARN log 字段扩展为 task_id + force_end + extension_count + max_extend_count
+> - ActivityWatcher 3 个降级分支（silence_parser_failed / huawei_client_nil / huawei_api_unreachable）调 RecordWatcherDegraded
+> - file_stat_failed 加设计注释解释为何不计入 watcher 降级（早期结束 INFO，不是降级 ERROR）
+> - zero new go.mod deps；prometheus/client_golang 刻意未导入
 > Phase 26 (TLS CA SEC-003a hotfix) 26-01 已执行完毕，4 commits（3 feat + 1 docs）。
 > SEC-003a-01..05 全部 satisfied：atomic SetCABundle + caCertPool RootCAs + cmd/server fail-closed 启动 + CABundleFile + BindEnv + 5-scenario 回归测试。
 
@@ -79,6 +88,7 @@ Last activity: 2026-08-06 -- Phase 25 plan 01 executed (3 commits: f8f8f6b + e52
 | Phase | Duration | Tasks | Files |
 |-------|----------|-------|-------|
 | Phase 25 P01 | 25min | 2 tasks | 4 files |
+| Phase 25 P03 | 12min | 2 tasks | 5 files |
 | Phase 26 P01 | 27min | 3 tasks | 7 files |
 
 ### Requirements Coverage
@@ -150,6 +160,12 @@ Last activity: 2026-08-06 -- Phase 25 plan 01 executed (3 commits: f8f8f6b + e52
 
 ## Decisions Log
 
+### 2026-08-06 - Phase 25 Plan 03 OBS-01..05 contract wire-up executed
+
+**Decision:** `internal/observability` 新包（3 atomic.Int64 + 3 Record* + 3 getter + ResetForTest helper）+ service / scheduler / watcher 6 个 call sites 接入（success-path only；max_extend_reached 故意不计数避免与成功延时 double-count；file_stat_failed 加设计注释说明不计入 OBS-04 降级事件）。
+**Rationale:** PRD §10 OBS-01..05 是 v2.0 milestone "可观测" 节的最后一组需求；plan 04 Nyquist E2E 7+ 场景与 audit snapshot golden JSON 断言都需要 (1) 可读的计数器 getter（`SmartExtendTotal() == 3` 这种断言）+ (2) 锁字段的 zap 日志（`smart_extend task=... count=... new_end=... reason=...`）。项目无 prometheus 集成 — OBS-05 字面读"可选 Prometheus counter 接入点"但 §Pitfall 7 锁定不引入新依赖；仅暴露 atomic.Int64 + Record* 即满足"预留接入点"语义，未来 prom 实现只改包内 Record* 实现，调用方不变。
+**Outcome:** 2 feat commits (81e51b3 / 39f93f3) + 1 docs commit (e31a6b5)。4 个新单元测试（每个 counter 增量 + reset 路径）全过；4 个包（services / scheduler / recorder / observability）race-detector 全绿。5/5 must_haves satisfied；0 deviations。atomic increment 位置 "after GORM Updates + before audit log block" — 满足 critical anti-pattern "auditSvc=nil 时计数器仍递增"。max_extend_reached 计数器刻意未调，WARN 日志 + completeTask("max_extend_reached") 是 sole signal（避免误导 smart_extend_total 度量）。`prometheus/client_golang` 在 doc comment 提及以解释设计决策但 import 块仅含 `sync/atomic`。
+
 ### 2026-08-06 - Phase 25 Plan 01 ActivitySnapshot + service entry points executed
 
 **Decision:** ActivitySnapshot 2 字段扩 (FileSizeBytes / FileGrowthBps) + VideoRecordingTaskService 增 UpdateTaskExtension / MarkTaskEndedEarly 单入口 + SetAuditService / SetConfig setter 注入 + SmartEndSnapshot JSON 序列化结构。
@@ -182,13 +198,12 @@ Last activity: 2026-08-06 -- Phase 25 plan 01 executed (3 commits: f8f8f6b + e52
 
 ### Last Session
 
-2026-08-06 — Phase 25 plan 01 executed (3 commits landed: f8f8f6b + e527ecb + fbae631). ActivitySnapshot FileSizeBytes/FileGrowthBps 扩展 + VideoRecordingTaskService UpdateTaskExtension / MarkTaskEndedEarly 单入口 + audit 注入 + 5 个新单元测试。6/6 must_haves satisfied, 5 deviations auto-fixed.
+2026-08-06 — Phase 25 plan 03 executed (3 commits landed: 81e51b3 + 39f93f3 + e31a6b5). internal/observability 包 (3 atomic.Int64 + 3 Record* + 3 getter + ResetForTest) + 4 个新单元测试 + service / scheduler / watcher 6 个 call sites 接入。5/5 must_haves satisfied, 0 deviations. zero new go.mod deps.
 
 ### Next Steps
 
-1. `/gsd:execute-phase 25` — 执行 25-02 plan (scheduler monitorTask select 三路 + WatcherChannels 多 input merge + CFG-03 双守门)
-2. `/gsd:plan-phase 25` 后续：25-03 (OBS 5 类日志 + smart_end_metrics.go atomic) + 25-04 (Nyquist E2E 7+ 场景 + audit golden JSON)
-3. 24-04 Nyquist 仍待执行 — 与 25-02 可并行（24-04 不依赖 25 反之亦然）
+1. `/gsd:execute-phase 25` — 执行 25-04 plan (Nyquist E2E 7+ 场景 + audit snapshot golden JSON + antipattern grep)
+2. 24-04 Nyquist 仍待执行 — 与 25-04 可并行（24-04 不依赖 25 反之亦然）
 
 ### Open Questions
 
