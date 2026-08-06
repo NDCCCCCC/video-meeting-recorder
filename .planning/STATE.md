@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: milestone
+milestone_name: 智能录制收尾（Smart Recording End）
 status: executing
-last_updated: "2026-08-06T04:17:11.129Z"
+last_updated: "2026-08-06T04:23:01.840Z"
 last_activity: 2026-08-06
 progress:
-  total_phases: 7
+  total_phases: 3
   completed_phases: 1
   total_plans: 10
-  completed_plans: 7
-  percent: 14
+  completed_plans: 8
+  percent: 33
 ---
 
 # STATE.md - Project Memory
@@ -57,8 +57,8 @@ v2.0 智能录制收尾（Smart Recording End）— roadmap 已创建（3 phases
 Phase: 24 (ActivityWatcher + silencedetect + 文件停滞) — EXECUTING
 Plan: 4 of 4 (24-04 Nyquist 测试 PENDING)
 Next phase: 25 (scheduler 多信号驱动 + E2E + CI) — not yet planned
-Status: Executing Phase 24 (wave 4)
-Last activity: 2026-08-06 -- Phase 24 wave 3 closed (24-03 complete, ahead of origin/main 51 commits)
+Status: Ready to execute
+Last activity: 2026-08-06 -- Phase 26 planning complete
 
 > 注：HANDOFF.json + .continue-here.md (2026-08-05 旧版 design-v2-review pause) 已删除。
 > 实际进度：Phase 23 验证通过 (5/5)；Phase 24 plans 1-3 done；24-04 待执行。
