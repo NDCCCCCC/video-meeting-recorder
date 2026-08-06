@@ -36,23 +36,23 @@
 
 ### SCHED — scheduler 多信号驱动
 
-- [ ] **SCHED-01**: `scheduler.monitorTask` 改为 `select` on EndTime timer + `taskEndedCh` + `taskUpdateChans[task.ID]`，单次循环同时等待三类信号
-- [ ] **SCHED-02**: EndTime 到点时，系统先问 `watcher.IsActive()`；活跃（任一信号未触发）则 `EndTime += extend_step_min`，否则 `completeTask("endtime_no_activity")`
-- [ ] **SCHED-03**: `taskEndedCh` 信号永远优先于 EndTime timer —— channel close 后 EndTime.C 不再生效，提前结束信号不受 timer 竞争
-- [ ] **SCHED-04**: 用户手动 `UpdateTaskEndTime` 触发 `taskUpdateChans` 时，`ExtensionCount` 不重置（仅 timer 重置），避免人为绕开上限
+- [x] **SCHED-01**: `scheduler.monitorTask` 改为 `select` on EndTime timer + `taskEndedCh` + `taskUpdateChans[task.ID]`，单次循环同时等待三类信号
+- [x] **SCHED-02**: EndTime 到点时，系统先问 `watcher.IsActive()`；活跃（任一信号未触发）则 `EndTime += extend_step_min`，否则 `completeTask("endtime_no_activity")`
+- [x] **SCHED-03**: `taskEndedCh` 信号永远优先于 EndTime timer —— channel close 后 EndTime.C 不再生效，提前结束信号不受 timer 竞争
+- [x] **SCHED-04**: 用户手动 `UpdateTaskEndTime` 触发 `taskUpdateChans` 时，`ExtensionCount` 不重置（仅 timer 重置），避免人为绕开上限
 
 ### EXTEND — 自动延时与上限
 
 - [ ] **EXTEND-01**: 单任务 `ExtensionCount` 上限 = `max_extend_count`（默认 4），累计延时 = 4 × `extend_step_min`（默认 30min）= 2h 总上限
-- [ ] **EXTEND-02**: 上限达 4 次后 EndTime 到点仍活跃 → 强制 `completeTask("max_extend_reached")`，任务状态保留 `completed`（**不**标 `failed`，便于运维不告警），audit log 写 `warn`
+- [x] **EXTEND-02**: 上限达 4 次后 EndTime 到点仍活跃 → 强制 `completeTask("max_extend_reached")`，任务状态保留 `completed`（**不**标 `failed`，便于运维不告警），audit log 写 `warn`
 - [ ] **EXTEND-03**: 默认 `extend_step_min=30`（可配，运维可调到 60min 等大值减少延时抖动）
 
 ### EARLY — 提前结束触发
 
-- [ ] **EARLY-01**: H 信号触发时 → `completeTask("smart_early_end")`，`task.EndedByHuaWeAPI=true`，`task.EndedEarlyReason="huawei_state_empty"`
-- [ ] **EARLY-02**: A + B 双 AND 命中（silence ≥ 30s AND file_stall ≥ 120s）→ `completeTask("smart_early_end")`，`task.EndedByHuaWeAPI=false`，`task.EndedEarlyReason="both_silence_and_stall"`
-- [ ] **EARLY-03**: 提前结束信号永远优先于 EndTime timer（`select` 内 case 顺序保证；channel close 后 EndTime.C 不再生效）
-- [ ] **EARLY-04**: 多 input 任务（huawei_auto + usb 同时录制），任一 watcher 判定结束 → 整体结束（保守策略，避免部分 ffmpeg 仍在写但任务已收尾）
+- [x] **EARLY-01**: H 信号触发时 → `completeTask("smart_early_end")`，`task.EndedByHuaWeAPI=true`，`task.EndedEarlyReason="huawei_state_empty"`
+- [x] **EARLY-02**: A + B 双 AND 命中（silence ≥ 30s AND file_stall ≥ 120s）→ `completeTask("smart_early_end")`，`task.EndedByHuaWeAPI=false`，`task.EndedEarlyReason="both_silence_and_stall"`
+- [x] **EARLY-03**: 提前结束信号永远优先于 EndTime timer（`select` 内 case 顺序保证；channel close 后 EndTime.C 不再生效）
+- [x] **EARLY-04**: 多 input 任务（huawei_auto + usb 同时录制），任一 watcher 判定结束 → 整体结束（保守策略，避免部分 ffmpeg 仍在写但任务已收尾）
 
 ### AUDIT — GORM 字段 + audit log
 
@@ -66,7 +66,7 @@
 
 - [ ] **CFG-01**: `internal/config/smart_end.go` 新增 `SmartEndConfig` 结构体（含 14 项阈值/开关，PRD §6 完整列表），从 `config.yaml` 加载，提供合理默认值
 - [ ] **CFG-02**: `config.yaml` 新增 `smart_end:` 段，含 14 项配置（`enabled / silence_db / silence_duration_s / file_stall_s / file_min_growth_bps / huawei_enabled / huawei_poll_interval_s / huawei_persist_s / huawei_failure_threshold / check_interval_s / extend_step_min / max_extend_count / stat_failure_threshold / degrade_on_silence_loss`）
-- [ ] **CFG-03**: `smart_end.enabled=false` 时系统退回纯 EndTime 行为（scheduler 不读 `taskEndedCh`，watcher 不启），便于运维临时回退
+- [x] **CFG-03**: `smart_end.enabled=false` 时系统退回纯 EndTime 行为（scheduler 不读 `taskEndedCh`，watcher 不启），便于运维临时回退
 - [ ] **CFG-04**: `smart_end.huawei_enabled=false` 时系统降级只用兜底 A + B（华为轮询 goroutine 不启），便于 TE40 设备下线/维护时回退
 
 ### OBS — 可观测性（日志）
@@ -120,17 +120,17 @@
 | WATCH-03 | Phase 24 | Pending | 华为 API 连续失败 3 次降级关闭 H |
 | WATCH-04 | Phase 24 | Pending | os.Stat 连续失败视为流死亡 |
 | WATCH-05 | Phase 24 | Pending | ffmpeg 重连保持 watcher 计时不重置 |
-| SCHED-01 | Phase 25 | Pending | monitorTask 改 select 驱动 |
-| SCHED-02 | Phase 25 | Pending | EndTime 到点先问 watcher.IsActive() |
-| SCHED-03 | Phase 25 | Pending | taskEndedCh 永远优先于 EndTime timer |
-| SCHED-04 | Phase 25 | Pending | 用户手动 UpdateTaskEndTime 时 ExtensionCount 不重置 |
+| SCHED-01 | Phase 25 | Complete | monitorTask 改 select 驱动 |
+| SCHED-02 | Phase 25 | Complete | EndTime 到点先问 watcher.IsActive() |
+| SCHED-03 | Phase 25 | Complete | taskEndedCh 永远优先于 EndTime timer |
+| SCHED-04 | Phase 25 | Complete | 用户手动 UpdateTaskEndTime 时 ExtensionCount 不重置 |
 | EXTEND-01 | Phase 25 | Pending | ExtensionCount 上限 = 4 (2h 总上限) |
-| EXTEND-02 | Phase 25 | Pending | 上限达 4 次后强制 completeTask("max_extend_reached") |
+| EXTEND-02 | Phase 25 | Complete | 上限达 4 次后强制 completeTask("max_extend_reached") |
 | EXTEND-03 | Phase 24 | Pending | 默认 extend_step_min=30（可配） |
-| EARLY-01 | Phase 25 | Pending | H 信号触发 → smart_early_end + EndedByHuaWeAPI=true |
-| EARLY-02 | Phase 25 | Pending | A+B 双 AND 命中 → smart_early_end |
-| EARLY-03 | Phase 25 | Pending | 提前结束信号永远优先于 EndTime timer |
-| EARLY-04 | Phase 25 | Pending | 多 input 任一 watcher 触发整体结束 |
+| EARLY-01 | Phase 25 | Complete | H 信号触发 → smart_early_end + EndedByHuaWeAPI=true |
+| EARLY-02 | Phase 25 | Complete | A+B 双 AND 命中 → smart_early_end |
+| EARLY-03 | Phase 25 | Complete | 提前结束信号永远优先于 EndTime timer |
+| EARLY-04 | Phase 25 | Complete | 多 input 任一 watcher 触发整体结束 |
 | AUDIT-01 | Phase 23 | Pending | GORM 加 5 字段（AutoMigrate 列表同步） |
 | AUDIT-02 | Phase 25 | Pending | 延时事件 audit log 含 snapshot |
 | AUDIT-03 | Phase 25 | Pending | 提前结束事件 audit log 含 snapshot |
@@ -138,7 +138,7 @@
 | AUDIT-05 | Phase 23 | Pending | 3 个 sentinel + docs/errors.md 同步 + CI sync-check |
 | CFG-01 | Phase 23 | Pending | SmartEndConfig 结构体 + 默认值 |
 | CFG-02 | Phase 23 | Pending | config.yaml smart_end 段（14 项） |
-| CFG-03 | Phase 25 | Pending | smart_end.enabled=false 退回纯 EndTime |
+| CFG-03 | Phase 25 | Complete | smart_end.enabled=false 退回纯 EndTime |
 | CFG-04 | Phase 25 | Pending | smart_end.huawei_enabled=false 只用 A+B |
 | OBS-01 | Phase 25 | Pending | smart_extend 日志 |
 | OBS-02 | Phase 25 | Pending | smart_early_end 日志 |
