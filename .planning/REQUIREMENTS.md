@@ -16,7 +16,7 @@
 - [ ] **SEC-003a-01**: 系统在 `HuaweiConfig.CABundleFile` 非空时从指定 PEM 文件读取所有证书（含 server cert + `huawei_ca` 自签根），注入 `tls.Config.RootCAs` 作为信任锚；`CABundleFile` 为空字符串时维持原行为（系统 CA bundle）
 - [ ] **SEC-003a-02**: `HuaweiClientManager.SetCABundle(path string) error` 在 PEM 文件不存在 / 解析失败时返回 wrapped error（含文件路径与底层 cause），调用方负责 fail-closed 处理
 - [ ] **SEC-003a-03**: `cmd/server` 启动时调用 `huaweiMgr.SetCABundle(cfg.Huawei.CABundleFile)`，错误时 `logger.Fatal` 退出；空字符串则跳过加载并记录 INFO 日志
-- [ ] **SEC-003a-04**: `config.yaml` 默认值 `./certs/huawei-10.62.10.3-ca.pem`（相对 working dir），运维可在不重启二进制的前提下覆盖；PEM 文件未随仓库 tracked（`.gitignore` 已忽略），部署时由运维手动同步
+- [ ] **SEC-003a-04**: `config.yaml` 默认值 `./certs/huawei-10.62.10.3-ca.pem`（相对 working dir），运维可通过 `config.yaml` / `HUAWEI_CA_BUNDLE_FILE` 环境变量在不重新编译二进制的条件下覆盖路径（服务进程重启生效即可）；PEM 文件未随仓库 tracked（`.gitignore` 已忽略），部署时由运维手动同步
 - [ ] **SEC-003a-05**: 新增 unit 子测覆盖 5 场景：① 正常 PEM + httptest 自签 server 握手成功；② PEM 损坏 / 不存在 → SetCABundle 返回 wrapped error；③ 空路径 → RootCAs=nil（系统 CA 默认）；④ `ca_bundle_file` 同时含 server cert + 自签根时 chain verify 成功；⑤ `NewHTTPClient` 签名变化后 `caCertPool==nil` 与非 nil 两条分支均覆盖
 
 ### DETECT — 检测信号采集

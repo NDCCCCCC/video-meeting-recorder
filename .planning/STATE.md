@@ -55,10 +55,14 @@ v2.0 智能录制收尾（Smart Recording End）— roadmap 已创建（3 phases
 ## Current Position
 
 Phase: 24 (ActivityWatcher + silencedetect + 文件停滞) — EXECUTING
-Plan: 1 of 4
-Next phase: 24 (ActivityWatcher + silencedetect + 文件停滞 — not yet planned)
-Status: Executing Phase 24
-Last activity: 2026-08-06 -- Phase 24 execution started
+Plan: 4 of 4 (24-04 Nyquist 测试 PENDING)
+Next phase: 25 (scheduler 多信号驱动 + E2E + CI) — not yet planned
+Status: Executing Phase 24 (wave 4)
+Last activity: 2026-08-06 -- Phase 24 wave 3 closed (24-03 complete, ahead of origin/main 51 commits)
+
+> 注：HANDOFF.json + .continue-here.md (2026-08-05 旧版 design-v2-review pause) 已删除。
+> 实际进度：Phase 23 验证通过 (5/5)；Phase 24 plans 1-3 done；24-04 待执行。
+> Phase 26 (TLS CA SEC-003a hotfix) 26-01 计划已写，待执行（hotfix 插入，非 roadmap 原计划）。
 
 ---
 
@@ -153,13 +157,13 @@ Last activity: 2026-08-06 -- Phase 24 execution started
 
 ### Last Session
 
-2026-08-06 — v2.0 roadmap 创建（3 phases / 34 REQ-IDs / 0 orphan）
+2026-08-06 — Phase 24 wave 3 closed (24-03 coordinator wiring done)；HANDOFF/.continue-here stale pause artifacts 已删除
 
 ### Next Steps
 
-1. `/gsd:plan-phase 23` — 拆解 Phase 23 为可执行 plans（DETECT-01/04 + AUDIT-01/05 + CFG-01/02）
-2. `/gsd:plan-phase 24` — Phase 23 完成后拆解 watcher（DETECT-02/03 + WATCH-01..05 + EXTEND-03）
-3. `/gsd:plan-phase 25` — Phase 24 完成后拆解 E2E（SCHED/EXTEND-01/02/EARLY/AUDIT-02/03/04/CFG-03/04/OBS-01..05）
+1. `/gsd:execute-phase 24` — 执行 24-04 Nyquist 测试（10 Test* + nyquist_compliant 翻 true）
+2. `/gsd:execute-phase 26` — 执行 26-01 (TLS CA SEC-003a hotfix，可与 24-04 并行或前置)
+3. `/gsd:plan-phase 25` — 24 收尾后拆解 Phase 25 (SCHED/EXTEND/EARLY/AUDIT-余/CFG-余/OBS)
 
 ### Open Questions
 
