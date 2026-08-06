@@ -31,7 +31,7 @@
 | ErrNotFound | Sentinel | 404 | 31 |
 | ErrPPTFileNotFound | Sentinel | 404 | 9 |
 | ErrPermissionNotFound | Sentinel | 404 | 5 |
-| ErrRecordingHuaWeiStateFetchFailed | Sentinel | 500 | 5 |
+| ErrRecordingHuaWeiStateFetchFailed | Sentinel | 500 | 20 |
 | ErrRecordingSmartEarlyEnd | Sentinel | 500 | 5 |
 | ErrRecordingSmartExtend | Sentinel | 500 | 5 |
 | ErrRoleInUse | Sentinel | 409 | 5 |
