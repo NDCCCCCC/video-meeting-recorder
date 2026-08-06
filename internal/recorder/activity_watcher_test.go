@@ -1,6 +1,11 @@
 package recorder
 
 import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -8,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/huawei"
 )
 
 // newTestWatcher 构造测试用 ActivityWatcher:
@@ -192,4 +198,193 @@ func TestFakeClock(t *testing.T) {
 	// 边界: Advance(0) 不变。
 	fc.Advance(0)
 	require.Equal(t, int64(1_700_000_005), fc.Now().Unix())
+}
+
+// ---------------------------------------------------------------------------
+// Phase 24-04 Nyquist scenario matrix (24-VALIDATION.md §ActivityWatcher scenario matrix)
+// ---------------------------------------------------------------------------
+
+// activityWatcherFakeHuawei 实现 HuaweiStateClient 接口,驱动 huaweiPoller 行为;
+// 字段 state/err 可在测试中动态调整。
+type activityWatcherFakeHuawei struct {
+	mu    sync.Mutex
+	state *huawei.ConferenceState
+	err   error
+}
+
+func (f *activityWatcherFakeHuawei) GetConferenceState(context.Context) (*huawei.ConferenceState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.state, f.err
+}
+
+// activityWatcherConfig 构造启用 SmartEnd 的短间隔 cfg,供 H 路径 1-2s 内触发
+// closeEnded 的真实时间集成测试使用。Enabled/HuaweiEnabled/DegradeOnSilenceLoss
+// 都设 true 以驱动 4 个 goroutine 全开;数字字段设为 1s 让 decisionTicker 在
+// 1-3 个 tick 内触发关闭条件 (避免 fakeClock 注入范围扩张到 production code)。
+func activityWatcherConfig() *config.Config {
+	return &config.Config{SmartEnd: config.SmartEndConfig{
+		Enabled:                true,
+		HuaweiEnabled:          true,
+		DegradeOnSilenceLoss:   true,
+		SilenceDB:              -30,
+		SilenceDurationS:       1,
+		FileStallS:             1,
+		FileMinGrowthBPS:       1024,
+		HuaweiPollIntervalS:    1,
+		HuaweiPersistS:         1,
+		HuaweiFailureThreshold: 3,
+		CheckIntervalS:         1,
+		ExtendStepMin:          30,
+		MaxExtendCount:         4,
+		StatFailureThreshold:   3,
+	}}
+}
+
+// waitActivityEnded 阻塞直到 watcher.EndedCh 关闭或 5s 超时。
+func waitActivityEnded(t *testing.T, w *ActivityWatcher) {
+	t.Helper()
+	select {
+	case <-w.EndedCh():
+	case <-time.After(5 * time.Second):
+		t.Fatal("ActivityWatcher did not end within timeout")
+	}
+}
+
+// 1. H 路径触发:fake Huawei 持续 confState=""+JoinSum=0 至少 huawei_persist_s
+// 后,decisionTicker 检测 huaweiEmptySince 满足条件 → closeEnded("huawei_state_empty")。
+func TestActivityWatcher_MeetingEnded_HuaweiEmpty(t *testing.T) {
+	f := &activityWatcherFakeHuawei{state: &huawei.ConferenceState{HasConferenceFields: true}}
+	w := NewActivityWatcher(activityWatcherConfig(), f, "", nil, zap.NewNop())
+	w.Start()
+	defer w.Stop()
+	waitActivityEnded(t, w)
+	s := w.Snapshot()
+	require.True(t, s.Ended)
+	require.Equal(t, "huawei_state_empty", s.EndedReason)
+	require.True(t, s.LastHuaWeiStateEmpty)
+}
+
+// 2. A+B 路径触发:logFile 写入 silence_start → silenceScanner 设 silenceSince;
+// fileTicker 周期 stat,但 lastFileGrowthAt 已被测试在 Start 前置为 now-2s
+// (>= file_stall_s);decisionTicker 在 silenceDurationS+FileStallS 满足时关。
+func TestActivityWatcher_MeetingEnded_AndAB(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "record.mkv")
+	require.NoError(t, os.WriteFile(path, []byte("seed"), 0644))
+	logFile, err := os.CreateTemp(t.TempDir(), "ffmpeg-*.log")
+	require.NoError(t, err)
+	defer logFile.Close()
+	_, err = logFile.WriteString("[silencedetect @ 0x55a3] silence_start: 0\n")
+	require.NoError(t, err)
+	require.NoError(t, logFile.Sync())
+	// 写完后 os.File 偏移在 EOF;bufio.Scanner 从偏移 0 起读需先 Seek 回 0。
+	_, err = logFile.Seek(0, 0)
+	require.NoError(t, err)
+	cfg := activityWatcherConfig()
+	cfg.SmartEnd.HuaweiEnabled = false
+	w := NewActivityWatcher(cfg, nil, path, logFile, zap.NewNop())
+	// 预置 lastFileGrowthAt 到 2s 前 (> file_stall_s=1),让 B 路径首次 decision 时立即满足。
+	w.mu.Lock()
+	w.lastFileGrowthAt = time.Now().Add(-2 * time.Second)
+	w.mu.Unlock()
+	w.Start()
+	defer w.Stop()
+	waitActivityEnded(t, w)
+	require.Equal(t, "both_silence_and_stall", w.Snapshot().EndedReason)
+}
+
+// 3. H 降级:fakeHuawei 3 次返 err → huaweiDegraded=true → H 路径不再评估;
+// 验证后续即使恢复 confState=empty 也不触发 closeEnded;此测仅验降级状态,
+func TestActivityWatcher_HuaweiDegraded(t *testing.T) {
+	f := &activityWatcherFakeHuawei{err: errors.New("unavailable")}
+	cfg := activityWatcherConfig()
+	cfg.SmartEnd.SilenceDurationS = 1
+	w := NewActivityWatcher(cfg, f, "", nil, zap.NewNop())
+	w.Start()
+	defer w.Stop()
+	require.Eventually(t, func() bool { return w.Snapshot().HuaWeiDegraded }, 4*time.Second, 50*time.Millisecond)
+	require.False(t, w.Snapshot().Ended)
+}
+
+// 4. A 降级:logFile 写入 5 行 [silencedetect malformed] (silenceParseFailures
+// 累计 ≥ 5) → silenceDegraded=true;验证 A 路径在 evaluate 时被短路。
+func TestActivityWatcher_SilenceDegraded(t *testing.T) {
+	logFile, err := os.CreateTemp(t.TempDir(), "ffmpeg-*.log")
+	require.NoError(t, err)
+	defer logFile.Close()
+	for i := 0; i < 5; i++ {
+		_, err = logFile.WriteString("[silencedetect malformed]\n")
+		require.NoError(t, err)
+	}
+	require.NoError(t, logFile.Sync())
+	// 写完后 os.File 偏移在 EOF;bufio.Scanner 从偏移 0 起读需先 Seek 回 0。
+	_, err = logFile.Seek(0, 0)
+	require.NoError(t, err)
+	cfg := activityWatcherConfig()
+	cfg.SmartEnd.HuaweiEnabled = false
+	w := NewActivityWatcher(cfg, nil, "", logFile, zap.NewNop())
+	w.Start()
+	defer w.Stop()
+	require.Eventually(t, func() bool { return w.Snapshot().SilenceDegraded }, 2*time.Second, 25*time.Millisecond)
+}
+
+// 5. stat 死亡:filePath 指向不存在路径 → fileTicker 连续 3 次 os.Stat 失败
+// → closeEnded("file_stat_failed")。
+func TestActivityWatcher_StatFailed(t *testing.T) {
+	cfg := activityWatcherConfig()
+	cfg.SmartEnd.HuaweiEnabled = false
+	w := NewActivityWatcher(cfg, nil, filepath.Join(t.TempDir(), "missing.mkv"), nil, zap.NewNop())
+	w.Start()
+	defer w.Stop()
+	waitActivityEnded(t, w)
+	require.Equal(t, "file_stat_failed", w.Snapshot().EndedReason)
+}
+
+// 6. 重连保持 (WATCH-05):手动预置 silenceSince / lastFileGrowthAt / huaweiEmptySince
+// + degraded 标记;调 OnReconnect() → 仅 silenceSince 清零,其余保留。
+func TestActivityWatcher_Reconnect(t *testing.T) {
+	w := newTestWatcher(t, nil)
+	oldGrowth := time.Now().Add(-time.Second)
+	w.mu.Lock()
+	w.silenceSince = time.Now()
+	w.lastFileGrowthAt = oldGrowth
+	w.huaweiEmptySince = time.Now().Add(-time.Second)
+	w.huaweiDegraded = true
+	w.silenceDegraded = true
+	w.mu.Unlock()
+	w.OnReconnect()
+	s := w.Snapshot()
+	require.True(t, s.SilenceSince.IsZero())
+	require.Equal(t, oldGrowth, s.LastFileGrowthAt)
+	require.False(t, s.HuaWeiEmptySince.IsZero())
+	require.True(t, s.HuaWeiDegraded)
+	require.True(t, s.SilenceDegraded)
+}
+
+// 7. close-once (WATCH-01):H 触发后再次调用 closeEnded,验证 sync.Once 拦下;
+// EndedReason 仍是首次触发的 "huawei_state_empty",EndedCh 仍 closed。
+func TestActivityWatcher_CloseOnce(t *testing.T) {
+	f := &activityWatcherFakeHuawei{state: &huawei.ConferenceState{HasConferenceFields: true}}
+	w := NewActivityWatcher(activityWatcherConfig(), f, "", nil, zap.NewNop())
+	w.Start()
+	defer w.Stop()
+	waitActivityEnded(t, w)
+	// 模拟 A+B 条件满足并尝试再次触发 closeEnded。
+	w.mu.Lock()
+	w.silenceSince = time.Now().Add(-2 * time.Second)
+	w.lastFileGrowthAt = time.Now().Add(-2 * time.Second)
+	w.mu.Unlock()
+	w.closeEnded("both_silence_and_stall")
+	require.Equal(t, "huawei_state_empty", w.Snapshot().EndedReason)
+	select {
+	case <-w.EndedCh():
+	default:
+		t.Fatal("EndedCh should remain closed")
+	}
+}
+
+// 8. ExtendStepMin (EXTEND-03):cfg.SmartEnd.ExtendStepMin=60 → watcher.ExtendStepMin() = 60min。
+func TestActivityWatcher_ExtendStep(t *testing.T) {
+	w := newTestWatcher(t, func(s *config.SmartEndConfig) { s.ExtendStepMin = 60 })
+	require.Equal(t, 60*time.Minute, w.ExtendStepMin())
 }

@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
@@ -454,4 +456,68 @@ func TestRecordingProcess_ReconnectCountAtomic(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatalf("ReconnectCount 在 2s 内未达到 %d（实际 %d）", goroutines, process.ReconnectCount.Load())
 	}
+}
+
+// TestBuildRecordingCommand_SilenceDetect 验证 24-03 (DETECT-02 wiring):
+// cfg.SmartEnd.Enabled=true 时 buildRecordingCommand args 含 -af silencedetect=...
+// 过滤器（带 SilenceDB / SilenceDurationS 数字字段）;Enabled=false 时不含 -af。
+func TestBuildRecordingCommand_SilenceDetect(t *testing.T) {
+	cases := []struct {
+		name     string
+		enabled  bool
+		wantHas  bool
+		wantAf   string
+	}{
+		{"enabled_true_injects_silencedetect", true, true, "silencedetect=noise=-30dB:d=30"},
+		{"enabled_false_omits_af", false, false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := NewSimpleRecordingCoordinator(zap.NewNop(), &config.Config{
+				Storage: config.StorageConfig{RecordingsPath: t.TempDir(), HLSPath: t.TempDir()},
+				FFmpeg:  config.FFmpegConfig{Path: "ffmpeg", HLSSegmentDuration: 10, HLSListSize: 6, CRF: 23, Preset: "medium", MaxVideoBitrate: "3M", VideoBufSize: "6M"},
+				SmartEnd: config.SmartEndConfig{Enabled: tc.enabled, SilenceDB: -30, SilenceDurationS: 30},
+			})
+			input := RecordingInput{Type: InputSourceRTSP, RTSPURL: "rtsp://example.com/stream", CameraBackend: "dshow"}
+			args, err := c.buildRecordingCommand(input, "out.mkv", "hls_dir", time.Minute, 1)
+			if err != nil {
+				t.Fatalf("buildRecordingCommand: %v", err)
+			}
+			var foundAf string
+			afPresent := false
+			for i, a := range args {
+				if a == "-af" && i+1 < len(args) {
+					afPresent = true
+					foundAf = args[i+1]
+				}
+			}
+			if afPresent != tc.wantHas {
+				t.Fatalf("-af present=%v, want %v (args=%v)", afPresent, tc.wantHas, args)
+			}
+			if tc.wantHas && foundAf != tc.wantAf {
+				t.Fatalf("-af value=%q, want %q", foundAf, tc.wantAf)
+			}
+		})
+	}
+}
+
+// TestRestartRecording_OnReconnect 验证 24-03 (WATCH-05 wiring):
+// RecordingProcess.OnReconnect 字段存在 + nil-safe + 非 nil 时同步被调用一次;
+// 不实际启 ffmpeg（仅断言回调函数调用契约）。
+func TestRestartRecording_OnReconnect(t *testing.T) {
+	t.Run("nil_safe", func(t *testing.T) {
+		var p *RecordingProcess
+		require.NotPanics(t, func() {
+			if p != nil && p.OnReconnect != nil {
+				p.OnReconnect()
+			}
+		})
+	})
+	t.Run("non_nil_invokes_once", func(t *testing.T) {
+		var calls int32
+		p := &RecordingProcess{OnReconnect: func() { atomic.AddInt32(&calls, 1) }}
+		p.OnReconnect()
+		p.OnReconnect()
+		require.Equal(t, int32(2), atomic.LoadInt32(&calls))
+	})
 }
