@@ -254,4 +254,14 @@ Gate 序列在 `git log --oneline` 中可验证：`test(24-02)` 在 `feat(24-02)
 
 ---
 
-*Plan completed: 2026-08-06 — 3 commits (88b20f0, 5ff35d9, 0657cb3) on `worktree-agent-ade23e375bac7d025`.*
+## Self-Check: PASSED
+
+- [x] SUMMARY.md 存在 (257 lines)
+- [x] 4 commits 全部存在 in git log (88b20f0, 5ff35d9, 0657cb3, 0535813)
+- [x] STATE.md / ROADMAP.md 未被 diff (empty stat output)
+- [x] 最终 git diff vs base: 仅 3 文件 +948 行 (activity_watcher.go / activity_watcher_test.go / 24-02-SUMMARY.md)
+- [x] go build + go vet + go test 全 PASS
+
+---
+
+*Plan completed: 2026-08-06 — 4 commits (88b20f0, 5ff35d9, 0657cb3, 0535813) on `worktree-agent-ade23e375bac7d025`.*
