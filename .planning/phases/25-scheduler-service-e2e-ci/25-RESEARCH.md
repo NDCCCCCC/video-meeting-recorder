@@ -950,7 +950,7 @@ func RecordWatcherDegraded() { WatcherDegradedTotal.Add(1) }
 |---|-------|---------|---------------|
 | (none) | — | — | — |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`taskEndedCh` 多 input 合并是否需要 `sync.Once` 二次保护？**
    - What we know: Phase 24 已用 `sync.Once` 在 watcher 内部 close；scheduler 聚合 fan-in goroutine 收到 close 后也只 close 一次（外部 sync.Once）。
