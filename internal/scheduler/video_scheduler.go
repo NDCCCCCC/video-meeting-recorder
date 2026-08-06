@@ -113,6 +113,7 @@ type RecorderCoordinatorInterface interface {
 	StartRecording(task *models.VideoRecordingTask, config *models.InputConfig) error
 	StartRecordingWithConfig(task *models.VideoRecordingTask, config *models.InputConfig, configType string) error
 	StopRecording(taskID uint) error
+	WatcherChannels(taskID uint) []<-chan struct{}
 	HealthCheck() error
 }
 

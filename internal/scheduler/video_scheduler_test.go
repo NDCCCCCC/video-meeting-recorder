@@ -154,6 +154,10 @@ func (m *mockCoordinator) StopRecording(taskID uint) error {
 	return nil
 }
 
+func (m *mockCoordinator) WatcherChannels(taskID uint) []<-chan struct{} {
+	return nil
+}
+
 func (m *mockCoordinator) HealthCheck() error {
 	return nil
 }

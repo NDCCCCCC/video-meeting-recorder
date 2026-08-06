@@ -65,7 +65,7 @@ type RecordingProcess struct {
 	ReconnectCount  atomic.Int32               // 当前重连次数（PERF-010：原子读，监控 goroutine 增 1 不会与 reconnect 比对产生 race）
 	MaxReconnects   int                        // 最大重连次数
 	ReconnectDelay  time.Duration              // 重连间隔
-	ShouldReconnect bool // 是否应该重连（仅对流媒体有效）
+	ShouldReconnect bool                       // 是否应该重连（仅对流媒体有效）
 
 	// Phase 24 / WATCH-05: OnReconnect 在 attemptReconnect 启动新 ffmpeg 之前由 watcher
 	// 等外部观察者注册;重连期间 watcher 应清理 silenceSince (避免断流期间假静音),
@@ -207,7 +207,7 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 			c.logger,
 		)
 		rec.OnReconnect = rec.ActivityWatcher.OnReconnect // WATCH-05
-		rec.ActivityWatcher.Start()                      // 启 4 goroutines
+		rec.ActivityWatcher.Start()                       // 启 4 goroutines
 		if c.logger != nil {
 			c.logger.Info("ActivityWatcher 已启动",
 				zap.Uint("task_id", task.ID),
@@ -1042,6 +1042,27 @@ func (c *SimpleRecordingCoordinator) HealthCheck() error {
 	}
 
 	return nil
+}
+
+// WatcherChannels returns the close-only watcher channels for all inputs of a task.
+// It snapshots the matching channels under the coordinator read lock so the scheduler
+// can fan them in without accessing recorder-owned process state directly.
+func (c *SimpleRecordingCoordinator) WatcherChannels(taskID uint) []<-chan struct{} {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	prefix := fmt.Sprintf("%d_", taskID)
+	out := make([]<-chan struct{}, 0, 2)
+	for key, proc := range c.processes {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		if proc == nil || proc.taskEndedCh == nil {
+			continue
+		}
+		out = append(out, proc.taskEndedCh)
+	}
+	return out
 }
 
 // GetRecordingStatus 获取录制状态

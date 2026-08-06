@@ -16,7 +16,18 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 )
 
-// TestNewSimpleRecordingCoordinator 测试协调器创建
+func TestRecorderCoordinator_WatcherChannels(t *testing.T) {
+	c := NewSimpleRecordingCoordinator(zap.NewNop(), &config.Config{})
+	c.processes["1_usb"] = &RecordingProcess{taskEndedCh: make(chan struct{})}
+	c.processes["1_stream"] = &RecordingProcess{taskEndedCh: make(chan struct{})}
+	c.processes["2_usb"] = &RecordingProcess{taskEndedCh: make(chan struct{})}
+
+	assert.Len(t, c.WatcherChannels(1), 2)
+	assert.Len(t, c.WatcherChannels(2), 1)
+	assert.NotNil(t, c.WatcherChannels(99))
+	assert.Empty(t, c.WatcherChannels(99))
+}
+
 func TestNewSimpleRecordingCoordinator(t *testing.T) {
 	logger := zap.NewNop()
 	cfg := &config.Config{
@@ -463,10 +474,10 @@ func TestRecordingProcess_ReconnectCountAtomic(t *testing.T) {
 // 过滤器（带 SilenceDB / SilenceDurationS 数字字段）;Enabled=false 时不含 -af。
 func TestBuildRecordingCommand_SilenceDetect(t *testing.T) {
 	cases := []struct {
-		name     string
-		enabled  bool
-		wantHas  bool
-		wantAf   string
+		name    string
+		enabled bool
+		wantHas bool
+		wantAf  string
 	}{
 		{"enabled_true_injects_silencedetect", true, true, "silencedetect=noise=-30dB:d=30"},
 		{"enabled_false_omits_af", false, false, ""},
@@ -474,8 +485,8 @@ func TestBuildRecordingCommand_SilenceDetect(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := NewSimpleRecordingCoordinator(zap.NewNop(), &config.Config{
-				Storage: config.StorageConfig{RecordingsPath: t.TempDir(), HLSPath: t.TempDir()},
-				FFmpeg:  config.FFmpegConfig{Path: "ffmpeg", HLSSegmentDuration: 10, HLSListSize: 6, CRF: 23, Preset: "medium", MaxVideoBitrate: "3M", VideoBufSize: "6M"},
+				Storage:  config.StorageConfig{RecordingsPath: t.TempDir(), HLSPath: t.TempDir()},
+				FFmpeg:   config.FFmpegConfig{Path: "ffmpeg", HLSSegmentDuration: 10, HLSListSize: 6, CRF: 23, Preset: "medium", MaxVideoBitrate: "3M", VideoBufSize: "6M"},
 				SmartEnd: config.SmartEndConfig{Enabled: tc.enabled, SilenceDB: -30, SilenceDurationS: 30},
 			})
 			input := RecordingInput{Type: InputSourceRTSP, RTSPURL: "rtsp://example.com/stream", CameraBackend: "dshow"}
