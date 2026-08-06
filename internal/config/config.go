@@ -200,6 +200,11 @@ type HuaweiConfig struct {
 	SessionTimeout     time.Duration `mapstructure:"session_timeout" json:"session_timeout" yaml:"session_timeout"`
 	KeepAliveInterval  time.Duration `mapstructure:"keep_alive_interval" json:"keep_alive_interval" yaml:"keep_alive_interval"`
 	MinTLSVersion      string        `mapstructure:"min_tls_version" json:"min_tls_version" yaml:"min_tls_version"`
+	// SEC-003a: 华为终端私有 CA bundle 路径（推荐 ./certs/huawei-10.62.10.3-ca.pem）。
+	// 空字符串 = 使用系统 CA bundle（保留完整证书校验）;
+	// 非空 = 由 Manager.SetCABundle 解析全部 CERTIFICATE 块后注入 tls.Config.RootCAs。
+	// 显式空字符串必须保留为空（system-CA opt-out），不可在 setDefaults 里覆盖。
+	CABundleFile string `mapstructure:"ca_bundle_file" json:"ca_bundle_file" yaml:"ca_bundle_file"`
 }
 
 // RTSPConfig RTSP配置
@@ -782,6 +787,8 @@ huawei:
   session_timeout: "3600s"
   keep_alive_interval: "300s"
   min_tls_version: "1.2"
+  # SEC-003a: 华为终端私有 CA bundle 路径（与 certs/*.pem 一并由运维部署）
+  ca_bundle_file: "./certs/huawei-10.62.10.3-ca.pem"
 
 ffmpeg:
   path: "./bin/ffmpeg"  # 使用项目内置的 ffmpeg
@@ -852,6 +859,8 @@ func bindSecretEnv(v *viper.Viper) {
 	_ = v.BindEnv("auth.hls_token_secret", "HLS_TOKEN_SECRET")
 	_ = v.BindEnv("huawei.insecure_skip_verify", "HUAWEI_INSECURE_SKIP_VERIFY")
 	_ = v.BindEnv("huawei.min_tls_version", "HUAWEI_MIN_TLS_VERSION")
+	// SEC-003a: 华为终端私有 CA bundle 路径覆盖——运维无需重新编译二进制即可切换。
+	_ = v.BindEnv("huawei.ca_bundle_file", "HUAWEI_CA_BUNDLE_FILE")
 	_ = v.BindEnv("cors.allowed_origins", "CORS_ALLOWED_ORIGINS")
 	_ = v.BindEnv("security.csrf_enabled", "CSRF_ENABLED")
 	_ = v.BindEnv("security.csrf_safe_origins", "CSRF_SAFE_ORIGINS")

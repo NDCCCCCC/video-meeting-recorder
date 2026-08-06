@@ -87,6 +87,9 @@ huawei:
   session_timeout: "3600s"
   keep_alive_interval: "300s"
   min_tls_version: "1.0"
+  # SEC-003a: 华为终端私有 CA bundle 路径（推荐 ./certs/huawei-10.62.10.3-ca.pem）。
+  # 可由环境变量 HUAWEI_CA_BUNDLE_FILE 覆盖；留空 = 使用系统 CA bundle。
+  ca_bundle_file: "./certs/huawei-10.62.10.3-ca.pem"
 
 ffmpeg:
   path: "./bin/ffmpeg"

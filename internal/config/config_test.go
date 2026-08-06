@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -104,6 +105,42 @@ func TestLoad_BindEnvHuaweiTLS(t *testing.T) {
 	// viper 把字符串 "true" 反序列化为 bool
 	assert.True(t, cfg.Huawei.InsecureSkipVerify, "HUAWEI_INSECURE_SKIP_VERIFY 应加载为 true")
 	assert.Equal(t, "1.3", cfg.Huawei.MinTLSVersion, "HUAWEI_MIN_TLS_VERSION 应加载为 1.3")
+}
+
+// TestBindEnvHuaweiCABundle 验证 SEC-003a：HUAWEI_CA_BUNDLE_FILE 通过 bindSecretEnv
+// 的 BindEnv 写入 v.BindEnv("huawei.ca_bundle_file", ...)，使用隔离 viper 实例 + Unmarshal
+// 精确断言，避免被 Load() 自动产生默认 config.yaml 内容污染。
+func TestBindEnvHuaweiCABundle(t *testing.T) {
+	want := "/tmp/test-huawei-ca.pem"
+	t.Setenv("HUAWEI_CA_BUNDLE_FILE", want)
+
+	v := viper.New()
+	bindSecretEnv(v)
+	// 同时注册 YAML decoder（Unmarshal 需要知道类型才能反序列化）
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(`huawei: {}`)))
+
+	var cfg Config
+	require.NoError(t, v.Unmarshal(&cfg))
+	assert.Equal(t, want, cfg.Huawei.CABundleFile,
+		"HUAWEI_CA_BUNDLE_FILE 应通过 BindEnv 写入 huawei.ca_bundle_file")
+}
+
+// TestHuaweiCABundle_EmptyPreserved 验证 SEC-003a：显式空字符串必须保留为空，
+// system-CA opt-out 不能被任何默认值覆盖。在隔离 viper 中写入 YAML 明文
+// `huawei.ca_bundle_file: ""`，Unmarshal 后字段值必须为空。
+func TestHuaweiCABundle_EmptyPreserved(t *testing.T) {
+	v := viper.New()
+	bindSecretEnv(v)
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(`huawei:
+  ca_bundle_file: ""
+`)))
+
+	var cfg Config
+	require.NoError(t, v.Unmarshal(&cfg))
+	assert.Equal(t, "", cfg.Huawei.CABundleFile,
+		"显式设置 ca_bundle_file=\"\" 必须保留为空字符（system-CA opt-out）")
 }
 
 func TestCSRFEnabledEnvBinding(t *testing.T) {
