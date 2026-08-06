@@ -39,6 +39,11 @@ type Config struct {
 	Transcription TranscriptionConfig `mapstructure:"transcription" json:"transcription" yaml:"transcription"`
 	CORS          CORSConfig          `mapstructure:"cors" json:"cors" yaml:"cors"`
 	Security      SecurityConfig      `mapstructure:"security" json:"security" yaml:"security"`
+	// SmartEnd Phase 23 (CFG-01): 智能录制收尾 14 项配置。
+	// 14 个字段定义见 smart_end.go;bool 默认值通过 Load() 中的 Viper SetDefault
+	// 在 Unmarshal 前注册,数字字段默认值由 setDefaults 调 applySmartEndDefaults
+	// 在 Unmarshal 后补零值。
+	SmartEnd SmartEndConfig `mapstructure:"smart_end" json:"smart_end" yaml:"smart_end"`
 }
 
 // CORSConfig controls exact cross-origin allowlisting. Empty denies cross-origin requests.
@@ -370,6 +375,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to merge expanded config: %w: %w", apperrors.ErrInternal, err)
 	}
 
+	// Phase 23 (CFG-01) + RESEARCH.md Pitfall 3 修复:smart_end 的 3 个 true-valued
+	// bool 字段必须通过 Viper SetDefault **在 Unmarshal 之前** 注册,这样当用户
+	// 在 config.yaml 里显式写 `smart_end.enabled: false` 时,SetDefault(true) 不会
+	// 把它覆盖为 true (CFG-03/04 退回开关)。YAML 读取顺序天然优先于默认。
+	v.SetDefault("smart_end.enabled", true)
+	v.SetDefault("smart_end.huawei_enabled", true)
+	v.SetDefault("smart_end.degrade_on_silence_loss", true)
+
 	// SEC-001: 显式绑定部署文档中的环境变量名（无 RECORD 前缀），使运维设置的
 	// SM4_SECRET/HLS_TOKEN_SECRET 等真正加载到配置结构（绕过 SetEnvPrefix 机制）。
 	bindSecretEnv(v)
@@ -381,6 +394,12 @@ func Load() (*Config, error) {
 
 	// 设置默认值
 	setDefaults(&cfg)
+
+	// Phase 23 (CFG-01): SmartEnd 数值/范围校验。fail-closed — 配置错误直接
+	// 阻断启动,避免后续 watcher/scheduler 在错的阈值上跑空跑。
+	if err := cfg.SmartEnd.Validate(); err != nil {
+		return nil, fmt.Errorf("smart_end config validation failed: %w: %w", apperrors.ErrInternal, err)
+	}
 
 	if value := os.Getenv("CORS_ALLOWED_ORIGINS"); value != "" {
 		cfg.CORS.AllowedOrigins = splitCommaSeparated(value)
@@ -658,6 +677,9 @@ func setDefaults(cfg *Config) { //nolint:gocyclo,cyclop // 大量配置项默认
 	if cfg.Tingwu.APITimeout == 0 {
 		cfg.Tingwu.APITimeout = 30
 	}
+
+	// Phase 23 (CFG-01): SmartEnd 数字字段默认值 (bool 由 Viper SetDefault 处理)。
+	applySmartEndDefaults(cfg)
 }
 
 func splitCommaSeparated(value string) []string {
