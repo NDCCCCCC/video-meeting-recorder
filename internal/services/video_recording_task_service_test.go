@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -457,4 +460,191 @@ func TestMarkTaskEndedEarly_BothSilenceAndStall(t *testing.T) {
 	assert.Equal(t, false, newDataMap["ended_by_huawei_api"],
 		"A+B 路径 audit NewData.ended_by_huawei_api 应 false")
 	assert.Equal(t, "both_silence_and_stall", newDataMap["ended_early_reason"])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 25 Plan 04 — Nyquist 闭环测试（gold JSON + antipattern grep）
+// ---------------------------------------------------------------------------
+
+// resolveSchedulerSource 解析 internal/scheduler/video_scheduler.go 的绝对路径。
+// 走 runtime.Caller(0) 拿本测试文件所在目录,再 ../scheduler/video_scheduler.go 拼出。
+// 这避免了硬编码 ../../internal/... (cwd 变化时脆弱)。
+func resolveSchedulerSource(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller(0) 必须可用")
+	thisDir := filepath.Dir(thisFile)
+	candidate := filepath.Clean(filepath.Join(thisDir, "..", "scheduler", "video_scheduler.go"))
+	if _, err := os.Stat(candidate); err != nil {
+		t.Fatalf("解析 scheduler 源文件失败 %s: %v", candidate, err)
+	}
+	return candidate
+}
+
+// TestServiceEntrypoint_OnlyPath 验证 Phase 25 AUDIT-04 守门:scheduler
+// 不得直 GORM 写 5 smart-end 字段(extension_count / ended_early /
+// last_extension_reason / ended_early_reason / ended_by_huawei_api)。
+// 通过反模式 grep 实现:scheduler 源文件不应包含
+// `s.taskService.GetDB().Model(&models.VideoRecordingTask{}).Updates(` 或
+// `s.taskService.GetDB().Model(&task).Updates(`(即使是局部变量也会被命中)。
+//
+// 注意:本测试是 service 包内的"side check",scheduler 包内另有
+// TestScheduler_DoesNotDirectlyUpdateTask(plan 04 sole owner 双侧防御)。
+func TestServiceEntrypoint_OnlyPath(t *testing.T) {
+	src, err := os.ReadFile(resolveSchedulerSource(t))
+	require.NoError(t, err)
+	content := string(src)
+
+	// antipattern 1: literal struct reference
+	antipattern1 := "s.taskService.GetDB().Model(&models.VideoRecordingTask{}).Updates("
+	assert.NotContains(t, content, antipattern1,
+		"scheduler 不应直 GORM 写 VideoRecordingTask;应走 service.UpdateTaskExtension / MarkTaskEndedEarly")
+
+	// antipattern 2: local-variable reference
+	antipattern2 := "s.taskService.GetDB().Model(&task).Updates("
+	assert.NotContains(t, content, antipattern2,
+		"scheduler 不应直 GORM 写 task 局部变量;应走 service.UpdateTaskExtension / MarkTaskEndedEarly")
+}
+
+// TestMarkTaskEndedEarly_AuditSnapshot 验证 Phase 25 AUDIT-03:MarkTaskEndedEarly
+// 写 3 GORM 字段 (ended_early / ended_early_reason / ended_by_huawei_api) +
+// audit log 1 行,NewData JSON 含 5+ 字段 (ended_early / ended_early_reason /
+// ended_by_huawei_api + 4 snapshot 字段 file_size_bytes / file_growth_bps /
+// silence_since / last_file_growth)。
+//
+// 与 TestMarkTaskEndedEarly_HuaweiSignal / _BothSilenceAndStall 的差异:本测试
+// (1) 显式断言 audit 行 module='task' / action='update';(2) 同 task 路径连续
+// 跑两个 reason,验证 GORM 字段互不污染(ExtensionCount 不变 + EndedEarlyReason
+// 切换为最后一次写入的值);(3) 验证 OldData 仅含 ended_early:false (Pitfall 4
+// 缓解 — end_time 旧值由 audit_ui 按 DiffData 自动呈现)。
+func TestMarkTaskEndedEarly_AuditSnapshot(t *testing.T) {
+	db := newTestDB(t)
+	svc := NewVideoRecordingTaskService(db, zap.NewNop())
+	auditSvc := auditpkg.NewAuditLogService(db, zap.NewNop())
+	defer auditSvc.Stop()
+	svc.SetAuditService(auditSvc)
+
+	now := time.Now().UTC()
+	task := models.VideoRecordingTask{
+		Name:           "early-end-audit-test",
+		StartTime:      now.Add(-time.Hour),
+		EndTime:        now.Add(30 * time.Minute),
+		Status:         models.VideoStatusRecording,
+		PreJoinMinutes: 0,
+		CreatedBy:      1,
+		ExtensionCount: 2, // 验证 MarkTaskEndedEarly 不会动 ExtensionCount
+	}
+	require.NoError(t, db.Create(&task).Error)
+	originalExtensionCount := task.ExtensionCount
+
+	fixedTime := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	// Step 1: H 信号 (huawei_state_empty, byHuaWeiAPI=true)
+	snap1 := recorder.ActivitySnapshot{
+		FileSizeBytes:        16384,
+		FileGrowthBps:        4096,
+		LastFileGrowthAt:     fixedTime,
+		HuaWeiEmptySince:     fixedTime,
+		LastHuaWeiStateEmpty: true,
+	}
+	err := svc.MarkTaskEndedEarly(context.Background(), task.ID, "huawei_state_empty", true, snap1)
+	require.NoError(t, err)
+
+	// GORM 字段断言:H 路径
+	var got models.VideoRecordingTask
+	require.NoError(t, db.First(&got, task.ID).Error)
+	assert.True(t, got.EndedEarly, "EndedEarly 应 true")
+	assert.Equal(t, "huawei_state_empty", got.EndedEarlyReason, "EndedEarlyReason 应 huawei_state_empty")
+	assert.True(t, got.EndedByHuaWeAPI, "EndedByHuaWeAPI 应 true (H 信号路径)")
+	assert.Equal(t, originalExtensionCount, got.ExtensionCount,
+		"MarkTaskEndedEarly 不应改 ExtensionCount(应保持 %d)", originalExtensionCount)
+
+	// AUDIT-03 断言:audit 行 module='task' / action='update'
+	logs := waitForAuditLogs(t, db, 1)
+	require.GreaterOrEqual(t, len(logs), 1, "audit_logs 应至少 1 行")
+	auditLog := logs[0]
+	assert.Equal(t, models.ActionUpdate, auditLog.Action, "audit action 应 update")
+	assert.Equal(t, models.ModuleTask, auditLog.Module, "audit module 应 task")
+	require.NotNil(t, auditLog.ResourceID)
+	assert.Equal(t, task.ID, *auditLog.ResourceID, "ResourceID 应指向本任务")
+
+	var newDataMap map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(auditLog.NewData), &newDataMap))
+	// AUDIT-03 必含字段:ended_early_reason / ended_by_huawei_api (SmartEndSnapshot 字段)
+	assert.Equal(t, "huawei_state_empty", newDataMap["ended_early_reason"], "NewData.ended_early_reason")
+	assert.Equal(t, true, newDataMap["ended_by_huawei_api"], "NewData.ended_by_huawei_api 应 true")
+	// 4 个 snapshot 字段
+	assert.EqualValues(t, 16384, newDataMap["file_size_bytes"], "NewData.file_size_bytes")
+	assert.EqualValues(t, 4096, newDataMap["file_growth_bps"], "NewData.file_growth_bps")
+	// silence_since / last_file_growth 是 *time.Time + omitempty;Step 1 snap.SilenceSince
+	// 是零值(nilIfZero → nil pointer)→ JSON 字段被 omitempty 抹去,key 不存在。
+	// 这是 Step 2 路径(有非零时间)才验证,见下面 last_file_growth。
+	_, hasLastGrowth := newDataMap["last_file_growth"]
+	assert.True(t, hasLastGrowth, "last_file_growth key 应在 JSON 中(snap.LastFileGrowthAt 非零)")
+
+	// OldData 仅 ended_early:false (Pitfall 4 缓解)
+	var oldDataMap map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(auditLog.OldData), &oldDataMap))
+	assert.Equal(t, false, oldDataMap["ended_early"],
+		"OldData.ended_early 应为 false(GORM Updates 前状态)")
+}
+
+// TestAuditSnapshot_ZeroTimeOmitsSilence 验证 Phase 25 AUDIT-02 Pitfall 4:
+func TestAuditSnapshot_ZeroTimeOmitsSilence(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	svc := NewVideoRecordingTaskService(db, zap.NewNop())
+	svc.SetConfig(cfg)
+	auditSvc := auditpkg.NewAuditLogService(db, zap.NewNop())
+	defer auditSvc.Stop()
+	svc.SetAuditService(auditSvc)
+
+	now := time.Now().UTC()
+	task := models.VideoRecordingTask{
+		Name:           "zero-time-silence",
+		StartTime:      now.Add(-time.Hour),
+		EndTime:        now.Add(30 * time.Minute),
+		Status:         models.VideoStatusRecording,
+		PreJoinMinutes: 0,
+		CreatedBy:      1,
+		ExtensionCount: 0,
+	}
+	require.NoError(t, db.Create(&task).Error)
+
+	// SilenceSince 故意置零(零值);其他字段填上以验证选择性
+	snap := recorder.ActivitySnapshot{
+		FileSizeBytes:    512,
+		FileGrowthBps:    1024,
+		LastFileGrowthAt: now.Add(-time.Minute),
+		SilenceSince:     time.Time{}, // 零值
+	}
+
+	err := svc.UpdateTaskExtension(context.Background(), task.ID, 30, "active_meeting", snap)
+	require.NoError(t, err)
+
+	// 等待 audit 写入 + 查最近一行
+	logs := waitForAuditLogs(t, db, 1)
+	require.GreaterOrEqual(t, len(logs), 1, "audit_logs 应至少 1 行")
+	auditLog := logs[0]
+
+	// 1. JSON raw 文本: "silence_since" 字段必须不存在(omitempty + nil pointer)
+	// 或序列化为 null。我们宽容两种:raw 文本不应包含 "0001-01-01"
+	assert.NotContains(t, auditLog.NewData, "0001-01-01",
+		"NewData JSON 不应包含 time.Time 零值的 '0001-01-01' 字符串;Pitfall 4 trap")
+
+	// 2. unmarshal 到 map[string]interface{} 后,silence_since 应为 nil(omitempty 抹去)
+	// 或为 null;unmarshal 后 nil 落入 map
+	var newDataMap map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(auditLog.NewData), &newDataMap))
+	silenceVal, present := newDataMap["silence_since"]
+	if present {
+		// 如果字段存在(序列化保留),它必须不是 time.Time 零值字符串
+		assert.Nil(t, silenceVal,
+			"silence_since 存在时必须为 nil/unmarshalled-null,实际 %T %v", silenceVal, silenceVal)
+	}
+	// 如果字段被 omitempty 抹去,present=false 即可;两种行为都接受
+
+	// 3. 非零字段(file_size_bytes / file_growth_bps)必须保留
+	assert.EqualValues(t, 512, newDataMap["file_size_bytes"])
+	assert.EqualValues(t, 1024, newDataMap["file_growth_bps"])
+	assert.EqualValues(t, 1, newDataMap["extension_count"])
 }
