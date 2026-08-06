@@ -2,14 +2,14 @@
 
 ## Milestones
 
-- ✅ **v1.0 视频切割与会议转录PPT** — Phases 01-14 (shipped 2026-05-06)
-- ✅ **v1.1 文件管理与编辑增强 / 后端安全加固** — Phases 17-22 (shipped 2026-08-03)
-- 🚧 **v2.0 智能录制收尾（Smart Recording End）** — Phases 23-25 (planning, started 2026-08-06)
+- **v1.0 视频切割与会议转录PPT** — Phases 01-14 (shipped 2026-05-06)
+- **v1.1 文件管理与编辑增强 / 后端安全加固** — Phases 17-22 (shipped 2026-08-03)
+- **v2.0 智能录制收尾（Smart Recording End）** — Phases 23-25 (planning, started 2026-08-06)
 
 ## Phases
 
 <details>
-<summary>✅ v1.0 视频切割与会议转录PPT (Phases 01-14) — SHIPPED 2026-05-06</summary>
+<summary>v1.0 视频切割与会议转录PPT (Phases 01-14) — SHIPPED 2026-05-06</summary>
 
 - [x] Phase 01: 视频分割 (5/5 plans) — completed 2026-04-17
 - [x] Phase 02: 本地转录 (4/4 plans) — completed 2026-04-17
@@ -33,7 +33,7 @@
 </details>
 
 <details>
-<summary>✅ v1.1 文件管理与编辑增强 / 后端安全加固 (Phases 17-22) — SHIPPED 2026-08-03</summary>
+<summary>v1.1 文件管理与编辑增强 / 后端安全加固 (Phases 17-22) — SHIPPED 2026-08-03</summary>
 
 - [x] Phase 17: 后端代码审查 56 项修复 P0/P1/P2 (4/4 plans) — completed 2026-07-30
 - [x] Phase 18: 凭据静态加密 + 密钥轮换 SEC-003b SM4-GCM (1/1 plan) — completed 2026-07-31
@@ -50,12 +50,12 @@
 </details>
 
 <details open>
-<summary>🚧 v2.0 智能录制收尾（Smart Recording End）(Phases 23-25) — PLANNING 2026-08-06</summary>
+<summary>v2.0 智能录制收尾（Smart Recording End）(Phases 23-25) — PLANNING 2026-08-06</summary>
 
 **Milestone Goal:** 让华为会议录制时长智能贴合会议真实时长——到点未结束自动延时（30min × 4 = 2h 上限），提前结束由 TE40 `WEB_GetMailboxDataAPI`（`confState=="" && joinSum==0`）主信号 + silencedetect + 文件停滞双兜底任一触发即收尾转码，无需人工干预。
 
-- [ ] **Phase 23: 华为 API 扩展 + GORM 字段 + sentinel 错误码** — 落地 H 信号数据通路与可观测基线
-- [ ] **Phase 24: ActivityWatcher + silencedetect + 文件停滞** — 整合 H+A+B 三类信号 + 多级降级
+- [x] **Phase 23: 华为 API 扩展 + GORM 字段 + sentinel 错误码** — 落地 H 信号数据通路与可观测基线
+- [ ] **Phase 24: ActivityWatcher + silencedetect + 文件停滞** — 整合 H+A+B + 多级降级
 - [ ] **Phase 25: scheduler 多信号驱动 + service 封装 + E2E + CI** — 端到端闭环 + 余项 AUDIT/CFG/OBS
 
 </details>
@@ -91,7 +91,13 @@ Plans:
   4. `HuaweiClient.GetConferenceState()` 连续失败 ≥ 3 次时自动降级关闭 H 信号，只用 A+B 兜底
   5. ffmpeg 重连期间 watcher 静音/文件计时不重置（仅清 `SilenceSince`），与现有断流重连逻辑不冲突
   6. 默认 `extend_step_min=30`，可通过运维配置调整为 60min 等大值
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 24-01-PLAN.md -- SilenceParser + 6 fixture 测试 + HuaweiStateClient interface 声明 (DETECT-02)
+- [ ] 24-02-PLAN.md -- ActivityWatcher 整合 H+A+B + 多级降级 + close-once + 公开 API (DETECT-03, WATCH-01..05, EXTEND-03)
+- [ ] 24-03-PLAN.md -- coordinator.go: buildRecordingCommand 注入 -af silencedetect + RecordingProcess.OnReconnect + restartRecording 同步调用 (DETECT-02 wiring, WATCH-05)
+- [ ] 24-04-PLAN.md -- 8 ActivityWatcher scenario 子测 + 2 coordinator 扩展测 (Nyquist 全覆盖)
 
 ### Phase 25: scheduler 多信号驱动 + service 封装 + E2E + CI
 **Goal**: `monitorTask` 改 `select` 驱动；完成延时上限/强制截断/提前结束端到端闭环；补齐 AUDIT/CFG/OBS 余项（含 audit log snapshot、enabled 开关、5 类可观测日志字段）
@@ -133,7 +139,7 @@ Plans:
 | 21. Close v1.1 gaps | v1.1 | 5/5 | Complete | 2026-08-03 |
 | 22. v1.1 audit tech debt 收尾 | v1.1 | 6/6 | Complete | 2026-08-03 |
 | 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 5/5 | Complete    | 2026-08-06 |
-| 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 0/TBD | Planning | - |
+| 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 0/4 | Planning | - |
 | 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 0/TBD | Planning | - |
 
 ## Backlog
