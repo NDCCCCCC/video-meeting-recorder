@@ -11,7 +11,8 @@ import (
 )
 
 // newTestWatcher 构造测试用 ActivityWatcher:
-//   - 走 applySmartEndDefaults 填默认数字 (bool 字段默认 false, 简化 huaweiPoller 路径)
+//   - SmartEnd 字段显式填默认值 (不依赖 config.applySmartEndDefaults 因其
+//     是 config 包私有;bool 字段默认 false, 简化 huaweiPoller 路径)
 //   - huaweiCli 传 nil (H 路径不被本套单测覆盖, 由 24-04 集成测试驱动)
 //   - filePath/logFile 传 ""/nil (fileTicker/silenceScanner 路径只在 Start 之后采样,
 //     本批单测覆盖 Start/Stop/IsActive/OnReconnect/Snapshot/ExtendStepMin/HuaweiEnabled
@@ -19,7 +20,20 @@ import (
 func newTestWatcher(t *testing.T, mutate func(*config.SmartEndConfig)) *ActivityWatcher {
 	t.Helper()
 	cfg := &config.Config{}
-	applySmartEndDefaults(cfg)
+	cfg.SmartEnd = config.SmartEndConfig{
+		SilenceDB:              -30,
+		SilenceDurationS:       30,
+		FileStallS:             120,
+		FileMinGrowthBPS:       1024,
+		HuaweiPollIntervalS:    30,
+		HuaweiPersistS:         30,
+		HuaweiFailureThreshold: 3,
+		CheckIntervalS:         5,
+		ExtendStepMin:          30,
+		MaxExtendCount:         4,
+		StatFailureThreshold:   3,
+		// Enabled / HuaweiEnabled / DegradeOnSilenceLoss 走零值 false 以简化。
+	}
 	if mutate != nil {
 		mutate(&cfg.SmartEnd)
 	}
@@ -48,8 +62,10 @@ func TestNewActivityWatcher(t *testing.T) {
 }
 
 // TestExtendStepMin 验证 ExtendStepMin():
-//   cfg.SmartEnd.ExtendStepMin=60 → 60*time.Minute
-//   cfg.SmartEnd.ExtendStepMin=30 (默认) → 30*time.Minute
+//
+//	cfg.SmartEnd.ExtendStepMin=60 → 60*time.Minute
+//	cfg.SmartEnd.ExtendStepMin=30 (默认) → 30*time.Minute
+//
 // 对应 24-VALIDATION.md §ActivityWatcher scenario matrix "ExtendStepMin" 行。
 func TestExtendStepMin(t *testing.T) {
 	t.Run("explicit 60", func(t *testing.T) {
