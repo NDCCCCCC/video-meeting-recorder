@@ -97,7 +97,7 @@ Plans:
 Plans:
 - [x] 24-01-PLAN.md -- SilenceParser + 6 fixture 测试 + HuaweiStateClient interface 声明 (DETECT-02)
 - [x] 24-02-PLAN.md -- ActivityWatcher 整合 H+A+B + 多级降级 + close-once + 公开 API (DETECT-03, WATCH-01..05, EXTEND-03)
-- [ ] 24-03-PLAN.md -- coordinator.go: buildRecordingCommand 注入 -af silencedetect + RecordingProcess.OnReconnect + restartRecording 同步调用 (DETECT-02 wiring, WATCH-05)
+- [x] 24-03-PLAN.md -- coordinator.go: buildRecordingCommand 注入 -af silencedetect + RecordingProcess.OnReconnect + restartRecording 同步调用 (DETECT-02 wiring, WATCH-05)
 - [ ] 24-04-PLAN.md -- 8 ActivityWatcher scenario 子测 + 2 coordinator 扩展测 (Nyquist 全覆盖)
 
 ### Phase 25: scheduler 多信号驱动 + service 封装 + E2E + CI
@@ -152,7 +152,7 @@ Plans:
 | 21. Close v1.1 gaps | v1.1 | 5/5 | Complete | 2026-08-03 |
 | 22. v1.1 audit tech debt 收尾 | v1.1 | 6/6 | Complete | 2026-08-03 |
 | 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 5/5 | Complete    | 2026-08-06 |
-| 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 2/4 | In Progress|  |
+| 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 3/4 | In Progress|  |
 | 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 0/TBD | Planning | - |
 
 ## Backlog
