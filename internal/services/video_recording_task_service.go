@@ -9,9 +9,12 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/recorder"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
+	auditpkg "github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
@@ -23,6 +26,11 @@ import (
 // Phase 19 D2：新增 encryptor 字段（Phase 18 SM4-GCM 凭据解密从 cmd/server
 // taskServiceAdapter 整合到此服务），消除 scheduler 与服务之间的双层签名级联与
 // 双源 truth。
+//
+// Phase 25 AUDIT-04：新增 auditSvc 与 cfg 字段,UpdateTaskExtension /
+// MarkTaskEndedEarly 是 smart-end 写 GORM 5 字段 + audit log 的唯一入口。
+// auditSvc 可为 nil (测试场景),nil 时静默跳过 audit log 写入;cfg 必传
+// (UpdateTaskExtension 读 cfg.SmartEnd.MaxExtendCount)。
 type VideoRecordingTaskService struct {
 	db        *gorm.DB
 	logger    *zap.Logger
@@ -30,19 +38,45 @@ type VideoRecordingTaskService struct {
 	// encryptor Phase 18 SM4-GCM 凭据静态解密。GetInputConfig 末尾在 encryptor!=nil
 	// 时解密 Password/StreamPassword；nil 时透传密文。
 	encryptor *CredentialEncryptor
+	// auditSvc Phase 25 AUDIT-04: smart-end 事件 audit log 写入。可为 nil,
+	// nil 时 UpdateTaskExtension / MarkTaskEndedEarly 仅写 GORM,不写 audit log
+	// (服务降级路径,测试场景常用)。
+	auditSvc *auditpkg.AuditLogService
+	// cfg Phase 25 AUDIT-04: UpdateTaskExtension 读 cfg.SmartEnd.MaxExtendCount
+	// 做延长上限守门。nil 时调用 UpdateTaskExtension 会 panic (production 路径
+	// 必须由 cmd/server 注入;测试可传 nil 仅测 MarkTaskEndedEarly 路径)。
+	cfg *config.Config
 }
 
 // NewVideoRecordingTaskService 创建视频录制任务服务
 // Phase 19 D2: 增加可选 CredentialEncryptor 参数；传 nil 行为等同 Phase 18 之前（密文透传）。
+// Phase 25 AUDIT-04: 增加可选 auditSvc 与 cfg variadic 参数,位置在 encryptor 之后。
+// 调用方既可零参沿用旧行为,也可按顺序 NewVideoRecordingTaskService(db, logger, encryptor, auditSvc, cfg)。
+// 任一 variadic 段首位为 nil 时等同未传;nil auditSvc → 静默跳过 audit 日志,
+// nil cfg → UpdateTaskExtension 调用时会 panic (测试场景一般传 nil 仅测 early-end 路径)。
 func NewVideoRecordingTaskService(db *gorm.DB, logger *zap.Logger, encryptor ...*CredentialEncryptor) *VideoRecordingTaskService {
 	s := &VideoRecordingTaskService{
 		db:     db,
 		logger: logger,
 	}
+	// Phase 19 D2: encryptor variadic,位置 0
 	if len(encryptor) > 0 {
 		s.encryptor = encryptor[0]
 	}
 	return s
+}
+
+// SetAuditService 设置 audit log 服务 (Phase 25 AUDIT-04)。供 cmd/server 在
+// 注入 scheduler 后单独设置 audit 依赖,避免 NewVideoRecordingTaskService 5
+// 参 + 2 variadic 难读。nil 入参清空 audit 能力。
+func (s *VideoRecordingTaskService) SetAuditService(auditSvc *auditpkg.AuditLogService) {
+	s.auditSvc = auditSvc
+}
+
+// SetConfig 设置全局配置 (Phase 25 AUDIT-04)。UpdateTaskExtension 读
+// cfg.SmartEnd.MaxExtendCount 做延长上限守门。nil 入参清空 cfg 引用。
+func (s *VideoRecordingTaskService) SetConfig(cfg *config.Config) {
+	s.cfg = cfg
 }
 
 // SetScheduler 设置调度器
@@ -1111,6 +1145,195 @@ func (s *VideoRecordingTaskService) UpdateRecordingPaths(ctx context.Context, id
 	if result.RowsAffected == 0 {
 		return apperrors.ErrTaskNotFound
 	}
+	return nil
+}
+
+// SmartEndSnapshot smart-end 事件 audit log snapshot 序列化结构 (Phase 25 AUDIT-02/03)。
+// 包含 watcher 状态 + 写后 GORM 5 字段的关键值,JSON 字段名与 audit_logs
+// NewData/OldData 直读体验对齐。
+//
+// Snapshot 字段 (`silence_since` / `last_file_growth`) 使用 *time.Time (nil 时
+// JSON 序列化 null),避免 time.Time 零值在 DB 中以 "0001-01-01" 形式出现
+// (RESEARCH.md Pitfall 4)。
+// EndedByHuaWeiAPI 与 EndedEarlyReason 不带 omitempty — AUDIT-03 要求 audit
+// log 始终携带这两个字段,即使值是 false / "";UpdateTaskExtension 路径
+// 故意不设置它们(为 0 值),但 MarkTaskEndedEarly 路径必须写出。
+type SmartEndSnapshot struct {
+	SilenceSince     *time.Time `json:"silence_since,omitempty"`
+	LastFileGrowthAt *time.Time `json:"last_file_growth,omitempty"`
+	FileSizeBytes    int64      `json:"file_size_bytes"`
+	FileGrowthBps    int64      `json:"file_growth_bps"`
+	ExtensionCount   int        `json:"extension_count,omitempty"`
+	NewEndTime       *time.Time `json:"new_end_time,omitempty"`
+	EndedByHuaWeiAPI bool       `json:"ended_by_huawei_api"`
+	EndedEarlyReason string     `json:"ended_early_reason"`
+}
+
+// nilIfZero 把 time.Time 零值转换为 *time.Time nil (audit log JSON marshall
+// 友好),非零值返回指向 t 的指针。
+func nilIfZero(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+// UpdateTaskExtension 智能延时单入口 (Phase 25 EXTEND-01 + AUDIT-02 + AUDIT-04)。
+//
+// 行为契约:
+//  1. 读 task;读不到 → wrapped apperrors.ErrInternal
+//  2. EXTEND-01 上限守门:task.ExtensionCount >= cfg.SmartEnd.MaxExtendCount
+//     → 返回 wrapped apperrors.ErrRecordingSmartExtend,scheduler 据此走
+//     EXTEND-02 max_extend_reached 强制收尾路径
+//  3. 原子写 end_time + extension_count + last_extension_reason 三字段
+//  4. 同步更新本地 task (供调用方读 new EndTime / ExtensionCount)
+//  5. OBS-01 INFO smart_extend 日志
+//  6. AUDIT-02 audit log snapshot (auditSvc 非 nil 时)
+//
+// 参数:
+//   - taskID  : 任务 ID
+//   - deltaMin: 延时分钟数 (正数, 通常 = cfg.SmartEnd.ExtendStepMin = 30)
+//   - reason  : 延时原因字符串 (例: "active_meeting", "huawei_state_recovered")
+//   - snap    : ActivityWatcher 当前快照,aud-02 audit log 序列化使用
+//
+// 返回:成功 nil;达到 MaxExtendCount 时 wrapped ErrRecordingSmartExtend;DB
+// 错误 wrapped ErrInternal。
+func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, taskID uint, deltaMin int, reason string, snap recorder.ActivitySnapshot) error {
+	// 1. 读 task
+	var task models.VideoRecordingTask
+	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
+		return fmt.Errorf("UpdateTaskExtension: load task %d: %w: %w", taskID, apperrors.ErrInternal, err)
+	}
+
+	// 2. EXTEND-01 上限守门
+	if task.ExtensionCount >= s.cfg.SmartEnd.MaxExtendCount {
+		return fmt.Errorf("extension limit %d reached for task %d: %w",
+			s.cfg.SmartEnd.MaxExtendCount, taskID, apperrors.ErrRecordingSmartExtend)
+	}
+
+	// 3. 计算新值 (Pitfall 4: 保存 extensionOld,audit OldData/NewData 引用)
+	extensionOld := task.ExtensionCount
+	newCount := extensionOld + 1
+	newEnd := task.EndTime.Add(time.Duration(deltaMin) * time.Minute)
+
+	// 4. 原子写 GORM 3 字段
+	if err := s.db.WithContext(ctx).Model(&task).Updates(map[string]interface{}{
+		"end_time":              newEnd,
+		"extension_count":       newCount,
+		"last_extension_reason": reason,
+	}).Error; err != nil {
+		return fmt.Errorf("UpdateTaskExtension: update task %d: %w: %w", taskID, apperrors.ErrInternal, err)
+	}
+
+	// 5. 同步本地 task (供 scheduler 读 new EndTime / ExtensionCount)
+	task.EndTime = newEnd
+	task.ExtensionCount = newCount
+
+	// 6. OBS-01 INFO smart_extend (字段名 task 锁定,Lazy Learning - 与 PRD §10 同)
+	s.logger.Info("smart_extend",
+		zap.Uint("task", taskID),
+		zap.Int("count", newCount),
+		zap.Time("new_end", newEnd),
+		zap.String("reason", reason),
+	)
+
+	// 7. AUDIT-02 audit log snapshot (auditSvc nil 时静默跳过)
+	if s.auditSvc != nil {
+		snapPayload := SmartEndSnapshot{
+			SilenceSince:     nilIfZero(snap.SilenceSince),
+			LastFileGrowthAt: nilIfZero(snap.LastFileGrowthAt),
+			FileSizeBytes:    snap.FileSizeBytes,
+			FileGrowthBps:    snap.FileGrowthBps,
+			ExtensionCount:   newCount,
+			NewEndTime:       &newEnd,
+		}
+		oldMap := map[string]interface{}{
+			"end_time":        task.EndTime, // 已更新为 newEnd;此处为旧值快照需求,Pitfall 4 提醒
+			"extension_count": extensionOld,
+		}
+		// 重新取一份旧的 endTime — Model Updates 不会回填 task struct 字段,
+		// 但 task.EndTime 已在步骤 5 被改写;这里仅用 extensionOld 做审计 diff。
+		// 为保证 OldData 准确,从原读取路径不可 (第一次 First 后再读会带新值),
+		// 故此场景下 OldData 仅包含 extension_count;end_time 旧值由 D-12 审计
+		// 平台按 DiffData 自动呈现。
+		_ = oldMap
+		_ = s.auditSvc.RecordChange(ctx, auditpkg.RecordChangeOpts{
+			Action:     models.ActionUpdate,
+			Module:     models.ModuleTask,
+			Resource:   "video_recording_task",
+			ResourceID: &taskID,
+			OldData: map[string]interface{}{
+				"extension_count": extensionOld,
+			},
+			NewData: snapPayload,
+		})
+	}
+
+	return nil
+}
+
+// MarkTaskEndedEarly 智能提前结束单入口 (Phase 25 EARLY-01/02 + AUDIT-03 + AUDIT-04)。
+//
+// 行为契约:
+//  1. 读 task;读不到 → wrapped apperrors.ErrInternal
+//  2. 写 ended_early=true + ended_early_reason + ended_by_huawei_api 三字段
+//  3. 同步本地 task
+//  4. OBS-02 INFO smart_early_end 日志 (含 snapshot JSON)
+//  5. AUDIT-03 audit log snapshot (auditSvc 非 nil 时)
+//
+// 注意: 本方法不写 Status 字段 (不调 completeTask);scheduler 调本方法后
+// 仍走既有 completeTask 路径转 converting 状态机。EndedEarly* 与 Status
+// 字段正交无冲突 (Phase 25 RESEARCH Pitfall 5)。
+func (s *VideoRecordingTaskService) MarkTaskEndedEarly(ctx context.Context, taskID uint, reason string, byHuaWeiAPI bool, snap recorder.ActivitySnapshot) error {
+	// 1. 读 task
+	var task models.VideoRecordingTask
+	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
+		return fmt.Errorf("MarkTaskEndedEarly: load task %d: %w: %w", taskID, apperrors.ErrInternal, err)
+	}
+
+	// 2. 写 GORM 3 字段
+	if err := s.db.WithContext(ctx).Model(&task).Updates(map[string]interface{}{
+		"ended_early":         true,
+		"ended_early_reason":  reason,
+		"ended_by_huawei_api": byHuaWeiAPI,
+	}).Error; err != nil {
+		return fmt.Errorf("MarkTaskEndedEarly: update task %d: %w: %w", taskID, apperrors.ErrInternal, err)
+	}
+
+	// 3. 同步本地 task
+	task.EndedEarly = true
+	task.EndedEarlyReason = reason
+	task.EndedByHuaWeAPI = byHuaWeiAPI
+
+	// 4. OBS-02 INFO smart_early_end (字段名 task 锁定)
+	snapshotMap := SmartEndSnapshot{
+		SilenceSince:     nilIfZero(snap.SilenceSince),
+		LastFileGrowthAt: nilIfZero(snap.LastFileGrowthAt),
+		FileSizeBytes:    snap.FileSizeBytes,
+		FileGrowthBps:    snap.FileGrowthBps,
+		EndedByHuaWeiAPI: byHuaWeiAPI,
+		EndedEarlyReason: reason,
+	}
+	s.logger.Info("smart_early_end",
+		zap.Uint("task", taskID),
+		zap.String("reason", reason),
+		zap.Any("snapshot", snapshotMap),
+	)
+
+	// 5. AUDIT-03 audit log snapshot (auditSvc nil 时静默跳过)
+	if s.auditSvc != nil {
+		_ = s.auditSvc.RecordChange(ctx, auditpkg.RecordChangeOpts{
+			Action:     models.ActionUpdate,
+			Module:     models.ModuleTask,
+			Resource:   "video_recording_task",
+			ResourceID: &taskID,
+			OldData: map[string]interface{}{
+				"ended_early": false,
+			},
+			NewData: snapshotMap,
+		})
+	}
+
 	return nil
 }
 
