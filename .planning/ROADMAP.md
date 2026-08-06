@@ -71,7 +71,14 @@
   2. `video_recording_tasks` 表经 AutoMigrate 后包含 5 个新字段（`ExtensionCount` / `LastExtensionReason` / `EndedEarly` / `EndedEarlyReason` / `EndedByHuaWeAPI`），GORM 可读写
   3. `internal/errors/` 新增 3 个 sentinel（`ErrRecordingSmartExtend` / `ErrRecordingSmartEarlyEnd` / `ErrRecordingHuaWeiStateFetchFailed`），`docs/errors.md` 同步更新，CI sync-check 通过
   4. `config.yaml` 新增 `smart_end:` 段含 14 项配置，`SmartEndConfig` 结构体可加载默认值
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 23-01-PLAN.md -- HuaweiClient.GetConferenceState stateless sample + presence-aware fields + 7 fixture tests (DETECT-01, DETECT-04)
+- [ ] 23-02-PLAN.md -- VideoRecordingTask 5 GORM fields + AutoMigrate sync + SQLite :memory: schema/read-write test (AUDIT-01)
+- [ ] 23-03-PLAN.md -- 3 sentinel definitions + mapping.go HTTP 500 + knownSentinels + docs regeneration + CI sync-check (AUDIT-05)
+- [ ] 23-04-PLAN.md -- SmartEndConfig struct (14 fields) + Viper SetDefault for true-bools + applySmartEndDefaults + Validate + 3 tests (CFG-01)
+- [ ] 23-05-PLAN.md -- config.yaml + bin/config.yaml smart_end sections (14 keys, byte-identical) + 4 sync tests (CFG-02)
 
 ### Phase 24: ActivityWatcher + silencedetect + 文件停滞
 **Goal**: 整合 H + A + B 三类信号，按 OR 判定，任一触发即发 `EventMeetingEnded`；多级降级保证华为 API 不可达或 silencedetect 解析失败时仍可工作
@@ -125,7 +132,7 @@
 | 20. 错误处理统一收敛 + sentinel | v1.1 | 5/5 | Complete | 2026-08-01 |
 | 21. Close v1.1 gaps | v1.1 | 5/5 | Complete | 2026-08-03 |
 | 22. v1.1 audit tech debt 收尾 | v1.1 | 6/6 | Complete | 2026-08-03 |
-| 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 0/TBD | Planning | - |
+| 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 0/5 | Planning | - |
 | 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 0/TBD | Planning | - |
 | 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 0/TBD | Planning | - |
 
