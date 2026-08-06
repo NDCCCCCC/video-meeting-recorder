@@ -35,8 +35,16 @@ type VideoRecordingTask struct {
 	ConversionStartedAt   *time.Time       `json:"conversion_started_at,omitempty"`                             // 转换开始时间
 	ConversionCompletedAt *time.Time       `json:"conversion_completed_at,omitempty"`                           // 转换完成时间
 	ConversionRetryCount  int              `gorm:"default:0" json:"conversion_retry_count"`                     // 转换重试次数
-	CreatedBy             uint             `gorm:"not null" json:"created_by"`
-	Creator               *User            `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+
+	// Smart-end audit fields (Phase 23 AUDIT-01). Written by service layer in Phase 25. Columns are added via AutoMigrate on next boot.
+	ExtensionCount      int    `gorm:"not null;default:0" json:"extension_count"`
+	LastExtensionReason string `gorm:"type:text;not null;default:''" json:"last_extension_reason,omitempty"`
+	EndedEarly          bool   `gorm:"not null;default:false" json:"ended_early"`
+	EndedEarlyReason    string `gorm:"type:text" json:"ended_early_reason,omitempty"`
+	EndedByHuaWeAPI     bool   `gorm:"not null;default:false;column:ended_by_huawei_api" json:"ended_by_huawei_api"`
+
+	CreatedBy uint  `gorm:"not null" json:"created_by"`
+	Creator   *User `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
 
 	// TaskInputConfigs 任务关联的输入配置列表
 	TaskInputConfigs []TaskInputConfig `gorm:"foreignKey:TaskID" json:"task_input_configs,omitempty"`
