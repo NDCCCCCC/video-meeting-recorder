@@ -157,7 +157,7 @@ Plans:
 | 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 5/5 | Complete    | 2026-08-06 |
 | 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 3/4 | In Progress|  |
 | 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 0/TBD | Planning | - |
-| 26. 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix) | v2.0 | 1/1 | Complete | 2026-08-06 |
+| 26. 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix) | v2.0 | 1/1 | Complete    | 2026-08-06 |
 
 ## Backlog
 
