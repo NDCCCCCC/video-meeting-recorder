@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 视频切割与会议转录PPT** — Phases 01-14 (shipped 2026-05-06)
 - ✅ **v1.1 文件管理与编辑增强 / 后端安全加固** — Phases 17-22 (shipped 2026-08-03)
-- 📋 **v2.0** — Planning next milestone
+- 🚧 **v2.0 智能录制收尾（Smart Recording End）** — Phases 23-25 (planning, started 2026-08-06)
 
 ## Phases
 
@@ -49,6 +49,58 @@
 
 </details>
 
+<details open>
+<summary>🚧 v2.0 智能录制收尾（Smart Recording End）(Phases 23-25) — PLANNING 2026-08-06</summary>
+
+**Milestone Goal:** 让华为会议录制时长智能贴合会议真实时长——到点未结束自动延时（30min × 4 = 2h 上限），提前结束由 TE40 `WEB_GetMailboxDataAPI`（`confState=="" && joinSum==0`）主信号 + silencedetect + 文件停滞双兜底任一触发即收尾转码，无需人工干预。
+
+- [ ] **Phase 23: 华为 API 扩展 + GORM 字段 + sentinel 错误码** — 落地 H 信号数据通路与可观测基线
+- [ ] **Phase 24: ActivityWatcher + silencedetect + 文件停滞** — 整合 H+A+B 三类信号 + 多级降级
+- [ ] **Phase 25: scheduler 多信号驱动 + service 封装 + E2E + CI** — 端到端闭环 + 余项 AUDIT/CFG/OBS
+
+</details>
+
+## Phase Details
+
+### Phase 23: 华为 API 扩展 + GORM 字段 + sentinel 错误码
+**Goal**: 落地 H 信号（主业务权威）的数据通路与可观测基线 — 让 `HuaweiClient.GetConferenceState()` 能返回 confState/joinSum、`video_recording_tasks` 表准备好智能录制字段、`internal/errors/` 加好 3 个 sentinel、`config.yaml` 准备好 14 项配置
+**Depends on**: Nothing (first v2.0 phase)
+**Requirements**: DETECT-01, DETECT-04, AUDIT-01, AUDIT-05, CFG-01, CFG-02 (6 REQ-IDs)
+**Success Criteria** (what must be TRUE):
+  1. `HuaweiClient.GetConferenceState()` 可识别 `confState=="" && joinSum==0` 持续 ≥ 30s 作为会议已结束信号，老设备 fallback 到 `IsInConf==0` 判据
+  2. `video_recording_tasks` 表经 AutoMigrate 后包含 5 个新字段（`ExtensionCount` / `LastExtensionReason` / `EndedEarly` / `EndedEarlyReason` / `EndedByHuaWeAPI`），GORM 可读写
+  3. `internal/errors/` 新增 3 个 sentinel（`ErrRecordingSmartExtend` / `ErrRecordingSmartEarlyEnd` / `ErrRecordingHuaWeiStateFetchFailed`），`docs/errors.md` 同步更新，CI sync-check 通过
+  4. `config.yaml` 新增 `smart_end:` 段含 14 项配置，`SmartEndConfig` 结构体可加载默认值
+**Plans**: TBD
+
+### Phase 24: ActivityWatcher + silencedetect + 文件停滞
+**Goal**: 整合 H + A + B 三类信号，按 OR 判定，任一触发即发 `EventMeetingEnded`；多级降级保证华为 API 不可达或 silencedetect 解析失败时仍可工作
+**Depends on**: Phase 23
+**Requirements**: DETECT-02, DETECT-03, WATCH-01, WATCH-02, WATCH-03, WATCH-04, WATCH-05, EXTEND-03 (8 REQ-IDs)
+**Success Criteria** (what must be TRUE):
+  1. `ActivityWatcher` 整合 H+A+B 三类信号，按 OR 关系判定，任一触发即发 `EventMeetingEnded`（H 持续 30s；A+B 双 AND）
+  2. ffmpeg `-af silencedetect=noise=-30dB:d=30` 可检测 ≥ 30s 持续静音（信号 A），stderr 解析连续 5 次无有效行时自动降级关闭 silence 分支（仅用文件停滞 + 华为信号）
+  3. 输出文件大小 ticker（5s）可识别 ≥ 120s 无增长（信号 B，`file_min_growth_bps` 阈值），连续 3 次 `os.Stat` 失败视为流死亡直接触发结束
+  4. `HuaweiClient.GetConferenceState()` 连续失败 ≥ 3 次时自动降级关闭 H 信号，只用 A+B 兜底
+  5. ffmpeg 重连期间 watcher 静音/文件计时不重置（仅清 `SilenceSince`），与现有断流重连逻辑不冲突
+  6. 默认 `extend_step_min=30`，可通过运维配置调整为 60min 等大值
+**Plans**: TBD
+
+### Phase 25: scheduler 多信号驱动 + service 封装 + E2E + CI
+**Goal**: `monitorTask` 改 `select` 驱动；完成延时上限/强制截断/提前结束端到端闭环；补齐 AUDIT/CFG/OBS 余项（含 audit log snapshot、enabled 开关、5 类可观测日志字段）
+**Depends on**: Phase 24
+**Requirements**: SCHED-01, SCHED-02, SCHED-03, SCHED-04, EXTEND-01, EXTEND-02, EARLY-01, EARLY-02, EARLY-03, EARLY-04, AUDIT-02, AUDIT-03, AUDIT-04, CFG-03, CFG-04, OBS-01, OBS-02, OBS-03, OBS-04, OBS-05 (20 REQ-IDs)
+**Success Criteria** (what must be TRUE):
+  1. `scheduler.monitorTask` 改 `select` on EndTime timer + `taskEndedCh` + `taskUpdateChans[task.ID]`，单次循环同时等待三类信号
+  2. EndTime 到点先问 `watcher.IsActive()`：活跃则 `EndTime += extend_step_min`，否则 `completeTask("endtime_no_activity")`；`taskEndedCh` 信号永远优先于 EndTime timer（channel close 后 EndTime.C 不再生效）
+  3. 单任务 `ExtensionCount` 上限 = 4，累计延时 = 4 × 30min = 2h 总上限；用户手动 `UpdateTaskEndTime` 触发 `taskUpdateChans` 时 `ExtensionCount` 不重置
+  4. 上限达 4 次后 EndTime 到点仍活跃 → 强制 `completeTask("max_extend_reached")`，任务状态保留 `completed`（不标 `failed`）
+  5. H 信号触发 / A+B 双 AND 命中 → `completeTask("smart_early_end")`，写入对应 `EndedByHuaWeAPI` / `EndedEarlyReason` 字段；多 input 任务任一 watcher 判定结束即整体结束（保守策略）
+  6. service 层封装 `UpdateTaskExtension(task, deltaMin, reason)` + `MarkTaskEndedEarly(task, reason, byHuaWeiAPI bool)`，统一写入 GORM 字段 + audit log；每次延时/提前结束事件写 audit log 含 snapshot（`silence_since` / `last_file_growth` / `file_size_bytes` / `file_growth_bps` + `extension_count` + `new_end_time`）
+  7. `smart_end.enabled=false` 时系统退回纯 EndTime 行为（scheduler 不读 `taskEndedCh`，watcher 不启）；`smart_end.huawei_enabled=false` 时系统降级只用兜底 A+B（华为轮询 goroutine 不启）
+  8. 5 类可观测日志字段全部输出：`smart_extend` / `smart_early_end` / `max_extend_reached` / `activity_watcher_degraded` / 可选 Prometheus counter 接入点（项目无 prometheus 集成则仅做日志）
+**Plans**: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -73,6 +125,9 @@
 | 20. 错误处理统一收敛 + sentinel | v1.1 | 5/5 | Complete | 2026-08-01 |
 | 21. Close v1.1 gaps | v1.1 | 5/5 | Complete | 2026-08-03 |
 | 22. v1.1 audit tech debt 收尾 | v1.1 | 6/6 | Complete | 2026-08-03 |
+| 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 0/TBD | Planning | - |
+| 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 0/TBD | Planning | - |
+| 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 0/TBD | Planning | - |
 
 ## Backlog
 

@@ -97,12 +97,50 @@
 
 ## Traceability
 
-> Phase-to-requirement mapping filled by `/gsd:roadmap` after this REQUIREMENTS.md is committed.
+> Phase-to-requirement mapping filled by `/gsd:roadmap` (2026-08-06, v2.0 roadmap created).
 
 | REQ-ID | Phase | Status | Notes |
 |--------|-------|--------|-------|
+| DETECT-01 | Phase 23 | Pending | 华为 GetConferenceState confState=="" && joinSum==0 持续 30s 检测 |
+| DETECT-02 | Phase 24 | Pending | ffmpeg silencedetect 过滤器 ≥ 30s 静音 |
+| DETECT-03 | Phase 24 | Pending | ticker 5s 采样文件大小 ≥ 120s 无增长 |
+| DETECT-04 | Phase 23 | Pending | 老设备 fallback 到 IsInConf==0 判据 |
+| WATCH-01 | Phase 24 | Pending | ActivityWatcher 整合 H+A+B OR 判定 + EventMeetingEnded |
+| WATCH-02 | Phase 24 | Pending | silencedetect 解析失败自动降级 |
+| WATCH-03 | Phase 24 | Pending | 华为 API 连续失败 3 次降级关闭 H |
+| WATCH-04 | Phase 24 | Pending | os.Stat 连续失败视为流死亡 |
+| WATCH-05 | Phase 24 | Pending | ffmpeg 重连保持 watcher 计时不重置 |
+| SCHED-01 | Phase 25 | Pending | monitorTask 改 select 驱动 |
+| SCHED-02 | Phase 25 | Pending | EndTime 到点先问 watcher.IsActive() |
+| SCHED-03 | Phase 25 | Pending | taskEndedCh 永远优先于 EndTime timer |
+| SCHED-04 | Phase 25 | Pending | 用户手动 UpdateTaskEndTime 时 ExtensionCount 不重置 |
+| EXTEND-01 | Phase 25 | Pending | ExtensionCount 上限 = 4 (2h 总上限) |
+| EXTEND-02 | Phase 25 | Pending | 上限达 4 次后强制 completeTask("max_extend_reached") |
+| EXTEND-03 | Phase 24 | Pending | 默认 extend_step_min=30（可配） |
+| EARLY-01 | Phase 25 | Pending | H 信号触发 → smart_early_end + EndedByHuaWeAPI=true |
+| EARLY-02 | Phase 25 | Pending | A+B 双 AND 命中 → smart_early_end |
+| EARLY-03 | Phase 25 | Pending | 提前结束信号永远优先于 EndTime timer |
+| EARLY-04 | Phase 25 | Pending | 多 input 任一 watcher 触发整体结束 |
+| AUDIT-01 | Phase 23 | Pending | GORM 加 5 字段（AutoMigrate 列表同步） |
+| AUDIT-02 | Phase 25 | Pending | 延时事件 audit log 含 snapshot |
+| AUDIT-03 | Phase 25 | Pending | 提前结束事件 audit log 含 snapshot |
+| AUDIT-04 | Phase 25 | Pending | service 层封装 UpdateTaskExtension + MarkTaskEndedEarly |
+| AUDIT-05 | Phase 23 | Pending | 3 个 sentinel + docs/errors.md 同步 + CI sync-check |
+| CFG-01 | Phase 23 | Pending | SmartEndConfig 结构体 + 默认值 |
+| CFG-02 | Phase 23 | Pending | config.yaml smart_end 段（14 项） |
+| CFG-03 | Phase 25 | Pending | smart_end.enabled=false 退回纯 EndTime |
+| CFG-04 | Phase 25 | Pending | smart_end.huawei_enabled=false 只用 A+B |
+| OBS-01 | Phase 25 | Pending | smart_extend 日志 |
+| OBS-02 | Phase 25 | Pending | smart_early_end 日志 |
+| OBS-03 | Phase 25 | Pending | max_extend_reached 日志 |
+| OBS-04 | Phase 25 | Pending | activity_watcher_degraded 日志 |
+| OBS-05 | Phase 25 | Pending | 可选 Prometheus counter（无 prometheus 集成则仅做日志） |
 
-*(empty — roadmapper populates during step 10)*
+**Coverage:** 34/34 (100%) — 0 orphan
+
+- **Phase 23**: 6 reqs (DETECT-01/04, AUDIT-01/05, CFG-01/02)
+- **Phase 24**: 8 reqs (DETECT-02/03, WATCH-01..05, EXTEND-03)
+- **Phase 25**: 20 reqs (SCHED-01..04, EXTEND-01/02, EARLY-01..04, AUDIT-02/03/04, CFG-03/04, OBS-01..05)
 
 ---
 
