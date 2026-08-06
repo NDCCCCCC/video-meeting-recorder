@@ -227,6 +227,43 @@ func (a *MinimalApp) Initialize() error {
 	return nil
 }
 
+// loadHuaweiCABundle 在启动时按 SEC-003a-03 fail-closed 装配华为私有 CA 信任锚。
+//
+// 行为：
+//   - 路径为空 / 纯空白 → 调 SetCABundle("") 把 caCertPool 设为 nil（system-CA 兜底），
+//     写 INFO「华为 TLS CA bundle 未配置，使用系统 CA」。完整证书校验仍然启用，
+//     不会退化为 InsecureSkipVerify=true。
+//   - 路径非空 → 调 SetCABundle(path)；SetCABundle 已保证完全原子性
+//     （全部 PEM 块解析成功才发布）。若返回 error：logger.Fatal 立刻退出进程，
+//     同时返回 wrapped error，让非 fatalFunc 替换场景（如测试用 zap observer）也能
+//     通过返回值把错误上抛。
+//
+// 不变量：
+//   - 只调用一次，在 NewManager 之后 / SetTLSPolicy 之后 / NewHuaweiConferenceConnector
+//     之前；保证下游任何 HuaweiClient 创建时一定能看到已发布（或明确 nil）的 pool。
+//   - 不读 .git/config、不应用 https-mitm workaround、不打印 PEM 字节或私钥；仅记录路径。
+func (a *MinimalApp) loadHuaweiCABundle() error {
+	path := strings.TrimSpace(a.config.Huawei.CABundleFile)
+	if path == "" {
+		if err := a.huaweiManager.SetCABundle(""); err != nil {
+			return fmt.Errorf("SetCABundle(\"\") 不应失败: %w", err)
+		}
+		a.logger.Info("华为 TLS CA bundle 未配置，使用系统 CA")
+		return nil
+	}
+	if err := a.huaweiManager.SetCABundle(a.config.Huawei.CABundleFile); err != nil {
+		a.logger.Fatal("加载华为 TLS CA bundle 失败",
+			zap.String("path", a.config.Huawei.CABundleFile),
+			zap.Error(err),
+		)
+		return fmt.Errorf("加载华为 TLS CA bundle 失败: %s: %w", a.config.Huawei.CABundleFile, err)
+	}
+	a.logger.Info("华为 TLS CA bundle 加载成功",
+		zap.String("path", a.config.Huawei.CABundleFile),
+	)
+	return nil
+}
+
 // initCredentialEncryptor 构造 CredentialEncryptor 并保存到 a.credentialEncryptor。
 // 必须保证 cfg.Auth.CredentialSM4* 已被 ValidateCredentialSM4Config 校验通过
 // （这是 cmd/server/main.go 的责任）。
@@ -786,6 +823,12 @@ func (a *MinimalApp) initHandlers() error {
 		huaweiapi.ParseMinTLSVersion(a.config.Huawei.MinTLSVersion),
 		a.config.Server.Environment == "production",
 	)
+	// SEC-003a: 加载华为终端私有 CA bundle。**fail-closed** — 必须在 SetTLSPolicy 之后、
+	// 任何 NewHuaweiClient 之前执行；解析失败立即 logger.Fatal，避免 HuaweiConferenceConnector
+	// 后续在录制期间反复 x509 错误。空路径则建立 nil pool（system-CA 兜底，证书校验仍启用）。
+	if err := a.loadHuaweiCABundle(); err != nil {
+		return fmt.Errorf("加载华为 TLS CA bundle 失败: %w", err)
+	}
 	// SEC-013: 注入出站 URL 白名单
 	a.huaweiManager.SetOutboundURLAllowlist(
 		a.config.Security.OutboundURLAllowlist,
