@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,6 +31,10 @@ type Config struct {
 	KeepAliveInterval  time.Duration // 保活间隔（必须小于60秒）
 	InsecureSkipVerify bool          // 是否跳过证书验证
 	MinTLSVersion      uint16        // 最小TLS版本
+	// SEC-003a 私有 CA 信任锚：nil → 使用系统 CA bundle；非 nil → 由 Manager.SetCABundle 注入。
+	// 注意：不要在调用方直接构造 []*x509.Certificate 加进 pool；统一通过 Manager.SetCABundle
+	// 解析 PEM 以保留"完整解析后才发布 pool"的原子不变量。
+	caCertPool *x509.CertPool
 }
 
 // Session 会话信息
@@ -209,9 +214,9 @@ type MailboxState struct {
 		Callstate    int    `json:"callstate"` // 通话状态
 		Calltype     int    `json:"calltype"`
 		Conftype     int    `json:"conftype"`
-		IsInConf     int    `json:"isInConf"` // 是否在会议中，1表示在会议中
-		ConfState    string `json:"confState,omitempty"`   // 会议状态字符串（如 rollcall）；空表示无活跃会议
-		JoinSum      int    `json:"joinSum,omitempty"`     // 当前参会人数
+		IsInConf     int    `json:"isInConf"`               // 是否在会议中，1表示在会议中
+		ConfState    string `json:"confState,omitempty"`    // 会议状态字符串（如 rollcall）；空表示无活跃会议
+		JoinSum      int    `json:"joinSum,omitempty"`      // 当前参会人数
 		ConfLeftTime int    `json:"confLeftTime,omitempty"` // 会议剩余时间（秒）
 	} `json:"state"`
 }
@@ -295,7 +300,12 @@ type HTTPClient struct {
 }
 
 // NewHTTPClient 创建HTTP客户端
-func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipVerify bool, minTLSVersion uint16, logger *zap.Logger) *HTTPClient {
+//   - insecureSkipVerify: 显式 false（生产 fail-closed；非生产允许 true）
+//   - minTLSVersion: 默认 tls.VersionTLS12（显式注入）
+//   - caCertPool: SEC-003a 私有 CA 信任锚。nil → Go 默认系统 CA bundle；
+//     非 nil → 注入到 tls.Config.RootCAs 用于华为私有自签 CA 链验证。
+//     调用者应通过 Manager.SetCABundle 解析 PEM 后传入，禁止上层直接复制。
+func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipVerify bool, minTLSVersion uint16, caCertPool *x509.CertPool, logger *zap.Logger) *HTTPClient {
 	// 构建基础URL
 	scheme := "https"
 	if port == 80 {
@@ -334,6 +344,9 @@ func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipV
 						tls.CurveP384,
 						tls.CurveP521,
 					},
+					// SEC-003a: 私有 CA 信任锚。nil → 系统 CA bundle; 非 nil → 由 Manager.SetCABundle 注入的 private CA pool。
+					// 保留 InsecureSkipVerify=false 与 minTLSVersion 不变；hostname/chain/expire 三重校验必须继续进行。
+					RootCAs: caCertPool,
 				},
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 10,
@@ -500,7 +513,7 @@ type HuaweiClient = Client
 func NewHuaweiClient(config *Config, logger *zap.Logger) *HuaweiClient {
 	return &HuaweiClient{
 		config:     config,
-		httpClient: NewHTTPClient(config.Server, config.Port, config.APITimeout, config.InsecureSkipVerify, config.MinTLSVersion, logger),
+		httpClient: NewHTTPClient(config.Server, config.Port, config.APITimeout, config.InsecureSkipVerify, config.MinTLSVersion, config.caCertPool, logger),
 		logger:     logger,
 	}
 }

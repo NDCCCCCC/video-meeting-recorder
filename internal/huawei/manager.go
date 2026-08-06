@@ -3,7 +3,11 @@ package huawei
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +33,11 @@ type Manager struct {
 	// 默认 InsecureSkipVerify=false、MinTLSVersion=tls.VersionTLS12。
 	tlsInsecureSkipVerify bool
 	tlsMinVersion         uint16
+	// SEC-003a: 私有 CA 信任锚（由 SetCABundle 注入；nil → 系统 CA bundle）。
+	// 必须在 createClient 时按指针快照，避免运行时被 SetCABundle 改写导致部分客户端
+	// 拿不到新 pool。已缓存的客户端不在 SetCABundle 范围内重新初始化——这与 SetTLSPolicy
+	// 同源语义，需要重启或下次 createClient 才可见新锚。
+	caCertPool *x509.CertPool
 	// SEC-013: 出站 URL 白名单 + 环境标识（开发环境绕过）
 	outboundURLAllowlist []string
 	environment          string
@@ -82,6 +91,77 @@ func (m *Manager) SetOutboundURLAllowlist(allowlist []string, environment string
 	m.environment = environment
 }
 
+// SetCABundle 加载华为终端私有 CA 信任锚（SEC-003a-01/02）。
+//
+// 语义：
+//   - path 为空字符串或仅包含空白字符 → 原子把 m.caCertPool 设为 nil，
+//     返回 nil（系统 CA bundle 兜底行为，完整证书校验仍启用）。
+//   - path 非空 → 读取 PEM 文件、解析每一个 CERTIFICATE block、为
+//     每一个 cert 都过 x509.ParseCertificate、再全部 add 到一个全新
+//     x509.NewCertPool；全部通过后才在 m.mu 保护下发布 m.caCertPool，
+//     期间任何错误都返回 *不* 修改已发布 pool 的 wrapped error。错误
+//     文本必须包含 path（运维定位），且通过 %w 保留底层 read/parse 原因。
+//
+// 拒绝条件（任一触发即整体失败、无部分可信 pool 残留）：
+//   - os.ReadFile 失败（缺失/无权限等）
+//   - 文件不包含任何 CERTIFICATE block
+//   - 任何 PEM 块 type != "CERTIFICATE"
+//   - 任何 x509.ParseCertificate 解析失败
+//   - 解析后仍有非空白 trailing bytes（防止"看起来通过但实际多块"漏检）
+//
+// 安全不变量：从不把 PEM 字节或私钥写入日志；仅路径与解析数量。
+func (m *Manager) SetCABundle(path string) error {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		m.mu.Lock()
+		m.caCertPool = nil
+		m.mu.Unlock()
+		return nil
+	}
+
+	data, err := os.ReadFile(trimmed)
+	if err != nil {
+		return fmt.Errorf("读取华为 TLS CA bundle 失败: %s: %w", trimmed, err)
+	}
+
+	pool := x509.NewCertPool()
+	rest := data
+	certCount := 0
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			return fmt.Errorf("解析华为 TLS CA bundle 失败: %s: 不支持的 PEM 块类型 %q（仅接受 CERTIFICATE）", trimmed, block.Type)
+		}
+		cert, parseErr := x509.ParseCertificate(block.Bytes)
+		if parseErr != nil {
+			return fmt.Errorf("解析华为 TLS CA bundle 失败: %s: x509.ParseCertificate 错误: %w", trimmed, parseErr)
+		}
+		pool.AddCert(cert)
+		certCount++
+	}
+	if certCount == 0 {
+		return fmt.Errorf("解析华为 TLS CA bundle 失败: %s: 未找到任何 CERTIFICATE 块", trimmed)
+	}
+	if strings.TrimSpace(string(rest)) != "" {
+		return fmt.Errorf("解析华为 TLS CA bundle 失败: %s: 文件末尾残留非空白字节（请清理 PEM 文件末尾的额外数据）", trimmed)
+	}
+
+	// 全部校验通过 → 在锁内一次性发布；中途失败不会到达这里。
+	m.mu.Lock()
+	m.caCertPool = pool
+	m.mu.Unlock()
+
+	m.logger.Info("华为 TLS CA bundle 加载成功",
+		zap.String("path", trimmed),
+		zap.Int("cert_count", certCount),
+	)
+	return nil
+}
+
 // ParseMinTLSVersion 将配置中的字符串版本号（"1.2"/"1.3"）或数字（"771"）解析为 tls 常量。
 // 空串或无法识别返回 0（由调用方归一化为 tls.VersionTLS12）。SEC-003a/D-03.5。
 func ParseMinTLSVersion(s string) uint16 {
@@ -127,6 +207,12 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 		return nil, fmt.Errorf("获取华为配置失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
+	// SEC-003a: 在锁内快照当前 CA pool，避免 SetCABundle 后改写指针
+	// 导致新建客户端拿到不一致状态。已缓存的客户端不重新初始化（与 SetTLSPolicy 语义一致）。
+	m.mu.RLock()
+	caPool := m.caCertPool
+	m.mu.RUnlock()
+
 	config := &Config{
 		Server: cfg.Server,
 		Port:   cfg.Port,
@@ -140,6 +226,7 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 		KeepAliveInterval:  30 * time.Second,        // 30秒保活间隔（必须小于60秒）
 		InsecureSkipVerify: m.tlsInsecureSkipVerify, // SEC-003a: 默认 false，可配置
 		MinTLSVersion:      m.tlsMinVersion,         // SEC-003a: 默认 tls.VersionTLS12，不再硬编码 TLS1.0
+		caCertPool:         caPool,                  // SEC-003a: 由 SetCABundle 注入；nil → 系统 CA
 	}
 
 	client := NewHuaweiClient(config, m.logger)
