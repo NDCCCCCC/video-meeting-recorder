@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: 智能录制收尾（Smart Recording End）
 status: executing
-last_updated: "2026-08-06T10:13:00.000Z"
+last_updated: "2026-08-06T10:29:00.000Z"
 last_activity: 2026-08-06
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 14
-  completed_plans: 13
-  percent: 79
+  completed_plans: 14
+  percent: 86
 ---
 
 # STATE.md - Project Memory
@@ -48,7 +48,7 @@ v2.0 智能录制收尾（Smart Recording End）— Phase 25 计划 4 plans, pla
 |-------|------|------|---------|-------|
 | 23 | 华为 API 扩展 + GORM 字段 + sentinel 错误码 | 落地 H 信号数据通路与可观测基线 | DETECT-01/04, AUDIT-01/05, CFG-01/02 (6) | 5/5 |
 | 24 | ActivityWatcher + silencedetect + 文件停滞 | 整合 H+A+B + 多级降级 | DETECT-02/03, WATCH-01..05, EXTEND-03 (8) | 3/4 |
-| 25 | scheduler 多信号驱动 + service 封装 + E2E + CI | 端到端闭环 + 余项 | SCHED-01..04, EXTEND-01/02, EARLY-01..04, AUDIT-02/03/04, CFG-03/04, OBS-01..05 (20) | 3/4 |
+| 25 | scheduler 多信号驱动 + service 封装 + E2E + CI | 端到端闭环 + 余项 | SCHED-01..04, EXTEND-01/02, EARLY-01..04, AUDIT-02/03/04, CFG-03/04, OBS-01..05 (20) | 4/4 |
 | 26 | 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix) | 私有 CA 加载到 RootCAs | SEC-003a-01..05 (5) | 1/1 |
 
 ---
@@ -56,10 +56,9 @@ v2.0 智能录制收尾（Smart Recording End）— Phase 25 计划 4 plans, pla
 ## Current Position
 
 Phase: 25
-Plan: 03 (OBS-01..05 contract wire-up) — COMPLETED
-Plan 04: Nyquist E2E 7+ scenarios + audit snapshot golden JSON + antipattern grep — next
-Status: In Progress
-Last activity: 2026-08-06 -- Phase 25 plan 03 executed (3 commits: 81e51b3 + 39f93f3 + e31a6b5)
+Plan: 04 (Nyquist E2E closure + validation flips) — COMPLETED
+Status: In Progress → Ready for `/gsd:verify-phase 25`
+Last activity: 2026-08-06 -- Phase 25 plan 04 executed (3 commits: f0bdd1e + f4970c3 + 4183eef; SUMMARY commit 3cf770f)
 
 > 注：HANDOFF.json + .continue-here.md (2026-08-05 旧版 design-v2-review pause) 已删除。
 > 实际进度：Phase 23 验证通过 (5/5)；Phase 24 plans 1-3 done；24-04 待执行。
@@ -70,6 +69,13 @@ Last activity: 2026-08-06 -- Phase 25 plan 03 executed (3 commits: 81e51b3 + 39f
 > - SmartEndSnapshot JSON 序列化结构 (8 字段) 供 audit log 使用
 > - 5 个新单元测试 + 1 个 audit snapshot 测试均通过
 > Phase 25 plan 02 (SCHED-01..04 + EXTEND-02 + EARLY-03/04 + CFG-03) 已执行（2 commits: ef060d3 + 9e53ddf）。
+> Phase 25 plan 04 (Nyquist E2E closure + validation flips) 已执行（3 commits: f0bdd1e + f4970c3 + 4183eef; SUMMARY commit 3cf770f）：
+> - 4 个 service-side 测试（TestServiceEntrypoint_OnlyPath sole owner antipattern + TestMarkTaskEndedEarly_AuditSnapshot 5-field golden + TestAuditSnapshot_ZeroTimeOmitsSilence Pitfall 4 + 现有 TestUpdateTaskExtension_AuditSnapshot 6-field golden）
+> - 9 个 scheduler-side 测试（7 个 TestMonitorTask_* E2E 子测 + TestScheduler_RaceDetectorFullSweep meta-test + TestScheduler_DoesNotDirectlyUpdateTask sole owner antipattern）
+> - 关键 deviation: plan 02 SUMMARY 声称添加 7 个 monitorTask E2E 子测实际未落地，plan 04 backfill（Rule 2 critical missing functionality）
+> - REQUIREMENTS.md Traceability 表 20/20 Phase 25 REQ-IDs 全部 Complete（带 plan-numbered evidence pointer）
+> - 25-VALIDATION.md frontmatter 翻为 nyquist_compliant: true / wave_0_complete: true；Per-Task Map 24 行全 green；Wave 0 22 checkboxes 全 [x]；Sign-Off 6 项全 [x]；Approval: approved
+> - go test -race ./... exit 0；go vet exit 0；go build exit 0
 > Phase 25 plan 03 (OBS-01..05 + CFG-04) 已执行（3 commits: 81e51b3 + 39f93f3 + e31a6b5）：
 > - internal/observability 包：3 atomic.Int64 计数器 + 3 Record* 函数 + 3 getter + ResetForTest helper
 > - 4 个新单元测试（每个 counter + reset 路径）均通过 + race-detector 全绿
@@ -89,6 +95,7 @@ Last activity: 2026-08-06 -- Phase 25 plan 03 executed (3 commits: 81e51b3 + 39f
 |-------|----------|-------|-------|
 | Phase 25 P01 | 25min | 2 tasks | 4 files |
 | Phase 25 P03 | 12min | 2 tasks | 5 files |
+| Phase 25 P04 | 18min | 2 tasks | 4 files (2 test + 2 .planning) |
 | Phase 26 P01 | 27min | 3 tasks | 7 files |
 
 ### Requirements Coverage
@@ -159,6 +166,12 @@ Last activity: 2026-08-06 -- Phase 25 plan 03 executed (3 commits: 81e51b3 + 39f
 ---
 
 ## Decisions Log
+
+### 2026-08-06 - Phase 25 Plan 04 Nyquist E2E closure + validation flips executed
+
+**Decision:** 4 个 service-side 测试 + 9 个 scheduler-side 测试（7 E2E + race meta + antipattern）+ 20/20 Phase 25 REQ-IDs 全部 Complete + VALIDATION.md frontmatter 翻为 nyquist_compliant: true。
+**Rationale:** Plan 04 是 Phase 25 Nyquist 门 — Plans 01-03 提供代码与 per-package 测试，Plan 04 证明整个 phase 正确性、race-free、与 REQUIREMENTS.md 对齐。TestServiceEntrypoint_OnlyPath + TestScheduler_DoesNotDirectlyUpdateTask 双侧 antipattern grep（dual-package sole owner — 防止 go test duplicate-function-name build failure）；7 个 TestMonitorTask_* 子测覆盖 SCHED-01..04 / EXTEND-02 / EARLY-04 / CFG-03。TestScheduler_RaceDetectorFullSweep meta-test 用 t.Run 串联 7 个子测，比 7x 顶层 test 省 wall-time 同时 race detector 仍每子测都跑。
+**Outcome:** 2 feat commits (f0bdd1e / f4970c3) + 1 docs commit (4183eef) + 1 SUMMARY commit (3cf770f)。13 个新测试（4 service + 7 scheduler E2E + 1 race meta + 1 antipattern）全过。关键 deviation: plan 02 SUMMARY 声称 7 个 monitorTask E2E 子测已加但实际未落地，plan 04 Rule 2 backfill 完成。0 race findings。VALIDATION.md frontmatter 翻为 nyquist_compliant: true / wave_0_complete: true；Per-Task Map 24 行全 green；Wave 0 22 checkboxes 全 [x]；Sign-Off 6 项全 [x]；Approval: approved。go test -race ./... exit 0；go vet exit 0；go build exit 0。Phase 25 准备好等 orchestrator 跑 `/gsd:verify-phase 25`。
 
 ### 2026-08-06 - Phase 25 Plan 03 OBS-01..05 contract wire-up executed
 
