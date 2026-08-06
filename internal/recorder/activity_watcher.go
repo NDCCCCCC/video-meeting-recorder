@@ -42,6 +42,10 @@ type ActivityWatcher struct {
 	silenceSince         time.Time
 	lastFileSize         int64
 	lastFileGrowthAt     time.Time
+	// lastFileGrowthBps 最近一次"达标"的速率缓存 (Phase 25 AUDIT-02）。
+	// 仅在 fileTicker 走 growthBps >= FileMinGrowthBPS 分支时刷新,
+	// 未达标不刷新 — 与 lastFileGrowthAt 同一周期语义。
+	lastFileGrowthBps    int64
 	huaweiEmptySince     time.Time
 	huaweiLastState      string
 	huaweiLastJoinSum    int
@@ -63,6 +67,9 @@ type ActivityWatcher struct {
 
 // ActivitySnapshot 是 watcher 状态的可移植值拷贝,Phase 25 scheduler 可持有
 // 长期观察 watcher 状态变化。每次 Snapshot 调用都过 w.mu 锁并复制字段。
+// FileSizeBytes 与 FileGrowthBps 由 fileTicker 维护 (Phase 25 AUDIT-02),
+// 供 service 层 audit log 序列化使用 — 与 LastFileGrowthAt 一起构成
+// "文件侧 telemetry" 的完整快照。
 type ActivitySnapshot struct {
 	SilenceSince         time.Time
 	LastFileGrowthAt     time.Time
@@ -74,6 +81,13 @@ type ActivitySnapshot struct {
 	EndedReason          string
 	LastSilenceStart     time.Time
 	TotalSilenceDuration time.Duration
+	// FileSizeBytes 最近一次 os.Stat 读到的文件大小 (bytes);fileTicker 每次
+	// 循环都更新,与 lastFileSize 同步,供 Snapshot 暴露。Phase 25 AUDIT-02。
+	FileSizeBytes int64 `json:"file_size_bytes"`
+	// FileGrowthBps 最近一次"达标"(growthBps >= FileMinGrowthBPS)的速率缓存;
+	// 未达标时不刷新 — 与 LastFileGrowthAt 同一周期语义,scheduler 读 Snapshot
+	// 时永远是"最后一次达标"的速率,适合 audit log 与配置阈值对比。Phase 25 AUDIT-02。
+	FileGrowthBps int64 `json:"file_growth_bps"`
 }
 
 // fakeClock 提供确定性时间源,ActivityWatcher.now 字段可替换为
@@ -178,6 +192,8 @@ func (w *ActivityWatcher) Snapshot() ActivitySnapshot {
 		EndedReason:          w.endedReason,
 		LastSilenceStart:     w.silenceSince, // 简化:此处为最后已知静音起点
 		TotalSilenceDuration: w.totalSilenceDurationLocked(),
+		FileSizeBytes:        w.lastFileSize,
+		FileGrowthBps:        w.lastFileGrowthBps,
 	}
 }
 
@@ -357,9 +373,10 @@ func (w *ActivityWatcher) fileTicker(ctx context.Context) {
 			if growthBps >= w.cfg.SmartEnd.FileMinGrowthBPS {
 				w.lastFileGrowthAt = w.now()
 				w.lastFileSize = size
+				w.lastFileGrowthBps = growthBps
 				w.statConsecFailures = 0
 			} else {
-				// 未达标:仅更新 lastFileSize,不更新 lastFileGrowthAt
+				// 未达标:仅更新 lastFileSize,不更新 lastFileGrowthAt / lastFileGrowthBps
 				w.lastFileSize = size
 			}
 			w.mu.Unlock()

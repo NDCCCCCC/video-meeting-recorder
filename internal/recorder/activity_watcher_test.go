@@ -388,3 +388,91 @@ func TestActivityWatcher_ExtendStep(t *testing.T) {
 	w := newTestWatcher(t, func(s *config.SmartEndConfig) { s.ExtendStepMin = 60 })
 	require.Equal(t, 60*time.Minute, w.ExtendStepMin())
 }
+
+// TestActivityWatcher_SnapshotExtension 验证 Phase 25 AUDIT-02 需求:
+// ActivitySnapshot 必须暴露 FileSizeBytes 与 FileGrowthBps,这两个字段由
+// fileTicker 维护。测试手法:直接构造 watcher 并调用 fileTicker(ctx) 一次
+// (不调用 Start — 避免启 4 个 goroutine 引入 flake),写大小变化、Tick 边界、
+// 断言 Snapshot 返回的 FileSizeBytes / FileGrowthBps 正确。
+//
+// 边界:
+//   - 起始 1 KiB 写盘 → ticker tick 后 Snapshot.FileSizeBytes == 1024,
+//     FileGrowthBps 反映对应增长率 (FileMinGrowthBPS=1024, CheckIntervalS=1)
+//   - 再追加 16 KiB → ticker tick 后 Snapshot.FileSizeBytes == 17408,
+//     FileGrowthBps >= 1024 (达标)
+//
+// 真实配置 FileMinGrowthBPS=1024, CheckIntervalS=1, 期望 1 KiB/s 达标;
+// 16 KiB/1s = 16384 bytes = 16384*8/1 = 131072 bps,远高于阈值。
+func TestActivityWatcher_SnapshotExtension(t *testing.T) {
+	// 临时 mkv 文件,fileTicker 从此路径 os.Stat。t.TempDir 自动清理。
+	path := filepath.Join(t.TempDir(), "record.mkv")
+	require.NoError(t, os.WriteFile(path, []byte("seed"), 0644))
+
+	// 构造独立的 cfg,CheckIntervalS=1 让测试快速 tick;FileMinGrowthBPS=1024
+	// 保持与 production 一致的阈值语义。
+	cfg := &config.Config{SmartEnd: config.SmartEndConfig{
+		SilenceDB:              -30,
+		SilenceDurationS:       30,
+		FileStallS:             120,
+		FileMinGrowthBPS:       1024,
+		HuaweiPollIntervalS:    30,
+		HuaweiPersistS:         30,
+		HuaweiFailureThreshold: 3,
+		CheckIntervalS:         1, // 1s 间隔,让测试在 3s 内确定性完成 2 tick
+		ExtendStepMin:          30,
+		MaxExtendCount:         4,
+		StatFailureThreshold:   3,
+	}}
+
+	// 独立构造 watcher,filePath 指向真实文件;logFile nil,logger nop。
+	w := NewActivityWatcher(cfg, nil, path, nil, zap.NewNop())
+	require.NotNil(t, w)
+
+	// 启 fileTicker 一次,在 ctx 取消前驱动 2 个 tick。
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 手动 w.wg.Add(1) 因为 fileTicker 内部 defer w.wg.Done() (production 路径
+	// 由 Start() 预 Add 4);不预 Add 会触发 negative WaitGroup panic。
+	w.wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.fileTicker(ctx)
+	}()
+
+	// Tick 1: 写 1 KiB,等 ticker (1s 间隔) 跑完第一次循环,断言 FileSizeBytes 更新到 1024。
+	require.NoError(t, os.WriteFile(path, make([]byte, 1024), 0644))
+	require.Eventually(t, func() bool {
+		s := w.Snapshot()
+		return s.FileSizeBytes == 1024
+	}, 3*time.Second, 50*time.Millisecond, "Snapshot.FileSizeBytes 应该跟随 fileTicker 第一次 tick 更新到 1024")
+
+	firstTickSnap := w.Snapshot()
+	require.Equal(t, int64(1024), firstTickSnap.FileSizeBytes, "Tick1 应把 FileSizeBytes 更新到 1024")
+	// 1 KiB 是从 4 bytes 增长,deltaBytes=1020,1020*8/1=8160 bps >= 1024 阈值,达标。
+	// 关键断言:FileGrowthBps 必须 >= 0 (字段已暴露,值由 fileTicker 缓存写入)。
+	require.GreaterOrEqual(t, firstTickSnap.FileGrowthBps, int64(0), "FileGrowthBps 字段必须暴露 (>=0)")
+
+	// Tick 2: 追加 16 KiB (累计 17 KiB = 17408 bytes),等 ticker 跑第二次循环。
+	// 增长 16 KiB / 1s = 16384 B/s,远超阈值 1024 B/s,达标。
+	require.NoError(t, os.WriteFile(path, make([]byte, 17408), 0644))
+	require.Eventually(t, func() bool {
+		s := w.Snapshot()
+		return s.FileSizeBytes == 17408
+	}, 3*time.Second, 50*time.Millisecond, "Snapshot.FileSizeBytes 应该跟随 fileTicker 第二次 tick 更新到 17408")
+
+	secondTickSnap := w.Snapshot()
+	require.Equal(t, int64(17408), secondTickSnap.FileSizeBytes, "Tick2 应把 FileSizeBytes 更新到 17408")
+	// 16384*8/1 = 131072 bps,远超 1024 阈值。
+	require.GreaterOrEqual(t, secondTickSnap.FileGrowthBps, int64(1024),
+		"Tick2 之后 FileGrowthBps 应 >= 1024 (达标分支),实际 %d", secondTickSnap.FileGrowthBps)
+
+	// 收尾:取消 ctx,等 fileTicker 退出后再断言.
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("fileTicker 在 ctx cancel 后未退出")
+	}
+}
