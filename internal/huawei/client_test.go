@@ -63,17 +63,12 @@ func goroutineCount() int {
 	return runtimeNumGoroutine()
 }
 
-// buildMailboxData wraps a state object in the TE40 mailbox envelope:
-//   {"state": "<JSON string of state>"}
-// data is the inner state payload (raw JSON). The helper serializes and
-// double-escapes to match the real APIResponse.Data shape.
+// buildMailboxData wraps a state object in the TE40 mailbox envelope.
+// The TE40 firmware returns state as an inline JSON object (not a string),
+// matching the existing GetMailboxData double-decode pattern.
 func buildMailboxData(t *testing.T, state map[string]interface{}) string {
 	t.Helper()
-	stateBytes, err := json.Marshal(state)
-	if err != nil {
-		t.Fatalf("failed to marshal state: %v", err)
-	}
-	envelope := map[string]interface{}{"state": string(stateBytes)}
+	envelope := map[string]interface{}{"state": state}
 	envelopeBytes, err := json.Marshal(envelope)
 	if err != nil {
 		t.Fatalf("failed to marshal envelope: %v", err)

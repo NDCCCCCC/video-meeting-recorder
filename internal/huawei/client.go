@@ -201,16 +201,88 @@ type USBDeviceInfo struct {
 // MailboxState 邮箱状态信息（来自WEB_GetMailboxDataAPI）
 type MailboxState struct {
 	State struct {
-		Sitename  string `json:"sitename"`
-		Speaker   int    `json:"speaker"`
-		Mic       int    `json:"mic"`
-		Gk        int    `json:"gk"`
-		Sip       int    `json:"sip"`
-		Callstate int    `json:"callstate"` // 通话状态
-		Calltype  int    `json:"calltype"`
-		Conftype  int    `json:"conftype"`
-		IsInConf  int    `json:"isInConf"` // 是否在会议中，1表示在会议中
+		Sitename     string `json:"sitename"`
+		Speaker      int    `json:"speaker"`
+		Mic          int    `json:"mic"`
+		Gk           int    `json:"gk"`
+		Sip          int    `json:"sip"`
+		Callstate    int    `json:"callstate"` // 通话状态
+		Calltype     int    `json:"calltype"`
+		Conftype     int    `json:"conftype"`
+		IsInConf     int    `json:"isInConf"` // 是否在会议中，1表示在会议中
+		ConfState    string `json:"confState,omitempty"`   // 会议状态字符串（如 rollcall）；空表示无活跃会议
+		JoinSum      int    `json:"joinSum,omitempty"`     // 当前参会人数
+		ConfLeftTime int    `json:"confLeftTime,omitempty"` // 会议剩余时间（秒）
 	} `json:"state"`
+}
+
+// parseMailboxState 解析 WEB_GetMailboxDataAPI 的 APIResponse.Data 字符串。
+// 该函数是无状态的纯函数：外层 APIResponse.Data 是 JSON 字符串，内含 state
+// 子对象；内层 state 是一个 JSON 字符串。需要两层 unmarshal 才能拿到结构化字段。
+//
+// 空数据 / 外层解析失败 / state 字段缺失或类型错误 / 内层解析失败时，统一返回
+// 包装了 apperrors.ErrRecordingHuaWeiStateFetchFailed 的错误，调用方可以
+// errors.Is 识别降级原因；绝不返回零值成功。
+func parseMailboxState(data string) (*MailboxState, error) {
+	if data == "" {
+		return nil, fmt.Errorf("mailbox data empty: %w", apperrors.ErrRecordingHuaWeiStateFetchFailed)
+	}
+
+	var wrapper struct {
+		State json.RawMessage `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(data), &wrapper); err != nil {
+		return nil, fmt.Errorf("mailbox outer parse failed: %w", apperrors.ErrRecordingHuaWeiStateFetchFailed)
+	}
+	if len(wrapper.State) == 0 || string(wrapper.State) == "null" {
+		return nil, fmt.Errorf("mailbox state field missing: %w", apperrors.ErrRecordingHuaWeiStateFetchFailed)
+	}
+
+	var mailboxState MailboxState
+	if err := json.Unmarshal(wrapper.State, &mailboxState.State); err != nil {
+		return nil, fmt.Errorf("mailbox state parse failed: %w", apperrors.ErrRecordingHuaWeiStateFetchFailed)
+	}
+	return &mailboxState, nil
+}
+
+// detectConferenceFields 检测 APIResponse.Data 中 confState 和 joinSum 两个
+// JSON key 是否同时存在。区分 "JSON 字段缺失" 与 "JSON 字段存在但值为零/空串"，
+// 让 Phase 24 watcher 在老设备（无新字段）上走 IsInConf fallback。
+func detectConferenceFields(rawData string) bool {
+	if rawData == "" {
+		return false
+	}
+	var wrapper struct {
+		State struct {
+			ConfState json.RawMessage `json:"confState"`
+			JoinSum   json.RawMessage `json:"joinSum"`
+		} `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(rawData), &wrapper); err != nil {
+		return false
+	}
+	return len(wrapper.State.ConfState) > 0 && len(wrapper.State.JoinSum) > 0
+}
+
+// ConferenceState 是 GetConferenceState 的一次采样结果，包含 H 信号所需的
+// confState / joinSum / confLeftTime 字段以及 IsInConf fallback。
+//
+// HasConferenceFields 用于区分 "老设备无新字段（fallback 路径）" 与 "新设备
+// 字段存在但值为空字符串/0（按新判据处理）"，Phase 24 watcher 必须依据该 flag
+// 选择判据：
+//   - HasConferenceFields=true 且 ConfState!=""  → 会议活跃
+//   - HasConferenceFields=true 且 ConfState=="" 且 JoinSum==0 → 空候选（持续阈值由 watcher 判定）
+//   - HasConferenceFields=false → 走 IsInConf==0 fallback
+//
+// 该结构仅承载一次快照，不包含任何定时器、goroutine 或跨调用状态。
+type ConferenceState struct {
+	ConfState    string // 会议状态字符串；空字符串表示无活跃会议
+	JoinSum      int    // 当前参会人数
+	ConfLeftTime int    // 会议剩余时间（秒）
+	IsInConf     int    // TE40 isInConf 字段（0/1），fallback 判据
+	// HasConferenceFields=true 表示 confState 和 joinSum 两个 JSON key 同时
+	// 存在；false 表示老设备字段缺失，需走 IsInConf fallback。
+	HasConferenceFields bool
 }
 
 // HTTPClient HTTP客户端封装
@@ -741,6 +813,69 @@ func (c *HuaweiClient) GetMailboxData(ctx context.Context) (*MailboxState, error
 
 	c.logger.Debug("会话保活成功")
 	return &mailboxState, nil
+}
+
+// getMailboxRaw 调用 WEB_GetMailboxDataAPI 并返回原始 APIResponse.Data 字符串。
+// 该函数故意保留与 GetMailboxData 相同的 HTTP/session/cookie 处理代码——
+// 不抽取共享私有方法以避免回归现有 GetMailboxData 行为
+// (TestHuaweiClient_StopExitsKeepAliveGoroutine 等)。
+func (c *HuaweiClient) getMailboxRaw(ctx context.Context) (string, error) {
+	if !c.hasSession() {
+		return "", NewHuaweiError(ErrCodeSessionInvalid, nil)
+	}
+
+	headers := map[string]string{
+		"Cookie": fmt.Sprintf("SessionID=%s", c.getSessionID()),
+	}
+
+	resp, err := c.httpClient.Post(ctx, "WEB_GetMailboxDataAPI", nil, headers)
+	if err != nil {
+		return "", err
+	}
+
+	// 更新过期时间（与 GetMailboxData 行为一致）
+	c.mu.Lock()
+	if c.session != nil {
+		c.session.ExpiresAt = time.Now().Add(c.config.SessionTimeout)
+	}
+	c.mu.Unlock()
+
+	if resp == nil {
+		return "", nil
+	}
+	return resp.Data, nil
+}
+
+// GetConferenceState 拉取一次邮箱快照并返回 ConferenceState。
+// 该方法无状态：不持有定时器、goroutine、跨调用缓存或上一次结果。
+// 30 秒持续判定由 Phase 24 的 ActivityWatcher 负责。
+//
+// 错误语义：
+//   - 传输/session 失败：返回包装 ErrRecordingHuaWeiStateFetchFailed 的 error，
+//     Phase 24 通过 errors.Is 累计失败次数。
+//   - mailbox payload 缺失 state 字段、内层 JSON 解析失败：同样返回包装错误，
+//     避免把 malformed 响应误判为会议已结束（confState="" && joinSum=0）。
+//
+// 返回值 HasConferenceFields 必须被调用方读取：true 表示走新 H 判据
+// (ConfState=="" && JoinSum==0)；false 表示老设备，走 IsInConf==0 fallback。
+func (c *HuaweiClient) GetConferenceState(ctx context.Context) (*ConferenceState, error) {
+	rawData, err := c.getMailboxRaw(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("mailbox fetch failed: %w", apperrors.ErrRecordingHuaWeiStateFetchFailed)
+	}
+
+	parsed, err := parseMailboxState(rawData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ConferenceState{
+		ConfState:           parsed.State.ConfState,
+		JoinSum:             parsed.State.JoinSum,
+		ConfLeftTime:        parsed.State.ConfLeftTime,
+		IsInConf:            parsed.State.IsInConf,
+		HasConferenceFields: detectConferenceFields(rawData),
+	}, nil
 }
 
 // IsInConference 检查终端是否在会议中
