@@ -50,13 +50,14 @@
 </details>
 
 <details open>
-<summary>v2.0 智能录制收尾（Smart Recording End）(Phases 23-25) — PLANNING 2026-08-06</summary>
+<summary>v2.0 智能录制收尾（Smart Recording End）(Phases 23-26) — PLANNING 2026-08-06</summary>
 
 **Milestone Goal:** 让华为会议录制时长智能贴合会议真实时长——到点未结束自动延时（30min × 4 = 2h 上限），提前结束由 TE40 `WEB_GetMailboxDataAPI`（`confState=="" && joinSum==0`）主信号 + silencedetect + 文件停滞双兜底任一触发即收尾转码，无需人工干预。
 
 - [x] **Phase 23: 华为 API 扩展 + GORM 字段 + sentinel 错误码** — 落地 H 信号数据通路与可观测基线
 - [ ] **Phase 24: ActivityWatcher + silencedetect + 文件停滞** — 整合 H+A+B + 多级降级
 - [ ] **Phase 25: scheduler 多信号驱动 + service 封装 + E2E + CI** — 端到端闭环 + 余项 AUDIT/CFG/OBS
+- [ ] **Phase 26: 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix)** — 加载 huawei-10.62.10.3-ca.pem 到 RootCAs，修复"锁定终端失败: x509: certificate signed by unknown authority"
 
 </details>
 
@@ -94,7 +95,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 24-01-PLAN.md -- SilenceParser + 6 fixture 测试 + HuaweiStateClient interface 声明 (DETECT-02)
+- [x] 24-01-PLAN.md -- SilenceParser + 6 fixture 测试 + HuaweiStateClient interface 声明 (DETECT-02)
 - [ ] 24-02-PLAN.md -- ActivityWatcher 整合 H+A+B + 多级降级 + close-once + 公开 API (DETECT-03, WATCH-01..05, EXTEND-03)
 - [ ] 24-03-PLAN.md -- coordinator.go: buildRecordingCommand 注入 -af silencedetect + RecordingProcess.OnReconnect + restartRecording 同步调用 (DETECT-02 wiring, WATCH-05)
 - [ ] 24-04-PLAN.md -- 8 ActivityWatcher scenario 子测 + 2 coordinator 扩展测 (Nyquist 全覆盖)
@@ -112,6 +113,18 @@ Plans:
   6. service 层封装 `UpdateTaskExtension(task, deltaMin, reason)` + `MarkTaskEndedEarly(task, reason, byHuaWeiAPI bool)`，统一写入 GORM 字段 + audit log；每次延时/提前结束事件写 audit log 含 snapshot（`silence_since` / `last_file_growth` / `file_size_bytes` / `file_growth_bps` + `extension_count` + `new_end_time`）
   7. `smart_end.enabled=false` 时系统退回纯 EndTime 行为（scheduler 不读 `taskEndedCh`，watcher 不启）；`smart_end.huawei_enabled=false` 时系统降级只用兜底 A+B（华为轮询 goroutine 不启）
   8. 5 类可观测日志字段全部输出：`smart_extend` / `smart_early_end` / `max_extend_reached` / `activity_watcher_degraded` / 可选 Prometheus counter 接入点（项目无 prometheus 集成则仅做日志）
+**Plans**: TBD
+
+### Phase 26: 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix)
+**Goal**: 加载 `certs/huawei-10.62.10.3-ca.pem`（含 server cert + huawei_ca 自签根）到 `tls.Config.RootCAs`，让 Go crypto/tls 信任华为私有自签根；修复"锁定终端失败: x509: certificate signed by unknown authority"硬阻塞——v2.0 三 phase（23/24/25）的 H 信号链路全部依赖此修复，否则 `HuaweiClient.GetConferenceState()` 始终无法建立连接
+**Depends on**: Nothing (hotfix，可独立于 24/25 执行；但 H/A/B 信号链路在此修复落地后才能联通)
+**Requirements**: SEC-003a-01, SEC-003a-02, SEC-003a-03, SEC-003a-04, SEC-003a-05 (5 REQ-IDs)
+**Success Criteria** (what must be TRUE):
+  1. `internal/huawei/client.go:298-348` 的 `tls.Config.RootCAs` 在 `CABundleFile` 配置非空时被设置为 `*x509.CertPool`（从 PEM 读取所有证书，server cert + huawei_ca 自签根均可识别）；`CABundleFile` 为空时维持原行为（系统 CA bundle，`InsecureSkipVerify=false`）
+  2. `internal/config/config.go` `HuaweiConfig` 新增 `CABundleFile string` 字段（`mapstructure:"ca_bundle_file"`），`config.yaml` 默认值 `./certs/huawei-10.62.10.3-ca.pem`（相对路径相对 working dir）
+  3. `HuaweiClientManager.SetCABundle(path string) error` 实现：读 PEM → 解析所有 cert → pool.AddCert(x509.ParseCertificate) → 调用方注入到所有后续 `NewHTTPClient` 调用；PEM 文件不存在或解析失败时返回 wrapped error（含 file path + cause）
+  4. `cmd/server/app.go` 启动时执行 `huaweiMgr.SetCABundle(a.config.Huawei.CABundleFile)`，错误时 `logger.Fatal`（fail-closed，与 SEC-003b 凭据加载一致）；空字符串则跳过加载保留系统 CA
+  5. 新增 `huawei_test.go` 子测：① 加载正常 PEM → 握手 `https://10.62.10.3`（项目环境）或 httptest 自签 server → cert verify 通过；② PEM 损坏 → SetCABundle 返回 wrapped error；③ 空路径 → 不修改 RootCAs（系统 CA 默认）；④ `NewHTTPClient` 接收 `caCertPool *x509.CertPool` 参数，`caCertPool==nil` 时 `tls.Config.RootCAs=nil`（系统 CA），非 nil 时设置；⑤ `ca_bundle_file` 同时含 server cert + 自签根时 chain verify 成功（双向信任）
 **Plans**: TBD
 
 ## Progress
@@ -139,7 +152,7 @@ Plans:
 | 21. Close v1.1 gaps | v1.1 | 5/5 | Complete | 2026-08-03 |
 | 22. v1.1 audit tech debt 收尾 | v1.1 | 6/6 | Complete | 2026-08-03 |
 | 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 5/5 | Complete    | 2026-08-06 |
-| 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 0/4 | Planning | - |
+| 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 1/4 | In Progress|  |
 | 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 0/TBD | Planning | - |
 
 ## Backlog
