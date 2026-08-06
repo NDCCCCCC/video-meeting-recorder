@@ -15,6 +15,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/recorder"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/video_recording"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
@@ -539,16 +540,13 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	)
 }
 
-// monitorTask 监控任务直到结束
 func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.VideoRecordingTask) {
 	s.mu.Lock()
-	// 创建更新通道
 	updateChan := make(chan time.Time, 1)
 	s.taskUpdateChans[task.ID] = updateChan
 	s.taskEndTimes[task.ID] = task.EndTime
 	s.mu.Unlock()
 
-	// 清理函数
 	defer func() {
 		s.mu.Lock()
 		delete(s.taskUpdateChans, task.ID)
@@ -556,54 +554,118 @@ func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.Vid
 		s.mu.Unlock()
 	}()
 
-	endTime := task.EndTime
+	if s.config == nil || !s.config.SmartEnd.Enabled {
+		s.monitorTaskEndTimeOnly(ctx, task, updateChan)
+		return
+	}
 
+	taskEndedCh := mergeWatchers(ctx, s.coordinator.WatcherChannels(task.ID), s.logger)
+	endTime := task.EndTime
 	for {
-		// 计算剩余时间
 		remaining := time.Until(endTime)
 		if remaining < 0 {
 			remaining = 0
 		}
-
-		s.logger.Info("监控任务中",
-			zap.Uint("task_id", task.ID),
-			zap.Duration("remaining", remaining),
-			zap.Time("end_time", endTime),
-		)
-
-		// 创建定时器
 		timer := time.NewTimer(remaining)
-
 		select {
-		case <-timer.C:
+		case <-taskEndedCh: // SCHED-03/EARLY-03: a close is immediately ready and preempts the deadline.
 			timer.Stop()
-			// 正常结束
-			s.completeTask(ctx, task.ID)
+			s.handleTaskEnded(ctx, task)
 			return
-
 		case <-ctx.Done():
 			timer.Stop()
-			// 任务被取消
-			s.logger.Info("任务监控被取消",
-				zap.Uint("task_id", task.ID),
-			)
 			return
-
 		case newEndTime, ok := <-updateChan:
 			timer.Stop()
 			if !ok {
-				// 通道关闭，退出
 				return
 			}
-			// 更新结束时间，继续监控
 			endTime = newEndTime
-			s.logger.Info("任务结束时间已更新",
-				zap.Uint("task_id", task.ID),
-				zap.Time("old_end_time", task.EndTime),
-				zap.Time("new_end_time", newEndTime),
-			)
+		case <-timer.C:
+			timer.Stop()
+			if s.handleEndTimeReached(ctx, task, &endTime) {
+				return
+			}
 		}
 	}
+}
+
+func (s *VideoSimpleScheduler) monitorTaskEndTimeOnly(ctx context.Context, task *models.VideoRecordingTask, updateChan <-chan time.Time) {
+	endTime := task.EndTime
+	for {
+		remaining := time.Until(endTime)
+		if remaining < 0 {
+			remaining = 0
+		}
+		timer := time.NewTimer(remaining)
+		select {
+		case <-timer.C:
+			timer.Stop()
+			s.completeTask(ctx, task.ID)
+			return
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case newEndTime, ok := <-updateChan:
+			timer.Stop()
+			if !ok {
+				return
+			}
+			endTime = newEndTime
+		}
+	}
+}
+
+func (s *VideoSimpleScheduler) watcherForTask(taskID uint) *recorder.ActivityWatcher {
+	return nil
+}
+
+func (s *VideoSimpleScheduler) handleTaskEnded(ctx context.Context, task *models.VideoRecordingTask) {
+	if watcher := s.watcherForTask(task.ID); watcher != nil {
+		snap := watcher.Snapshot()
+		if svc, ok := s.taskService.(interface {
+			MarkTaskEndedEarly(context.Context, uint, string, bool, recorder.ActivitySnapshot) error
+		}); ok {
+			if err := svc.MarkTaskEndedEarly(ctx, task.ID, snap.EndedReason, snap.LastHuaWeiStateEmpty, snap); err != nil {
+				s.logger.Error("记录提前结束失败", zap.Uint("task_id", task.ID), zap.Error(err))
+			}
+		}
+	}
+	s.completeTask(ctx, task.ID)
+}
+
+func (s *VideoSimpleScheduler) handleEndTimeReached(ctx context.Context, task *models.VideoRecordingTask, endTime *time.Time) bool {
+	watcher := s.watcherForTask(task.ID)
+	if watcher == nil || !watcher.IsActive() {
+		s.completeTask(ctx, task.ID)
+		return true
+	}
+	current, err := s.taskService.GetTask(ctx, task.ID)
+	if err != nil {
+		s.logger.Error("加载延时任务失败", zap.Uint("task_id", task.ID), zap.Error(err))
+		return true
+	}
+	max := s.config.SmartEnd.MaxExtendCount
+	if current.ExtensionCount >= max {
+		s.logger.Warn("max_extend_reached", zap.Uint("task_id", task.ID), zap.Bool("force_end", true))
+		s.completeTask(ctx, task.ID)
+		return true
+	}
+	if svc, ok := s.taskService.(interface {
+		UpdateTaskExtension(context.Context, uint, int, string, recorder.ActivitySnapshot) error
+	}); ok {
+		if err := svc.UpdateTaskExtension(ctx, task.ID, s.config.SmartEnd.ExtendStepMin, "smart_extend", watcher.Snapshot()); err != nil {
+			s.logger.Error("自动延时失败", zap.Uint("task_id", task.ID), zap.Error(err))
+			return true
+		}
+		updated, getErr := s.taskService.GetTask(ctx, task.ID)
+		if getErr == nil {
+			*endTime = updated.EndTime
+		} else {
+			*endTime = endTime.Add(time.Duration(s.config.SmartEnd.ExtendStepMin) * time.Minute)
+		}
+	}
+	return false
 }
 
 // completeTask 完成任务
