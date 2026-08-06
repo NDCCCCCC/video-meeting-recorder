@@ -12,6 +12,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/observability"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/recorder"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
 	auditpkg "github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
@@ -1237,6 +1238,10 @@ func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, tas
 		zap.String("reason", reason),
 	)
 
+	// OBS-05: atomic counter +1 (success-path only,Updates 已成功)。
+	// 位置放在 audit log 块之前,确保 auditSvc=nil 时计数器仍递增。
+	observability.RecordSmartExtend()
+
 	// 7. AUDIT-02 audit log snapshot (auditSvc nil 时静默跳过)
 	if s.auditSvc != nil {
 		snapPayload := SmartEndSnapshot{
@@ -1319,6 +1324,10 @@ func (s *VideoRecordingTaskService) MarkTaskEndedEarly(ctx context.Context, task
 		zap.String("reason", reason),
 		zap.Any("snapshot", snapshotMap),
 	)
+
+	// OBS-05: atomic counter +1 (success-path only,Updates 已成功)。
+	// 位置放在 audit log 块之前,确保 auditSvc=nil 时计数器仍递增。
+	observability.RecordSmartEarlyEnd()
 
 	// 5. AUDIT-03 audit log snapshot (auditSvc nil 时静默跳过)
 	if s.auditSvc != nil {

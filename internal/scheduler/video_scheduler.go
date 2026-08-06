@@ -647,7 +647,16 @@ func (s *VideoSimpleScheduler) handleEndTimeReached(ctx context.Context, task *m
 	}
 	max := s.config.SmartEnd.MaxExtendCount
 	if current.ExtensionCount >= max {
-		s.logger.Warn("max_extend_reached", zap.Uint("task_id", task.ID), zap.Bool("force_end", true))
+		// OBS-03: WARN max_extend_reached 锁字段 task_id + force_end=true;
+		// extension_count / max_extend_count 为诊断增强字段,符合 §Pitfall 7
+		// "避免 double-count" 设计 — 此处仅 WARN 日志,不调 RecordSmartExtend
+		// (成功延时路径在 service.UpdateTaskExtension 已 +1,避免重复计数)。
+		s.logger.Warn("max_extend_reached",
+			zap.Uint("task_id", task.ID),
+			zap.Bool("force_end", true),
+			zap.Int("extension_count", current.ExtensionCount),
+			zap.Int("max_extend_count", max),
+		)
 		s.completeTask(ctx, task.ID)
 		return true
 	}

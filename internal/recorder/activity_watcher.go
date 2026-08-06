@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/observability"
 )
 
 // silenceFailureThreshold 是 SilenceParser 连续解析失败的硬编码阈值,触发
@@ -291,6 +292,9 @@ func (w *ActivityWatcher) silenceScanner(ctx context.Context) {
 					zap.String("reason", "silence_parser_failed"),
 					zap.Int("consecutive_failures", failures),
 				)
+				// OBS-05: atomic counter +1 (Phase 25 OBS-04 接入点)。
+				// 放在 WARN 之后,确保 log fire 与 counter increment 1:1 同步。
+				observability.RecordWatcherDegraded()
 			}
 			continue
 		}
@@ -354,6 +358,11 @@ func (w *ActivityWatcher) fileTicker(ctx context.Context) {
 				consec := w.statConsecFailures
 				w.mu.Unlock()
 				if consec >= w.cfg.SmartEnd.StatFailureThreshold {
+					// file_stat_failed 是早期结束信号 (INFO),不是 watcher 降级事件 (ERROR);
+					// 刻意不计为 RecordWatcherDegraded — 参见 25-03 plan §OBS-04 设计备注。
+					// closeEnded 内已发 smart_early_end (watcher) INFO 日志 + close taskEndedCh,
+					// scheduler handleTaskEnded 据此走 MarkTaskEndedEarly(snap.EndedReason,
+					// byHuaWeiAPI=false) → OBS-02 计数;此处不再额外 OBS-04 计数避免双重信号。
 					w.closeEnded("file_stat_failed")
 					return
 				}
@@ -407,6 +416,8 @@ func (w *ActivityWatcher) huaweiPoller(ctx context.Context) {
 		w.logger.Warn("activity_watcher_degraded",
 			zap.String("reason", "huawei_client_nil"),
 		)
+		// OBS-05: atomic counter +1 (Phase 25 OBS-04 接入点)。
+		observability.RecordWatcherDegraded()
 		<-ctx.Done()
 		return
 	}
@@ -436,6 +447,8 @@ func (w *ActivityWatcher) huaweiPoller(ctx context.Context) {
 						zap.String("reason", "huawei_api_unreachable"),
 						zap.Int("consecutive_failures", consec),
 					)
+					// OBS-05: atomic counter +1 (Phase 25 OBS-04 接入点)。
+					observability.RecordWatcherDegraded()
 				}
 				// 失败时保留 huaweiEmptySince (不重置) — 失败不代表"会议恢复"
 				_ = empty
