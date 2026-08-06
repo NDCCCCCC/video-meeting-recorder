@@ -57,7 +57,7 @@
 - [x] **Phase 23: 华为 API 扩展 + GORM 字段 + sentinel 错误码** — 落地 H 信号数据通路与可观测基线
 - [ ] **Phase 24: ActivityWatcher + silencedetect + 文件停滞** — 整合 H+A+B + 多级降级
 - [ ] **Phase 25: scheduler 多信号驱动 + service 封装 + E2E + CI** — 端到端闭环 + 余项 AUDIT/CFG/OBS
-- [ ] **Phase 26: 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix)** — 加载 huawei-10.62.10.3-ca.pem 到 RootCAs，修复"锁定终端失败: x509: certificate signed by unknown authority"
+- [x] **Phase 26: 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix)** — 加载 huawei-10.62.10.3-ca.pem 到 RootCAs，修复"锁定终端失败: x509: certificate signed by unknown authority"
 
 </details>
 
@@ -125,7 +125,10 @@ Plans:
   3. `HuaweiClientManager.SetCABundle(path string) error` 实现：读 PEM → 解析所有 cert → pool.AddCert(x509.ParseCertificate) → 调用方注入到所有后续 `NewHTTPClient` 调用；PEM 文件不存在或解析失败时返回 wrapped error（含 file path + cause）
   4. `cmd/server/app.go` 启动时执行 `huaweiMgr.SetCABundle(a.config.Huawei.CABundleFile)`，错误时 `logger.Fatal`（fail-closed，与 SEC-003b 凭据加载一致）；空字符串则跳过加载保留系统 CA
   5. 新增 `huawei_test.go` 子测：① 加载正常 PEM → 握手 `https://10.62.10.3`（项目环境）或 httptest 自签 server → cert verify 通过；② PEM 损坏 → SetCABundle 返回 wrapped error；③ 空路径 → 不修改 RootCAs（系统 CA 默认）；④ `NewHTTPClient` 接收 `caCertPool *x509.CertPool` 参数，`caCertPool==nil` 时 `tls.Config.RootCAs=nil`（系统 CA），非 nil 时设置；⑤ `ca_bundle_file` 同时含 server cert + 自签根时 chain verify 成功（双向信任）
-**Plans**: TBD
+**Plans**: 1 plan (26-01)
+
+Plans:
+- [x] 26-01-PLAN.md -- Atomic SetCABundle + caCertPool RootCAs + 5-scenario regression suite + CABundleFile config + cmd/server fail-closed startup wiring (SEC-003a-01..05)
 
 ## Progress
 
@@ -154,6 +157,7 @@ Plans:
 | 23. 华为 API 扩展 + GORM 字段 + sentinel | v2.0 | 5/5 | Complete    | 2026-08-06 |
 | 24. ActivityWatcher + silencedetect + 文件停滞 | v2.0 | 3/4 | In Progress|  |
 | 25. scheduler 多信号驱动 + service 封装 + E2E + CI | v2.0 | 0/TBD | Planning | - |
+| 26. 华为终端 TLS 私有 CA 加载 (SEC-003a hotfix) | v2.0 | 1/1 | Complete | 2026-08-06 |
 
 ## Backlog
 

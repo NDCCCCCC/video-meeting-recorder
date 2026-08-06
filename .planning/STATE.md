@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: milestone
-status: executing
-last_updated: "2026-08-06T04:42:13.973Z"
+milestone_name: 智能录制收尾（Smart Recording End）
+status: verifying
+last_updated: "2026-08-06T04:51:19.683Z"
 last_activity: 2026-08-06
 progress:
-  total_phases: 7
-  completed_phases: 1
+  total_phases: 3
+  completed_phases: 3
   total_plans: 10
-  completed_plans: 8
-  percent: 14
+  completed_plans: 10
+  percent: 100
 ---
 
 # STATE.md - Project Memory
@@ -54,19 +54,24 @@ v2.0 智能录制收尾（Smart Recording End）— roadmap 已创建（3 phases
 
 ## Current Position
 
-Phase: 26 (tls-ca-sec-003a-hotfix) — EXECUTING
-Plan: 1 of 1
+Phase: 26 (tls-ca-sec-003a-hotfix) — VERIFYING
+Plan: 1 of 1 (executed; SUMMARY committed)
 Next phase: 25 (scheduler 多信号驱动 + E2E + CI) — not yet planned
-Status: Executing Phase 26
-Last activity: 2026-08-06 -- Phase 26 execution started
+Status: Phase 26 plan 01 implementation complete — ready for verification
+Last activity: 2026-08-06 -- Phase 26 plan 01 executed (4 commits: c8ef568 + f311e86 + c2357d7 + 7818db5)
 
 > 注：HANDOFF.json + .continue-here.md (2026-08-05 旧版 design-v2-review pause) 已删除。
 > 实际进度：Phase 23 验证通过 (5/5)；Phase 24 plans 1-3 done；24-04 待执行。
-> Phase 26 (TLS CA SEC-003a hotfix) 26-01 计划已写，待执行（hotfix 插入，非 roadmap 原计划）。
+> Phase 26 (TLS CA SEC-003a hotfix) 26-01 已执行完毕，4 commits（3 feat + 1 docs）。
+> SEC-003a-01..05 全部 satisfied：atomic SetCABundle + caCertPool RootCAs + cmd/server fail-closed 启动 + CABundleFile + BindEnv + 5-scenario 回归测试。
 
 ---
 
 ## Performance Metrics
+
+| Phase | Duration | Tasks | Files |
+|-------|----------|-------|-------|
+| Phase 26 P01 | 27min | 3 tasks | 7 files |
 
 ### Requirements Coverage
 
@@ -137,6 +142,12 @@ Last activity: 2026-08-06 -- Phase 26 execution started
 
 ## Decisions Log
 
+### 2026-08-06 - Phase 26 Plan 01 SEC-003a hotfix executed
+
+**Decision:** Atomic PEM bundle publish under Manager.mu + caCertPool *x509.CertPool parameter on NewHTTPClient + fail-closed startup wiring in cmd/server/app.go + HUAWEI_CA_BUNDLE_FILE env override.
+**Rationale:** x509: certificate signed by unknown authority on `https://10.62.10.3` (Huawei TE40 private CA) blocked the entire v2.0 DETECT-01 mailbox polling chain. Phase 17 TLS hardening requires InsecureSkipVerify=false + chain validation, so the only safe option is to load the private CA bundle into a *x509.CertPool and pass it via tls.Config.RootCAs. Atomic-only publish prevents partial-trust states; logger.Fatal at startup makes misconfiguration loud rather than silent.
+**Outcome:** 3 feat commits (c8ef568 / f311e86 / c2357d7) + 1 docs commit (7818db5). 5-scenario regression suite covers ValidPEM / InvalidOrMissing (6 subtests) / EmptyPath / CertPoolBranches (pointer-identity) / ServerAndRootChain. All Phase 17 invariants preserved (MinVersion=tls.VersionTLS12, no 3DES, InsecureSkipVerify=false, ForceAttemptHTTP2=false).
+
 ### 2026-08-06 - v2.0 Roadmap 创建
 
 **Decision:** 3-phase split（A 基础设施 → B watcher → C E2E + 余项），Phase 23/24/25。34 REQ-IDs 全映射，0 orphan。
@@ -157,12 +168,12 @@ Last activity: 2026-08-06 -- Phase 26 execution started
 
 ### Last Session
 
-2026-08-06 — Phase 24 wave 3 closed (24-03 coordinator wiring done)；HANDOFF/.continue-here stale pause artifacts 已删除
+2026-08-06 — Phase 26 plan 01 SEC-003a hotfix executed (4 commits landed: c8ef568 + f311e86 + c2357d7 + 7818db5). Huawei private CA bundle loader with fail-closed startup wiring + 5-scenario regression suite. All SEC-003a-01..05 requirements satisfied.
 
 ### Next Steps
 
-1. `/gsd:execute-phase 24` — 执行 24-04 Nyquist 测试（10 Test* + nyquist_compliant 翻 true）
-2. `/gsd:execute-phase 26` — 执行 26-01 (TLS CA SEC-003a hotfix，可与 24-04 并行或前置)
+1. `/gsd:verify-phase 26` — 验证 Phase 26 plan 01（x509 chain validation against injected pool + InsecureSkipVerify=false preservation）
+2. `/gsd:execute-phase 24` — 执行 24-04 Nyquist 测试（10 Test* + nyquist_compliant 翻 true），现在可以驱动真实 Huawei HTTPS 路径
 3. `/gsd:plan-phase 25` — 24 收尾后拆解 Phase 25 (SCHED/EXTEND/EARLY/AUDIT-余/CFG-余/OBS)
 
 ### Open Questions
@@ -175,6 +186,6 @@ Last activity: 2026-08-06 -- Phase 26 execution started
 
 ---
 
-*STATE.md updated: 2026-08-06 — v2.0 roadmap created, awaiting plan-phase 23*
+*STATE.md updated: 2026-08-06 — Phase 26 plan 01 SEC-003a hotfix executed (4 commits landed), Phase 24-04 Nyquist next*
 
-**Planned Phase:** 23 (next) — TBD plans — TBD date
+**Planned Phase:** 25 (after Phase 24-04 verifies) — TBD plans — TBD date

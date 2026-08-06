@@ -139,3 +139,10 @@ None — plan executed exactly as written. The gofmt -w absorption on `internal/
 
 *Phase: 26-tls-ca-sec-003a-hotfix*
 *Completed: 2026-08-06*
+
+## Self-Check: PASSED
+
+- File `26-01-SUMMARY.md` exists at `.planning/phases/26-tls-ca-sec-003a-hotfix/26-01-SUMMARY.md`
+- All 4 commit hashes verified in git log: `c8ef568`, `f311e86`, `c2357d7`, `7818db5`
+- Working tree clean post-SUMMARY commit
+
