@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +17,22 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
+
+// skipIfMissing 安全跳过：当目标 YAML 不存在时 t.Skip（本测试是部署期模板
+// drift gate，不是文件存在性 gate）。
+//   - 本地开发：config.yaml + bin/config.yaml 由运维手工准备，测试正常执行。
+//   - 干净 CI checkout：文件被 .gitignore 排除，bin/ 由 cross-build job 创建，
+//     root 可能在 createDefaultConfigFile() 触发后存在、也可能尚未触发。
+//     Skip 比 FAIL 更准确反映"无模板可校验"的现实。
+func skipIfMissing(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			t.Skipf("yaml drift gate skipped: %s not present (likely gitignored / fresh checkout)", path)
+		}
+		t.Fatalf("stat %s: %v", path, err)
+	}
+}
 
 // expectedSmartEndKeys 是 REQUIREMENTS.md:58 与 23-RESEARCH.md CFG-02 节明确锁定的
 // 14 项 smart_end 配置键集合。任意漂移(多一个/少一个/重命名)都应被本测试捕获。
@@ -174,6 +191,7 @@ func TestSmartEndYAML_Exactly14Keys(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			skipIfMissing(t, tc.path)
 			n := loadSmartEndSection(t, tc.path)
 			m, _ := smartEndMap(t, n)
 			assert.Equal(t, 14, len(m),
@@ -203,6 +221,8 @@ func TestSmartEndYAML_RootBinSync(t *testing.T) {
 	root := projectRoot(t)
 	rootPath := filepath.Join(root, "config.yaml")
 	binPath := filepath.Join(root, "bin", "config.yaml")
+	skipIfMissing(t, rootPath)
+	skipIfMissing(t, binPath)
 
 	rootNode := loadSmartEndSection(t, rootPath)
 	binNode := loadSmartEndSection(t, binPath)
@@ -237,6 +257,7 @@ func TestSmartEndYAML_RootBinSync(t *testing.T) {
 func TestSmartEndYAML_ExpectedDefaults(t *testing.T) {
 	root := projectRoot(t)
 	rootPath := filepath.Join(root, "config.yaml")
+	skipIfMissing(t, rootPath)
 
 	node := loadSmartEndSection(t, rootPath)
 	m, _ := smartEndMap(t, node)
@@ -266,6 +287,7 @@ func TestSmartEndYAML_ExpectedDefaults(t *testing.T) {
 func TestSmartEndYAML_ViperLoadsCleanly(t *testing.T) {
 	root := projectRoot(t)
 	rootPath := filepath.Join(root, "config.yaml")
+	skipIfMissing(t, rootPath)
 
 	// 读整份 config.yaml:Viper 需要 Document 形式,只 encode 子节点会丢失
 	// Document wrapper,导致 unmarshal 解析不出数字字面值。

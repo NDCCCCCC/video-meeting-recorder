@@ -205,6 +205,13 @@ type HuaweiConfig struct {
 	// 非空 = 由 Manager.SetCABundle 解析全部 CERTIFICATE 块后注入 tls.Config.RootCAs。
 	// 显式空字符串必须保留为空（system-CA opt-out），不可在 setDefaults 里覆盖。
 	CABundleFile string `mapstructure:"ca_bundle_file" json:"ca_bundle_file" yaml:"ca_bundle_file"`
+	// REDO (huawei-tls-after-ca-fix): 华为终端 hostname 校验 ServerName——
+	// IP-only dial + cert SAN 仅含 DNS（如 *.tp.huawei.com）时，必须把 ServerName
+	// 设为与 dNSName 匹配的字面名（例如 "vct.tp.huawei.com"），让 Go x509 verifier 走
+	// dNSName 路径而不是被 "doesn't contain any IP SANs" 拒绝。
+	// 空字符串 = Go 用 dial 地址做 hostname 校验（不修改现状）；与 ca_bundle_file
+	// 同级别可由 HUAWEI_TLS_SERVER_NAME 环境变量覆盖。
+	TLSServerName string `mapstructure:"tls_server_name" json:"tls_server_name" yaml:"tls_server_name"`
 }
 
 // RTSPConfig RTSP配置
@@ -789,6 +796,9 @@ huawei:
   min_tls_version: "1.2"
   # SEC-003a: 华为终端私有 CA bundle 路径（与 certs/*.pem 一并由运维部署）
   ca_bundle_file: "./certs/huawei-10.62.10.3-ca.pem"
+  # IP-only dial 且证书只含 DNS SAN 时，填写与 SAN 匹配的名称；空字符串保留 Go 默认校验。
+  # 可由 HUAWEI_TLS_SERVER_NAME 环境变量覆盖。
+  tls_server_name: ""
 
 ffmpeg:
   path: "./bin/ffmpeg"  # 使用项目内置的 ffmpeg
@@ -840,6 +850,27 @@ tingwu:
 # Python依赖配置
 python:
   prefer_uv: true  # 优先使用uv管理Python依赖（需要安装uv）
+
+# Phase 23 (CFG-02) + 23-RESEARCH.md: smart_end 段 — 与 SmartEndConfig struct 14
+# 字段一一对应。auto-generated config.yaml 自动含此段,与 bin/config.yaml 部署
+# 模板及 REQUIREMENTS.md:58 锁定列表保持同步,smart_end_yaml_test.go 的 RED gate
+# 因此在干净 checkout 上可正常验证 root config.yaml(部署期 bin/config.yaml
+# 仍由运维手工准备,测试在缺失时安全 skip)。
+smart_end:
+  enabled: true
+  silence_db: -30
+  silence_duration_s: 30
+  file_stall_s: 120
+  file_min_growth_bps: 1024
+  huawei_enabled: true
+  huawei_poll_interval_s: 30
+  huawei_persist_s: 30
+  huawei_failure_threshold: 3
+  check_interval_s: 5
+  extend_step_min: 30
+  max_extend_count: 4
+  stat_failure_threshold: 3
+  degrade_on_silence_loss: true
 `
 
 	// 写入配置文件
@@ -861,6 +892,8 @@ func bindSecretEnv(v *viper.Viper) {
 	_ = v.BindEnv("huawei.min_tls_version", "HUAWEI_MIN_TLS_VERSION")
 	// SEC-003a: 华为终端私有 CA bundle 路径覆盖——运维无需重新编译二进制即可切换。
 	_ = v.BindEnv("huawei.ca_bundle_file", "HUAWEI_CA_BUNDLE_FILE")
+	// REDO (huawei-tls-after-ca-fix): 华为终端 hostname 校验 ServerName 覆盖。
+	_ = v.BindEnv("huawei.tls_server_name", "HUAWEI_TLS_SERVER_NAME")
 	_ = v.BindEnv("cors.allowed_origins", "CORS_ALLOWED_ORIGINS")
 	_ = v.BindEnv("security.csrf_enabled", "CSRF_ENABLED")
 	_ = v.BindEnv("security.csrf_safe_origins", "CSRF_SAFE_ORIGINS")
