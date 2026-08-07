@@ -25,7 +25,7 @@
 | ErrForbidden | Sentinel | 403 | 24 |
 | ErrForeignKeyConstraint | Sentinel | 500 | 15 |
 | ErrInsufficientQuota | Sentinel | 429 | 12 |
-| ErrInternal | Sentinel | 500 | 111 |
+| ErrInternal | Sentinel | 500 | 118 |
 | ErrInvalidFileType | Sentinel | 400 | 5 |
 | ErrInvalidInput | Sentinel | 400 | 157 |
 | ErrNotFound | Sentinel | 404 | 31 |
@@ -33,7 +33,7 @@
 | ErrPermissionNotFound | Sentinel | 404 | 5 |
 | ErrRecordingHuaWeiStateFetchFailed | Sentinel | 500 | 20 |
 | ErrRecordingSmartEarlyEnd | Sentinel | 500 | 5 |
-| ErrRecordingSmartExtend | Sentinel | 500 | 5 |
+| ErrRecordingSmartExtend | Sentinel | 500 | 11 |
 | ErrRoleInUse | Sentinel | 409 | 5 |
 | ErrRoleNameExists | Sentinel | 409 | 5 |
 | ErrRoleNotFound | Sentinel | 404 | 15 |
