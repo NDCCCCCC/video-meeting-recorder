@@ -52,8 +52,12 @@ type mockTaskService struct {
 }
 
 func newMockTaskService() *mockTaskService {
-	// 创建内存数据库用于测试（使用纯Go SQLite驱动）
-	sqlDB, err := sql.Open("sqlite", ":memory:")
+	// 创建内存数据库用于测试（使用纯Go SQLite驱动）。
+	// DSN file:test-...&mode=memory&cache=shared 让 connection pool 共享 schema，
+	// 否则 AutoMigrate 后 input_configs 表在别的连接不可见 → UNIQUE 冲突。
+	// 同 services 包 video_recording_task_service_test.go newTestDB 修复。
+	dsn := fmt.Sprintf("file:test-mocktask-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	sqlDB, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		panic(fmt.Sprintf("创建测试数据库失败: %v", err))
 	}
