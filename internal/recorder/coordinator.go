@@ -20,11 +20,10 @@ import (
 
 // SimpleRecordingCoordinator 简单的录制协调器
 type SimpleRecordingCoordinator struct {
-	logger      *zap.Logger
-	config      *config.Config
-	processes   map[string]*RecordingProcess // 使用字符串键支持多配置 (taskID_configType)
-	cancelFuncs map[string]context.CancelFunc
-	mu          sync.RWMutex
+	logger    *zap.Logger
+	config    *config.Config
+	processes map[string]*RecordingProcess // 使用字符串键支持多配置 (taskID_configType)
+	mu        sync.RWMutex
 	// huaweiCli 注入给 ActivityWatcher 用于 H 信号轮询。可选 (HuaweiStateClient interface)。
 	// 由 cmd/server (Phase 25) 在 app.go 通过 SetHuaweiCli 注入;nil 时 watcher huaweiPoller
 	// 入口直接 return (RESEARCH.md Open Question 2 推荐)。Phase 24 仅声明字段+setter,
@@ -113,10 +112,9 @@ type RecordingInput struct {
 // NewSimpleRecordingCoordinator 创建录制协调器
 func NewSimpleRecordingCoordinator(logger *zap.Logger, cfg *config.Config) *SimpleRecordingCoordinator {
 	return &SimpleRecordingCoordinator{
-		logger:      logger,
-		config:      cfg,
-		processes:   make(map[string]*RecordingProcess),
-		cancelFuncs: make(map[string]context.CancelFunc),
+		logger:    logger,
+		config:    cfg,
+		processes: make(map[string]*RecordingProcess),
 	}
 }
 
@@ -189,7 +187,6 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 	// 最小临界区：仅做 map 注册（PERF-004）
 	c.mu.Lock()
 	c.processes[processKey] = rec
-	c.cancelFuncs[processKey] = cancel
 	c.mu.Unlock()
 
 	// Phase 24 / WATCH-01: per-task owned ActivityWatcher (RESEARCH.md Architecture Decision 4)。
@@ -449,9 +446,6 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 	process.Status = "running"
 	process.CancelFunc = cancel
 	process.logFile = logFile
-
-	// 更新 cancelFuncs
-	c.cancelFuncs[processKey] = cancel
 
 	// Recreate the watcher so silenceScanner and fileTicker bind to the new
 	// ffmpeg log file and MKV path instead of the closed, previous recording.

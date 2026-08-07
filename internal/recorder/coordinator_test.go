@@ -43,7 +43,6 @@ func TestNewSimpleRecordingCoordinator(t *testing.T) {
 
 	assert.NotNil(t, coordinator)
 	assert.NotNil(t, coordinator.processes)
-	assert.NotNil(t, coordinator.cancelFuncs)
 }
 
 // TestBuildRecordingInput 测试录制输入构建
