@@ -77,10 +77,9 @@ type RecordingProcess struct {
 	// (cfg.SmartEnd.Enabled=false 路径)。
 	ActivityWatcher *ActivityWatcher
 
-	// Phase 24 / WATCH-01: taskEndedCh buffered chan struct{},ActivityWatcher
-	// 内部 close-once 关闭;scheduler 在 SCHED-01 select 第三个 case。Phase 24 仅构造
-	// 不消费,Phase 25 接线。
-	taskEndedCh chan struct{}
+	// Phase 24 / WATCH-01: close-only channel reference, backed by the
+	// ActivityWatcher close-once channel. Phase 25 wires it after watcher creation.
+	taskEndedCh <-chan struct{}
 }
 
 // InputSourceType 输入源类型
@@ -197,8 +196,6 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 	// 仅在 cfg.SmartEnd.Enabled 为 true 时构造;false 时纯 EndTime 行为 (Phase 25 CFG-03 守门)。
 	// nil huaweiCli 安全 (huaweiPoller 入口检查 cfg.SmartEnd.HuaweiEnabled 后直接 return)。
 	if c.config != nil && c.config.SmartEnd.Enabled && rec != nil {
-		endedCh := make(chan struct{}, 1)
-		rec.taskEndedCh = endedCh
 		rec.ActivityWatcher = NewActivityWatcher(
 			c.config,
 			c.huaweiClient(),
@@ -206,6 +203,7 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 			logFile,
 			c.logger,
 		)
+		rec.taskEndedCh = rec.ActivityWatcher.EndedCh()   // bridge to the live watcher channel
 		rec.OnReconnect = rec.ActivityWatcher.OnReconnect // WATCH-05
 		rec.ActivityWatcher.Start()                       // 启 4 goroutines
 		if c.logger != nil {
