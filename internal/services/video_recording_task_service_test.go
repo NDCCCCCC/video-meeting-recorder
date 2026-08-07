@@ -327,6 +327,16 @@ func TestUpdateTaskExtension_AuditSnapshot(t *testing.T) {
 	_, hasLastGrowth := newDataMap["last_file_growth"]
 	assert.True(t, hasSilence, "silence_since key 必须存在 JSON")
 	assert.True(t, hasLastGrowth, "last_file_growth key 必须存在 JSON")
+
+	// OldData must preserve the pre-Updates end_time and extension_count values.
+	var oldDataMap map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(auditLog.OldData), &oldDataMap))
+	assert.EqualValues(t, 0, oldDataMap["extension_count"])
+	oldEndText, ok := oldDataMap["end_time"].(string)
+	require.True(t, ok, "OldData.end_time must be an RFC3339 string")
+	oldEnd, err := time.Parse(time.RFC3339Nano, oldEndText)
+	require.NoError(t, err)
+	assert.True(t, oldEnd.Equal(originalEnd), "OldData.end_time 应保留更新前值")
 }
 
 // TestUpdateTaskExtension_MaxLimit 验证 Phase 25 EXTEND-01/02:ExtensionCount
@@ -581,11 +591,13 @@ func TestMarkTaskEndedEarly_AuditSnapshot(t *testing.T) {
 	_, hasLastGrowth := newDataMap["last_file_growth"]
 	assert.True(t, hasLastGrowth, "last_file_growth key 应在 JSON 中(snap.LastFileGrowthAt 非零)")
 
-	// OldData 仅 ended_early:false (Pitfall 4 缓解)
+	// OldData mirrors all three smart-end fields from the pre-Updates snapshot.
 	var oldDataMap map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(auditLog.OldData), &oldDataMap))
 	assert.Equal(t, false, oldDataMap["ended_early"],
 		"OldData.ended_early 应为 false(GORM Updates 前状态)")
+	assert.Equal(t, "", oldDataMap["ended_early_reason"])
+	assert.Equal(t, false, oldDataMap["ended_by_huawei_api"])
 }
 
 // TestAuditSnapshot_ZeroTimeOmitsSilence 验证 Phase 25 AUDIT-02 Pitfall 4:

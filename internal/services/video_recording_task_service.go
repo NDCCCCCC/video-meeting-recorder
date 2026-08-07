@@ -1205,6 +1205,7 @@ func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, tas
 	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
 		return fmt.Errorf("UpdateTaskExtension: load task %d: %w: %w", taskID, apperrors.ErrInternal, err)
 	}
+	oldTask := task // immutable pre-Updates snapshot for audit OldData
 
 	// 2. EXTEND-01 上限守门
 	if task.ExtensionCount >= s.cfg.SmartEnd.MaxExtendCount {
@@ -1212,10 +1213,10 @@ func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, tas
 			s.cfg.SmartEnd.MaxExtendCount, taskID, apperrors.ErrRecordingSmartExtend)
 	}
 
-	// 3. 计算新值 (Pitfall 4: 保存 extensionOld,audit OldData/NewData 引用)
-	extensionOld := task.ExtensionCount
+	// 3. 计算新值 (Pitfall 4: derive from the immutable pre-update snapshot)
+	extensionOld := oldTask.ExtensionCount
 	newCount := extensionOld + 1
-	newEnd := task.EndTime.Add(time.Duration(deltaMin) * time.Minute)
+	newEnd := oldTask.EndTime.Add(time.Duration(deltaMin) * time.Minute)
 
 	// 4. 原子写 GORM 3 字段
 	if err := s.db.WithContext(ctx).Model(&task).Updates(map[string]interface{}{
@@ -1252,25 +1253,19 @@ func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, tas
 			ExtensionCount:   newCount,
 			NewEndTime:       &newEnd,
 		}
+		// OldData schema: pre-update end_time and extension_count, both sourced
+		// from the immutable task snapshot captured before Updates.
 		oldMap := map[string]interface{}{
-			"end_time":        task.EndTime, // 已更新为 newEnd;此处为旧值快照需求,Pitfall 4 提醒
-			"extension_count": extensionOld,
+			"end_time":        oldTask.EndTime,
+			"extension_count": oldTask.ExtensionCount,
 		}
-		// 重新取一份旧的 endTime — Model Updates 不会回填 task struct 字段,
-		// 但 task.EndTime 已在步骤 5 被改写;这里仅用 extensionOld 做审计 diff。
-		// 为保证 OldData 准确,从原读取路径不可 (第一次 First 后再读会带新值),
-		// 故此场景下 OldData 仅包含 extension_count;end_time 旧值由 D-12 审计
-		// 平台按 DiffData 自动呈现。
-		_ = oldMap
 		_ = s.auditSvc.RecordChange(ctx, auditpkg.RecordChangeOpts{
 			Action:     models.ActionUpdate,
 			Module:     models.ModuleTask,
 			Resource:   "video_recording_task",
 			ResourceID: &taskID,
-			OldData: map[string]interface{}{
-				"extension_count": extensionOld,
-			},
-			NewData: snapPayload,
+			OldData:    oldMap,
+			NewData:    snapPayload,
 		})
 	}
 
@@ -1295,6 +1290,7 @@ func (s *VideoRecordingTaskService) MarkTaskEndedEarly(ctx context.Context, task
 	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
 		return fmt.Errorf("MarkTaskEndedEarly: load task %d: %w: %w", taskID, apperrors.ErrInternal, err)
 	}
+	oldTask := task // immutable pre-Updates snapshot for audit OldData
 
 	// 2. 写 GORM 3 字段
 	if err := s.db.WithContext(ctx).Model(&task).Updates(map[string]interface{}{
@@ -1331,15 +1327,20 @@ func (s *VideoRecordingTaskService) MarkTaskEndedEarly(ctx context.Context, task
 
 	// 5. AUDIT-03 audit log snapshot (auditSvc nil 时静默跳过)
 	if s.auditSvc != nil {
+		// OldData mirrors all three smart-end fields changed by this method and
+		// comes from the immutable pre-Updates task snapshot.
+		oldMap := map[string]interface{}{
+			"ended_early":         oldTask.EndedEarly,
+			"ended_early_reason":  oldTask.EndedEarlyReason,
+			"ended_by_huawei_api": oldTask.EndedByHuaWeAPI,
+		}
 		_ = s.auditSvc.RecordChange(ctx, auditpkg.RecordChangeOpts{
 			Action:     models.ActionUpdate,
 			Module:     models.ModuleTask,
 			Resource:   "video_recording_task",
 			ResourceID: &taskID,
-			OldData: map[string]interface{}{
-				"ended_early": false,
-			},
-			NewData: snapshotMap,
+			OldData:    oldMap,
+			NewData:    snapshotMap,
 		})
 	}
 
