@@ -60,7 +60,13 @@ jobs:
           fi
 
       - name: Test
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        # go clean -testcache 强制清掉上一次 build 的测试结果缓存。
+        # 上次观察到 audit_logs 在 services 包内出现 "no such table" 间歇性失败,
+        # 推测是 test cache 命中了上一次 sqlite :memory: schema 残留。强制清缓存
+        # 让所有 test 在本 job 重新编译并新建 sqlite 内存库,根除该类问题。
+        run: |
+          go clean -testcache
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
         env:
           # 测试用环境变量（go test 不需要真实密钥）
           SM4_SECRET: 0123456789abcdef0123456789abcdef

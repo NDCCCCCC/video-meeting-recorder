@@ -307,6 +307,9 @@ func TestUpdateTaskExtension_AuditSnapshot(t *testing.T) {
 	assert.False(t, got.EndedEarly, "延长路径不应改 EndedEarly")
 
 	// AUDIT-02:audit_logs 行存在,JSON 含 6 关键字段
+	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
+	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
+	auditSvc.FlushNow(context.Background())
 	logs := waitForAuditLogs(t, db, 1)
 	require.GreaterOrEqual(t, len(logs), 1, "audit_logs 应至少 1 行")
 	auditLog := logs[0]
@@ -411,6 +414,9 @@ func TestMarkTaskEndedEarly_HuaweiSignal(t *testing.T) {
 	assert.True(t, got.EndedByHuaWeAPI, "EndedByHuaWeAPI 应 true (H 信号)")
 
 	// audit log 断言:processQueue 每 1s ticker flush,waitForAuditLogs 上限 2s 让其落入 DB
+	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
+	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
+	auditSvc.FlushNow(context.Background())
 	logs := waitForAuditLogs(t, db, 1)
 	require.GreaterOrEqual(t, len(logs), 1)
 	auditLog := logs[0]
@@ -462,6 +468,9 @@ func TestMarkTaskEndedEarly_BothSilenceAndStall(t *testing.T) {
 	assert.False(t, got.EndedByHuaWeAPI, "A+B 路径 EndedByHuaWeAPI 应 false")
 
 	// audit log 断言
+	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
+	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
+	auditSvc.FlushNow(context.Background())
 	logs := waitForAuditLogs(t, db, 1)
 	require.GreaterOrEqual(t, len(logs), 1)
 	auditLog := logs[0]
@@ -569,6 +578,9 @@ func TestMarkTaskEndedEarly_AuditSnapshot(t *testing.T) {
 		"MarkTaskEndedEarly 不应改 ExtensionCount(应保持 %d)", originalExtensionCount)
 
 	// AUDIT-03 断言:audit 行 module='task' / action='update'
+	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
+	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
+	auditSvc.FlushNow(context.Background())
 	logs := waitForAuditLogs(t, db, 1)
 	require.GreaterOrEqual(t, len(logs), 1, "audit_logs 应至少 1 行")
 	auditLog := logs[0]
@@ -634,6 +646,9 @@ func TestAuditSnapshot_ZeroTimeOmitsSilence(t *testing.T) {
 	require.NoError(t, err)
 
 	// 等待 audit 写入 + 查最近一行
+	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
+	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
+	auditSvc.FlushNow(context.Background())
 	logs := waitForAuditLogs(t, db, 1)
 	require.GreaterOrEqual(t, len(logs), 1, "audit_logs 应至少 1 行")
 	auditLog := logs[0]

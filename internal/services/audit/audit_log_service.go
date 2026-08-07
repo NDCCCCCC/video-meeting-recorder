@@ -165,6 +165,37 @@ func (s *AuditLogService) Stop() {
 	}
 }
 
+// FlushNow 同步刷新当前堆积在 asyncQueue 中的所有待落库条目。
+//
+// 用法：测试或关键路径在 Stop() / 断言之前调用，保证 audit 行已落 DB，
+// 避免 1s ticker 未到点就 waitForAuditLogs 拿到空结果。
+// production 路径不需要 — 默认 ticker 1s flush 即可。
+func (s *AuditLogService) FlushNow(ctx context.Context) {
+	if ctx == nil {
+		ctx = s.lifecycleCtx
+	}
+	// 反复 drain 直到队列空 (避免 LogOperation 在 drain 间隙塞入新条目)。
+	for {
+		// 非阻塞尝试取一条
+		select {
+		case log, ok := <-s.asyncQueue:
+			if !ok {
+				// 队列已关闭；保留原 Stop 语义
+				return
+			}
+			if err := s.db.WithContext(ctx).Create(log).Error; err != nil {
+				s.logger.Error("FlushNow 同步写入审计日志失败",
+					zap.Uint("log_id", log.ID),
+					zap.Error(err),
+				)
+			}
+		default:
+			// 队列空
+			return
+		}
+	}
+}
+
 // LogOperation 记录操作日志（异步）
 func (s *AuditLogService) LogOperation(ctx context.Context, req *LogOperationRequest) error {
 	if req == nil {
