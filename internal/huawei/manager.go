@@ -38,6 +38,11 @@ type Manager struct {
 	// 拿不到新 pool。已缓存的客户端不在 SetCABundle 范围内重新初始化——这与 SetTLSPolicy
 	// 同源语义，需要重启或下次 createClient 才可见新锚。
 	caCertPool *x509.CertPool
+	// REDO (huawei-tls-after-ca-fix) 修复：hostname 校验所需的显式 ServerName（dNSName
+	// 路径），由 SetTLSServerName 注入。空字符串保留 Go 默认（用 dial 地址做 hostname
+	// 校验），与 SetTLSPolicy / SetCABundle 同源语义。运维可通过
+	// huawei.tls_server_name / HUAWEI_TLS_SERVER_NAME 配置（推荐值 "vct.tp.huawei.com"）。
+	tlsServerName string
 	// SEC-013: 出站 URL 白名单 + 环境标识（开发环境绕过）
 	outboundURLAllowlist []string
 	environment          string
@@ -84,6 +89,26 @@ func (m *Manager) SetTLSPolicy(insecureSkipVerify bool, minTLSVersion uint16, is
 	m.tlsMinVersion = minTLSVersion
 }
 
+// SetTLSServerName 设置华为客户端全局 ServerName（REDO）。
+// non-empty 时把值透传到所有后续 createClient 的 tls.Config.ServerName，让 Go x509
+// verifier 用 dNSName 匹配 cert SAN；空字符串保留 Go 默认行为（用 dial 地址做 hostname
+// 校验）。与 SetTLSPolicy / SetCABundle 同源——只影响下次 createClient，已缓存的客户端
+// 不会被改写。
+//
+// 入参归一化：调用方传值前自动 strings.TrimSpace，前后空白被剥离；trim 后空字符串视作
+// "清空"（opt-out，与 ca_bundle_file 同语义）。所有写入都在 m.mu.Lock 内完成，
+// createClient 会在 RLock 内同步快照，避免与读取侧发生数据竞争。
+//
+// 推荐配置：当 10.62.10.3 的 server cert SAN 仅含 DNS（如 *.tp.huawei.com）且客户端
+// 必须 IP-only dial 时，运维应在 huawei.tls_server_name 填入匹配的字面名（如
+// "vct.tp.huawei.com"），这是 REDO 修复的入口。
+func (m *Manager) SetTLSServerName(name string) {
+	trimmed := strings.TrimSpace(name)
+	m.mu.Lock()
+	m.tlsServerName = trimmed
+	m.mu.Unlock()
+}
+
 // SetOutboundURLAllowlist 注入 SEC-013 出站 URL 白名单与运行环境。
 // env=="development" 时 allowlist 为空也允许所有出站。
 func (m *Manager) SetOutboundURLAllowlist(allowlist []string, environment string) {
@@ -110,6 +135,12 @@ func (m *Manager) SetOutboundURLAllowlist(allowlist []string, environment string
 //   - 解析后仍有非空白 trailing bytes（防止"看起来通过但实际多块"漏检）
 //
 // 安全不变量：从不把 PEM 字节或私钥写入日志；仅路径与解析数量。
+//
+// REDO (huawei-tls-after-ca-fix) 修正：先前 hotfix 在此处加了 "pool 内无 self-signed root
+// → Warn" 的防御性日志，但主会话用真实 Go probe 验证：CA chain 实际 OK（pool 含 leaf +
+// 已知正确的 chain-2 自签根时，错误就变成 hostname/SAN 校验），并不存在 "trust anchor"
+// 缺失问题。先前的 Warn 基于错误前提，已撤回——SetCABundle 只负责原子发布 pool，不再做
+// "pool 拓扑扫描"。hostname 修复走 SetTLSServerName + huawei.tls_server_name。
 func (m *Manager) SetCABundle(path string) error {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
@@ -209,8 +240,12 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 
 	// SEC-003a: 在锁内快照当前 CA pool，避免 SetCABundle 后改写指针
 	// 导致新建客户端拿到不一致状态。已缓存的客户端不重新初始化（与 SetTLSPolicy 语义一致）。
+	// REDO: 同步快照 tlsServerName，遵循相同的"启动期一次性注入"并发语义——
+	// SetTLSServerName 用 m.mu.Lock 写,createClient 在同一 RLock 窗口内读,
+	// 避免后续阶段若引入运行期改写时出现 data race。
 	m.mu.RLock()
 	caPool := m.caCertPool
+	name := m.tlsServerName
 	m.mu.RUnlock()
 
 	config := &Config{
@@ -227,6 +262,7 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 		InsecureSkipVerify: m.tlsInsecureSkipVerify, // SEC-003a: 默认 false，可配置
 		MinTLSVersion:      m.tlsMinVersion,         // SEC-003a: 默认 tls.VersionTLS12，不再硬编码 TLS1.0
 		caCertPool:         caPool,                  // SEC-003a: 由 SetCABundle 注入；nil → 系统 CA
+		tlsServerName:      name,                    // REDO: RLock 内已快照；nil/"" → Go 默认（用 dial 地址）
 	}
 
 	client := NewHuaweiClient(config, m.logger)

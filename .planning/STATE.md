@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: 智能录制收尾（Smart Recording End）
+milestone_name: milestone
 status: executing
-last_updated: "2026-08-06T10:29:00.000Z"
+last_updated: "2026-08-07T03:41:08.123Z"
 last_activity: 2026-08-06
 progress:
-  total_phases: 4
-  completed_phases: 3
+  total_phases: 7
+  completed_phases: 4
   total_plans: 14
   completed_plans: 14
-  percent: 86
+  percent: 57
 ---
 
 # STATE.md - Project Memory

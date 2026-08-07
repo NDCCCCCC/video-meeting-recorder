@@ -89,7 +89,31 @@ huawei:
   min_tls_version: "1.0"
   # SEC-003a: 华为终端私有 CA bundle 路径（推荐 ./certs/huawei-10.62.10.3-ca.pem）。
   # 可由环境变量 HUAWEI_CA_BUNDLE_FILE 覆盖；留空 = 使用系统 CA bundle。
+  #
+  # 文件内容：通常是华为终端私有 CA 的 PEM 块，可以是 root cert / intermediate cert，
+  # 或 root + intermediate 拼接。SetCABundle 会原子解析所有 CERTIFICATE 块并发布到一个
+  # 全新 x509.CertPool。中途解析失败会让进程终止（fail-closed），不允许部分 pool 残留。
+  #
+  # 自查命令：openssl x509 -in <file> -noout -subject -issuer
   ca_bundle_file: "./certs/huawei-10.62.10.3-ca.pem"
+
+  # REDO (huawei-tls-after-ca-fix): 华为终端 hostname 校验所需的 ServerName——
+  # 当 10.62.10.3 的 server cert SAN 仅含 DNS（如 *.tp.huawei.com）且客户端必须
+  # IP-only dial 时，必须把 ServerName 设为与 dNSName 匹配的字面名（如
+  # "vct.tp.huawei.com"）。Go x509 verifier 会改走 dNSName 路径完成校验，
+  # 避免 "x509: cannot validate certificate for 10.62.10.3 because it doesn't
+  # contain any IP SANs" 失败。可由环境变量 HUAWEI_TLS_SERVER_NAME 覆盖。
+  #
+  # 推荐值（与 huawei-10.62.10.3-chain-1.pem 的 CN / SAN 一致）：vct.tp.huawei.com
+  # 空字符串 = Go 用 dial 地址做 hostname 校验（仅当 cert SAN 含匹配 iPAddress 时通过）。
+  # 生产证书导入流程：
+  #   - 方案 A（推荐）：运维把 ./certs/huawei-10.62.10.3-chain-2.pem（huawei_ca 自签根）
+  #     覆盖到 ca_bundle_file；本字段填入 "vct.tp.huawei.com"。
+  #   - 方案 B：保持 ca.pem 不变，让运维在内部 DNS 把 vct.tp.huawei.com 解析到 10.62.10.3；
+  #     huawei.conf_server 改为 "vct.tp.huawei.com"；本字段可留空。
+  #   - 方案 C：联系华为 / 内部 CA reissue 一张 SAN 同时含 vct.tp.huawei.com (DNS) 与
+  #     10.62.10.3 (iPAddress) 的 server cert 替换 chain-1.pem；本字段可留空。
+  tls_server_name: "vct.tp.huawei.com"
 
 ffmpeg:
   path: "./bin/ffmpeg"

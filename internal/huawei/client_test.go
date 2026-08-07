@@ -78,7 +78,7 @@ func buildMailboxData(t *testing.T, state map[string]interface{}) string {
 
 // TestParseMailboxState covers the stateless parseMailboxState helper plus the
 // presence detection used by GetConferenceState. Subtests map 1:1 to the 7
-// behaviours from Plan 23-01 Task 1.
+// behaviors from Plan 23-01 Task 1.
 func TestParseMailboxState(t *testing.T) {
 	t.Run("AllFieldsPresent", func(t *testing.T) {
 		data := buildMailboxData(t, map[string]interface{}{
@@ -261,11 +261,11 @@ func TestParseMailboxState(t *testing.T) {
 
 		hasFields := detectConferenceFields(data)
 		got := &ConferenceState{
-			ConfState:            parsed.State.ConfState,
-			JoinSum:              parsed.State.JoinSum,
-			ConfLeftTime:         parsed.State.ConfLeftTime,
-			IsInConf:             parsed.State.IsInConf,
-			HasConferenceFields:  hasFields,
+			ConfState:           parsed.State.ConfState,
+			JoinSum:             parsed.State.JoinSum,
+			ConfLeftTime:        parsed.State.ConfLeftTime,
+			IsInConf:            parsed.State.IsInConf,
+			HasConferenceFields: hasFields,
 		}
 
 		if got.HasConferenceFields {

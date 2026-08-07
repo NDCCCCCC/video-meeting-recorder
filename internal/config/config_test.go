@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -141,6 +142,50 @@ func TestHuaweiCABundle_EmptyPreserved(t *testing.T) {
 	require.NoError(t, v.Unmarshal(&cfg))
 	assert.Equal(t, "", cfg.Huawei.CABundleFile,
 		"显式设置 ca_bundle_file=\"\" 必须保留为空字符（system-CA opt-out）")
+}
+
+// TestBindEnvHuaweiTLSServerName 验证 HUAWEI_TLS_SERVER_NAME 能覆盖配置，
+// 让 IP-only dial 仍按证书 DNS SAN 做严格 hostname 校验。
+func TestBindEnvHuaweiTLSServerName(t *testing.T) {
+	const want = "vct.tp.huawei.com"
+	t.Setenv("HUAWEI_TLS_SERVER_NAME", want)
+
+	v := viper.New()
+	bindSecretEnv(v)
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(`huawei: {}`)))
+
+	var cfg Config
+	require.NoError(t, v.Unmarshal(&cfg))
+	assert.Equal(t, want, cfg.Huawei.TLSServerName,
+		"HUAWEI_TLS_SERVER_NAME 应通过 BindEnv 写入 huawei.tls_server_name")
+}
+
+// TestHuaweiTLSServerName_EmptyPreserved 验证显式空字符串保留 Go 默认行为：
+// 使用 dial 地址做 hostname 校验，不被代码默认值覆盖。
+func TestHuaweiTLSServerName_EmptyPreserved(t *testing.T) {
+	v := viper.New()
+	bindSecretEnv(v)
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(`huawei:
+  tls_server_name: ""
+`)))
+
+	var cfg Config
+	require.NoError(t, v.Unmarshal(&cfg))
+	assert.Empty(t, cfg.Huawei.TLSServerName)
+}
+
+// TestCreateDefaultConfigFile_HuaweiTLSServerName 确保新安装自动生成的
+// config.yaml 暴露 tls_server_name，而不是只能依赖示例文件或环境变量。
+func TestCreateDefaultConfigFile_HuaweiTLSServerName(t *testing.T) {
+	t.Chdir(t.TempDir())
+	require.NoError(t, createDefaultConfigFile())
+
+	data, err := os.ReadFile("config.yaml")
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "tls_server_name:",
+		"自动生成的 config.yaml 必须包含 huawei.tls_server_name")
 }
 
 func TestCSRFEnabledEnvBinding(t *testing.T) {

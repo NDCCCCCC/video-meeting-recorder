@@ -261,6 +261,12 @@ func (a *MinimalApp) loadHuaweiCABundle() error {
 	a.logger.Info("华为 TLS CA bundle 加载成功",
 		zap.String("path", a.config.Huawei.CABundleFile),
 	)
+	// REDO (huawei-tls-after-ca-fix): 启动期汇报 hostname 校验所用的 ServerName，
+	// 让运维在 logs/server.log 一眼确认 huawei.tls_server_name / HUAWEI_TLS_SERVER_NAME
+	// 是否被读取（空值意味着 IP-only dial 仍走 "doesn't contain any IP SANs" 失败路径）。
+	a.logger.Info("华为 TLS hostname ServerName 已配置",
+		zap.String("tls_server_name", a.config.Huawei.TLSServerName),
+	)
 	return nil
 }
 
@@ -823,6 +829,11 @@ func (a *MinimalApp) initHandlers() error {
 		huaweiapi.ParseMinTLSVersion(a.config.Huawei.MinTLSVersion),
 		a.config.Server.Environment == "production",
 	)
+	// REDO (huawei-tls-after-ca-fix): 注入 hostname 校验所需的 ServerName（dNSName 匹配路径）。
+	// IP-only dial + cert SAN 仅含 DNS 时，此值非空才能绕过 "doesn't contain any IP SANs"。
+	// 空字符串保留 Go 默认（用 dial 地址做 hostname 校验）。可比对日志核对：
+	// logs/server.log 应有 `tls_server_name=<value or empty>` 一行让运维判断配置生效。
+	a.huaweiManager.SetTLSServerName(a.config.Huawei.TLSServerName)
 	// SEC-003a: 加载华为终端私有 CA bundle。**fail-closed** — 必须在 SetTLSPolicy 之后、
 	// 任何 NewHuaweiClient 之前执行；解析失败立即 logger.Fatal，避免 HuaweiConferenceConnector
 	// 后续在录制期间反复 x509 错误。空路径则建立 nil pool（system-CA 兜底，证书校验仍启用）。

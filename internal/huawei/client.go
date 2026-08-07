@@ -35,6 +35,14 @@ type Config struct {
 	// 注意：不要在调用方直接构造 []*x509.Certificate 加进 pool；统一通过 Manager.SetCABundle
 	// 解析 PEM 以保留"完整解析后才发布 pool"的原子不变量。
 	caCertPool *x509.CertPool
+	// REDO (huawei-tls-after-ca-fix) hostname 校验修复：IP-only dial 时显式 ServerName
+	// 让 Go x509 verifier 用 dNSName 匹配 cert SAN。空字符串 → Go 使用 dial 地址做
+	// hostname 校验（IP-only 拨号 + 无 IP SAN cert 时会失败，符合现状）。
+	//
+	// 重要约束：本字段仅由 Manager.SetTLSServerName 在启动期注入，运行期外部不可直接赋值
+	// 也不可并发修改；createClient 内部在 RLock 快照后通过 Config 字段透传到 NewHTTPClient。
+	// 禁止上层构造 Config 时直接给本字段赋值（绕过 Manager 的并发安全护栏）。
+	tlsServerName string
 }
 
 // Session 会话信息
@@ -305,7 +313,11 @@ type HTTPClient struct {
 //   - caCertPool: SEC-003a 私有 CA 信任锚。nil → Go 默认系统 CA bundle；
 //     非 nil → 注入到 tls.Config.RootCAs 用于华为私有自签 CA 链验证。
 //     调用者应通过 Manager.SetCABundle 解析 PEM 后传入，禁止上层直接复制。
-func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipVerify bool, minTLSVersion uint16, caCertPool *x509.CertPool, logger *zap.Logger) *HTTPClient {
+//   - tlsServerName: REDO 修复——IP-only dial 时显式 ServerName 让 Go 用 dNSName 匹配
+//     cert SAN（"doesn't contain any IP SANs" 错误的反制路径）。空字符串保留 Go 默认
+//     行为（用 dial 地址做 hostname 校验）。
+//     配套配置：huawei.tls_server_name / HUAWEI_TLS_SERVER_NAME；推荐值 "vct.tp.huawei.com"。
+func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipVerify bool, minTLSVersion uint16, caCertPool *x509.CertPool, tlsServerName string, logger *zap.Logger) *HTTPClient {
 	// 构建基础URL
 	scheme := "https"
 	if port == 80 {
@@ -326,6 +338,11 @@ func NewHTTPClient(server string, port int, timeout time.Duration, insecureSkipV
 					InsecureSkipVerify: insecureSkipVerify,
 					MinVersion:         minTLSVersion,    // SEC-003a: 由调用方注入，默认 tls.VersionTLS12
 					MaxVersion:         tls.VersionTLS12, // 限制最大版本为 TLS 1.2（华为终端兼容性）
+					// REDO (huawei-tls-after-ca-fix) 修复：显式 ServerName 让 Go x509 hostname
+					// verifier 用 dNSName 匹配 cert SAN，避免 IP-only dial + 无 IP SAN cert 的
+					// "doesn't contain any IP SANs" 失败。空字符串回退到 Go 默认（用 dial
+					// 地址做 hostname 校验），与原行为一致；非空值启用 dNSName 路径。
+					ServerName: tlsServerName,
 					// SEC-003a: 密码套件——优先 ECDHE 前向保密，保留 RSA-AES 兼容华为老设备；
 					// 已剔除基于 3DES 的弱套件（SWEET32 攻击面）。
 					CipherSuites: []uint16{
@@ -512,9 +529,13 @@ type HuaweiClient = Client
 // NewHuaweiClient 创建华为终端API客户端
 func NewHuaweiClient(config *Config, logger *zap.Logger) *HuaweiClient {
 	return &HuaweiClient{
-		config:     config,
-		httpClient: NewHTTPClient(config.Server, config.Port, config.APITimeout, config.InsecureSkipVerify, config.MinTLSVersion, config.caCertPool, logger),
-		logger:     logger,
+		config: config,
+		httpClient: NewHTTPClient(
+			config.Server, config.Port,
+			config.APITimeout, config.InsecureSkipVerify, config.MinTLSVersion,
+			config.caCertPool, config.tlsServerName, logger,
+		),
+		logger: logger,
 	}
 }
 

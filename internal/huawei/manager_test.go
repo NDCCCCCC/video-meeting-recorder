@@ -26,6 +26,22 @@ import (
 	"go.uber.org/zap"
 )
 
+// stubDB 是 Manager.DBInterface 的最小内存实现，用于绕开真实数据库，
+// 把 createClient 路径（Manager.GetClient → m.db.GetHuaweiConfig）拉到测试里来。
+// 桥接测试需要它把 Server/Port 指向 httptest.Server，这样能验证
+// Manager.SetTLSServerName → Config.tlsServerName → NewHTTPClient.tls.Config.ServerName
+// 的完整透传链。
+type stubDB struct {
+	cfg *HuaweiConfigDB
+}
+
+func (s *stubDB) GetHuaweiConfig(configID uint) (*HuaweiConfigDB, error) {
+	if s.cfg == nil {
+		return nil, errors.New("stubDB: no config injected")
+	}
+	return s.cfg, nil
+}
+
 // TestNewManager_DefaultTLSPolicy 验证 SEC-003a：NewManager 默认 TLS 策略为
 // MinTLSVersion=tls.VersionTLS12、InsecureSkipVerify=false（不再有 0x0301 / true 硬编码）。
 func TestNewManager_DefaultTLSPolicy(t *testing.T) {
@@ -65,7 +81,7 @@ func TestSetTLSPolicy_ProductionInsecureFatal(t *testing.T) {
 
 // TestNewHTTPClient_No3DESCipher 验证 SEC-003a：HTTPClient 的 CipherSuites 不含 3DES（SWEET32）。
 func TestNewHTTPClient_No3DESCipher(t *testing.T) {
-	c := NewHTTPClient("example.com", 443, 10*time.Second, false, tls.VersionTLS12, nil, zap.NewNop())
+	c := NewHTTPClient("example.com", 443, 10*time.Second, false, tls.VersionTLS12, nil, "", zap.NewNop())
 
 	tr, ok := c.client.Transport.(*http.Transport)
 	assert.True(t, ok, "Transport 应为 *http.Transport")
@@ -203,7 +219,10 @@ func fakeHuaweiAPIHandler() http.Handler {
 }
 
 // makeHuaweiClient 为本地 TLS server 构造一个 Huawei client，注入 caPool + 开发环境 bypass。
-func makeHuaweiClient(t *testing.T, srv *httptest.Server, caPool *x509.CertPool) *HuaweiClient {
+// tlsServerName="" 表示不显式设 ServerName（让 Go x509 verifier 用 dial 地址做 hostname
+// 校验）；非空字符串会注入到 tls.Config.ServerName，让 Go 走 dNSName 匹配路径（这是 REDO
+// 修复的核心：IP-only dial + DNS-only SAN cert 必须靠 ServerName 完成 hostname 校验）。
+func makeHuaweiClient(t *testing.T, srv *httptest.Server, caPool *x509.CertPool, tlsServerName string) *HuaweiClient {
 	t.Helper()
 	urlStr := strings.TrimPrefix(srv.URL, "https://")
 	parts := strings.SplitN(urlStr, ":", 2)
@@ -220,6 +239,7 @@ func makeHuaweiClient(t *testing.T, srv *httptest.Server, caPool *x509.CertPool)
 		InsecureSkipVerify: false,
 		MinTLSVersion:      tls.VersionTLS12,
 		caCertPool:         caPool,
+		tlsServerName:      tlsServerName,
 	}, zap.NewNop())
 	// 走 development 环境绕过 SEC-013 出站 URL 白名单——本测试不验证白名单。
 	client.httpClient.SetOutboundURLAllowlist(nil, "development")
@@ -257,7 +277,7 @@ func TestSetCABundle_ValidPEM(t *testing.T) {
 	assert.False(t, m.tlsInsecureSkipVerify, "SetCABundle 不应改写 TLS 策略")
 
 	// 5) 真实握手：InsecureSkipVerify=false + 注入 CA → 必须成功
-	client := makeHuaweiClient(t, srv, m.caCertPool)
+	client := makeHuaweiClient(t, srv, m.caCertPool, "")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	resp, err := client.httpClient.Post(ctx, "Web_RequestSessionID", nil)
@@ -375,7 +395,7 @@ func TestSetCABundle_EmptyPath(t *testing.T) {
 // SEC-003a-05 第 ⑤ 条要求。
 func TestNewHTTPClient_CertPoolBranches(t *testing.T) {
 	t.Run("nil_pool_means_system_CA", func(t *testing.T) {
-		c := NewHTTPClient("example.com", 443, 5*time.Second, false, tls.VersionTLS12, nil, zap.NewNop())
+		c := NewHTTPClient("example.com", 443, 5*time.Second, false, tls.VersionTLS12, nil, "", zap.NewNop())
 		tr := c.client.Transport.(*http.Transport)
 		require.NotNil(t, tr.TLSClientConfig)
 		assert.Nil(t, tr.TLSClientConfig.RootCAs, "nil pool → RootCAs 必须为 nil（系统 CA 兜底）")
@@ -384,7 +404,7 @@ func TestNewHTTPClient_CertPoolBranches(t *testing.T) {
 
 	t.Run("non_nil_pool_is_assigned_by_identity", func(t *testing.T) {
 		pool := x509.NewCertPool()
-		c := NewHTTPClient("example.com", 443, 5*time.Second, false, tls.VersionTLS12, pool, zap.NewNop())
+		c := NewHTTPClient("example.com", 443, 5*time.Second, false, tls.VersionTLS12, pool, "", zap.NewNop())
 		tr := c.client.Transport.(*http.Transport)
 		require.NotNil(t, tr.TLSClientConfig)
 		require.NotNil(t, tr.TLSClientConfig.RootCAs, "非 nil pool 必须被分配")
@@ -426,10 +446,288 @@ func TestCABundle_ServerAndRootChain(t *testing.T) {
 	require.NotNil(t, m.caCertPool)
 
 	// 6) InsecureSkipVerify=false 时凭 pool 内的 root 信任
-	client := makeHuaweiClient(t, srv, m.caCertPool)
+	client := makeHuaweiClient(t, srv, m.caCertPool, "")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	resp, err := client.httpClient.Post(ctx, "Web_RequestSessionID", nil)
 	require.NoError(t, err, "链式 PEM 加载后握手应成功（InsecureSkipVerify=false）")
 	assert.Equal(t, 1, resp.Success)
+}
+
+// TestNewHTTPClient_ServerNameSet_HostnameVerifiesByDNS — REDO: 修复 IP-only 拨号
+// 场景下的 hostname/SAN 校验。
+//
+// 模拟生产现场（huawei-10.62.10.3 server cert 实际 SAN 只有 'DNS:*.tp.huawei.com'，
+// 无 iPAddress SAN）。客户端 IP-only dial 时若不显式设 ServerName，Go x509 verifier
+// 用 dial 地址做 hostname 校验 → 失败（"doesn't contain any IP SANs"）。一旦显式让
+// tls.Config.ServerName="vct.tp.huawei.com"，Go 走 dNSName 匹配路径 → *.tp.huawei.com
+// 通配符命中 → 握手成功（InsecureSkipVerify=false 与 full chain 校验保持）。
+//
+// RED 阶段：NewHTTPClient 尚不支持 tlsServerName 入参 → 编译失败，确认行为变更的
+// 真实性；GREEN 阶段：注入 tls.Config.ServerName 后握手成功。
+func TestNewHTTPClient_ServerNameSet_HostnameVerifiesByDNS(t *testing.T) {
+	dir := t.TempDir()
+
+	// 1) 自签 root + 签发 DNS-only SAN server cert（CN / DNS = vct.tp.huawei.com；
+	//    无 IPAddresses 字段，模拟生产 cert 结构）。
+	rootPEM, rootKeyPEM := generateSelfSignedCert(t, &x509.Certificate{
+		Subject:     pkix.Name{CommonName: "huawei-redo-root"},
+		IsCA:        true,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	})
+	root, err := x509.ParseCertificate(parseFirstCertDER(t, rootPEM))
+	require.NoError(t, err)
+	rootKey := parsePKCS1PrivateKey(t, rootKeyPEM)
+	serverKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	serverTmpl := &x509.Certificate{
+		Subject:  pkix.Name{CommonName: "vct.tp.huawei.com"},
+		DNSNames: []string{"vct.tp.huawei.com"},
+		// 故意不设 IPAddresses —— 钉住"无 IP SAN 时 IP-only dial 必须用 ServerName"。
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	fillCertDefaults(serverTmpl)
+	serverDER, err := x509.CreateCertificate(rand.Reader, serverTmpl, root, &serverKey.PublicKey, rootKey)
+	require.NoError(t, err)
+	serverCert, err := x509.ParseCertificate(serverDER)
+	require.NoError(t, err)
+
+	// 2) root 写文件 → SetCABundle 注入 pool
+	rootPath := filepath.Join(dir, "root.pem")
+	require.NoError(t, os.WriteFile(rootPath, rootPEM, 0o600))
+	m := NewManager(zap.NewNop(), nil)
+	require.NoError(t, m.SetCABundle(rootPath))
+	require.NotNil(t, m.caCertPool)
+
+	// 3) 显式注册 ServerName —— 模拟生产 huawei.tls_server_name 配置
+	m.SetTLSServerName("vct.tp.huawei.com")
+
+	// 4) httptest TLS server（cert 与 generateServerCert 一致）
+	srv := startTLSServer(t, fakeHuaweiAPIHandler(), serverCert, serverKey)
+	defer srv.Close()
+
+	// 5) IP-only dial + ServerName="vct.tp.huawei.com" → 握手必须成功（InsecureSkipVerify=false 保持）
+	client := makeHuaweiClient(t, srv, m.caCertPool, "vct.tp.huawei.com")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := client.httpClient.Post(ctx, "Web_RequestSessionID", nil)
+	require.NoError(t, err, "DNS SAN match：握手应成功（InsecureSkipVerify=false 保持）")
+	assert.Equal(t, 1, resp.Success)
+}
+
+// TestNewHTTPClient_NoServerName_IPClient_FailsHostnameSAN — REDO 回归测试：钉住真实
+// bug 现状——server cert SAN 仅含 dNSName、客户端 IP-only dial 且未显式设 ServerName
+// 时，Go x509 verifier 应在 hostname 校验阶段失败，而非误指 trust anchor
+// （"unknown authority"）。这是 PRIOR debug 错误假设的反证：真实失败模式是 hostname
+// 层而非 CA chain。后续 SetCABundle 不应再将此类失败误归类为 trust anchor 问题。
+//
+// 断言只钉**语义指纹**（Go x509 错误栈 + 反证"unknown authority"），不钉易随
+// Go 版本变化的错误文案——早期版本的 Go x509 在 IP-only dial + 无 iPAddress SAN 时报
+// "doesn't contain any IP SANs"，但 Go 1.20+ 走 dNSName vs IP 路径时报
+// "is valid for vct.tp.huawei.com, not 127.0.0.1"。两者都属于 hostname 校验失败，
+// 不是 trust anchor 失败，所以保守断言只看错误的归属 + 反证不存在 unknown authority。
+func TestNewHTTPClient_NoServerName_IPClient_FailsHostnameSAN(t *testing.T) {
+	dir := t.TempDir()
+
+	// 1) 同 TestNewHTTPClient_ServerNameSet_HostnameVerifiesByDNS：self-signed root +
+	//    DNS-only SAN server cert（无 IPAddresses）
+	rootPEM, rootKeyPEM := generateSelfSignedCert(t, &x509.Certificate{
+		Subject:     pkix.Name{CommonName: "huawei-redo-root-noservername"},
+		IsCA:        true,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	})
+	root, err := x509.ParseCertificate(parseFirstCertDER(t, rootPEM))
+	require.NoError(t, err)
+	rootKey := parsePKCS1PrivateKey(t, rootKeyPEM)
+	serverKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	serverTmpl := &x509.Certificate{
+		Subject:     pkix.Name{CommonName: "vct.tp.huawei.com"},
+		DNSNames:    []string{"vct.tp.huawei.com"},
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	fillCertDefaults(serverTmpl)
+	serverDER, err := x509.CreateCertificate(rand.Reader, serverTmpl, root, &serverKey.PublicKey, rootKey)
+	require.NoError(t, err)
+	serverCert, err := x509.ParseCertificate(serverDER)
+	require.NoError(t, err)
+
+	rootPath := filepath.Join(dir, "root-noservername.pem")
+	require.NoError(t, os.WriteFile(rootPath, rootPEM, 0o600))
+	m := NewManager(zap.NewNop(), nil)
+	require.NoError(t, m.SetCABundle(rootPath))
+	require.NotNil(t, m.caCertPool)
+	// 注意：故意不调用 SetTLSServerName —— 模拟回归 bug 现场。
+
+	srv := startTLSServer(t, fakeHuaweiAPIHandler(), serverCert, serverKey)
+	defer srv.Close()
+
+	client := makeHuaweiClient(t, srv, m.caCertPool, "") // 不传 ServerName
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = client.httpClient.Post(ctx, "Web_RequestSessionID", nil)
+	require.Error(t, err, "无 ServerName + IP-only dial + 无 IP SAN → 握手必须失败")
+
+	errStr := err.Error()
+	// 语义指纹 ①：错误栈来自 Go x509 校验层（cert chain + hostname 都走 x509 包）
+	assert.Contains(t, errStr, "x509",
+		"错误应来自 x509 校验栈（Go 任何 hostname/chain 校验错误的固定前缀）")
+	// 语义指纹 ②（反证）：不是 PRIOR 错误假设的 unknown authority
+	// ——bug 的真实断点是 hostname/SAN，CA chain 验证实际 OK。
+	// 该断言与 Go 版本无关：unknown authority 文本在 Go x509 多年都是 stable 的。
+	assert.NotContains(t, errStr, "unknown authority",
+		"REDO 反证：当前 root cause 不是 CA chain trust，而是 hostname 校验；"+
+			"旧假设的 unknown authority 文本不应再出现")
+}
+
+// TestSetTLSServerName_TrimWhitespace — review follow-up：SetTLSServerName 入参必须
+// 走 strings.TrimSpace 归一化，前后空白被剥离；trim 后空字符串视作"清空" opt-out，
+// 与 ca_bundle_file 同语义。运维常因 YAML 缩进或复制粘贴引入意外空格，桥接层必须
+// 能容忍。如果回归到"原样落库"，会导致 dial 地址 vs ServerName 字面不匹配 → 握手
+// 失败，且无明确错误指向，debug 成本最高。
+func TestSetTLSServerName_TrimWhitespace(t *testing.T) {
+	m := NewManager(zap.NewNop(), nil)
+
+	t.Run("leading_and_trailing_whitespace_trimmed", func(t *testing.T) {
+		m.SetTLSServerName("   vct.tp.huawei.com   ")
+		assert.Equal(t, "vct.tp.huawei.com", m.tlsServerName,
+			"前后空白必须被 TrimSpace 剥离")
+	})
+
+	t.Run("whitespace_only_is_cleared", func(t *testing.T) {
+		// 先生成一个值证明后续 trim 能清掉
+		m.SetTLSServerName("vct.tp.huawei.com")
+		require.Equal(t, "vct.tp.huawei.com", m.tlsServerName)
+
+		m.SetTLSServerName("   \t\n  ")
+		assert.Equal(t, "", m.tlsServerName,
+			"全空白字符串 trim 后视作清空（与 ca_bundle_file 同语义）")
+	})
+
+	t.Run("clean_value_passes_through", func(t *testing.T) {
+		m.SetTLSServerName("vct.tp.huawei.com")
+		assert.Equal(t, "vct.tp.huawei.com", m.tlsServerName,
+			"无空白的字面值不应被改动")
+	})
+}
+
+// TestSetTLSServerName_PropagatesToNewHTTPClientThroughManager — **review [blocking]**
+// 桥接回归测试：通过 stubDB 让 Manager.GetClient 走完整 createClient 路径，让真的
+// httptest server 与 client 进行 TLS 握手。仅当 Manager.SetTLSServerName →
+// createClient 配置构造（tlsServerName: m.tlsServerName）→ NewHuaweiClient →
+// NewHTTPClient → tls.Config.ServerName 这条桥接完整正确时，握手才能成功。
+//
+// 现有 TestNewHTTPClient_ServerNameSet_HostnameVerifiesByDNS 用 makeHuaweiClient
+// 直接构造 Config 并把 tlsServerName 当字面量传进去，绕开了 Manager 的桥接 ——
+// 若 manager.go createClient 中的 `tlsServerName: m.tlsServerName` 行被误删/改坏，
+// 该测试仍保持 GREEN。本测试就是为了补齐这一覆盖漏洞：它会在桥接断点出现时
+// 必然 FAIL，是 review [blocking] 项的核心验证。
+//
+// 敏感性证明（手动切换 RED→GREEN）：
+//  1. 把 manager.go 的 `tlsServerName: name,` 改成 `tlsServerName: "",`，
+//  2. 跑 `go test -count=1 -run TestSetTLSServerName_PropagatesToNewHTTPClientThroughManager ./internal/huawei/`
+//     → 必 FAIL（handshake / InitializeAndStartKeepAlive 在 GetSessionID 阶段返回 hostname error）。
+//  3. 恢复原行，同命令 → PASS。
+//
+// 详细 RED/GREEN 输出见 debug session 的 Evidence 区。
+func TestSetTLSServerName_PropagatesToNewHTTPClientThroughManager(t *testing.T) {
+	dir := t.TempDir()
+
+	// 1) 自签 root + DNS-only SAN server cert（CN / DNS = vct.tp.huawei.com；无
+	//    IPAddresses，模拟生产 cert 结构）。client dial 127.0.0.1 时若不显式设
+	//    ServerName 必失败；显式设 ServerName="vct.tp.huawei.com" 后走 dNSName 路径成功。
+	rootPEM, rootKeyPEM := generateSelfSignedCert(t, &x509.Certificate{
+		Subject:     pkix.Name{CommonName: "huawei-bridge-root"},
+		IsCA:        true,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	})
+	root, err := x509.ParseCertificate(parseFirstCertDER(t, rootPEM))
+	require.NoError(t, err)
+	rootKey := parsePKCS1PrivateKey(t, rootKeyPEM)
+	serverKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	serverTmpl := &x509.Certificate{
+		Subject:  pkix.Name{CommonName: "vct.tp.huawei.com"},
+		DNSNames: []string{"vct.tp.huawei.com"},
+		// 故意不设 IPAddresses —— 钉住"无 IP SAN 时 IP-only dial 必须靠 ServerName"
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	fillCertDefaults(serverTmpl)
+	serverDER, err := x509.CreateCertificate(rand.Reader, serverTmpl, root, &serverKey.PublicKey, rootKey)
+	require.NoError(t, err)
+	serverCert, err := x509.ParseCertificate(serverDER)
+	require.NoError(t, err)
+
+	// 2) root 写文件 → SetCABundle 注入 pool
+	rootPath := filepath.Join(dir, "bridge-root.pem")
+	require.NoError(t, os.WriteFile(rootPath, rootPEM, 0o600))
+
+	// 3) httptest TLS server —— 必须返回 SessionID cookie（无论 login/keep-alive
+	//    路径都能拿到），否则 InitializeAndStartKeepAlive 会在 GetSessionID 报
+	//    "未能获取到会话ID"，无法验证 TLS 桥接。
+	bridgeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:  "SessionID",
+			Value: "bridge-test-session",
+			Path:  "/",
+		})
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"success": 1, "data": ""})
+	})
+	srv := startTLSServer(t, bridgeHandler, serverCert, serverKey)
+	defer srv.Close()
+
+	// 4) 解析 server URL 给 stubDB
+	urlStr := strings.TrimPrefix(srv.URL, "https://")
+	parts := strings.SplitN(urlStr, ":", 2)
+	require.Len(t, parts, 2, "URL 应含端口")
+	port, err := strconv.Atoi(parts[1])
+	require.NoError(t, err)
+
+	// 5) stubDB 把 Manager.GetClient 拉进 httptest server
+	db := &stubDB{cfg: &HuaweiConfigDB{
+		ID:             1,
+		Server:         parts[0],
+		Port:           port,
+		Username:       "user",
+		Password:       "pass",
+		TerminalNumber: "tn1",
+	}}
+
+	// 6) Manager 全装配 —— 走与生产 cmd/server 启动期一致的 setter 链路
+	m := NewManager(zap.NewNop(), db)
+	require.NoError(t, m.SetCABundle(rootPath), "root PEM 应被正常加载")
+	require.NotNil(t, m.caCertPool)
+	m.SetTLSPolicy(false, tls.VersionTLS12, false) // 非生产环境，避免任何 fatal 触发
+	m.SetTLSServerName("vct.tp.huawei.com")        // **核心：要测的桥接起点**
+	m.SetOutboundURLAllowlist(nil, "development")  // 绕过 SEC-013 出站白名单
+
+	// 7) GetClient → createClient → NewHTTPClient with ServerName → 真实握手
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := m.GetClient(ctx, 1)
+	require.NoError(t, err,
+		"Manager→Config→NewHTTPClient 桥接必须正确；"+
+			"否则 m.tlsServerName 在 createClient 中未被读到 tls.Config.ServerName，"+
+			"IP-only dial 在 InitializeAndStartKeepAlive 的 GetSessionID 阶段会 hostname 报错")
+	require.NotNil(t, client)
+
+	// 8) 直接断言最终 tls.Config.ServerName 也已注入（更靠近 review 要求的"透传到
+	//    NewHTTPClient" 措辞）—— 单元级 fidelity 比单跑握手更稳：即使 fake handler
+	//    因为其他原因返回成功，这里也能捕获"字段未被赋值"的退化场景。
+	tr, ok := client.httpClient.client.Transport.(*http.Transport)
+	require.True(t, ok, "Transport 应为 *http.Transport")
+	require.NotNil(t, tr.TLSClientConfig)
+	assert.Equal(t, "vct.tp.huawei.com", tr.TLSClientConfig.ServerName,
+		"tls.Config.ServerName 必须从 Manager.SetTLSServerName 透传到 tls.Config")
+	assert.False(t, tr.TLSClientConfig.InsecureSkipVerify,
+		"InsecureSkipVerify 必须保持 false（review hard_constraint）")
+
+	// 9) 关停 keep-alive goroutine，避免 runtime 抖动污染 Go race 测试
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stopCancel()
+	_ = client.Stop(stopCtx)
 }
