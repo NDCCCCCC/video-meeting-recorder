@@ -39,10 +39,10 @@ type ActivityWatcher struct {
 	now func() time.Time
 
 	// 状态字段 — 全部读写过 mu 锁。
-	mu                   sync.Mutex
-	silenceSince         time.Time
-	lastFileSize         int64
-	lastFileGrowthAt     time.Time
+	mu               sync.Mutex
+	silenceSince     time.Time
+	lastFileSize     int64
+	lastFileGrowthAt time.Time
 	// lastFileGrowthBps 最近一次"达标"的速率缓存 (Phase 25 AUDIT-02）。
 	// 仅在 fileTicker 走 growthBps >= FileMinGrowthBPS 分支时刷新,
 	// 未达标不刷新 — 与 lastFileGrowthAt 同一周期语义。
@@ -437,7 +437,6 @@ func (w *ActivityWatcher) huaweiPoller(ctx context.Context) {
 				w.mu.Lock()
 				w.huaweiConsecFailures++
 				consec := w.huaweiConsecFailures
-				empty := w.huaweiEmptySince
 				w.mu.Unlock()
 				if consec >= w.cfg.SmartEnd.HuaweiFailureThreshold {
 					w.mu.Lock()
@@ -451,7 +450,6 @@ func (w *ActivityWatcher) huaweiPoller(ctx context.Context) {
 					observability.RecordWatcherDegraded()
 				}
 				// 失败时保留 huaweiEmptySince (不重置) — 失败不代表"会议恢复"
-				_ = empty
 				continue
 			}
 			w.mu.Lock()
