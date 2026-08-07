@@ -302,11 +302,12 @@ func (w *ActivityWatcher) silenceScanner(ctx context.Context) {
 		w.mu.Lock()
 		w.silenceParseFailures = 0
 		w.mu.Unlock()
-		if ev.Kind == SilenceEventStart {
+		switch ev.Kind {
+		case SilenceEventStart:
 			w.mu.Lock()
 			w.silenceSince = w.now()
 			w.mu.Unlock()
-		} else if ev.Kind == SilenceEventEnd {
+		case SilenceEventEnd:
 			w.mu.Lock()
 			w.silenceSince = time.Time{}
 			w.mu.Unlock()

@@ -270,10 +270,10 @@ func TestActivityWatcher_MeetingEnded_HuaweiEmpty(t *testing.T) {
 // (>= file_stall_s);decisionTicker 在 silenceDurationS+FileStallS 满足时关。
 func TestActivityWatcher_MeetingEnded_AndAB(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "record.mkv")
-	require.NoError(t, os.WriteFile(path, []byte("seed"), 0644))
+	require.NoError(t, os.WriteFile(path, []byte("seed"), 0o644))
 	logFile, err := os.CreateTemp(t.TempDir(), "ffmpeg-*.log")
 	require.NoError(t, err)
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 	_, err = logFile.WriteString("[silencedetect @ 0x55a3] silence_start: 0\n")
 	require.NoError(t, err)
 	require.NoError(t, logFile.Sync())
@@ -311,7 +311,7 @@ func TestActivityWatcher_HuaweiDegraded(t *testing.T) {
 func TestActivityWatcher_SilenceDegraded(t *testing.T) {
 	logFile, err := os.CreateTemp(t.TempDir(), "ffmpeg-*.log")
 	require.NoError(t, err)
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 	for i := 0; i < 5; i++ {
 		_, err = logFile.WriteString("[silencedetect malformed]\n")
 		require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestActivityWatcher_ExtendStep(t *testing.T) {
 func TestActivityWatcher_SnapshotExtension(t *testing.T) {
 	// 临时 mkv 文件,fileTicker 从此路径 os.Stat。t.TempDir 自动清理。
 	path := filepath.Join(t.TempDir(), "record.mkv")
-	require.NoError(t, os.WriteFile(path, []byte("seed"), 0644))
+	require.NoError(t, os.WriteFile(path, []byte("seed"), 0o644))
 
 	// 构造独立的 cfg,CheckIntervalS=1 让测试快速 tick;FileMinGrowthBPS=1024
 	// 保持与 production 一致的阈值语义。
@@ -442,7 +442,7 @@ func TestActivityWatcher_SnapshotExtension(t *testing.T) {
 	}()
 
 	// Tick 1: 写 1 KiB,等 ticker (1s 间隔) 跑完第一次循环,断言 FileSizeBytes 更新到 1024。
-	require.NoError(t, os.WriteFile(path, make([]byte, 1024), 0644))
+	require.NoError(t, os.WriteFile(path, make([]byte, 1024), 0o644))
 	require.Eventually(t, func() bool {
 		s := w.Snapshot()
 		return s.FileSizeBytes == 1024
@@ -456,7 +456,7 @@ func TestActivityWatcher_SnapshotExtension(t *testing.T) {
 
 	// Tick 2: 追加 16 KiB (累计 17 KiB = 17408 bytes),等 ticker 跑第二次循环。
 	// 增长 16 KiB / 1s = 16384 B/s,远超阈值 1024 B/s,达标。
-	require.NoError(t, os.WriteFile(path, make([]byte, 17408), 0644))
+	require.NoError(t, os.WriteFile(path, make([]byte, 17408), 0o644))
 	require.Eventually(t, func() bool {
 		s := w.Snapshot()
 		return s.FileSizeBytes == 17408

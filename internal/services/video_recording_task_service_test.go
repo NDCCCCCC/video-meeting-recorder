@@ -273,13 +273,13 @@ func TestUpdateTaskExtension_AuditSnapshot(t *testing.T) {
 
 	base := time.Now().UTC().Add(-1 * time.Hour)
 	task := models.VideoRecordingTask{
-		Name:          "extend-audit-test",
-		StartTime:     base,
-		EndTime:       base.Add(30 * time.Minute),
-		Status:        models.VideoStatusRecording,
+		Name:           "extend-audit-test",
+		StartTime:      base,
+		EndTime:        base.Add(30 * time.Minute),
+		Status:         models.VideoStatusRecording,
 		PreJoinMinutes: 0,
-		CreatedBy:     1,
-		InputConfigID: nil,
+		CreatedBy:      1,
+		InputConfigID:  nil,
 		ExtensionCount: 0,
 	}
 	require.NoError(t, db.Create(&task).Error)
@@ -350,12 +350,12 @@ func TestUpdateTaskExtension_MaxLimit(t *testing.T) {
 	svc.SetConfig(cfg)
 
 	task := models.VideoRecordingTask{
-		Name:          "max-extend-test",
-		StartTime:     time.Now().UTC().Add(-time.Hour),
-		EndTime:       time.Now().UTC().Add(30 * time.Minute),
-		Status:        models.VideoStatusRecording,
+		Name:           "max-extend-test",
+		StartTime:      time.Now().UTC().Add(-time.Hour),
+		EndTime:        time.Now().UTC().Add(30 * time.Minute),
+		Status:         models.VideoStatusRecording,
 		PreJoinMinutes: 0,
-		CreatedBy:     1,
+		CreatedBy:      1,
 		ExtensionCount: 4, // 已达 MaxExtendCount
 	}
 	require.NoError(t, db.Create(&task).Error)
@@ -383,12 +383,12 @@ func TestMarkTaskEndedEarly_HuaweiSignal(t *testing.T) {
 	svc.SetAuditService(auditSvc)
 
 	task := models.VideoRecordingTask{
-		Name:          "huawei-early-end",
-		StartTime:     time.Now().UTC().Add(-time.Hour),
-		EndTime:       time.Now().UTC().Add(30 * time.Minute),
-		Status:        models.VideoStatusRecording,
+		Name:           "huawei-early-end",
+		StartTime:      time.Now().UTC().Add(-time.Hour),
+		EndTime:        time.Now().UTC().Add(30 * time.Minute),
+		Status:         models.VideoStatusRecording,
 		PreJoinMinutes: 0,
-		CreatedBy:     1,
+		CreatedBy:      1,
 	}
 	require.NoError(t, db.Create(&task).Error)
 
@@ -434,12 +434,12 @@ func TestMarkTaskEndedEarly_BothSilenceAndStall(t *testing.T) {
 	svc.SetAuditService(auditSvc)
 
 	task := models.VideoRecordingTask{
-		Name:          "ab-early-end",
-		StartTime:     time.Now().UTC().Add(-time.Hour),
-		EndTime:       time.Now().UTC().Add(30 * time.Minute),
-		Status:        models.VideoStatusRecording,
+		Name:           "ab-early-end",
+		StartTime:      time.Now().UTC().Add(-time.Hour),
+		EndTime:        time.Now().UTC().Add(30 * time.Minute),
+		Status:         models.VideoStatusRecording,
 		PreJoinMinutes: 0,
-		CreatedBy:     1,
+		CreatedBy:      1,
 	}
 	require.NoError(t, db.Create(&task).Error)
 

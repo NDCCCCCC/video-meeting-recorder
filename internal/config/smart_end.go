@@ -70,17 +70,17 @@ type SmartEndConfig struct {
 
 // 错误消息常量 (包私有,Validate() 使用)。集中维护便于审计。
 const (
-	errSmartEndSilenceDBOutOfRange   = "smart_end.silence_db 必须在 [-100, 0] 范围内"
-	errSmartEndSilenceDurationS      = "smart_end.silence_duration_s 必须 > 0"
-	errSmartEndFileStallS            = "smart_end.file_stall_s 必须 > 0"
-	errSmartEndFileMinGrowthBPS      = "smart_end.file_min_growth_bps 必须 >= 0"
-	errSmartEndHuaweiPollIntervalS   = "smart_end.huawei_poll_interval_s 必须 > 0"
-	errSmartEndHuaweiPersistS        = "smart_end.huawei_persist_s 必须 > 0"
-	errSmartEndHuaweiFailureThresh   = "smart_end.huawei_failure_threshold 必须 > 0"
-	errSmartEndCheckIntervalS        = "smart_end.check_interval_s 必须 > 0"
-	errSmartEndExtendStepMin         = "smart_end.extend_step_min 必须 > 0"
-	errSmartEndMaxExtendCount        = "smart_end.max_extend_count 必须 > 0"
-	errSmartEndStatFailureThreshold  = "smart_end.stat_failure_threshold 必须 > 0"
+	errSmartEndSilenceDBOutOfRange  = "smart_end.silence_db 必须在 [-100, 0] 范围内"
+	errSmartEndSilenceDurationS     = "smart_end.silence_duration_s 必须 > 0"
+	errSmartEndFileStallS           = "smart_end.file_stall_s 必须 > 0"
+	errSmartEndFileMinGrowthBPS     = "smart_end.file_min_growth_bps 必须 >= 0"
+	errSmartEndHuaweiPollIntervalS  = "smart_end.huawei_poll_interval_s 必须 > 0"
+	errSmartEndHuaweiPersistS       = "smart_end.huawei_persist_s 必须 > 0"
+	errSmartEndHuaweiFailureThresh  = "smart_end.huawei_failure_threshold 必须 > 0"
+	errSmartEndCheckIntervalS       = "smart_end.check_interval_s 必须 > 0"
+	errSmartEndExtendStepMin        = "smart_end.extend_step_min 必须 > 0"
+	errSmartEndMaxExtendCount       = "smart_end.max_extend_count 必须 > 0"
+	errSmartEndStatFailureThreshold = "smart_end.stat_failure_threshold 必须 > 0"
 )
 
 // applySmartEndDefaults 把 SmartEnd 的数字字段按零值替换为默认值。
