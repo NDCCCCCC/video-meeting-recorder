@@ -413,15 +413,19 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 		return fmt.Errorf("构建录制命令失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
-	// 关闭旧的日志文件
-	if process.logFile != nil {
-		_ = process.logFile.Close()
-	}
-
-	// Phase 24 / WATCH-05: 重连前同步通知 watcher 清 SilenceSince (避免断流期间假静音)。
-	// 严格放在 cmd.Start 之前 (RESEARCH.md Pitfall 4)。nil 时不 panic (Process 默认 nil)。
+	// Phase 24 / WATCH-05: notify the current watcher before teardown so it can
+	// clear reconnect-sensitive silence state before the old process is replaced.
 	if process.OnReconnect != nil {
 		process.OnReconnect()
+	}
+	// The watcher owns goroutines bound to the old log file and output path.
+	// Stop it before closing the file so those goroutines exit cleanly.
+	if process.ActivityWatcher != nil {
+		process.ActivityWatcher.Stop()
+	}
+	if process.logFile != nil {
+		_ = process.logFile.Close()
+		process.logFile = nil
 	}
 
 	// 创建新的录制进程
@@ -448,6 +452,25 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 
 	// 更新 cancelFuncs
 	c.cancelFuncs[processKey] = cancel
+
+	// Recreate the watcher so silenceScanner and fileTicker bind to the new
+	// ffmpeg log file and MKV path instead of the closed, previous recording.
+	if c.config != nil && c.config.SmartEnd.Enabled {
+		process.ActivityWatcher = NewActivityWatcher(
+			c.config,
+			c.huaweiClient(),
+			mkvPath,
+			logFile,
+			c.logger,
+		)
+		process.taskEndedCh = process.ActivityWatcher.EndedCh()
+		process.OnReconnect = process.ActivityWatcher.OnReconnect
+		process.ActivityWatcher.Start()
+	} else {
+		process.ActivityWatcher = nil
+		process.OnReconnect = nil
+		process.taskEndedCh = nil
+	}
 
 	c.logger.Info("重连录制已启动",
 		zap.String("process_key", processKey),
