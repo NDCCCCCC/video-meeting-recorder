@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,10 +28,31 @@ import (
 	auditpkg "github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 )
 
-// newTestDB 构造 SQLite 内存数据库并迁移本测试所需的三张表。
+// newTestDB 构造 SQLite 测试数据库并迁移本测试所需的表。
+//
+// DSN 形如 "file:<unique>?mode=memory&cache=shared":
+//   - "file:" + 测试唯一名:在同一进程内每个测试拿到独立的 cache 命名空间,避免
+//     -count=N 下跨 iteration 数据污染 (Bug B: 匿名 cache 全局共享,前次写入被
+//     后续 iteration 读到,例如 TestMarkTaskEndedEarly_AuditSnapshot 期望
+//     "huawei_state_empty" 实际拿到前次 "both_silence_and_stall")。
+//   - "mode=memory": 使用 in-memory DB,无磁盘 I/O,速度等同 ":memory:"。
+//   - "cache=shared": connection pool 内所有连接共享同一份 schema 与数据,
+//     修复 Bug A — 原生 ":memory:" 在 GORM 默认连接池下,每个连接独立持有
+//     in-memory DB,AutoMigrate 在 conn A 建的表在 conn B 不可见 →
+//     "no such table: audit_logs"。验证: TestDiagnose_MemoryDB_ConnectionIsolation
+//     显示 200 并发探测中 185 个 goroutine 落到新连接,sqlite_master 不含 audit_logs。
+//
+// 取唯一名的两种方式: (1) t.Name() 含子测试层级 + counter,天然唯一但长度不可控;
+// (2) 短随机串 + counter。t.TempDir-based 方案(把 sqlite 写到 t.TempDir() 文件)
+// 也可解决,但带来 auditSvc.processQueue goroutine 与 t.Cleanup TempDir RemoveAll
+// 的 close-time race (Bug C: "The process cannot access the file")。当前方案
+// 完全无磁盘 I/O,无 cleanup race。
+//
+// 注: 如果未来切到 modernc.org/sqlite (pure-Go),语法可能微调,届时再适配。
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	dsn := fmt.Sprintf("file:test-%d-%s?mode=memory&cache=shared", time.Now().UnixNano(), strings.ReplaceAll(t.Name(), "/", "-"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 	if err != nil {
 		t.Fatalf("打开内存 sqlite 失败: %v", err)
 	}
