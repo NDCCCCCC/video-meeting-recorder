@@ -6,10 +6,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/auth/videoplaybacktoken"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/middleware"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services"
@@ -19,22 +22,38 @@ import (
 
 // VideoFileHandler 视频文件处理器
 type VideoFileHandler struct {
-	fileService  *services.VideoFileService
-	auditService *audit.AuditLogService
-	logger       *zap.Logger
+	fileService   *services.VideoFileService
+	auditService  *audit.AuditLogService
+	logger        *zap.Logger
+	config        *config.Config
+	playbackToken *videoplaybacktoken.VideoPlaybackToken
 }
 
 // NewVideoFileHandler 创建视频文件处理器
+//
+// cfg 用于构造 video_playback_token 服务（独立密钥族，与 SM4 / HLS Token 隔离），
+// 启动期 cfg.ValidateVideoPlaybackTokenConfig 已先行校验合法性。这里再容忍 cfg 为
+// nil（仅测试场景），production 必须保证非 nil。
 func NewVideoFileHandler(
 	fileService *services.VideoFileService,
 	auditService *audit.AuditLogService,
 	logger *zap.Logger,
+	cfg *config.Config,
 ) *VideoFileHandler {
-	return &VideoFileHandler{
+	h := &VideoFileHandler{
 		fileService:  fileService,
 		auditService: auditService,
 		logger:       logger,
+		config:       cfg,
 	}
+	if cfg != nil {
+		h.playbackToken = videoplaybacktoken.NewVideoPlaybackToken(
+			cfg.Auth.VideoPlaybackTokenSecret,
+			cfg.Auth.VideoPlaybackTokenDuration,
+			logger,
+		)
+	}
+	return h
 }
 
 // ListFiles 获取文件列表
@@ -151,6 +170,117 @@ func (h *VideoFileHandler) DownloadFile(c *gin.Context) {
 	http.ServeContent(c.Writer, c.Request, file.FileName, fileInfo.ModTime(), fileHandle)
 
 	h.logger.Info("文件流传输完成", zap.Uint("file_id", id), zap.String("file_name", file.FileName))
+}
+
+// GetPlaybackURL 颁发已录制视频播放专用 HMAC token。
+//
+// 鉴权 API（受 MultiAuth 保护）；返回的 playback_url 在 path 中嵌入 token，5min 内
+// 可重复使用。用途：让 <video> 元素在不带 Authorization 头的 HTTP 请求里获得短效
+// 播放凭据，避开 AllowedTokenURLPrefixes 白名单收紧后 query-token 路径不可用的
+// 死锁，同时把 token 泄露面缩到最小。
+//
+// 返回格式: { playback_url: "/api/v1/files/playback/<token>", expires_at: <unix-ts> }
+func (h *VideoFileHandler) GetPlaybackURL(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的文件ID")
+		return
+	}
+
+	file, err := h.fileService.GetFileByID(c.Request.Context(), id)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "文件不存在")
+		return
+	}
+
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not in context"})
+		return
+	}
+	if !middleware.CanAccessAllData(c) && file.CreatedBy != userID {
+		h.logger.Warn("用户无权获取播放 URL",
+			zap.Uint("user_id", userID),
+			zap.Uint("file_id", id),
+			zap.Uint("file_owner", file.CreatedBy))
+		response.GinError(c, response.CodeForbidden, "无权访问此文件")
+		return
+	}
+	if !file.Exists() {
+		response.GinError(c, response.CodeNotFound, "物理文件不存在")
+		return
+	}
+
+	token := h.playbackToken.Generate(id, userID)
+	expiresAt := time.Now().Add(h.config.Auth.VideoPlaybackTokenDuration).Unix()
+	response.GinSuccess(c, gin.H{
+		"playback_url": "/api/v1/files/playback/" + token,
+		"expires_at":   expiresAt,
+	})
+}
+
+// PlayByPlaybackToken 通过 video_playback_token 流式返回 mp4/mkv 文件（支持 Range）。
+//
+// 公开路由（不经 MultiAuth）：token 自身携带 (fileID, userID, exp) 授权信息。
+// 校验后仍 re-check file.CreatedBy == claims.UserID 做 defense-in-depth——admin 角色
+// 在 token 签发时已隐含（签发时走 GetPlaybackURL 受 MultiAuth 保护），公开路径上
+// 不能再扩大权限范围。
+func (h *VideoFileHandler) PlayByPlaybackToken(c *gin.Context) {
+	token := c.Param("token")
+	claims, err := h.playbackToken.Verify(token)
+	if err != nil {
+		h.logger.Warn("video_playback_token 校验失败",
+			zap.String("path", c.Request.URL.Path),
+			zap.String("error", err.Error()))
+		response.HandleError(c, err)
+		return
+	}
+
+	file, err := h.fileService.GetFileByID(c.Request.Context(), claims.FileID)
+	if err != nil {
+		response.GinError(c, response.CodeNotFound, "文件不存在")
+		return
+	}
+
+	// Defense-in-depth：即便 token 已通过 HMAC + 过期校验，仍要求 token 绑定的 userID
+	// 与文件创建者匹配。admin 在签发 token 时已隐含权限，公开路径不做放大。
+	if file.CreatedBy != claims.UserID {
+		h.logger.Warn("playback token 用户与文件创建者不符",
+			zap.Uint("token_user_id", claims.UserID),
+			zap.Uint("file_id", claims.FileID),
+			zap.Uint("file_owner", file.CreatedBy))
+		response.GinError(c, response.CodeForbidden, "无权访问此文件")
+		return
+	}
+
+	if !file.Exists() {
+		response.GinError(c, response.CodeNotFound, "物理文件不存在")
+		return
+	}
+
+	fileHandle, err := os.Open(file.FilePath)
+	if err != nil {
+		h.logger.Error("无法打开文件",
+			zap.Uint("file_id", claims.FileID),
+			zap.Error(err),
+			response.SentinelField(err))
+		response.HandleError(c, err)
+		return
+	}
+	defer func() { _ = fileHandle.Close() }()
+
+	fileInfo, err := fileHandle.Stat()
+	if err != nil {
+		response.GinError(c, response.CodeInternalError, "无法获取文件信息")
+		return
+	}
+
+	setVideoHeaders(c, file, fileInfo.Size())
+	http.ServeContent(c.Writer, c.Request, file.FileName, fileInfo.ModTime(), fileHandle)
+	h.logger.Info("playback token 流传输完成",
+		zap.Uint("file_id", claims.FileID),
+		zap.Uint("user_id", claims.UserID),
+		zap.Int64("size", fileInfo.Size()))
 }
 
 // setVideoHeaders 设置视频流响应头

@@ -14,7 +14,6 @@ import type { ColumnsType } from 'antd/es/table'
 import * as videoFileApi from '../../api/video-file'
 import * as splitApi from '../../api/split'
 import { TimelineWithMarkers } from '../../components/TimelineWithMarkers'
-import { getToken } from '../../api/apiClient'
 import type { VideoFile } from '../../types/video-file'
 import styles from './SplitPage.module.css'
 
@@ -62,19 +61,10 @@ export default function SplitPage() {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // video_playback_token：5min TTL，异步获取
+  const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined)
 
   const videoRef = useRef<HTMLVideoElement>(null)
-
-  // ==================== 计算值 ====================
-
-  const videoUrl = useMemo(() => {
-    if (!id) return ''
-    const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-    const token = getToken()
-    return token
-      ? `${API_BASE_URL}/api/v1/files/${id}/download?token=${token}`
-      : `${API_BASE_URL}/api/v1/files/${id}/download`
-  }, [id])
 
   // 段落预览数据
   const segmentPreviews: SegmentPreview[] = useMemo(() => {
@@ -121,10 +111,20 @@ export default function SplitPage() {
       setLoading(true)
       setError(null)
       try {
-        const response = await videoFileApi.getVideoFile(parseInt(id, 10))
+        const fileId = parseInt(id, 10)
+        const response = await videoFileApi.getVideoFile(fileId)
         if (response.data) {
           setVideoFile(response.data)
           setDuration(response.data.duration)
+        }
+        // 串行拉取播放 URL（依赖登录态 + 文件存在）
+        try {
+          const urlRes = await videoFileApi.getVideoPlaybackUrl(fileId)
+          if (urlRes.data?.playback_url) {
+            setVideoUrl(urlRes.data.playback_url)
+          }
+        } catch (urlErr) {
+          setError(urlErr instanceof Error ? urlErr.message : '获取播放链接失败')
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : '加载视频文件失败')
@@ -371,6 +371,26 @@ export default function SplitPage() {
                   if (video) {
                     setDuration(video.duration)
                   }
+                }}
+                onError={() => {
+                  // token 过期或服务端 403 时尝试重新获取一次
+                  if (!id) return
+                  const video = videoRef.current
+                  const restoreTime = video ? video.currentTime : 0
+                  setError('视频加载失败，正在重试...')
+                  videoFileApi
+                    .getVideoPlaybackUrl(parseInt(id, 10))
+                    .then((res) => {
+                      if (res.data?.playback_url && video) {
+                        video.src = res.data.playback_url
+                        video.currentTime = restoreTime
+                        video.load()
+                        setVideoUrl(res.data.playback_url)
+                      }
+                    })
+                    .catch((err) => {
+                      setError(err instanceof Error ? err.message : '视频加载失败')
+                    })
                 }}
                 onTimeUpdate={() => {
                   const video = videoRef.current

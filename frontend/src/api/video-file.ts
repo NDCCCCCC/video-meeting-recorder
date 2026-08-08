@@ -34,6 +34,18 @@ export async function getVideoFile(id: number): Promise<ApiResponse<VideoFile>> 
   return apiRequest<VideoFile>(`/api/v1/files/${id}`)
 }
 
+// 获取视频播放 URL（video_playback_token）
+//
+// 返回的 playback_url 是路径形式 /api/v1/files/playback/<token>，浏览器 <video>
+// 元素可直接使用；token 5min TTL，过期后由前端重新调用本函数获取新 URL。
+export async function getVideoPlaybackUrl(
+  id: number
+): Promise<ApiResponse<{ playback_url: string; expires_at: number }>> {
+  return apiRequest<{ playback_url: string; expires_at: number }>(
+    `/api/v1/files/${id}/playback_url`
+  )
+}
+
 // 下载文件（触发浏览器原生下载，显示进度）
 export function downloadVideoFile(id: number, fileName?: string): void {
   const token = getToken()

@@ -865,7 +865,7 @@ func (a *MinimalApp) initHandlers() error {
 		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db, a.credentialEncryptor),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, auditService, a.logger, a.config, a.db),
 		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, auditService, a.logger, usbScanner),
-		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, auditService, a.logger),
+		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, auditService, a.logger, a.config),
 		File:          fileHandler,
 		Audit:         auditHandler,
 		Notification:  notificationHandler,
@@ -1037,6 +1037,7 @@ func (a *MinimalApp) registerRoutes() error {
 		files.GET("/stats", auditOp(models.ModuleFile, models.ActionRead), a.handlers.VideoFile.GetFileStats)                   // 获取文件统计
 		files.DELETE("/batch", auditOp(models.ModuleFile, "batch_delete"), a.handlers.VideoFile.BatchDeleteFiles)               // 批量删除文件（必须在 /:id 之前）
 		files.POST("/batch/download", auditOp(models.ModuleFile, models.ActionExport), a.handlers.VideoFile.BatchDownloadFiles) // 批量下载（数据导出，按中危处理补审计）
+		files.GET("/:id/playback_url", auditOp(models.ModuleFile, models.ActionRead), a.handlers.VideoFile.GetPlaybackURL)      // 颁发 video_playback_token（必须在 /:id 之前）
 		files.GET("/:id/download", auditOp(models.ModuleFile, models.ActionExport), a.handlers.VideoFile.DownloadFile)          // 下载文件（必须在 /:id 之前）
 		files.GET("/:id", auditOp(models.ModuleFile, models.ActionRead), a.handlers.VideoFile.GetFile)                          // 获取文件详情
 		files.DELETE("/:id", auditOp(models.ModuleFile, "delete"), a.handlers.VideoFile.DeleteFile)                             // 删除文件
@@ -1046,6 +1047,9 @@ func (a *MinimalApp) registerRoutes() error {
 	// 公开文件访问（无需认证；SEC-014 加公开路由装饰器）
 	a.router.GET("/api/v1/files/download/:token", publicRouteDecorator, auditOp(models.ModuleFile, models.ActionExport), a.handlers.File.Download)
 	a.router.GET("/api/v1/files/share/:token", publicRouteDecorator, auditOp(models.ModuleFile, models.ActionExport), a.handlers.File.ShareDownload)
+	// 已录制视频 playback token 公开流（无中间件鉴权，token 自带 5min 短效授权）。
+	// 替代 SEC-001/PR-B 收紧后 /api/v1/files/:id/download?token= 路径不可用的问题。
+	a.router.GET("/api/v1/files/playback/:token", publicRouteDecorator, auditOp(models.ModuleFile, models.ActionExport), a.handlers.VideoFile.PlayByPlaybackToken)
 
 	// 视频分割和快照
 	videos := api.Group("/videos")

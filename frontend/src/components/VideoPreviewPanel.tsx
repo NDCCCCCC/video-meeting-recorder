@@ -1,6 +1,6 @@
 // VideoPreviewPanel - Video player with timestamp synchronization for PPT slides
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Card, Alert, Space, Button, message } from 'antd'
 import {
   PlayCircleOutlined,
@@ -12,7 +12,7 @@ import {
 } from '@ant-design/icons'
 import { getTimestampMap } from '../api/transcription'
 import type { SlideTimestamp } from '../types/transcription'
-import { getToken } from '../api/apiClient'
+import { getVideoPlaybackUrl } from '../api/video-file'
 import { PlaybackSpeedControl, usePlaybackSpeed } from './PlaybackSpeedControl'
 import EditableProgressBar from './EditableProgressBar'
 
@@ -75,17 +75,30 @@ export function VideoPreviewPanel({
   const [timestampMap, setTimestampMap] = useState<Map<number, number>>(new Map())
   const [timestampError, setTimestampError] = useState<string>()
   const [playbackRate, setPlaybackRate] = useState(1.0)
+  // video_playback_token：5min TTL，异步获取
+  const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined)
 
   // Initialize playback speed hook
   const { changeSpeed } = usePlaybackSpeed(videoRef as React.RefObject<HTMLVideoElement>)
 
-  // ==================== 计算值 ====================
-  const videoUrl = useMemo(() => {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-    const token = getToken()
-    return token
-      ? `${API_BASE_URL}/api/v1/files/${videoFileId}/download?token=${token}`
-      : `${API_BASE_URL}/api/v1/files/${videoFileId}/download`
+  // 异步获取播放 URL；videoFileId 变化时重新获取
+  useEffect(() => {
+    let cancelled = false
+    setError(undefined)
+    getVideoPlaybackUrl(videoFileId)
+      .then((res) => {
+        if (!cancelled && res.data?.playback_url) {
+          setVideoUrl(res.data.playback_url)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : '获取播放链接失败')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
   }, [videoFileId])
 
   // ==================== 加载时间戳映射 ====================
@@ -274,9 +287,27 @@ export function VideoPreviewPanel({
   }, [])
 
   const handleError = useCallback(() => {
-    setError('视频加载失败，请检查文件是否存在或稍后重试')
-    setIsLoading(false)
-  }, [])
+    // token 过期或服务端 403 时尝试重新获取一次
+    const video = videoRef.current
+    const restoreTime = video ? video.currentTime : 0
+    setError('视频加载失败，正在重试...')
+    setIsLoading(true)
+    getVideoPlaybackUrl(videoFileId)
+      .then((res) => {
+        if (res.data?.playback_url && video) {
+          video.src = res.data.playback_url
+          video.currentTime = restoreTime
+          video.load()
+          setVideoUrl(res.data.playback_url)
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : '视频加载失败')
+      })
+      .finally(() => {
+        setIsLoading(false)
+      })
+  }, [videoFileId])
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current

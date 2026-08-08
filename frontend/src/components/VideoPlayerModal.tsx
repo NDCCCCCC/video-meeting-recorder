@@ -12,7 +12,7 @@ import {
   FullscreenOutlined,
 } from '@ant-design/icons'
 import type { VideoFile } from '../types/video-file'
-import { getToken } from '../api/apiClient'
+import { getVideoPlaybackUrl, downloadVideoFile } from '../api/video-file'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { FrameNavigation } from './FrameNavigation'
 
@@ -142,17 +142,36 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
   const [playbackRate, setPlaybackRate] = useState(1)
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(true)
-
-  // ==================== 计算值 ====================
-  const videoUrl = useMemo(() => {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-    const token = getToken()
-    return token
-      ? `${API_BASE_URL}/api/v1/files/${file.id}/download?token=${token}`
-      : `${API_BASE_URL}/api/v1/files/${file.id}/download`
-  }, [file.id])
+  // video_playback_token：5min TTL，需异步获取而非直接拼接 URL
+  const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined)
 
   const isNativelySupported = useMemo(() => file.format === 'mp4', [file.format])
+
+  // 异步加载播放 URL；visibility/file.id 变化时重新获取
+  useEffect(() => {
+    if (!visible) {
+      setVideoUrl(undefined)
+      return
+    }
+    let cancelled = false
+    setError(undefined)
+    getVideoPlaybackUrl(file.id)
+      .then((res) => {
+        if (cancelled) return
+        if (res.data?.playback_url) {
+          setVideoUrl(res.data.playback_url)
+        } else {
+          setError('无法获取播放链接')
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : '获取播放链接失败')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [file.id, visible])
 
   // ==================== 播放控制 ====================
   const handlePlayPause = useCallback(() => {
@@ -271,15 +290,11 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
   }, [])
 
   // ==================== 下载 ====================
+  // 下载走 Bearer header（downloadVideoFile），不用 playback URL；避免依赖 5min TTL
   const handleDownload = useCallback(() => {
-    const link = document.createElement('a')
-    link.href = videoUrl
-    link.download = file.file_name
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    downloadVideoFile(file.id, file.file_name)
     message.success('开始下载')
-  }, [videoUrl, file.file_name])
+  }, [file.id, file.file_name])
 
   // ==================== 关闭模态框 ====================
   const handleClose = useCallback(() => {
@@ -400,25 +415,44 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
               </div>
             )}
 
-            <video
-              key={`${file.id}-${visible}`}
-              ref={videoRef as React.RefObject<HTMLVideoElement>}
-              src={videoUrl}
-              style={STYLES.video}
-              preload="metadata"
-              muted={muted}
-              {...({ volume: actualVolume } as unknown as React.VideoHTMLAttributes<HTMLVideoElement>)}
-              onLoadedMetadata={() => {
-                const video = videoRef.current
-                if (video) {
-                  setDuration(video.duration)
-                  setLoading(false)
-                }
-              }}
-              onError={() => {
-                setError('视频加载失败，请检查文件是否存在或稍后重试')
-                setLoading(false)
-              }}
+            {videoUrl && (
+              <video
+                key={`${file.id}-${visible}-${videoUrl}`}
+                ref={videoRef as React.RefObject<HTMLVideoElement>}
+                src={videoUrl}
+                style={STYLES.video}
+                preload="metadata"
+                muted={muted}
+                {...({ volume: actualVolume } as unknown as React.VideoHTMLAttributes<HTMLVideoElement>)}
+                onLoadedMetadata={() => {
+                  const video = videoRef.current
+                  if (video) {
+                    setDuration(video.duration)
+                    setLoading(false)
+                  }
+                }}
+                onError={() => {
+                  // token 过期（5min）或服务端 403 时尝试重新获取一次
+                  const video = videoRef.current
+                  const restoreTime = video ? video.currentTime : 0
+                  setError('视频加载失败，正在重试...')
+                  setLoading(true)
+                  getVideoPlaybackUrl(file.id)
+                    .then((res) => {
+                      if (res.data?.playback_url && video) {
+                        video.src = res.data.playback_url
+                        video.currentTime = restoreTime
+                        video.load()
+                        setVideoUrl(res.data.playback_url)
+                      }
+                    })
+                    .catch((err) => {
+                      setError(err instanceof Error ? err.message : '视频加载失败')
+                    })
+                    .finally(() => {
+                      setLoading(false)
+                    })
+                }}
               onTimeUpdate={() => {
                 const video = videoRef.current
                 if (video) {
@@ -432,6 +466,9 @@ export function VideoPlayerModal({ file, visible, onClose }: VideoPlayerModalPro
                 if (video) setPlaybackRate(video.playbackRate)
               }}
             />
+            )}
+
+            {/* 自定义控制条 */}
 
             {/* 自定义控制条 */}
             <div style={STYLES.controlBar}>

@@ -38,6 +38,12 @@ func main() {
 	// 启动期一次性检测 hex secret 截断风险（典型 bug：`openssl rand -hex 32` 生成 64-char）。
 	cfg.WarnCredentialSM4Truncation(logger)
 
+	// video_playback_token 配置校验：secret ≥ 32 字符、独立密钥族（不与 SM4/HLS 重用）、
+	// duration > 0；任何不合规直接 Fatal，进程不进入运行态。
+	if err := cfg.ValidateVideoPlaybackTokenConfig(); err != nil {
+		logger.Fatal("video_playback_token 配置不合法", zap.Error(err))
+	}
+
 	logger.Info("Starting Record V2 Server",
 		zap.String("version", "2.0.0"),
 		zap.String("environment", cfg.Server.Environment),

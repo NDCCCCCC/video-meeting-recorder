@@ -104,8 +104,15 @@ type AuthConfig struct {
 	MaxSessionDuration   time.Duration `mapstructure:"max_session_duration" json:"max_session_duration" yaml:"max_session_duration"`
 	HLSTokenSecret       string        `mapstructure:"hls_token_secret" json:"hls_token_secret" yaml:"hls_token_secret"`
 	HLSTokenDuration     time.Duration `mapstructure:"hls_token_duration" json:"hls_token_duration" yaml:"hls_token_duration"`
-	MaxDecryptFailures   int           `mapstructure:"max_decrypt_failures" json:"max_decrypt_failures" yaml:"max_decrypt_failures"`       // 最大解密失败次数
-	DecryptFailureWindow int           `mapstructure:"decrypt_failure_window" json:"decrypt_failure_window" yaml:"decrypt_failure_window"` // 时间窗口（秒）
+	// 已录制视频播放专用 HMAC token（独立密钥族，与 SM4Secret / HLSTokenSecret 必须互不相同）。
+	// 用于让 <video> 元素在不带 Authorization 头的 HTTP 请求里获得 5min 短效播放凭据；
+	// 路径模式 /api/v1/files/playback/:token（path 而非 query string，避免 URL 出现在日志/历史/
+	// Referer 等泄露面）。SEC-001/PR-B 后视频下载端点已不在 AllowedTokenURLPrefixes 白名单，
+	// 通过这条路径恢复可播放性同时不扩大原 query-token 攻击面。
+	VideoPlaybackTokenSecret   string        `mapstructure:"video_playback_token_secret" json:"video_playback_token_secret" yaml:"video_playback_token_secret"`
+	VideoPlaybackTokenDuration time.Duration `mapstructure:"video_playback_token_duration" json:"video_playback_token_duration" yaml:"video_playback_token_duration"`
+	MaxDecryptFailures         int           `mapstructure:"max_decrypt_failures" json:"max_decrypt_failures" yaml:"max_decrypt_failures"`       // 最大解密失败次数
+	DecryptFailureWindow       int           `mapstructure:"decrypt_failure_window" json:"decrypt_failure_window" yaml:"decrypt_failure_window"` // 时间窗口（秒）
 
 	// Authentication mode (local, ad) - per D-01, D-02, D-03
 	Mode string `mapstructure:"mode" json:"mode" yaml:"mode"`
@@ -524,6 +531,11 @@ func setDefaults(cfg *Config) { //nolint:gocyclo,cyclop // 大量配置项默认
 	if cfg.Auth.HLSTokenDuration == 0 {
 		cfg.Auth.HLSTokenDuration = 30 * time.Second
 	}
+	// video_playback_token：默认 5min，覆盖 30min 视频 preview 的 Range 请求 + 暂停 +
+	// 拖拽 + 5min 兜底重试；泄露窗口适中。可由 cfg.video_playback_token_duration 调小/调大。
+	if cfg.Auth.VideoPlaybackTokenDuration == 0 {
+		cfg.Auth.VideoPlaybackTokenDuration = 5 * time.Minute
+	}
 	// 解密失败速率限制默认值
 	if cfg.Auth.MaxDecryptFailures == 0 {
 		cfg.Auth.MaxDecryptFailures = 5 // 最大失败次数
@@ -888,6 +900,8 @@ smart_end:
 func bindSecretEnv(v *viper.Viper) {
 	_ = v.BindEnv("auth.sm4_secret", "SM4_SECRET")
 	_ = v.BindEnv("auth.hls_token_secret", "HLS_TOKEN_SECRET")
+	// video_playback_token 密钥族环境变量覆盖；与 HLS_TOKEN_SECRET / SM4_SECRET 解耦。
+	_ = v.BindEnv("auth.video_playback_token_secret", "VIDEO_PLAYBACK_TOKEN_SECRET")
 	_ = v.BindEnv("huawei.insecure_skip_verify", "HUAWEI_INSECURE_SKIP_VERIFY")
 	_ = v.BindEnv("huawei.min_tls_version", "HUAWEI_MIN_TLS_VERSION")
 	// SEC-003a: 华为终端私有 CA bundle 路径覆盖——运维无需重新编译二进制即可切换。
@@ -1012,6 +1026,32 @@ func (c *Config) ValidateCredentialSM4Config() error {
 	}
 	if prevSec == sec {
 		return fmt.Errorf("CREDENTIAL_SM4_PREVIOUS_SECRET 必须不等于 CREDENTIAL_SM4_SECRET（强制轮换）")
+	}
+	return nil
+}
+
+// ValidateVideoPlaybackTokenConfig 校验 video_playback_token 配置合法性。
+// 镜像 ValidateCredentialSM4Config 的 fail-closed 语义：生产环境必须显式设置 ≥ 32
+// 字符的密钥、且与 SM4Secret / HLSTokenSecret 必须互不相同（独立密钥族，密钥重用会
+// 抹平 HMAC/SM4 之间的安全边界）。duration 必须 > 0（0/负 TTL 无意义且可能误签）。
+func (c *Config) ValidateVideoPlaybackTokenConfig() error {
+	sec := c.Auth.VideoPlaybackTokenSecret
+	dur := c.Auth.VideoPlaybackTokenDuration
+
+	if sec == "" {
+		return fmt.Errorf("VIDEO_PLAYBACK_TOKEN_SECRET 必须显式设置")
+	}
+	if len(sec) < 32 {
+		return fmt.Errorf("VIDEO_PLAYBACK_TOKEN_SECRET 必须 ≥ 32 字符（当前长度=%d）", len(sec))
+	}
+	if sec == c.Auth.SM4Secret {
+		return fmt.Errorf("VIDEO_PLAYBACK_TOKEN_SECRET 必须不等于 SM4_SECRET（独立密钥族）")
+	}
+	if sec == c.Auth.HLSTokenSecret {
+		return fmt.Errorf("VIDEO_PLAYBACK_TOKEN_SECRET 必须不等于 HLS_TOKEN_SECRET（独立密钥族）")
+	}
+	if dur <= 0 {
+		return fmt.Errorf("video_playback_token_duration 必须 > 0（当前=%v）", dur)
 	}
 	return nil
 }
