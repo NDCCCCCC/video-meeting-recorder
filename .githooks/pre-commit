@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Git pre-commit hook: 防止 docs/errors.md 漂移导致 CI 失败。
+#
+# 工作机制：当 staged 文件涉及错误声明 / handler / response 包时，自动跑
+# go generate ./internal/errors/... 并把生成的 docs/errors.md 加入本次 commit。
+#
+# 激活方式（一次性）：
+#   ./scripts/install-githooks.sh
+# 或者手工：
+#   git config core.hooksPath .githooks
+#
+# 跳过一次（紧急情况）：
+#   git commit --no-verify
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+CHANGED=$(git diff --cached --name-only)
+# 仅当改动可能影响 errors.md 内容时才跑 generate（避免无关 commit 浪费时间）。
+# generator 扫描范围：internal/errors (sentinel/mapping) + internal/handlers (调用点) +
+# pkg/response (CodeXxx 常量与 GIN 响应映射)。
+if echo "$CHANGED" | grep -qE '^internal/errors/.*\.go$|^internal/handlers/.*\.go$|^pkg/response/.*\.go$'; then
+  echo "[pre-commit] 检测到错误相关改动，运行 go generate ./internal/errors/..."
+  go generate ./internal/errors/...
+  # 把生成结果 stage 进来；如果 generator 这次没产出新改动，git add 是 no-op。
+  git add docs/errors.md
+  echo "[pre-commit] docs/errors.md 已同步"
+fi
+
+exit 0
