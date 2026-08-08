@@ -84,7 +84,7 @@ jobs:
 
       - name: Upload coverage
         if: matrix.go-version == '1.25' && github.event_name == 'push'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-backend
           path: coverage.out
@@ -162,7 +162,7 @@ jobs:
           ls -lh bin/
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: record-v2-${{ matrix.target }}
           path: bin/record-v2-${{ matrix.target }}${{ matrix.ext }}
@@ -196,7 +196,7 @@ jobs:
         run: npm run build
 
       - name: Upload frontend dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: frontend/dist/
