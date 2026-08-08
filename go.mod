@@ -3,7 +3,7 @@ module github.com/NDCCCCCC/video-meeting-recorder
 go 1.25.0
 
 require (
-	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.4.1
+	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.5.3
 	github.com/corona10/goimagehash v1.1.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-ldap/ldap/v3 v3.4.13
