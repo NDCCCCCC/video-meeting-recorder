@@ -1,81 +1,81 @@
-# Dependabot configuration for NDCCCCCC/video-meeting-recorder.
+# NDCCCCCC/video-meeting-recorder 的 Dependabot 配置。
 #
-# Covers all four dependency surfaces in this repo:
-# - npm (frontend/, locked via package-lock.json; CI uses `npm ci`)
-# - pip via uv (root pyproject.toml + uv.lock; CI is Python-less, lock
-#   is maintained locally)
-# - gomod at the root (single module under go.mod; CI uses go 1.25)
-# - gomod in scripts/fix_migration and scripts/check_db (independent
-#   submodules, CI ignores their go.mod via "ignoring go.mod in system
-#   temp root" warning, but Dependabot should still surface updates)
-# - GitHub Actions (ci.yml pins action versions explicitly)
+# 覆盖此仓库中的所有四个依赖表面：
+# - npm (前端目录，通过 package-lock.json 锁定；CI 使用 `npm ci`)
+# - 通过 uv 安装 pip (根目录 pyproject.toml + uv.lock；CI 环境不含 Python，锁定
+#   在本地维护)
+# - 根目录下的 gomod（go.mod 下的单个模块；CI 使用 go 1.25）
+# - gomod 在 scripts/fix_migration 和 scripts/check_db 中 (独立
+# 子模块，CI 通过“忽略 go.mod”在系统中忽略它们
+#   临时根目录警告，但 Dependabot 仍应显示更新)
+# - GitHub Actions (ci.yml 明确指定了 action 版本)
 #
-# Reference:
+# 参考：
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
-version: 2
+版本：2: 2
 
-updates:
-  # ── Frontend (npm) ────────────────────────────────────────────────
-  - package-ecosystem: "npm"
-    directory: "/frontend"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Asia/Shanghai"
-    # Align with CI: Node 20
-    target-branch: "main"
-    commit-message:
-      prefix: "chore(frontend)"
-      include: "scope"
-    # CI uses `npm ci` (strict lockfile) so PRs MUST keep
-    # package-lock.json in sync with package.json
-    labels:
-      - "dependencies"
-      - "frontend"
-    # Limit noise: skip patch-level bumps for monorepo-wide churn
-    # (the project is a single-package app, so this is mostly cosmetic)
-    groups:
-      patch-and-minor:
-        applies-to: version-updates
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-    # Reviewer rotation: ping maintainer
-    reviewers:
-      - "NDCCCCCC"
-    # Skip majors unless security-tagged; user prefers staged rollouts
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    open-pull-requests-limit: 5
+更新：:
+  # ── 前端 (npm) ────────────────────────────────────────────────# ── Frontend (npm) ────────────────────────────────────────────────
+  - package-ecosystem: "npm"package-ecosystem: "npm"
+    目录: "/frontend": "/frontend"
+    日程：:
+      间隔: "每周": "weekly"
+      day: "monday": "monday"
+      时间: "09:00": "09:00"
+      时区: "Asia/Shanghai": "Asia/Shanghai"
+    # 与 CI 对齐：Node 20# Align with CI: Node 20
+    目标分支: "main": "main"
+    提交信息：:
+      前缀: "chore(frontend)": "chore(frontend)"
+      包含: "scope": "scope"
+    # CI 使用 `npm ci`（严格锁文件），因此 PR 必须保持# CI uses `npm ci` (strict lockfile) so PRs MUST keep
+    # package-lock.json 与 package.json 同步# package-lock.json in sync with package.json
+    标签：:
+      - "依赖项""dependencies"
+      - "前端""frontend"
+    # 限制噪声：跳过单体仓库范围内的变更导致的补丁级别波动# Limit noise: skip patch-level bumps for monorepo-wide churn
+    # (该项目是一个单包应用，所以这主要是为了美观)# (the project is a single-package app, so this is mostly cosmetic)
+    组：:
+      补丁与次要：:
+        适用于：版本更新: version-updates
+        模式：:
+          - “*”"*"
+        更新类型：:
+          - “次要”"minor"
+          - "补丁""patch"
+    # 审稿人轮换：ping 维护者# Reviewer rotation: ping maintainer
+    审稿人：:
+      - "NDCCCCCC""NDCCCCCC"
+    # 除非带有安全标签，否则跳过主版本；用户偏好分阶段发布# Skip majors unless security-tagged; user prefers staged rollouts
+    忽略：:
+      - dependency-name: "*"dependency-name: "*"
+        更新类型：["版本更新：semver-major"]: ["version-update:semver-major"]
+    开放拉取请求限制：5: 5
 
-  # ── Python (uv / pip) ─────────────────────────────────────────────
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Asia/Shanghai"
-    target-branch: "main"
-    commit-message:
-      prefix: "chore(python)"
-      include: "scope"
-    labels:
-      - "dependencies"
-      - "python"
-    # uv honors version specifiers in pyproject.toml; Dependabot
-    # follows them automatically. The Pillow >=10.0.0,<13.0.0 cap
-    # forces a manual bump for major upgrades.
-    groups:
-      patch-and-minor:
-        applies-to: version-updates
-        patterns:
-          - "*"
+  # ── Python (uv / pip) ─────────────────────────────────────────────# ── Python (uv / pip) ─────────────────────────────────────────────
+  - package-ecosystem: "pip"package-ecosystem: "pip"
+    目录: "/": "/"
+    日程：:
+      间隔: "每周": "weekly"
+      day: "monday": "monday"
+      时间: "09:00": "09:00"
+      时区: "Asia/Shanghai": "Asia/Shanghai"
+    目标分支: "main": "main"
+    提交信息：:
+      前缀: "chore(python)": "chore(python)"
+      包含: "scope": "scope"
+    标签：:
+      - "依赖项""dependencies"
+      - "python""python"
+    # uv 在 pyproject.toml 中支持版本说明符；Dependabot# uv honors version specifiers in pyproject.toml; Dependabot
+    # 自动跟随它们。Pillow >=10.0.0,<13.0.0 约束# follows them automatically. The Pillow >=10.0.0,<13.0.0 cap
+    # 强制进行重大升级的手动更新。# forces a manual bump for major upgrades.
+    组：:
+      补丁与次要：:
+        适用于：版本更新: version-updates
+        模式：:
+          - “*”"*"
         update-types:
           - "minor"
           - "patch"
