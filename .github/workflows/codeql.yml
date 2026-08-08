@@ -45,8 +45,13 @@ jobs:
         include:
         - language: actions
           build-mode: none
+        # Go 用 manual 而不是 autobuild：
+        # internal/frontend/embed.go 用了 `//go:embed dist`，
+        # 该目录被 .gitignore 排除且 CodeQL runner 没有前置 frontend-build job，
+        # 默认 autobuild（= go build ./...）会失败、报 "Go files were found but not processed"。
+        # 改成 manual + 下文 Run manual build steps 中建占位再 go build。
         - language: go
-          build-mode: autobuild
+          build-mode: manual
         - language: javascript-typescript
           build-mode: none
         - language: python
@@ -66,8 +71,12 @@ jobs:
     # Add any setup steps before running the `github/codeql-action/init` action.
     # This includes steps like installing compilers or runtimes (`actions/setup-node`
     # or others). This is typically only required for manual builds.
-    # - name: Setup runtime (example)
-    #   uses: actions/setup-example@v1
+    - name: Setup Go
+      if: matrix.language == 'go'
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+        cache: true
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
@@ -92,12 +101,14 @@ jobs:
       if: matrix.build-mode == 'manual'
       shell: bash
       run: |
-        echo 'If you are using a "manual" build mode for one or more of the' \
-          'languages you are analyzing, replace this with the commands to build' \
-          'your code, for example:'
-        echo '  make bootstrap'
-        echo '  make release'
-        exit 1
+        # 1) 给 //go:embed dist 一个最小占位文件，让 go build 能过编译。
+        #    占位 index.html 不会被任何运行时路径真正服务。
+        mkdir -p internal/frontend/dist
+        printf '<!doctype html><title>placeholder</title>\n' \
+          > internal/frontend/dist/index.html
+
+        # 2) 编完整 server binary，CodeQL 会跟踪所有包及 transitive deps。
+        go build -trimpath -o /tmp/codeql-build ./cmd/server
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
