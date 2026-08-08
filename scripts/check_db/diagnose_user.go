@@ -1,3 +1,5 @@
+//go:build diagnose
+
 package main
 
 import (

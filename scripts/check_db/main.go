@@ -1,3 +1,5 @@
+//go:build role
+
 package main
 
 import (
