@@ -1,0 +1,189 @@
+# Dependabot configuration for NDCCCCCC/video-meeting-recorder.
+#
+# Covers all four dependency surfaces in this repo:
+# - npm (frontend/, locked via package-lock.json; CI uses `npm ci`)
+# - pip via uv (root pyproject.toml + uv.lock; CI is Python-less, lock
+#   is maintained locally)
+# - gomod at the root (single module under go.mod; CI uses go 1.25)
+# - gomod in scripts/fix_migration and scripts/check_db (independent
+#   submodules, CI ignores their go.mod via "ignoring go.mod in system
+#   temp root" warning, but Dependabot should still surface updates)
+# - GitHub Actions (ci.yml pins action versions explicitly)
+#
+# Reference:
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # ── Frontend (npm) ────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    # Align with CI: Node 20
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(frontend)"
+      include: "scope"
+    # CI uses `npm ci` (strict lockfile) so PRs MUST keep
+    # package-lock.json in sync with package.json
+    labels:
+      - "dependencies"
+      - "frontend"
+    # Limit noise: skip patch-level bumps for monorepo-wide churn
+    # (the project is a single-package app, so this is mostly cosmetic)
+    groups:
+      patch-and-minor:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Reviewer rotation: ping maintainer
+    reviewers:
+      - "NDCCCCCC"
+    # Skip majors unless security-tagged; user prefers staged rollouts
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 5
+
+  # ── Python (uv / pip) ─────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(python)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    # uv honors version specifiers in pyproject.toml; Dependabot
+    # follows them automatically. The Pillow >=10.0.0,<13.0.0 cap
+    # forces a manual bump for major upgrades.
+    groups:
+      patch-and-minor:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    reviewers:
+      - "NDCCCCCC"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 3
+
+  # ── Go (root module) ──────────────────────────────────────────────
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(go)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "go"
+    # Allow direct + indirect; CI runs `go mod download` only
+    # (no `go mod tidy` in backend job, so reviewers MUST run
+    # `go mod tidy && go generate ./internal/errors/...` locally
+    # before merge — see ci.yml "Verify errors doc sync" step)
+    groups:
+      golang-x-and-indirect:
+        applies-to: version-updates
+        patterns:
+          - "golang.org/x/*"
+          - "github.com/spf13/*"
+          - "github.com/gin-gonic/*"
+        update-types:
+          - "minor"
+          - "patch"
+    reviewers:
+      - "NDCCCCCC"
+    # Direct-dependency major bumps need manual review (API surface
+    # changes, e.g. gin v1.x -> v2.x); block majors.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 5
+
+  # ── Go (scripts/fix_migration submodule) ──────────────────────────
+  - package-ecosystem: "gomod"
+    directory: "/scripts/fix_migration"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(scripts)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "go"
+      - "scripts"
+    reviewers:
+      - "NDCCCCCC"
+    open-pull-requests-limit: 2
+
+  # ── Go (scripts/check_db submodule) ───────────────────────────────
+  - package-ecosystem: "gomod"
+    directory: "/scripts/check_db"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(scripts)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "go"
+      - "scripts"
+    reviewers:
+      - "NDCCCCCC"
+    open-pull-requests-limit: 2
+
+  # ── GitHub Actions ────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    target-branch: "main"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "ci"
+    # golangci/golangci-lint-action is pinned to v7 + golangci-lint
+    # v2.12.2 (built with go1.25); Dependabot bumps here would break
+    # the matrix — see memory `project-golangci-lint-v2-pin.md`.
+    reviewers:
+      - "NDCCCCCC"
+    # Always allow security-tagged action bumps (e.g.
+    # actions/checkout, actions/setup-go CVEs) even if major.
+    open-pull-requests-limit: 3
