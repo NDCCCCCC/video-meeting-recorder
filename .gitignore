@@ -94,6 +94,12 @@ internal/frontend/dist/
 # ============================================================================
 scripts/bin/
 scripts/internal/
+# Python __pycache__ from `uv run python scripts/*.py` (already exists
+# as an untracked artifact from the dependency-upgrade smoke tests).
+# Use a directory pattern (not `**/__pycache__/`) to be conservative —
+# only the scripts/ tree currently produces .pyc files; expanding the
+# glob would surprise other parts of the repo.
+scripts/__pycache__/
 
 # ============================================================================
 # 临时文件
