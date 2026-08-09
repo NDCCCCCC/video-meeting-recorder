@@ -39,7 +39,7 @@ jobs:
         run: go mod download
 
       - name: Download frontend dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: internal/frontend/dist
@@ -84,7 +84,7 @@ jobs:
 
       - name: Upload coverage
         if: matrix.go-version == '1.25' && github.event_name == 'push'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-backend
           path: coverage.out
@@ -162,7 +162,7 @@ jobs:
           ls -lh bin/
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: record-v2-${{ matrix.target }}
           path: bin/record-v2-${{ matrix.target }}${{ matrix.ext }}
@@ -196,7 +196,7 @@ jobs:
         run: npm run build
 
       - name: Upload frontend dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: frontend/dist/
@@ -213,7 +213,7 @@ jobs:
       contents: write  # 创建 release 需要
     steps:
       - name: Download all cross-build binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: record-v2-*
           path: dist
@@ -230,7 +230,7 @@ jobs:
 
       - name: Create GitHub Release (draft)
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           generate_release_notes: true
