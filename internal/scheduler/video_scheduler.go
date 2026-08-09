@@ -370,9 +370,10 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 			zap.String("conference_number", task.ConferenceNumber),
 		)
 		if err := s.connector.ConnectToConference(ctx, task); err != nil {
+			// 不记录原始 err（华为 client 持凭据发起已认证调用，错误受污染）；
+			// 仅记 SentinelField 分类，避免敏感信息经日志泄露（CodeQL #25）。
 			s.logger.Error("连接华为会议失败",
 				zap.Uint("task_id", taskID),
-				zap.Error(err),
 				response.SentinelField(err),
 			)
 			_ = s.updateTaskStatus(ctx, taskID, models.VideoStatusFailed, err.Error())

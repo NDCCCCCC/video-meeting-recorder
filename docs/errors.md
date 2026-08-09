@@ -29,7 +29,7 @@
 | ErrInsufficientQuota | Sentinel | 429 | 12 |
 | ErrInternal | Sentinel | 500 | 117 |
 | ErrInvalidFileType | Sentinel | 400 | 5 |
-| ErrInvalidInput | Sentinel | 400 | 172 |
+| ErrInvalidInput | Sentinel | 400 | 173 |
 | ErrNotFound | Sentinel | 404 | 31 |
 | ErrPPTFileNotFound | Sentinel | 404 | 9 |
 | ErrPermissionNotFound | Sentinel | 404 | 5 |

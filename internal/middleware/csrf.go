@@ -53,7 +53,7 @@ var csrfSafeMethods = map[string]bool{
 // 错误模式:
 //
 //	任何被拒绝的请求 403 + JSON,logger 记录 path/ip/method 便于审计。
-func CSRF(safeOrigins []string, logger *zap.Logger) gin.HandlerFunc {
+func CSRF(safeOrigins []string, logger *zap.Logger, secure bool) gin.HandlerFunc {
 	originCheckEnabled := len(safeOrigins) > 0
 	allowed := make(map[string]struct{}, len(safeOrigins))
 	for _, o := range safeOrigins {
@@ -65,7 +65,7 @@ func CSRF(safeOrigins []string, logger *zap.Logger) gin.HandlerFunc {
 		//    写请求具备 token 基础。这是 Double-Submit Cookie 模式的标准 bootstrap。
 		if csrfSafeMethods[c.Request.Method] {
 			if cookie, _ := c.Cookie(csrfCookieName); cookie == "" {
-				issueCSRFCookie(c)
+				issueCSRFCookieSecure(c, secure)
 			}
 			c.Next()
 			return
@@ -137,12 +137,9 @@ func CSRF(safeOrigins []string, logger *zap.Logger) gin.HandlerFunc {
 
 // CSRFIssueCookie 在非 CSRF 路由上需要下发 cookie 时的 helper,例如登录成功后。
 // 调用方通过 c.SetCookie 直接设置也可,这里提供一致封装便于测试。
+// secure 应由调用方按部署环境(生产 HTTPS)传入,避免硬编码 false 触发 CodeQL 告警。
 func CSRFIssueCookie(c *gin.Context, secure bool) {
 	issueCSRFCookieSecure(c, secure)
-}
-
-func issueCSRFCookie(c *gin.Context) {
-	issueCSRFCookieSecure(c, false)
 }
 
 // issueCSRFCookieSecure 生成 32 字节 base64 token,设置为 _csrf cookie。
