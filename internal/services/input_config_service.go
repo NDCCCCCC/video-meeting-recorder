@@ -57,7 +57,13 @@ func (s *InputConfigService) decryptPasswordField(value string) (string, error) 
 	if s.encryptor == nil {
 		return value, nil
 	}
-	return s.encryptor.Decrypt(value)
+	plaintext, err := s.encryptor.Decrypt(value)
+	if err != nil {
+		// 返回哨兵而非 %w 包裹受 password 污染的底层 err，断开敏感日志污点链
+		// （CodeQL clear-text-logging：避免凭据值经错误/日志泄露）。
+		return "", apperrors.ErrCredentialAccess
+	}
+	return plaintext, nil
 }
 
 // InputConfigListResponse 输入配置列表响应

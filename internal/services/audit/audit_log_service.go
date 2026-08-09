@@ -3,7 +3,6 @@ package audit
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -361,33 +360,30 @@ func (s *AuditLogService) Query(ctx context.Context, req *QueryRequest, userID u
 		return nil, err
 	}
 
-	// 排序 - 使用白名单验证防止注入
-	orderBy := req.OrderBy
-	if orderBy == "" {
-		orderBy = "created_at"
-	}
-	// OrderBy 白名单
-	allowedOrderBy := map[string]bool{
-		"created_at": true, "username": true, "module": true,
-		"action": true, "status": true, "duration": true,
-	}
-	if !allowedOrderBy[orderBy] {
-		orderBy = "created_at"
-	}
-
-	order := req.Order
-	if order == "" {
-		order = "desc"
-	}
-	// Order 方向白名单
-	allowedOrder := map[string]bool{
-		"asc": true, "desc": true, "ASC": true, "DESC": true,
-	}
-	if !allowedOrder[order] {
-		order = "desc"
+	// 排序 - 把用户输入映射到【包级字面量】再拼接，杜绝 ORDER BY 注入。
+	// （白名单若仍用用户串拼接，CodeQL 无法识别为 sanitizer，故改 switch 取字面量。）
+	var orderCol string
+	switch req.OrderBy {
+	case "username":
+		orderCol = "username"
+	case "module":
+		orderCol = "module"
+	case "action":
+		orderCol = "action"
+	case "status":
+		orderCol = "status"
+	case "duration":
+		orderCol = "duration"
+	default:
+		orderCol = "created_at" // 含空值与未知列
 	}
 
-	query = query.Order(fmt.Sprintf("%s %s", orderBy, order))
+	orderDir := "DESC"
+	if strings.EqualFold(req.Order, "asc") {
+		orderDir = "ASC"
+	}
+
+	query = query.Order(orderCol + " " + orderDir)
 
 	// 分页
 	if req.Page < 1 {

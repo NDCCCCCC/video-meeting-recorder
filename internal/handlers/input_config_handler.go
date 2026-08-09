@@ -81,7 +81,7 @@ func (h *InputConfigHandler) ListConfigs(c *gin.Context) {
 // @Router /api/v1/input-configs/{id} [get]
 func (h *InputConfigHandler) GetConfig(c *gin.Context) {
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
+	id, err := strconv.ParseUint(idStr, 10, strconv.IntSize)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, "无效的配置ID")
 		return
@@ -151,7 +151,7 @@ func (h *InputConfigHandler) CreateConfig(c *gin.Context) {
 // @Router /api/v1/input-configs/{id} [put]
 func (h *InputConfigHandler) UpdateConfig(c *gin.Context) {
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
+	id, err := strconv.ParseUint(idStr, 10, strconv.IntSize)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, "无效的配置ID")
 		return
@@ -195,7 +195,7 @@ func (h *InputConfigHandler) UpdateConfig(c *gin.Context) {
 // @Router /api/v1/input-configs/{id} [delete]
 func (h *InputConfigHandler) DeleteConfig(c *gin.Context) {
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
+	id, err := strconv.ParseUint(idStr, 10, strconv.IntSize)
 	if err != nil {
 		response.GinError(c, response.CodeInvalidRequest, "无效的配置ID")
 		return

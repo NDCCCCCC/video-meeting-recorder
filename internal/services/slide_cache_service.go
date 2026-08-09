@@ -16,6 +16,7 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/security"
 )
 
 const (
@@ -217,21 +218,19 @@ func (s *SlideCacheService) GetSlideImagePath(pptFileID uint, resolution, filena
 		return "", fmt.Errorf("invalid resolution: %s", resolution)
 	}
 
+	// filepath.Base 剥离任何目录成分（CodeQL 路径注入 sanitizer），再过严格白名单正则。
+	filename = filepath.Base(filename)
 	// Validate filename format (strict whitelist)
 	if !s.isValidSlideFilename(filename) {
 		return "", fmt.Errorf("invalid filename format")
 	}
 
-	// Build absolute path
+	// Build absolute path（basePath 由 config + 固定段构成；filename 为唯一不可信输入）。
+	// SECURITY: 包容校验 filename 不可逃出 basePath（路径穿越防护，per T-03-01）；
+	// 使用 SafeJoin 返回值作为 sink，使 CodeQL 路径注入污点在 guard 处终止。
 	basePath := filepath.Join(s.config.Storage.RecordingsPath, "ppts", fmt.Sprintf("%d", pptFileID), "slides", resolution)
-	absolutePath := filepath.Join(basePath, filename)
-
-	// SECURITY: Validate resolved path starts with recordings path (path traversal prevention, per T-03-01)
-	recordingsPath := filepath.Clean(s.config.Storage.RecordingsPath)
-	resolvedPath := filepath.Clean(absolutePath)
-
-	rel, relErr := filepath.Rel(recordingsPath, resolvedPath)
-	if relErr != nil || strings.HasPrefix(rel, "..") {
+	absolutePath, err := security.SafeJoin(basePath, filename)
+	if err != nil {
 		return "", fmt.Errorf("path traversal detected: %s", filename)
 	}
 
