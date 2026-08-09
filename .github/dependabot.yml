@@ -1,81 +1,79 @@
 # NDCCCCCC/video-meeting-recorder 的 Dependabot 配置。
 #
-# 覆盖此仓库中的所有四个依赖表面：
-# - npm (前端目录，通过 package-lock.json 锁定；CI 使用 `npm ci`)
-# - 通过 uv 安装 pip (根目录 pyproject.toml + uv.lock；CI 环境不含 Python，锁定
-#   在本地维护)
-# - 根目录下的 gomod（go.mod 下的单个模块；CI 使用 go 1.25）
-# - gomod 在 scripts/fix_migration 和 scripts/check_db 中 (独立
-# 子模块，CI 通过“忽略 go.mod”在系统中忽略它们
-#   临时根目录警告，但 Dependabot 仍应显示更新)
-# - GitHub Actions (ci.yml 明确指定了 action 版本)
+# 覆盖四个依赖表面:
+# - npm(前端目录,通过 package-lock.json 锁定;CI 使用 `npm ci`)
+# - pip(根目录 pyproject.toml + uv.lock;CI 环境不含 Python,锁定在本地维护)
+# - gomod(根目录 go.mod 下的单个模块;CI 使用 go 1.25)
+# - gomod 在 scripts/fix_migration 和 scripts/check_db 中(独立子模块;
+#   CI 通过"忽略 go.mod"在系统中忽略它们,但 Dependabot 仍会开更新 PR)
+# - GitHub Actions(ci.yml 明确指定了 action 版本)
 #
-# 参考：
+# 参考:
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
-版本：2: 2
+version: 2
 
-更新：:
-  # ── 前端 (npm) ────────────────────────────────────────────────# ── Frontend (npm) ────────────────────────────────────────────────
-  - package-ecosystem: "npm"package-ecosystem: "npm"
-    目录: "/frontend": "/frontend"
-    日程：:
-      间隔: "每周": "weekly"
-      day: "monday": "monday"
-      时间: "09:00": "09:00"
-      时区: "Asia/Shanghai": "Asia/Shanghai"
-    # 与 CI 对齐：Node 20# Align with CI: Node 20
-    目标分支: "main": "main"
-    提交信息：:
-      前缀: "chore(frontend)": "chore(frontend)"
-      包含: "scope": "scope"
-    # CI 使用 `npm ci`（严格锁文件），因此 PR 必须保持# CI uses `npm ci` (strict lockfile) so PRs MUST keep
-    # package-lock.json 与 package.json 同步# package-lock.json in sync with package.json
-    标签：:
-      - "依赖项""dependencies"
-      - "前端""frontend"
-    # 限制噪声：跳过单体仓库范围内的变更导致的补丁级别波动# Limit noise: skip patch-level bumps for monorepo-wide churn
-    # (该项目是一个单包应用，所以这主要是为了美观)# (the project is a single-package app, so this is mostly cosmetic)
-    组：:
-      补丁与次要：:
-        适用于：版本更新: version-updates
-        模式：:
-          - “*”"*"
-        更新类型：:
-          - “次要”"minor"
-          - "补丁""patch"
-    # 审稿人轮换：ping 维护者# Reviewer rotation: ping maintainer
-    审稿人：:
-      - "NDCCCCCC""NDCCCCCC"
-    # 除非带有安全标签，否则跳过主版本；用户偏好分阶段发布# Skip majors unless security-tagged; user prefers staged rollouts
-    忽略：:
-      - dependency-name: "*"dependency-name: "*"
-        更新类型：["版本更新：semver-major"]: ["version-update:semver-major"]
-    开放拉取请求限制：5: 5
+updates:
+  # ── 前端 (npm) ──────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    # 与 CI 对齐:Node 20
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(frontend)"
+      include: "scope"
+    # CI 使用 `npm ci`(严格锁文件),因此 PR 必须保持 package-lock.json
+    # 与 package.json 同步。
+    labels:
+      - "dependencies"
+      - "frontend"
+    # 限制噪声:把 patch+minor 合并成一个组
+    groups:
+      patch-and-minor:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # 审稿人轮换:ping 维护者
+    reviewers:
+      - "NDCCCCCC"
+    # 跳过主版本的 version-update(用户偏好分阶段发布);但 security-update
+    # 的主版本仍可开 PR(applies-to 仅作用于 version-updates)。
+    ignore:
+      - dependency-name: "*"
+        applies-to: version-updates
+        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 5
 
-  # ── Python (uv / pip) ─────────────────────────────────────────────# ── Python (uv / pip) ─────────────────────────────────────────────
-  - package-ecosystem: "pip"package-ecosystem: "pip"
-    目录: "/": "/"
-    日程：:
-      间隔: "每周": "weekly"
-      day: "monday": "monday"
-      时间: "09:00": "09:00"
-      时区: "Asia/Shanghai": "Asia/Shanghai"
-    目标分支: "main": "main"
-    提交信息：:
-      前缀: "chore(python)": "chore(python)"
-      包含: "scope": "scope"
-    标签：:
-      - "依赖项""dependencies"
-      - "python""python"
-    # uv 在 pyproject.toml 中支持版本说明符；Dependabot# uv honors version specifiers in pyproject.toml; Dependabot
-    # 自动跟随它们。Pillow >=10.0.0,<13.0.0 约束# follows them automatically. The Pillow >=10.0.0,<13.0.0 cap
-    # 强制进行重大升级的手动更新。# forces a manual bump for major upgrades.
-    组：:
-      补丁与次要：:
-        适用于：版本更新: version-updates
-        模式：:
-          - “*”"*"
+  # ── Python (uv / pip) ───────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(python)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    # uv 在 pyproject.toml 中支持版本说明符;Dependabot 自动跟随。
+    # Pillow 上限 <13.0.0 由 pyproject.toml 约束,主版本升级需手动。
+    groups:
+      patch-and-minor:
+        applies-to: version-updates
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"
@@ -83,10 +81,11 @@
       - "NDCCCCCC"
     ignore:
       - dependency-name: "*"
+        applies-to: version-updates
         update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 3
 
-  # ── Go (root module) ──────────────────────────────────────────────
+  # ── Go (根模块) ─────────────────────────────────────────────────
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
@@ -101,10 +100,9 @@
     labels:
       - "dependencies"
       - "go"
-    # Allow direct + indirect; CI runs `go mod download` only
-    # (no `go mod tidy` in backend job, so reviewers MUST run
-    # `go mod tidy && go generate ./internal/errors/...` locally
-    # before merge — see ci.yml "Verify errors doc sync" step)
+    # CI 只跑 `go mod download`(backend job 不跑 `go mod tidy`),所以
+    # 合并前 reviewers 必须本地跑 `go mod tidy && go generate ./internal/errors/...`
+    # —— 见 ci.yml 的 "Verify errors doc sync" 步骤。
     groups:
       golang-x-and-indirect:
         applies-to: version-updates
@@ -117,14 +115,15 @@
           - "patch"
     reviewers:
       - "NDCCCCCC"
-    # Direct-dependency major bumps need manual review (API surface
-    # changes, e.g. gin v1.x -> v2.x); block majors.
+    # 直接依赖的主版本升级需手动 review(API 表面变化,如 gin v1->v2);
+    # 跳过 version-update 的主版本,但允许 security 主版本开 PR。
     ignore:
       - dependency-name: "*"
+        applies-to: version-updates
         update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
 
-  # ── Go (scripts/fix_migration submodule) ──────────────────────────
+  # ── Go (scripts/fix_migration 子模块) ───────────────────────────
   - package-ecosystem: "gomod"
     directory: "/scripts/fix_migration"
     schedule:
@@ -144,7 +143,7 @@
       - "NDCCCCCC"
     open-pull-requests-limit: 2
 
-  # ── Go (scripts/check_db submodule) ───────────────────────────────
+  # ── Go (scripts/check_db 子模块) ────────────────────────────────
   - package-ecosystem: "gomod"
     directory: "/scripts/check_db"
     schedule:
@@ -164,7 +163,7 @@
       - "NDCCCCCC"
     open-pull-requests-limit: 2
 
-  # ── GitHub Actions ────────────────────────────────────────────────
+  # ── GitHub Actions ─────────────────────────────────────────────
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -179,11 +178,11 @@
     labels:
       - "dependencies"
       - "ci"
-    # golangci/golangci-lint-action is pinned to v7 + golangci-lint
-    # v2.12.2 (built with go1.25); Dependabot bumps here would break
-    # the matrix — see memory `project-golangci-lint-v2-pin.md`.
+    # golangci/golangci-lint-action 锁定 v7 + golangci-lint v2.12.2
+    # (go1.25 构建);Dependabot 升级这里可能破坏矩阵
+    # —— 见 memory `project-golangci-lint-v2-pin.md`。
     reviewers:
       - "NDCCCCCC"
-    # Always allow security-tagged action bumps (e.g.
-    # actions/checkout, actions/setup-go CVEs) even if major.
+    # 始终允许带安全标签的 action 升级(如 checkout、setup-go 的 CVE),
+    # 即使是主版本 —— 此处无 ignore 块。
     open-pull-requests-limit: 3
