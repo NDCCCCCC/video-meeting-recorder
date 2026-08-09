@@ -99,7 +99,7 @@ func TestCSRFMiddleware(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := gin.New()
-			r.Use(CSRF(tc.safeOrigins, nil))
+			r.Use(CSRF(tc.safeOrigins, nil, false))
 			r.Handle(tc.method, "/x", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 			req := httptest.NewRequest(tc.method, "/x", nil)

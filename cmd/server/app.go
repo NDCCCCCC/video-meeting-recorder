@@ -935,8 +935,12 @@ func (a *MinimalApp) registerRoutes() error {
 	// 中间件自身对 Bearer 头放行（保持现有 API 客户端兼容），未来切到 cookie 认证
 	// 时自动接管所有非 Bearer 写请求。
 	if a.config.Security.CSRFEnabled {
-		api.Use(middleware.CSRF(a.config.Security.CSRFSafeOrigins, a.logger))
-		a.logger.Info("CSRF middleware enabled", zap.Strings("safe_origins", a.config.Security.CSRFSafeOrigins))
+		// 生产环境(HTTPS)下发 Secure cookie；开发(HTTP)需 false 否则浏览器不会接受。
+		csrfSecure := a.config.Server.Environment == "production"
+		api.Use(middleware.CSRF(a.config.Security.CSRFSafeOrigins, a.logger, csrfSecure))
+		a.logger.Info("CSRF middleware enabled",
+			zap.Strings("safe_origins", a.config.Security.CSRFSafeOrigins),
+			zap.Bool("secure_cookie", csrfSecure))
 	}
 
 	// 用户管理
