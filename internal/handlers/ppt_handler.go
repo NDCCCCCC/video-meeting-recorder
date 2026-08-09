@@ -162,6 +162,13 @@ func (h *PPThandler) ServeSlideImage(c *gin.Context) {
 		return
 	}
 
+	// CodeQL 路径注入 barrier：在 path sink 变量上直接拒绝 ".."
+	// （跨包 interprocedural 兜底，确保 c.File 的输入被判定为无污点）。
+	if strings.Contains(imagePath, "..") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "幻灯片图片不存在"})
+		return
+	}
+
 	// Serve file
 	c.File(imagePath)
 }
