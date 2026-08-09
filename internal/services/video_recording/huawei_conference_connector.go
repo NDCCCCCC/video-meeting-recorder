@@ -11,6 +11,7 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/huawei"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
 // HuaweiConferenceConnector 华为会议连接器
@@ -120,7 +121,9 @@ func (c *HuaweiConferenceConnector) DisconnectFromConference(ctx context.Context
 	}
 
 	if err := c.manager.HangupConference(ctx, configID, hangupReq); err != nil {
-		c.logger.Warn("挂断会议失败", zap.Error(err))
+		// 不记录原始 err（华为 client 持 cfg.Password 发起已认证调用，错误受凭据污染）；
+		// 仅记 SentinelField 稳定分类，避免敏感信息经日志泄露（CodeQL #28）。
+		c.logger.Warn("挂断会议失败", response.SentinelField(err))
 		// 继续执行解锁操作
 	}
 

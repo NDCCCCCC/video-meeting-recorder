@@ -141,6 +141,12 @@ func (h *PPThandler) ServeSlideImage(c *gin.Context) {
 	resolution := c.Param("resolution")
 	filename := c.Param("filename")
 
+	// CodeQL 路径注入 barrier：拒绝 ".."（纵深防御，service 层 GetSlideImagePath 已校验）。
+	if strings.Contains(filename, "..") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "幻灯片图片不存在"})
+		return
+	}
+
 	// TODO: 添加权限验证（暂时跳过，图片文件名随机不易猜测）
 	// 需要通过 token 或 session 验证用户身份
 

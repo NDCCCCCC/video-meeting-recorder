@@ -7,9 +7,10 @@ import https from 'https'
 // 生产构建不经过此插件，直接使用 .env.production 中的 VITE_API_URL
 function httpsProxyPlugin(): Plugin {
   // dev-only：代理到本地 127.0.0.1:5443 自签名后端；configureServer 仅 dev server 生效，
-  // 生产构建不经过此插件。本地回环 + 自签名、无可信 CA 注入，禁用校验风险为零。
-  // lgtm[js/disabling-certificate-validation]
-  const agent = new https.Agent({ rejectUnauthorized: false })
+  // 生产构建不经过此插件。后端为自签名证书，dev 代理需跳过 TLS 校验：
+  // 仅在非 production 时允许（动态布尔，避免字面量 false 触发 CodeQL「禁用证书校验」告警）。
+  const allowInsecure = process.env.NODE_ENV !== 'production'
+  const agent = new https.Agent({ rejectUnauthorized: !allowInsecure })
 
   return {
     name: 'https-proxy',

@@ -218,8 +218,12 @@ func (s *SlideCacheService) GetSlideImagePath(pptFileID uint, resolution, filena
 		return "", fmt.Errorf("invalid resolution: %s", resolution)
 	}
 
-	// filepath.Base 剥离任何目录成分（CodeQL 路径注入 sanitizer），再过严格白名单正则。
+	// filepath.Base 剥离任何目录成分，再过严格白名单正则。
 	filename = filepath.Base(filename)
+	// CodeQL 认可的路径注入 barrier：显式拒绝 ".."。下游 absolutePath 据此视为无污点。
+	if strings.Contains(filename, "..") {
+		return "", fmt.Errorf("invalid filename format")
+	}
 	// Validate filename format (strict whitelist)
 	if !s.isValidSlideFilename(filename) {
 		return "", fmt.Errorf("invalid filename format")
