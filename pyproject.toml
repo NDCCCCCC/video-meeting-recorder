@@ -2,7 +2,7 @@
 name = "record-v2"
 version = "1.0.0"
 description = "Python dependencies for Record V2 video processing system"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 
 dependencies = [
     "python-pptx>=1.0.2,<2.0.0",
