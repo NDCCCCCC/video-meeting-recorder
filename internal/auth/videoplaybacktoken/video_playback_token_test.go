@@ -82,8 +82,18 @@ func TestVerify_TamperedSignature(t *testing.T) {
 	svc := newTestService(t, 5*time.Minute)
 	tok := svc.Generate(1, 1)
 	parts := strings.Split(tok, ".")
-	// 篡改最后一字节:RawURLEncoding 下末位 'x' → 'z' 通常仍合法。
-	tampered := parts[0] + "." + parts[1][:len(parts[1])-1] + "z"
+	// 确定性篡改：替换签名【首字符】为另一个合法 base64url 字符。首字符的全部 6 位都是
+	// 数据位（构成解码后的首字节），必定改变 HMAC 比对结果。
+	// 注意：不能改末字符——HMAC-SHA256=32B→43 个 base64url 字符，第 43 个字符仅高 4 位是
+	// 数据、低 2 位是 padding；改末位 'x'(49)→'z'(51) 时高 4 位均为 1100，解码字节不变，
+	// 导致 hmac.Equal 通过、Verify 返回 nil。签名含 time.Now() 秒级时间戳，末字符随时间变化，
+	// 旧实现因此是时间相关 flaky（约 6% 的秒末字符 ∈ {w,x,y,z} 时失败）。
+	sig := parts[1]
+	bad := byte('B')
+	if sig[0] == 'B' {
+		bad = 'C'
+	}
+	tampered := parts[0] + "." + string(bad) + sig[1:]
 	_, err := svc.Verify(tampered)
 	if err == nil {
 		t.Fatal("expected error for tampered signature, got nil")
