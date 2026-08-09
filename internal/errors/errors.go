@@ -18,6 +18,12 @@ var (
 	ErrForbidden     = errors.New("forbidden")
 	ErrInternal      = errors.New("internal server error")
 
+	// 凭据/安全 sentinels：凭据加载/解密/鉴权失败时返回这些常量，而非 %w 包裹可能携带
+	// 敏感信息（Password/SM4 key）的底层错误 —— 避免敏感数据经日志或错误链泄露（CodeQL
+	// clear-text-logging 告警）。调用方仍可经 errors.Is 判定错误类别。
+	ErrCredentialAccess = errors.New("credential access failure")
+	ErrHuaweiAuthFailed = errors.New("huawei terminal authentication failed")
+
 	// 业务错误
 	ErrVideoFileNotFound   = errors.New("video file not found")
 	ErrTaskNotFound        = errors.New("task not found")
