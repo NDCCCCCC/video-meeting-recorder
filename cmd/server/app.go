@@ -150,7 +150,8 @@ func (a *MinimalApp) Initialize() error {
 
 	// Phase 18 step 3：构造 CredentialEncryptor
 	if err := a.initCredentialEncryptor(); err != nil {
-		return fmt.Errorf("failed to initialize credential encryptor: %w", err)
+		// 不 %w 包裹受 SM4 key 污染的 err，断开敏感日志污点链（CodeQL #22）
+		return errors.New("failed to initialize credential encryptor (check CREDENTIAL_SM4_KEY)")
 	}
 
 	// 初始化数据库
@@ -160,7 +161,8 @@ func (a *MinimalApp) Initialize() error {
 
 	// Phase 18 step 4：数据迁移（plaintext / base64-stub → envelope）
 	if err := a.credentialEncryptor.MigratePlaintextToGCM(context.Background(), a.db); err != nil {
-		return fmt.Errorf("凭据明文迁移失败: %w", err)
+		// 不 %w 包裹受凭据列污染的 err，断开敏感日志污点链（CodeQL #22）
+		return errors.New("凭据明文迁移失败")
 	}
 
 	// Wave 4 step 4a：迁移后按 version 计数打日志（operator 确认 plaintext 已清零）
@@ -170,13 +172,13 @@ func (a *MinimalApp) Initialize() error {
 
 	// Phase 18 step 5：第一次 InvariantScan（必须 0 失败）
 	if err := a.credentialEncryptor.InvariantScan(context.Background(), a.db); err != nil {
-		return fmt.Errorf("凭据 invariant scan 失败: %w", err)
+		return errors.New("凭据 invariant scan 失败")
 	}
 
 	// Phase 18 step 6：RotateIfNeeded（previous → current；no-op 时直接跳过）
 	rotated, err := a.credentialEncryptor.RotateIfNeeded(context.Background(), a.db)
 	if err != nil {
-		return fmt.Errorf("凭据轮换失败: %w", err)
+		return errors.New("凭据轮换失败")
 	}
 	if rotated > 0 {
 		a.logger.Info("凭据轮换完成", zap.Int("rotated", rotated))
@@ -189,7 +191,7 @@ func (a *MinimalApp) Initialize() error {
 
 	// Phase 18 step 7：第二次 InvariantScan（轮换后必须全部为 current version）
 	if err := a.credentialEncryptor.InvariantScan(context.Background(), a.db); err != nil {
-		return fmt.Errorf("凭据轮换后 invariant scan 失败: %w", err)
+		return errors.New("凭据轮换后 invariant scan 失败")
 	}
 
 	// Wave 4 step 7a：第二次 invariant 通过后再打一次 version 计数日志（最终确认）
@@ -1536,6 +1538,12 @@ func (a *MinimalApp) registerFrontendRoutes() {
 			filePath = "index.html"
 		}
 
+		// 路径穿越防护：拒绝含 ".." 的请求（embed.FS 本身已限定在嵌入树内，此为纵深防御）
+		if strings.Contains(filePath, "..") {
+			serveFile(c, staticFS, "index.html")
+			return
+		}
+
 		// 尝试打开文件
 		file, err := staticFS.Open(filePath)
 		if err != nil {
@@ -1562,6 +1570,11 @@ func (a *MinimalApp) registerFrontendRoutes() {
 
 // serveFile 服务文件到 HTTP 响应
 func serveFile(c *gin.Context, fs http.FileSystem, name string) {
+	// 路径穿越防护：拒绝含 ".." 的 name（embed.FS 已限定嵌入树，此为纵深防御）
+	if strings.Contains(name, "..") {
+		c.String(http.StatusNotFound, "File not found")
+		return
+	}
 	file, err := fs.Open(name)
 	if err != nil {
 		c.String(http.StatusNotFound, "File not found")

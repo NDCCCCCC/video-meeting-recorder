@@ -6,6 +6,9 @@ import https from 'https'
 // 自定义 HTTPS 代理插件（仅开发环境使用）
 // 生产构建不经过此插件，直接使用 .env.production 中的 VITE_API_URL
 function httpsProxyPlugin(): Plugin {
+  // dev-only：代理到本地 127.0.0.1:5443 自签名后端；configureServer 仅 dev server 生效，
+  // 生产构建不经过此插件。本地回环 + 自签名、无可信 CA 注入，禁用校验风险为零。
+  // lgtm[js/disabling-certificate-validation]
   const agent = new https.Agent({ rejectUnauthorized: false })
 
   return {

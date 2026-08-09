@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/security"
 )
 
 // LocalStorageDriver 本地存储驱动
@@ -35,6 +36,12 @@ func NewLocalStorageDriver(basePath, baseURL string, logger *zap.Logger) *LocalS
 	}
 }
 
+// safePath 校验 path 不逃出 basePath 并返回清洗后的绝对路径（路径穿越防护）。
+// 调用方须使用返回值作为文件系统 sink，使 CodeQL 污点在包容 guard 处终止。
+func (d *LocalStorageDriver) safePath(path string) (string, error) {
+	return security.SafeJoin(d.basePath, path)
+}
+
 // Upload 上传文件
 func (d *LocalStorageDriver) Upload(ctx context.Context, file *multipart.FileHeader, path string) (*UploadResult, error) {
 	// 打开上传的文件
@@ -44,8 +51,11 @@ func (d *LocalStorageDriver) Upload(ctx context.Context, file *multipart.FileHea
 	}
 	defer func() { _ = src.Close() }()
 
-	// 创建目标文件
-	fullPath := filepath.Join(d.basePath, path)
+	// 创建目标文件（包容校验：path 不可逃出 basePath）
+	fullPath, err := d.safePath(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("创建目录失败: %w: %w", apperrors.ErrInternal, err)
@@ -72,7 +82,10 @@ func (d *LocalStorageDriver) Upload(ctx context.Context, file *multipart.FileHea
 
 // Download 下载文件
 func (d *LocalStorageDriver) Download(ctx context.Context, path string) (io.ReadCloser, error) {
-	fullPath := filepath.Join(d.basePath, path)
+	fullPath, err := d.safePath(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
 	file, err := os.Open(fullPath)
 	if err != nil {
 		return nil, fmt.Errorf("打开文件失败: %w: %w", apperrors.ErrInternal, err)
@@ -82,14 +95,20 @@ func (d *LocalStorageDriver) Download(ctx context.Context, path string) (io.Read
 
 // Delete 删除文件
 func (d *LocalStorageDriver) Delete(ctx context.Context, path string) error {
-	fullPath := filepath.Join(d.basePath, path)
+	fullPath, err := d.safePath(path)
+	if err != nil {
+		return fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
 	return os.Remove(fullPath)
 }
 
 // Exists 检查文件是否存在
 func (d *LocalStorageDriver) Exists(ctx context.Context, path string) (bool, error) {
-	fullPath := filepath.Join(d.basePath, path)
-	_, err := os.Stat(fullPath)
+	fullPath, err := d.safePath(path)
+	if err != nil {
+		return false, fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
+	_, err = os.Stat(fullPath)
 	if err == nil {
 		return true, nil
 	}
@@ -107,7 +126,10 @@ func (d *LocalStorageDriver) GetURL(ctx context.Context, path string, expires ti
 
 // GetInfo 获取文件信息
 func (d *LocalStorageDriver) GetInfo(ctx context.Context, path string) (*FileInfo, error) {
-	fullPath := filepath.Join(d.basePath, path)
+	fullPath, err := d.safePath(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		return nil, err
@@ -124,8 +146,14 @@ func (d *LocalStorageDriver) GetInfo(ctx context.Context, path string) (*FileInf
 
 // Copy 复制文件
 func (d *LocalStorageDriver) Copy(ctx context.Context, srcPath, destPath string) error {
-	src := filepath.Join(d.basePath, srcPath)
-	dst := filepath.Join(d.basePath, destPath)
+	src, err := d.safePath(srcPath)
+	if err != nil {
+		return fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
+	dst, err := d.safePath(destPath)
+	if err != nil {
+		return fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
 
 	srcFile, err := os.Open(src)
 	if err != nil {
@@ -151,8 +179,14 @@ func (d *LocalStorageDriver) Copy(ctx context.Context, srcPath, destPath string)
 
 // Move 移动文件
 func (d *LocalStorageDriver) Move(ctx context.Context, srcPath, destPath string) error {
-	src := filepath.Join(d.basePath, srcPath)
-	dst := filepath.Join(d.basePath, destPath)
+	src, err := d.safePath(srcPath)
+	if err != nil {
+		return fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
+	dst, err := d.safePath(destPath)
+	if err != nil {
+		return fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
 
 	// 确保目标目录存在
 	dstDir := filepath.Dir(dst)
@@ -165,7 +199,10 @@ func (d *LocalStorageDriver) Move(ctx context.Context, srcPath, destPath string)
 
 // List 列出文件
 func (d *LocalStorageDriver) List(ctx context.Context, prefix string, limit int) ([]*FileInfo, error) {
-	dir := filepath.Join(d.basePath, prefix)
+	dir, err := d.safePath(prefix)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", apperrors.ErrInvalidInput, err)
+	}
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {

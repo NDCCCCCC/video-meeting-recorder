@@ -15,15 +15,11 @@ func parseUintParam(c *gin.Context, key string) (uint, error) {
 		return 0, fmt.Errorf("parameter %s is empty", key)
 	}
 
-	// 使用 ParseUint 而不是 Sscanf，更安全和准确
-	id64, err := strconv.ParseUint(idStr, 10, 64)
+	// bitSize 取 strconv.IntSize（== uint 位宽）：ParseUint 保证结果落在 uint 范围内，
+	// 既避免 32 位平台 uint(id64) 截断，也被 CodeQL 识别为 sanitizer（整数转换告警）。
+	id64, err := strconv.ParseUint(idStr, 10, strconv.IntSize)
 	if err != nil {
 		return 0, fmt.Errorf("invalid %s: %w", key, err)
-	}
-
-	// 检查是否超出 uint 范围
-	if id64 > ^uint64(0)>>1 {
-		return 0, fmt.Errorf("%s value too large", key)
 	}
 
 	return uint(id64), nil

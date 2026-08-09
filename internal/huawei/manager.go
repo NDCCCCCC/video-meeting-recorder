@@ -269,9 +269,10 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	// SEC-013: 注入出站 URL 白名单与开发环境标识
 	client.httpClient.SetOutboundURLAllowlist(m.outboundURLAllowlist, m.environment)
 
-	// 初始化并启动保活
+	// 初始化并启动保活（消费 cfg.Password → 其 err 受凭据污染）。
+	// 不 %w 包裹受污染 err，返回哨兵断开敏感日志污点链（CodeQL #24/#25/#28）。
 	if err := client.InitializeAndStartKeepAlive(ctx); err != nil {
-		return nil, fmt.Errorf("华为终端初始化失败: %w: %w", apperrors.ErrInternal, err)
+		return nil, apperrors.ErrHuaweiAuthFailed
 	}
 
 	// 缓存客户端

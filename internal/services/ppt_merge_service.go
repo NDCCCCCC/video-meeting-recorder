@@ -14,6 +14,7 @@ import (
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/security"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
@@ -132,7 +133,11 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 		outputName = "合并PPT.pptx"
 	}
 	timestamp := time.Now().Unix()
-	outputPath := filepath.Join(mergedDir, fmt.Sprintf("merged_%d_%s", timestamp, outputName))
+	// 包容校验：outputPath 须落在 mergedDir 内（路径穿越防护；outputName 来自用户）
+	outputPath, err := security.SafeJoin(mergedDir, fmt.Sprintf("merged_%d_%s", timestamp, outputName))
+	if err != nil {
+		return nil, fmt.Errorf("invalid output name: %w", err)
+	}
 
 	// Convert slide spec to JSON
 	slideSpecJSON, err := json.Marshal(slideSpecs)

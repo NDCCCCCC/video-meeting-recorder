@@ -14,6 +14,7 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
+	"github.com/NDCCCCCC/video-meeting-recorder/internal/security"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
 
@@ -155,6 +156,10 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 	if strings.ContainsAny(newName, "/\\") {
 		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "文件名不能包含路径分隔符", nil)
 	}
+	// Reject ".." fragments to prevent path traversal
+	if strings.Contains(newName, "..") {
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "文件名不能包含 ..", nil)
+	}
 
 	// Preserve file extension: strip any extension from newName, use original file extension
 	ext := filepath.Ext(pptFile.FilePath)
@@ -170,11 +175,15 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 
 	// Validation: check for duplicate filename in same directory
 	dir := filepath.Dir(pptFile.FilePath)
-	newFilePath := filepath.Join(dir, newFileName)
+	// 包容校验：新路径必须落在原文件所在目录内（路径穿越防护）
+	newFilePath, err := security.SafeJoin(dir, newFileName)
+	if err != nil {
+		return apperrors.NewBusinessError(apperrors.CodeInvalidInput, "无效的文件名", nil)
+	}
 
 	// Check if another file with the same path already exists
 	var existingFile models.PPTFile
-	err := s.db.WithContext(ctx).Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
+	err = s.db.WithContext(ctx).Where("file_path = ? AND id != ?", newFilePath, id).First(&existingFile).Error
 	if err == nil {
 		return apperrors.NewBusinessError(apperrors.CodeAlreadyExists, "目标文件名已存在", nil)
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -199,18 +208,24 @@ func (s *PPTFileService) RenamePPTFile(ctx context.Context, id uint, newName str
 		if pptFile.SlideCachePath != "" {
 			// Update cache directory name to match new filename
 			cacheDir := filepath.Dir(pptFile.SlideCachePath)
-			newSlideCachePath = filepath.Join(cacheDir, newFileName+"_cache")
-
-			// Attempt to rename cache directory (non-critical)
-			if err := os.Rename(pptFile.SlideCachePath, newSlideCachePath); err != nil {
-				s.logger.Warn("重命名slide缓存目录失败",
-					zap.Uint("ppt_file_id", id),
-					zap.String("old_cache", pptFile.SlideCachePath),
-					zap.String("new_cache", newSlideCachePath),
-					zap.Error(err), response.SentinelField(err),
-				)
-				// Don't fail on cache rename error - continue with DB update
+			// 包容校验：缓存路径须落在原缓存目录内（路径穿越防护）
+			safeCachePath, cacheErr := security.SafeJoin(cacheDir, newFileName+"_cache")
+			if cacheErr != nil {
+				// 无效缓存路径名：保持原缓存路径（非关键）
 				newSlideCachePath = pptFile.SlideCachePath
+			} else {
+				newSlideCachePath = safeCachePath
+				// Attempt to rename cache directory (non-critical)
+				if err := os.Rename(pptFile.SlideCachePath, newSlideCachePath); err != nil {
+					s.logger.Warn("重命名slide缓存目录失败",
+						zap.Uint("ppt_file_id", id),
+						zap.String("old_cache", pptFile.SlideCachePath),
+						zap.String("new_cache", newSlideCachePath),
+						zap.Error(err), response.SentinelField(err),
+					)
+					// Don't fail on cache rename error - continue with DB update
+					newSlideCachePath = pptFile.SlideCachePath
+				}
 			}
 		}
 
