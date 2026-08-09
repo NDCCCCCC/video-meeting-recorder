@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -131,6 +132,10 @@ func (s *PPTMergeService) MergeSlides(ctx context.Context, req *models.MergeRequ
 	outputName := req.OutputName
 	if outputName == "" {
 		outputName = "合并PPT.pptx"
+	}
+	// CodeQL 认可的路径注入 barrier：显式拒绝 ".."。下游 outputPath 据此视为无污点。
+	if strings.Contains(outputName, "..") {
+		return nil, fmt.Errorf("invalid output name")
 	}
 	timestamp := time.Now().Unix()
 	// 包容校验：outputPath 须落在 mergedDir 内（路径穿越防护；outputName 来自用户）

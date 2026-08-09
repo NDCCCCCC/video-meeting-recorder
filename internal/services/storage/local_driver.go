@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -39,6 +40,10 @@ func NewLocalStorageDriver(basePath, baseURL string, logger *zap.Logger) *LocalS
 // safePath 校验 path 不逃出 basePath 并返回清洗后的绝对路径（路径穿越防护）。
 // 调用方须使用返回值作为文件系统 sink，使 CodeQL 污点在包容 guard 处终止。
 func (d *LocalStorageDriver) safePath(path string) (string, error) {
+	// CodeQL 认可的路径注入 barrier：显式拒绝 ".."。下游（含 SafeJoin 结果）据此视为无污点。
+	if strings.Contains(path, "..") {
+		return "", fmt.Errorf("%w: path escapes base", apperrors.ErrInvalidInput)
+	}
 	return security.SafeJoin(d.basePath, path)
 }
 

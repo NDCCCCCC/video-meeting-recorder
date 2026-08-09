@@ -442,7 +442,8 @@ func (m *Manager) WaitForConnection(ctx context.Context, configID uint, conferen
 		case <-ticker.C:
 			client, err := m.GetClient(ctx, configID)
 			if err != nil {
-				m.logger.Warn("获取客户端失败，继续等待", zap.Error(err), response.SentinelField(err))
+				// 不记录原始 err（client 持凭据，错误可能受污染）；仅记 SentinelField 分类（CodeQL #24）
+				m.logger.Warn("获取客户端失败，继续等待", response.SentinelField(err))
 				continue
 			}
 
