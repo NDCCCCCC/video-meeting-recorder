@@ -1,6 +1,6 @@
 module github.com/NDCCCCCC/video-meeting-recorder
 
-go 1.25.0
+go 1.25.12
 
 require (
 	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.5.3
