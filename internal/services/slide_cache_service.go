@@ -238,6 +238,14 @@ func (s *SlideCacheService) GetSlideImagePath(pptFileID uint, resolution, filena
 		return "", fmt.Errorf("path traversal detected: %s", filename)
 	}
 
+	// CodeQL 路径注入 barrier：在 sink 变量 absolutePath 上直接拒绝 ".."。
+	// security.SafeJoin 是未建模函数，CodeQL 不会把 filename 上的 barrier 穿透到返回值，
+	// 故须在最终 sink 变量本身加 guard（与 ppt_handler #10 一致的已验证模式）。
+	// SafeJoin 内部已 filepath.Clean，合法绝对路径不会含 ".."，此 guard 永不误触发。
+	if strings.Contains(absolutePath, "..") {
+		return "", fmt.Errorf("path traversal detected")
+	}
+
 	// Check if file exists
 	if _, err := os.Stat(absolutePath); os.IsNotExist(err) {
 		return "", fmt.Errorf("slide image not found: %s", filename)
