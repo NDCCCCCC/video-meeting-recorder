@@ -3,6 +3,7 @@
 
 import { Modal, Form, Input, Select, DatePicker, Space, Tag } from 'antd'
 import type { FormInstance } from 'antd'
+import dayjs from 'dayjs'
 import {
   canEditAllFields,
   DEFAULT_PRE_JOIN_MINUTES,
@@ -23,6 +24,13 @@ const RECORDING_TIP = (
     任务正在录制中，仅可修改结束时间
   </div>
 )
+
+// 时间选择器配置：分钟仅 00/15/30/45 可选，秒列隐藏并默认 00 (record-v2-quick)
+const TASK_TIME_PICKER = {
+  format: 'HH:mm',
+  minuteStep: 15,
+  defaultValue: dayjs('00:00:00', 'HH:mm:ss'),
+} as const
 
 function renderConfigTypeTag(config: InputConfig) {
   const tagConfig = getConfigTypeTagConfig(config)
@@ -182,7 +190,7 @@ export function TaskFormModal({
             ]}
           >
             <DatePicker
-              showTime
+              showTime={TASK_TIME_PICKER}
               format="YYYY-MM-DD HH:mm:ss"
               disabled={!!editingTask && !canEditAllFields(editingTask.status)}
             />
@@ -193,7 +201,7 @@ export function TaskFormModal({
             label="结束时间"
             rules={[{ required: true, message: '请选择结束时间' }]}
           >
-            <DatePicker showTime format="YYYY-MM-DD HH:mm:ss" />
+            <DatePicker showTime={TASK_TIME_PICKER} format="YYYY-MM-DD HH:mm:ss" />
           </Form.Item>
         </Space>
 
