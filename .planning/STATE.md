@@ -4,7 +4,7 @@ milestone: v2.0
 milestone_name: milestone
 status: executing
 last_updated: "2026-08-11T01:25:00.000Z"
-last_activity: 2026-08-11
+last_activity: 2026-08-12
 progress:
   total_phases: 7
   completed_phases: 4
@@ -231,9 +231,10 @@ Last activity: 2026-08-06 -- Phase 25 plan 04 executed (3 commits: f0bdd1e + f49
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260811-cxl | 时间选择器分钟仅 00/15/30/45 可选，秒列隐藏默认 00 | 2026-08-11 | c4341a0 | [260811-cxl-00-15-30-45-00](./quick/260811-cxl-00-15-30-45-00/) |
+| 260812-jc2 | 为 clean 工具增加 HTML 报告输出（结构对齐 MD 五节），文件路径渲染为可点击打开资源管理器的 file:/// 超链接 | 2026-08-12 | f87e9ac | [260812-jc2-clean-report-html-md](./quick/260812-jc2-clean-report-html-md/) |
 
 ---
 
-*STATE.md updated: 2026-08-11 — Quick task 260811-cxl completed (commit c4341a0: 时间选择器分钟 00/15/30/45 + 秒默认 00)*
+*STATE.md updated: 2026-08-12 — Quick task 260812-jc2 completed (commits 86c3733 + f87e9ac: clean 工具 HTML 报告 + file:/// 目录超链接)*
 
 **Active Phase:** 25 (4 plans, 1/4 done)
