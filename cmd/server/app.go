@@ -1149,6 +1149,22 @@ func (a *MinimalApp) registerServices() error {
 	a.coordinator = recorder.NewSimpleRecordingCoordinator(a.logger, a.config)
 	a.logger.Info("录制协调器已创建")
 
+	// Phase 25 SCHED-01：把 *huaweiapi.Manager 桥接成 recorder.HuaweiStateClient
+	// 并注入 coordinator，ActivityWatcher 的 H 信号（huaweiPoller）才会拉到真实
+	// 会议状态。否则 huaweiCli 永久为 nil → ActivityWatcher 立即降级关闭 H
+	// 信号（huaweiPoller 入口判断 huaweiCli == nil → huaweiDegraded=true，
+	// reason="huawei_client_nil"），配合 file_stat_failed 误杀导致 smart_early_end
+	// 在 15s 内触发。
+	// 详见 .planning/debug/huawei-auto-smart-end.md Bug A。
+	if a.huaweiManager != nil {
+		a.coordinator.SetHuaweiCli(&huaweiManagerStateAdapter{mgr: a.huaweiManager})
+		a.logger.Info("已注入 huaweiManagerStateAdapter 到 coordinator",
+			zap.Bool("huawei_enabled", a.config != nil && a.config.SmartEnd.HuaweiEnabled),
+		)
+	} else {
+		a.logger.Warn("huaweiManager 为 nil，跳过 SetHuaweiCli；ActivityWatcher H 信号将走降级路径")
+	}
+
 	// 创建任务调度器
 	// Phase 19 D2：直接传入 videoTaskService（满足 scheduler.TaskServiceInterface），
 	// 不再需要 taskServiceAdapter 适配层。Phase 18 SM4-GCM 凭据解密逻辑已下移到
