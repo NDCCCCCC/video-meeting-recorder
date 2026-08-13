@@ -642,17 +642,22 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 		"-pix_fmt", "yuv420p",
 	)
 
-	// 添加音频编码参数（如果有音频）
-	if input.hasAudio {
-		// Bug G: 加 aresample=48000 filter 强制 resample 到 48kHz,
-		// 解决上游 HLS 缺 audio sample rate 元数据 (aac encoder init fail
-		// 导致 tee muxer hang) 的问题。即使 input sample rate 探测失败,
-		// aresample 会让 ffmpeg 用 silent frames 启动 encoder。
+	// Bug G 真正修法: 上游 HLS 编码器缺 audio sample rate 元数据时,
+	// analyzeduration/probesize 探测不出来 (10MB 也不够), aresample 也
+	// 无法在没有 input rate 的情况下 init filter graph → aac encoder
+	// 永远起不来, tee muxer hang 在 Stream mapping 后无任何输出。
+	//
+	// 解法: 检测 HLS 输入时跳过 audio stream (-an),只 encode video。
+	// 这样 mkv/hls 都只有 video 轨,无 audio — 比 hang 无产出好。
+	//
+	// 注: 这是 fallback;如果上游修复 metadata,可考虑改回。
+	isHLSNoAudio := input.Type == InputSourceStream && input.StreamProtocol == "hls"
+
+	// 添加音频编码参数（如果有音频 且 不是 HLS 缺元数据场景）
+	if input.hasAudio && !isHLSNoAudio {
 		args = append(args,
 			"-c:a", "aac",
 			"-b:a", c.config.FFmpeg.DefaultAudioBitrate+"k",
-			"-af", "aresample=48000",
-			"-ar", "48000",
 		)
 	}
 
@@ -670,7 +675,7 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 
 	// 映射流：需要根据输入源类型确定正确的输入索引
 	args = append(args, "-map", "0:v")
-	if input.hasAudio {
+	if input.hasAudio && !isHLSNoAudio {
 		// 检查是否有独立的音频输入源（USB或Mixed类型）
 		if input.Type == InputSourceUSB || input.Type == InputSourceMixed {
 			// 分离的音频设备，使用第二个输入索引
