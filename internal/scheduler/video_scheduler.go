@@ -463,7 +463,21 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	}
 
 	// 启动多路录制
+	//
+	// Bug D 修复: StartRecordingWithConfig 失败时,coordinator 内部不会改写
+	// task.MKVFilePath (因为路径覆盖发生在 ffmpeg 启动成功后),但 coordinator
+	// 仍可能在 ffmpeg 启动成功但进程秒退的场景下覆盖 task.MKVFilePath 为一个
+	// 不会生成文件的路径。多 inputConfig 循环时,失败的 configType 不应让
+	// DB 路径被改写。
+	//
+	// 策略: 每次启动前快照 task.MKVFilePath / task.HLSPreviewPath; 失败时
+	// 回滚到快照值; 成功时记录到 lastSuccessfulMKVPath / lastSuccessfulHLSPath。
+	// 循环后用 lastSuccessful* 调 UpdateRecordingPaths。
 	var recordingErrors []error
+	baselineMKVPath := task.MKVFilePath
+	baselineHLSPath := task.HLSPreviewPath
+	lastSuccessfulMKVPath := baselineMKVPath
+	lastSuccessfulHLSPath := baselineHLSPath
 	for _, config := range inputConfigs {
 		// 从TaskInputConfigs中获取正确的ConfigType
 		configType := "usb" // 默认值
@@ -480,16 +494,34 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 			zap.String("config_type", configType),
 		)
 
+		// 快照启动前路径,失败时回滚
+		preMKVPath := task.MKVFilePath
+		preHLSPath := task.HLSPreviewPath
+
 		if err := s.coordinator.StartRecordingWithConfig(task, &config, configType); err != nil {
 			s.logger.Error("启动录制失败",
 				zap.Uint("task_id", taskID),
 				zap.Uint("config_id", config.ID),
+				zap.String("config_type", configType),
 				zap.Error(err),
 				response.SentinelField(err),
 			)
 			recordingErrors = append(recordingErrors, err)
+			// 回滚到启动前路径,避免 task.MKVFilePath 被失败的 configType 污染
+			task.MKVFilePath = preMKVPath
+			task.HLSPreviewPath = preHLSPath
+			continue
 		}
+		// 成功: coordinator 已改写 task.MKVFilePath / task.HLSPreviewPath
+		lastSuccessfulMKVPath = task.MKVFilePath
+		lastSuccessfulHLSPath = task.HLSPreviewPath
 	}
+
+	// 统一回滚到最后一次成功路径(防止循环中失败的 configType 残留覆盖)
+	task.MKVFilePath = lastSuccessfulMKVPath
+	task.HLSPreviewPath = lastSuccessfulHLSPath
+	_ = baselineMKVPath
+	_ = baselineHLSPath
 
 	// 如果所有录制都失败，则返回错误
 	if len(recordingErrors) == len(inputConfigs) {
