@@ -625,7 +625,6 @@ func TestMonitorTask_OnTimerActive_Extends(t *testing.T) {
 // TestMonitorTask_TaskEnded_PreemptsTimer 撤回 (Phase 25 智能退出撤回后,monitorTask
 // 不再监听 taskEndedCh,此测试不再适用)。
 
-
 // TestMonitorTask_ManualUpdateDoesNotResetCount 验证 Phase 25 SCHED-04:用户手动
 // UpdateTaskEndTime 触发 taskUpdateChans 时,ExtensionCount 不重置(仅 timer 重置)。
 // 实现:在 monitorTask 进入 select 阻塞后,通过 s.taskUpdateChans[task.ID] 注入一个
@@ -703,7 +702,6 @@ func TestMonitorTask_MaxExtendReached(t *testing.T) {
 
 // TestMonitorTask_MultiInput_AnyEndsAll 撤回 (Phase 25 智能退出撤回后,monitorTask
 // 不再监听 taskEndedCh,此测试不再适用)。
-
 
 // TestMonitorTask_SmartEndDisabled 验证 Phase 25 CFG-03:SmartEnd.Enabled=false
 // 时 monitorTask 退回 monitorTaskEndTimeOnly(纯 EndTime 行为,不读 taskEndedCh)。

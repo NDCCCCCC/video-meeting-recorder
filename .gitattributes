@@ -1,0 +1,34 @@
+# 行尾规范化：所有文本文件统一 LF（覆盖全局 autocrlf=true）。
+# 历史原因全部 .go/.sh/.yml/.mod 曾以 CRLF 提交，导致 golangci-lint fmt 整文件报
+# "需格式化"。此规则 + `git add --renormalize .` 一次性根治。
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.eot  binary
+*.otf  binary
+*.mp4  binary
+*.mkv  binary
+*.mov  binary
+*.pdf  binary
+*.db   binary
+*.db-shm binary
+*.db-wal binary
+*.zip  binary
+*.gz   binary
+*.exe  binary
+*.dll  binary
+*.so   binary
+*.dylib binary
+*.ts   binary
+*.key  binary
+*.pem  binary
+*.crt  binary
