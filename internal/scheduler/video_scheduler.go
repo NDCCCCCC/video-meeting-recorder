@@ -1302,53 +1302,44 @@ func (s *VideoSimpleScheduler) CancelTaskExecution(taskID uint) error {
 		zap.Uint("task_id", taskID),
 	)
 
+	// Bug J: 修复死锁。原代码在持有 s.mu 时调 RemoveTask,
+	// 而 RemoveTask 内部 s.mu.Lock() → Go mutex 不可重入 → 递归死锁。
+	// 现象: 6 次"取消任务执行"都只打印首行日志,无后续 — 第1次死锁持 s.mu,
+	// 后续阻塞在 s.mu.Lock()。此 bug 一直潜伏, Bug I 修复让 hasCancel=true
+	// (cancelFuncs 生命周期跟随 monitorTask) 后才暴露。
+	//
+	// 修复: s.mu 只在读取/删除 cancelFuncs 时短暂持有;
+	// StopRecording / RemoveTask / releaseHuaweiDevice 全部移到锁外调用。
 	s.mu.Lock()
-
-	// 检查是否有取消函数
 	cancel, hasCancel := s.cancelFuncs[taskID]
 	if hasCancel {
-		// 先停止录制，确保 ffmpeg 正常退出并完成 MKV 文件写入
-		if stopErr := s.coordinator.StopRecording(taskID); stopErr != nil {
-			s.logger.Warn("停止录制失败",
-				zap.Uint("task_id", taskID),
-				zap.Error(stopErr),
-				response.SentinelField(stopErr),
-			)
-		}
-
-		// 取消监控任务
 		delete(s.cancelFuncs, taskID)
 		delete(s.executing, taskID)
-		cancel()
+	}
+	s.mu.Unlock()
+
+	// 无条件停止 ffmpeg (让它正常退出 flush mkv), 不持 s.mu
+	if stopErr := s.coordinator.StopRecording(taskID); stopErr != nil {
+		s.logger.Warn("停止录制失败",
+			zap.Uint("task_id", taskID),
+			zap.Error(stopErr),
+			response.SentinelField(stopErr),
+		)
+	}
+
+	if hasCancel {
+		cancel() // 停止 monitorTask goroutine (executeTask 的 ctx)
 		s.logger.Info("任务执行已取消",
 			zap.Uint("task_id", taskID),
 		)
-
-		// 从调度器移除任务
+		// RemoveTask 内部 s.mu.Lock(), 必须在不持 s.mu 时调, 否则递归死锁
 		_ = s.RemoveTask(taskID)
 	}
 
-	// 无论是否有 cancelFunc，都需要尝试清理资源
-	// 断开华为会议连接，解锁终端，创建文件记录，提交转换任务
-	// 注意：这里在锁外获取任务信息，避免在持有锁时进行数据库查询
+	// 清理华为资源 (releaseHuaweiDevice 开头有 StopRecording 幂等双保险)
 	if s.connector != nil {
-		s.mu.Unlock()
 		s.releaseHuaweiDevice(taskID)
 		return nil
-	}
-
-	s.mu.Unlock()
-
-	// 如果没有 connector，至少尝试停止录制
-	if !hasCancel {
-		if stopErr := s.coordinator.StopRecording(taskID); stopErr != nil {
-			s.logger.Warn("停止录制失败",
-				zap.Uint("task_id", taskID),
-				zap.Error(stopErr),
-				response.SentinelField(stopErr),
-			)
-		}
-		_ = s.RemoveTask(taskID)
 	}
 
 	return nil
