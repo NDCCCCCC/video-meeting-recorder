@@ -301,7 +301,17 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 	s.cancelFuncs[taskID] = cancel
 	s.mu.Unlock()
 
+	// Bug I: cancelFuncs/executing 生命周期必须跟随 monitorTask,不能在
+	// executeTask return 时删除。executeTask 启动 monitorTask goroutine 后
+	// 就 return,若 defer 立即删 cancelFuncs,用户点"停止"时 CancelTaskExecution
+	// 找不到 cancel 函数 → 不调 StopRecording → ffmpeg 残留,HLS 流不停。
+	// 解法: monitorStarted 标志 — 只有未启动 monitorTask 的早期 return 才
+	// 在 defer 清理;启动后清理责任移交给 monitorTask 的 defer。
+	monitorStarted := false
 	defer func() {
+		if monitorStarted {
+			return // monitorTask 负责清理
+		}
 		s.mu.Lock()
 		delete(s.executing, taskID)
 		delete(s.cancelFuncs, taskID)
@@ -564,6 +574,7 @@ func (s *VideoSimpleScheduler) executeTask(taskID uint) {
 
 	// 启动监控（传递context用于取消）
 	go s.monitorTask(ctx, task)
+	monitorStarted = true
 
 	s.logger.Info("任务进入录制状态",
 		zap.Uint("task_id", taskID),
@@ -582,6 +593,11 @@ func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.Vid
 		s.mu.Lock()
 		delete(s.taskUpdateChans, task.ID)
 		delete(s.taskEndTimes, task.ID)
+		// Bug I: executing/cancelFuncs 生命周期跟随 monitorTask。
+		// executeTask 启动本 goroutine 后已 return,不再清理这两个 map,
+		// 由本 defer 在 monitorTask 真正结束时清理。
+		delete(s.executing, task.ID)
+		delete(s.cancelFuncs, task.ID)
 		s.mu.Unlock()
 	}()
 
@@ -1377,6 +1393,19 @@ func (s *VideoSimpleScheduler) UpdateTaskEndTime(taskID uint, newEndTime time.Ti
 }
 
 func (s *VideoSimpleScheduler) releaseHuaweiDevice(taskID uint) {
+	// Bug I: 必须先停 ffmpeg,否则取消任务后录制进程残留、HLS 流不停。
+	// releaseHuaweiDevice 是 CancelTaskExecution 的最终清理路径(有 connector 时),
+	// 之前只断开华为会议 + 创建文件记录 + 提交转换, 从不调 StopRecording。
+	// 即使 CancelTaskExecution 上游已调 StopRecording (修复 2 后 hasCancel=true),
+	// 这里再调一次是幂等双保险 (StopRecording 对已停进程是 no-op)。
+	if stopErr := s.coordinator.StopRecording(taskID); stopErr != nil {
+		s.logger.Warn("释放设备时停止录制失败",
+			zap.Uint("task_id", taskID),
+			zap.Error(stopErr),
+			response.SentinelField(stopErr),
+		)
+	}
+
 	// Phase 19 Wave 4：派生 bounded ctx 供本流程内的 DB 查询与会议断开使用
 	// （releaseHuaweiDevice 由 CancelTaskExecution 调用，无请求 ctx 可透传）。
 	ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
