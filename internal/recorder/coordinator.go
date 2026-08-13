@@ -218,8 +218,13 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 		}
 	}
 
-	// 对于主配置（USB或第一个配置），更新任务的主要路径
-	if configType == "usb" || task.MKVFilePath == "" {
+	// 总是用本次启动的 mkvPath 刷新 task.MKVFilePath / RecordingFile / HLSPreviewPath,
+	// 无论 configType 是 usb / huawei_auto / stream。Phase 18 (bb3dc93e) 引入的条件
+	// `configType == "usb" || task.MKVFilePath == ""` 不覆盖 stream/huawei_auto,
+	// 导致流式录制完成后 completeTask 写出的 MKVFilePath 时间戳沿用上次残留(用户
+	// 实测 115759 → 本次启动 120108),web 端报"提交转换任务失败"(MKV 不存在)。
+	// 详见 .planning/debug/huawei-auto-smart-end.md Bug C。
+	if configType == "usb" || configType == "huawei_auto" || configType == "stream" || task.MKVFilePath == "" {
 		task.RecordingFile = mkvPath
 		task.MKVFilePath = mkvPath
 		task.HLSPreviewPath = m3u8Path
