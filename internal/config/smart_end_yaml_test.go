@@ -74,7 +74,7 @@ var expectedSmartEndDefaults = map[string]interface{}{
 	"check_interval_s":         5,
 	"extend_step_min":          30,
 	"max_extend_count":         4,
-	"stat_failure_threshold":   3,
+	"stat_failure_threshold":   6,
 	"degrade_on_silence_loss":  true,
 }
 
@@ -318,7 +318,7 @@ func TestSmartEndYAML_ViperLoadsCleanly(t *testing.T) {
 	assert.Equal(t, 5, cfg.SmartEnd.CheckIntervalS)
 	assert.Equal(t, 30, cfg.SmartEnd.ExtendStepMin)
 	assert.Equal(t, 4, cfg.SmartEnd.MaxExtendCount)
-	assert.Equal(t, 3, cfg.SmartEnd.StatFailureThreshold)
+	assert.Equal(t, 6, cfg.SmartEnd.StatFailureThreshold)
 	assert.True(t, cfg.SmartEnd.DegradeOnSilenceLoss)
 }
 

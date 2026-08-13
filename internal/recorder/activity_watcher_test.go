@@ -330,13 +330,24 @@ func TestActivityWatcher_SilenceDegraded(t *testing.T) {
 
 // 5. stat 死亡:filePath 指向不存在路径 → fileTicker 连续 3 次 os.Stat 失败
 // → closeEnded("file_stat_failed")。
+//
+// Bug B 修复后 fileTicker 启动后前 fileStatGraceWindow (30s) 秒内的 stat 失败
+// 不计入 statConsecFailures。测试通过 fakeClock 把 wall time 推进到 grace window
+// 之后,确保 fileTicker 真实开始累计 stat 失败。
 func TestActivityWatcher_StatFailed(t *testing.T) {
 	cfg := activityWatcherConfig()
 	cfg.SmartEnd.HuaweiEnabled = false
+	fc := &fakeClock{t: time.Now()}
 	w := NewActivityWatcher(cfg, nil, filepath.Join(t.TempDir(), "missing.mkv"), nil, zap.NewNop())
+	w.now = fc.Now
 	w.Start()
 	defer w.Stop()
-	waitActivityEnded(t, w)
+	// 把 fake 时间推到 grace window 之外,真实 ticker 仍在原周期继续触发。
+	// 3 次 stat 失败 + grace 30s 之后,closeEnded("file_stat_failed") 应触发。
+	require.Eventually(t, func() bool {
+		fc.Advance(time.Second)
+		return w.Snapshot().Ended
+	}, 6*time.Second, 100*time.Millisecond, "file_stat_failed 应在 grace window 过后 3 次 stat 失败内触发")
 	require.Equal(t, "file_stat_failed", w.Snapshot().EndedReason)
 }
 

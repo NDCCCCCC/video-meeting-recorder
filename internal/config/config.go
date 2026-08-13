@@ -881,7 +881,7 @@ smart_end:
   check_interval_s: 5
   extend_step_min: 30
   max_extend_count: 4
-  stat_failure_threshold: 3
+  stat_failure_threshold: 6
   degrade_on_silence_loss: true
 `
 

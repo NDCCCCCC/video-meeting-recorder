@@ -202,7 +202,14 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 		)
 		rec.taskEndedCh = rec.ActivityWatcher.EndedCh()   // bridge to the live watcher channel
 		rec.OnReconnect = rec.ActivityWatcher.OnReconnect // WATCH-05
-		rec.ActivityWatcher.Start()                       // 启 4 goroutines
+		// Bug B 修复:把 ffmpeg 进程存活回调注入 ActivityWatcher,fileTicker 在
+		// grace window 外遇到 stat 失败时,若 ffmpeg 已退出则不计入失败计数,
+		// 避免 file_stat_failed 与 monitorProcess 触发双重结束信号。
+		// 详见 .planning/debug/huawei-auto-smart-end.md Bug B。
+		rec.ActivityWatcher.SetProcessAliveCheck(func() bool {
+			return cmd != nil && cmd.ProcessState == nil
+		})
+		rec.ActivityWatcher.Start() // 启 4 goroutines
 		if c.logger != nil {
 			c.logger.Info("ActivityWatcher 已启动",
 				zap.Uint("task_id", task.ID),

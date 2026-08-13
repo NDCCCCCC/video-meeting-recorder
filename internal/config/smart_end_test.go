@@ -50,7 +50,7 @@ server:
 	assert.Equal(t, 5, cfg.SmartEnd.CheckIntervalS, "CheckIntervalS should default to 5")
 	assert.Equal(t, 30, cfg.SmartEnd.ExtendStepMin, "ExtendStepMin should default to 30")
 	assert.Equal(t, 4, cfg.SmartEnd.MaxExtendCount, "MaxExtendCount should default to 4")
-	assert.Equal(t, 3, cfg.SmartEnd.StatFailureThreshold, "StatFailureThreshold should default to 3")
+	assert.Equal(t, 6, cfg.SmartEnd.StatFailureThreshold, "StatFailureThreshold should default to 6")
 	assert.True(t, cfg.SmartEnd.DegradeOnSilenceLoss, "DegradeOnSilenceLoss should default to true")
 }
 

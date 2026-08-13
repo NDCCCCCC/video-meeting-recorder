@@ -26,6 +26,16 @@ import (
 // 阈值 (3/3) 区分以反映 ffmpeg stderr 文本噪声更高的现实。
 const silenceFailureThreshold = 5
 
+// fileStatGraceWindow 是 ActivityWatcher.Start() 之后的"启动宽限期"。在该窗口
+// 期间,fileTicker 即使遇到 os.Stat 失败也**不**递增 statConsecFailures,避免
+// ffmpeg 冷启动阶段 mkv 文件尚未创建/句柄未释放导致的初次 stat 误杀(典型
+// 现象:huawei_auto 任务进入会议后 15s 内被 file_stat_failed 提前结束)。
+//
+// 30s 与 cfg.SmartEnd.HuaweiPersistS 默认值对齐,符合"短轮询周期(<CheckIntervalS>)
+// 的若干倍"经验规则;运维可在 Bug B 评审后调整,但默认值应≥CheckIntervalS×2
+// 以避免一次 stat 抖动即打穿阈值。
+const fileStatGraceWindow = 30 * time.Second
+
 // ActivityWatcher 整合 H + A + B 三类信号 + 多级降级状态机 + close-once。
 type ActivityWatcher struct {
 	// 注入字段 (构造时一次性赋值,运行期不变)。
@@ -64,6 +74,16 @@ type ActivityWatcher struct {
 	// 运行时字段 — Start 初始化,Stop 清理。
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	// startedAt Start() 调用时刻,供 fileTicker 启动宽限期判断使用。
+	// 由 Start() 写一次(w.now()),运行期只读。
+	startedAt time.Time
+	// isProcessAlive 可选回调:返回 true 表示底层录制进程(由调用方持有)仍
+	// 处于 alive 状态。fileTicker 在 grace window 外遇到 os.Stat 失败时,
+	// 若此回调返回 false(进程已退出)则不计入 statConsecFailures ——
+	// scheduler 的 monitorProcess 路径会通过 ProcessState 检测触发结束,
+	// 不需要 file_stat_failed 信号造成双重 close。nil 时跳过 liveness 检查
+	// (Phase 24 单元测试场景)。
+	isProcessAlive func() bool
 }
 
 // ActivitySnapshot 是 watcher 状态的可移植值拷贝,Phase 25 scheduler 可持有
@@ -140,6 +160,7 @@ func NewActivityWatcher(cfg *config.Config, huaweiCli HuaweiStateClient, filePat
 // Start 启动 4 个采样 goroutine (silenceScanner / fileTicker / huaweiPoller /
 // decisionTicker)。多次 Start 是未定义行为(预期仅调用一次)。
 func (w *ActivityWatcher) Start() {
+	w.startedAt = w.now()
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancel = cancel
 	w.wg.Add(4)
@@ -147,6 +168,21 @@ func (w *ActivityWatcher) Start() {
 	go w.fileTicker(ctx)
 	go w.huaweiPoller(ctx)
 	go w.decisionTicker(ctx)
+}
+
+// SetProcessAliveCheck 注入 ffmpeg 进程存活回调。调用方(典型为 coordinator
+// 在 NewActivityWatcher 之后)持有 *exec.Cmd,提供:
+//
+//	func() bool { return rec.Cmd != nil && rec.Cmd.ProcessState == nil }
+//
+// fileTicker 在 grace window 外遇到 os.Stat 失败时,若此回调返回 false(进程
+// 已退出)则**不**递增 statConsecFailures,避免 file_stat_failed 与
+// monitorProcess 通过 ProcessState 触发的结束信号双重发火。多次调用后者
+// 覆盖前者。nil 表示禁用 liveness 检查(Phase 24 单元测试场景)。
+func (w *ActivityWatcher) SetProcessAliveCheck(fn func() bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.isProcessAlive = fn
 }
 
 // Stop 取消 ctx,等待 4 个 goroutine 退出,最后 close(taskEndedCh) (若未关闭)。
@@ -352,9 +388,25 @@ func (w *ActivityWatcher) fileTicker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// 启动宽限期:watcher 启动后前 fileStatGraceWindow 秒内的 stat
+			// 失败不计入 statConsecFailures。ffmpeg 冷启动期 mkv 文件尚未
+			// 创建/句柄未释放是常见现象,与"流死亡"语义不同,不应触发
+			// smart_early_end。
+			if !w.startedAt.IsZero() && w.now().Sub(w.startedAt) < fileStatGraceWindow {
+				continue
+			}
 			info, err := os.Stat(w.filePath)
 			if err != nil {
+				// ffmpeg liveness check:进程已退出时不要累计 stat 失败。
+				// monitorProcess 会基于 ProcessState 触发结束信号,这里
+				// 触发 file_stat_failed 会造成双重 close,scheduler 路径
+				// 重复执行 MarkTaskEndedEarly。
 				w.mu.Lock()
+				alive := w.isProcessAlive == nil || w.isProcessAlive()
+				if !alive {
+					w.mu.Unlock()
+					continue
+				}
 				w.statConsecFailures++
 				consec := w.statConsecFailures
 				w.mu.Unlock()

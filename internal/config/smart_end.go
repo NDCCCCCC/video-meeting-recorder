@@ -127,7 +127,7 @@ func applySmartEndDefaults(cfg *Config) {
 		s.MaxExtendCount = 4
 	}
 	if s.StatFailureThreshold == 0 {
-		s.StatFailureThreshold = 3
+		s.StatFailureThreshold = 6
 	}
 	// bool 字段:不触碰。
 }
