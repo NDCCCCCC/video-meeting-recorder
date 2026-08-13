@@ -229,6 +229,29 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 		return
 	}
 
+	// Bug D 兜底: 如果 DB.MKVFilePath 文件不存在,扫描同目录下其他 .mkv 文件
+	// 选最新 mtime 作为兜底输入。这覆盖了 task 多次启动时 DB 路径被失败启动
+	// 覆盖为不生成文件路径的 stale 场景。
+	if task.MKVFilePath != "" {
+		if _, err := os.Stat(task.MKVFilePath); os.IsNotExist(err) {
+			if recovered := recoverLatestMKV(task.MKVFilePath); recovered != "" && recovered != task.MKVFilePath {
+				s.logger.Warn("DB MKVFilePath 不存在,兜底到同目录最新 mkv 文件",
+					zap.Uint("task_id", taskID),
+					zap.String("db_path", task.MKVFilePath),
+					zap.String("recovered_path", recovered),
+				)
+				task.MKVFilePath = recovered
+				// 同步写回 DB,避免下次重试再次兜底
+				if err := s.db.WithContext(ctx).Model(&task).Update("mkv_file_path", recovered).Error; err != nil {
+					s.logger.Warn("兜底路径写回 DB 失败",
+						zap.Uint("task_id", taskID),
+						zap.Error(err),
+					)
+				}
+			}
+		}
+	}
+
 	// 创建可取消的context
 	ctx, cancel := context.WithCancel(ctx)
 	s.mu.Lock()
@@ -407,6 +430,48 @@ func (s *FFmpegConversionService) convertMKVToMP4(ctx context.Context, task *mod
 func (s *FFmpegConversionService) generateMP4Path(mkvPath string) string {
 	// 将.mkv替换为.mp4
 	return mkvPath[:len(mkvPath)-4] + ".mp4"
+}
+
+// recoverLatestMKV 在 stalePath 同目录下找最新修改时间的 .mkv 文件作为兜底。
+//
+// 用途: task 多次启动 + DB.MKVFilePath 被失败启动覆盖的 stale 场景,转换任务
+// 重试时从同目录最新 .mkv 兜底。返回空字符串表示未找到任何 mkv 文件。
+//
+// 边界: stalePath 父目录不存在 → 返回 ""; 仅 .mkv 后缀文件参与;跳过 size=0
+// 的空文件 (ffmpeg 启动失败可能生成空 mkv)。
+func recoverLatestMKV(stalePath string) string {
+	dir := filepath.Dir(stalePath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	var latest os.FileInfo
+	var latestPath string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if filepath.Ext(name) != ".mkv" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		// 跳过 size=0 的空文件(ffmpeg 启动失败可能生成空 mkv)
+		if info.Size() == 0 {
+			continue
+		}
+		if latest == nil || info.ModTime().After(latest.ModTime()) {
+			latest = info
+			latestPath = filepath.Join(dir, name)
+		}
+	}
+	if latest == nil {
+		return ""
+	}
+	return latestPath
 }
 
 // handleConversionError 处理转换错误
