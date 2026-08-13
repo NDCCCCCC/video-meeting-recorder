@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Git pre-commit hook: 防止 docs/errors.md 漂移导致 CI 失败。
+# Git pre-commit hook。
 #
-# 工作机制：当 staged 文件涉及错误声明 / handler / response 包时，自动跑
-# go generate ./internal/errors/... 并把生成的 docs/errors.md 加入本次 commit。
+# 做两件事：
+#   1. docs/errors.md 同步：当 staged 文件涉及 errors/handlers/response 包时，
+#      自动 go generate ./internal/errors/... 并把生成的 docs/errors.md 纳入本次 commit。
+#   2. Go 代码质量：当 staged 文件含 *.go 时，golangci-lint fmt 自动格式化并重新暂存，
+#      再跑 go vet 拦截问题。
 #
 # 激活方式（一次性）：
 #   ./scripts/install-githooks.sh
@@ -18,15 +21,49 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 CHANGED=$(git diff --cached --name-only)
-# 仅当改动可能影响 errors.md 内容时才跑 generate（避免无关 commit 浪费时间）。
-# generator 扫描范围：internal/errors (sentinel/mapping) + internal/handlers (调用点) +
-# pkg/response (CodeXxx 常量与 GIN 响应映射)。
+
+# ---------------------------------------------------------------------------
+# 1. docs/errors.md 同步（仅当改动可能影响其内容时才跑 generate）
+#    generator 扫描范围：internal/errors (sentinel/mapping) + internal/handlers (调用点) +
+#    pkg/response (CodeXxx 常量与 GIN 响应映射)。
+# ---------------------------------------------------------------------------
 if echo "$CHANGED" | grep -qE '^internal/errors/.*\.go$|^internal/handlers/.*\.go$|^pkg/response/.*\.go$'; then
   echo "[pre-commit] 检测到错误相关改动，运行 go generate ./internal/errors/..."
   go generate ./internal/errors/...
   # 把生成结果 stage 进来；如果 generator 这次没产出新改动，git add 是 no-op。
   git add docs/errors.md
   echo "[pre-commit] docs/errors.md 已同步"
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Go 代码：自动格式化 + go vet（仅当 staged 含 *.go 时触发）
+# ---------------------------------------------------------------------------
+STAGED_GO=$(git diff --cached --name-only --diff-filter=ACMR -- '*.go')
+if [ -n "$STAGED_GO" ]; then
+  # 2a) 自动格式化（gofmt + gofumpt + goimports，由 .golangci.yml 的 formatters 配置驱动）。
+  #     全量扫描但有缓存；基线已格式化，实际只会动到本次未格式化的文件。
+  if command -v golangci-lint >/dev/null 2>&1; then
+    echo "[pre-commit] 格式化 Go 代码 (golangci-lint fmt)..."
+    if ! golangci-lint fmt; then
+      echo "❌ [pre-commit] golangci-lint fmt 失败，请修复后重试（或紧急跳过：git commit --no-verify）" >&2
+      exit 1
+    fi
+    # 只把原本就 staged 的 .go 文件重新 stage（fmt 改了它们的内容），
+    # 不把开发者故意未暂存的其他 .go 改动偷偷加入。
+    while IFS= read -r f; do
+      [ -n "$f" ] && git add "$f"
+    done <<< "$STAGED_GO"
+  else
+    echo "⚠️ [pre-commit] 未找到 golangci-lint，跳过自动格式化（建议运行 ./scripts/install-tools.sh）" >&2
+  fi
+
+  # 2b) go vet 拦截（编译器级静态检查，不可达代码/printf 参数错等）。
+  echo "[pre-commit] 运行 go vet ./..."
+  if ! go vet ./...; then
+    echo "❌ [pre-commit] go vet 失败。修复后重试，或紧急跳过：git commit --no-verify" >&2
+    exit 1
+  fi
+  echo "[pre-commit] Go 代码检查通过"
 fi
 
 exit 0

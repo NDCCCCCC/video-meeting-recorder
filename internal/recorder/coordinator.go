@@ -80,10 +80,10 @@ type RecordingInput struct {
 // NewSimpleRecordingCoordinator 创建录制协调器
 func NewSimpleRecordingCoordinator(logger *zap.Logger, cfg *config.Config) *SimpleRecordingCoordinator {
 	return &SimpleRecordingCoordinator{
-		logger:                 logger,
-		config:                 cfg,
-		processes:              make(map[string]*RecordingProcess),
-		taskIDProcessKeyIndex:  make(map[uint]string),
+		logger:                logger,
+		config:                cfg,
+		processes:             make(map[string]*RecordingProcess),
+		taskIDProcessKeyIndex: make(map[uint]string),
 	}
 }
 
@@ -993,53 +993,6 @@ func (c *SimpleRecordingCoordinator) buildStreamArgs(input RecordingInput) ([]st
 	}
 
 	return args, nil
-}
-
-// absolutizeTeeSpec 把 tee muxer spec 里的相对路径转为绝对路径,消除
-// ffmpeg 子进程 cwd 假设。
-//
-// tee spec 格式: "path1|[f=hls:opts]path2|[f=hls:opts]path3"
-// 第一个分支无 [f=...] 包裹,看扩展名推断 muxer;后续分支全部 [f=...] 包裹。
-//
-// 相对路径 if 以 "./" 或不含盘符符:" 直接拼 RecordingsPath;否则保留。
-// Windows 路径: 含 ":" 的字段是绝对路径 (如 "C:\\..."),跳过。
-// 转换后保留 normalizePath + escapeSimple 输出的形态。
-func absolutizeTeeSpec(teeSpec, baseDir string) string {
-	// 用 [ 或 | 拆分,保留分隔符
-	parts := strings.Split(teeSpec, "|")
-	absBase := baseDir
-	if !filepath.IsAbs(absBase) {
-		if cwd, err := os.Getwd(); err == nil {
-			absBase = filepath.Join(cwd, absBase)
-		}
-	}
-	for i, part := range parts {
-		// 跳过 [f=...] 选项块
-		if strings.HasPrefix(part, "[") {
-			continue
-		}
-		// 跳过已经是绝对路径的 (Windows: "C:\..." 或 "C:/...";含 ":")
-		// 排除 "C:" 这种单字符路径: 至少含一个分隔符
-		if isAbsoluteTeePath(part) {
-			continue
-		}
-		// 相对路径转绝对
-		parts[i] = filepath.ToSlash(filepath.Join(absBase, part))
-	}
-	return strings.Join(parts, "|")
-}
-
-// isAbsoluteTeePath 判断 tee spec 段是否为绝对路径 (Windows 盘符)。
-func isAbsoluteTeePath(p string) bool {
-	// 例如 "C:/Users/..." 或 "C:\\Users\\..." 或 "/tmp/..." (linux)
-	// 简化: 含 ":" 或 [a-z]:[\\/] 视为绝对
-	if len(p) >= 2 && p[1] == ':' {
-		return true
-	}
-	if strings.HasPrefix(p, "/") || strings.HasPrefix(p, "\\") {
-		return true
-	}
-	return false
 }
 
 // HealthCheck 健康检查

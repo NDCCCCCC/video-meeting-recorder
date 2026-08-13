@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Git pre-push hook：推送前本地门禁。
+#
+#   - 仅当推送内容含 *.go 改动时触发（纯文档/前端推送直接放行，不浪费时间）。
+#   - go build ./...：确保整个项目编译通过。
+#   - go test ./...：跑测试（本地不带 -race 提速；CI 带 -race 兜底）。
+#
+# 任一失败则拒绝推送，避免坏代码推到 GitHub 才被 CI 暴露。
+#
+# 跳过一次（紧急情况）：
+#   git push --no-verify
+#
+# 激活：./scripts/install-githooks.sh（core.hooksPath=.githooks）
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+z40=0000000000000000000000000000000000000000
+has_go=0
+
+# pre-push 的 stdin 每行格式：<local ref> <local oid> <remote ref> <remote oid>
+while read -r local_ref local_oid remote_ref remote_oid; do
+  # 删除分支（local_oid 全零）：无文件改动，跳过
+  [ "$local_oid" = "$z40" ] && continue
+
+  if [ "$remote_oid" = "$z40" ]; then
+    # 新分支：取本次推送独有的提交所改动的文件
+    files=$(git log --name-only --pretty=format: "$local_oid" --not --all)
+  else
+    # 已有分支：取本次推送范围的 diff
+    files=$(git diff --name-only "$remote_oid..$local_oid")
+  fi
+
+  if echo "$files" | grep -qE '\.go$'; then
+    has_go=1
+  fi
+done
+
+# 无 Go 改动 → 直接放行
+if [ "$has_go" -eq 0 ]; then
+  exit 0
+fi
+
+echo "[pre-push] 检测到 Go 改动，运行本地门禁（build + test）..."
+
+echo "[pre-push] go build ./..."
+if ! go build ./...; then
+  echo "❌ [pre-push] 编译失败。修复后重试，或紧急跳过：git push --no-verify" >&2
+  exit 1
+fi
+
+# 不带 -race 提速；CI 带 -race 兜底。
+# 需 SM4/HLS 测试密钥（见 ci.yml Test step），否则部分初始化/测试失败。
+echo "[pre-push] go test ./... (no -race, CI covers race)"
+if ! env SM4_SECRET=0123456789abcdef0123456789abcdef \
+        HLS_TOKEN_SECRET=0123456789abcdef0123456789abcdef \
+        go test ./...; then
+  echo "❌ [pre-push] 测试失败。修复后重试，或紧急跳过：git push --no-verify" >&2
+  exit 1
+fi
+
+echo "[pre-push] 门禁通过，继续推送"
+exit 0

@@ -30,6 +30,16 @@
 
 详见 [BUILD.md](./BUILD.md)。
 
+## 开发
+
+提交与推送的质量门禁已通过 git hooks 自动化（首次克隆后执行 `./scripts/install-githooks.sh`）：
+
+- **commit**：自动 `golangci-lint fmt` 格式化 + `go vet` 拦截
+- **push**：含 Go 改动时跑 `go build` + `go test`（CI 带 `-race` 兜底）
+- **一键全量检查**（等价 CI）：`bash scripts/check.sh`
+
+跳过：`git commit --no-verify` / `git push --no-verify`。详见 [开发流程](./docs/development-workflow.md)。
+
 ## 部署
 
 详见 [DEPLOYMENT.md](./DEPLOYMENT.md)。关键点：
