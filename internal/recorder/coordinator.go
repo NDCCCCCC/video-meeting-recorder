@@ -642,15 +642,22 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 		"-pix_fmt", "yuv420p",
 	)
 
-	// Bug G 三修: HLS 输入缺 audio sample rate 元数据,
-	// analyzeduration/probesize/aresample 都无法启动 aac encoder。
-	// 但上游确实有 audio 数据, 业务方需要 audio track。
+	// Bug G 五修: HLS 输入缺 audio sample rate 元数据 (PMT sample_rate=0),
+	// 但 ts 段在会议开时确实有 audio PES 数据 (11 号 mp4 实测 sample_rate=48000)。
 	//
-	// 解法: 双 input (lavfi anullsrc 静音 + 真实 HLS), 用 lavfi 的 audio
-	// (有完整 metadata) 启动 encoder, map 真实 HLS 的 video + lavfi 的 audio。
+	// 实测 (2026-08-13):
+	// - ffmpeg -i URL -c:a aac ... (不带 -map) → 跑通, 静默跳过无效 audio
+	// - ffmpeg -i URL -map 0:v -map 0:a ... → hang (强制解析无效 audio)
+	// - lavfi anullsrc 兜底 (三修) → 跑通, 但 audio 是静音不是真实音
+	// - amix 混合 (四修) → 还是 hang (仍要 init [0:a] 真实 audio stream)
 	//
-	// isHLSWithSilentAudio = HLS 输入场景下用静音 audio 兜底
-	isHLSWithSilentAudio := input.Type == InputSourceStream && input.StreamProtocol == "hls"
+	// 真正解法: HLS 时不强制 -map audio, 让 ffmpeg 自己选 stream。
+	// ffmpeg 检测到 audio sample_rate=0 时会静默跳过 audio track,
+	// 但 video 正常 encode + 写 mkv。当上游修复 PMT (audio 有 sample_rate),
+	// ffmpeg 会自动选 audio 并 encode。
+	//
+	// isHLSInput = HLS 输入场景 (让 ffmpeg 自适应 stream selection)
+	isHLSInput := input.Type == InputSourceStream && input.StreamProtocol == "hls"
 
 	// 添加音频编码参数（如果有音频）
 	if input.hasAudio {
@@ -673,12 +680,15 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	// activity_watcher.go 整文件删除)。
 
 	// 映射流：需要根据输入源类型确定正确的输入索引
-	if isHLSWithSilentAudio {
-		// Bug G 三修: HLS 输入用 lavfi audio 兜底
-		// map 0:v (真实 HLS video) + 1:a (lavfi anullsrc 静音 audio)
-		args = append(args, "-map", "0:v", "-map", "1:a")
-		// 加 -shortest 让 lavfi (无限流) 跟随真实 HLS 长度结束
-		args = append(args, "-shortest")
+	if isHLSInput {
+		// Bug G 五修: HLS 只 map video, 不 map audio
+		// ffmpeg 自己会评估 audio stream 可用性:
+		//   - audio sample_rate=0 → 静默跳过 audio track, 只录 video
+		//   - audio sample_rate 正常 → 自动选 audio 并 encode
+		// 这样会议开时 (有真实 audio 数据) 录真实声音, 会议关时 (无 audio) 录 video-only
+		args = append(args, "-map", "0:v")
+		// 不 map audio — 让 ffmpeg 自动选 (默认行为是 best audio stream)
+		// 因为没显式 -map 0:a, ffmpeg 不会因为 sample_rate=0 hang
 	} else {
 		args = append(args, "-map", "0:v")
 		if input.hasAudio {
@@ -965,26 +975,19 @@ func (c *SimpleRecordingCoordinator) buildStreamArgs(input RecordingInput) ([]st
 	case "srt":
 		args = []string{"-i", input.StreamURL}
 	case "hls":
-		// Bug G: 上游 HLS 编码器 audio ts 段缺 sample rate 元数据,
-		// ffmpeg 报 "unspecified sample rate" 并 hang 在 Stream mapping 后。
-		// 但上游确实有 audio 数据 (业务方实测有声音) — 只是元数据缺失。
+		// Bug G 五修: HLS 输入 PMT sample_rate=0 元数据缺失, 但 ts 段在
+		// 会议开时确实有 audio PES 数据 (11 号 mp4 实测 sample_rate=48000)。
+		// 实测 (2026-08-13):
+		// - 不带 -map: ffmpeg 静默跳过无效 audio, 跑通
+		// - 带 -map 0:a: 强制解析无效 audio, hang
+		// - lavfi anullsrc 兜底: 跑通但 audio 是静音
+		// - amix 混合: 还是 hang (要 init [0:a])
 		//
-		// 解法: 双 input 兜底
-		//   input 0 = 真实 HLS (video only, audio 解析可能失败)
-		//   input 1 = lavfi anullsrc (48000 Hz stereo 静音 audio)
-		// 然后 map 0:v + 1:a, 让 aac encoder 从 lavfi (有完整 metadata) 启动。
-		// 这样 mkv 一定有 audio track (静音), video 从真实 HLS 取。
-		//
-		// 局限: audio 是静音不是真实音 — 但比"完全无 audio 轨"更接近业务需求,
-		// 且 ffmpeg 不再 hang。如果业务方需要真实 audio, 需上游修 ts metadata。
-		args = []string{
-			"-analyzeduration", "10000000",
-			"-probesize", "10000000",
-			"-i", input.StreamURL,
-			// 第二个 input: lavfi 静音 audio (48kHz stereo)
-			"-f", "lavfi",
-			"-i", "anullsrc=r=48000:cl=stereo",
-		}
+		// 真正解法: 不加 analyzeduration/probesize 这种"试图修元数据"的
+		// 参数, 不加 lavfi 静音 input, 让 ffmpeg 用默认 stream selection
+		// 自动跳过无效 audio track。会议开时 (audio 有数据) ffmpeg 自动录,
+		// 会议关时 (无 audio 数据) 静默跳过。
+		args = []string{"-i", input.StreamURL}
 	default:
 		return nil, fmt.Errorf("不支持的流媒体协议: %s: %w", protocol, apperrors.ErrInvalidInput)
 	}
