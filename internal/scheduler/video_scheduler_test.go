@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -49,6 +50,16 @@ func (m *mockVideoFileService) CreateFileFromTask(ctx context.Context, task *mod
 type mockTaskService struct {
 	tasks map[uint]*models.VideoRecordingTask
 	db    *gorm.DB
+	// extensionCalls 记录 UpdateTaskExtension 调用参数,tests 断言调用次数与 reason。
+	extensionCallsMu sync.Mutex
+	extensionCalls   []extensionCall
+}
+
+// extensionCall 记录一次 UpdateTaskExtension 调用,供测试断言。
+type extensionCall struct {
+	TaskID   uint
+	DeltaMin int
+	Reason   string
 }
 
 func newMockTaskService() *mockTaskService {
@@ -144,8 +155,21 @@ func (m *mockTaskService) GetDB() *gorm.DB {
 	return m.db
 }
 
+// UpdateTaskExtension EXTEND-01 延长入口 (Phase 25 撤回 watcher 后唯一延长路径)。
+// Scheduler 测试驱动:已在 inline 实现中记录调用次数,供 TestMonitorTask_OnTimerActive_Extends
+// 等测试断言"调了几次 / 调没调"。
+func (m *mockTaskService) UpdateTaskExtension(ctx context.Context, taskID uint, deltaMin int, reason string) error {
+	m.extensionCallsMu.Lock()
+	defer m.extensionCallsMu.Unlock()
+	m.extensionCalls = append(m.extensionCalls, extensionCall{TaskID: taskID, DeltaMin: deltaMin, Reason: reason})
+	return nil
+}
+
 // mockCoordinator 模拟录制协调器
-type mockCoordinator struct{}
+type mockCoordinator struct {
+	// aliveTaskIDs IsProcessAlive 白名单;空表示一律返回 false。
+	aliveTaskIDs map[uint]bool
+}
 
 func newMockCoordinator() *mockCoordinator {
 	return &mockCoordinator{}
@@ -163,8 +187,13 @@ func (m *mockCoordinator) StopRecording(taskID uint) error {
 	return nil
 }
 
-func (m *mockCoordinator) WatcherChannels(taskID uint) []<-chan struct{} {
-	return nil
+// IsProcessAlive Phase 25 智能退出撤回后,scheduler 用此判断 ffmpeg 进程是否仍在
+// 录制。mock 通过 aliveTaskIDs 白名单模拟:在白名单内返回 true,否则 false。
+func (m *mockCoordinator) IsProcessAlive(taskID uint) bool {
+	if m.aliveTaskIDs == nil {
+		return false
+	}
+	return m.aliveTaskIDs[taskID]
 }
 
 func (m *mockCoordinator) HealthCheck() error {
@@ -485,20 +514,9 @@ func TestConversionService_InterfaceCompilationCheck(t *testing.T) {
 // cfg.ExtendStepMin=30 / MaxExtendCount=4 / CheckIntervalS=1 与服务层 newTestConfig 对齐。
 func newSmartEndScheduler() *VideoSimpleScheduler {
 	cfg := &config.Config{SmartEnd: config.SmartEndConfig{
-		Enabled:                true,
-		SilenceDB:              -30,
-		SilenceDurationS:       30,
-		FileStallS:             120,
-		FileMinGrowthBPS:       1024,
-		HuaweiEnabled:          false,
-		HuaweiPollIntervalS:    30,
-		HuaweiPersistS:         30,
-		HuaweiFailureThreshold: 3,
-		CheckIntervalS:         1,
-		ExtendStepMin:          30,
-		MaxExtendCount:         4,
-		StatFailureThreshold:   3,
-		DegradeOnSilenceLoss:   false,
+		Enabled:        true,
+		ExtendStepMin:  30,
+		MaxExtendCount: 4,
 	}}
 	return NewVideoSimpleScheduler(
 		newMockTaskService(),
@@ -546,22 +564,8 @@ func makeTaskForMonitor(id uint, endInPast bool) *models.VideoRecordingTask {
 	}
 }
 
-// makeMockCoordinatorWithChannels 构造一个可以注入自定义 close-only channel 列表的
-// mockCoordinator(覆盖默认 nil 返回的 WatcherChannels)。在 TestMonitorTask_TaskEnded_PreemptsTimer
-// 与 TestMonitorTask_MultiInput_AnyEndsAll 中用来驱动 taskEndedCh 路径。
-type mockCoordinatorWithChannels struct {
-	*mockCoordinator
-	channels map[uint][]chan struct{}
-}
-
-func (m *mockCoordinatorWithChannels) WatcherChannels(taskID uint) []<-chan struct{} {
-	chans := m.channels[taskID]
-	out := make([]<-chan struct{}, 0, len(chans))
-	for _, c := range chans {
-		out = append(out, c)
-	}
-	return out
-}
+// makeMockCoordinatorWithChannels 撤回 (Phase 25 智能退出撤回后,WatcherChannels
+// 路径不再需要;mockCoordinatorWithChannels 整类型删除)。
 
 // TestMonitorTask_TripleSelect 验证 Phase 25 SCHED-01:monitorTask 的 select 同时
 // 等待 3 类信号 (timer.C / taskEndedCh / updateChan)。本测试通过 cancel 路径
@@ -618,41 +622,9 @@ func TestMonitorTask_OnTimerActive_Extends(t *testing.T) {
 	}
 }
 
-// TestMonitorTask_TaskEnded_PreemptsTimer 验证 Phase 25 SCHED-03 + EARLY-03:
-// taskEndedCh close 后 EndTime.C 不再生效,提前结束信号优先 timer。
-// 实现:EndTime 设 1 小时后(timer.C 1h 内不触发),通过 WatcherChannels 注入一个
-// close-only channel,close 之后 monitorTask 立即返回(< 1s)。
-func TestMonitorTask_TaskEnded_PreemptsTimer(t *testing.T) {
-	s := newSmartEndScheduler()
-	taskSvc := s.taskService.(*mockTaskService)
-	task := makeTaskForMonitor(3, false) // 远期 endTime
-	taskSvc.tasks[task.ID] = task
+// TestMonitorTask_TaskEnded_PreemptsTimer 撤回 (Phase 25 智能退出撤回后,monitorTask
+// 不再监听 taskEndedCh,此测试不再适用)。
 
-	// 替换 coordinator 为带 channel 的版本
-	taskEndedCh := make(chan struct{})
-	s.coordinator = &mockCoordinatorWithChannels{
-		mockCoordinator: newMockCoordinator(),
-		channels:        map[uint][]chan struct{}{task.ID: {taskEndedCh}},
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		s.monitorTask(ctx, task)
-	}()
-	// 50ms 后 close,确保 monitorTask 已进入 select
-	time.Sleep(50 * time.Millisecond)
-	close(taskEndedCh)
-
-	select {
-	case <-done:
-		// success:preempt 生效
-	case <-time.After(2 * time.Second):
-		t.Fatal("taskEndedCh close 后 2s 内 monitorTask 未返回 — SCHED-03 优先顺序失效")
-	}
-}
 
 // TestMonitorTask_ManualUpdateDoesNotResetCount 验证 Phase 25 SCHED-04:用户手动
 // UpdateTaskEndTime 触发 taskUpdateChans 时,ExtensionCount 不重置(仅 timer 重置)。
@@ -729,41 +701,9 @@ func TestMonitorTask_MaxExtendReached(t *testing.T) {
 	}
 }
 
-// TestMonitorTask_MultiInput_AnyEndsAll 验证 Phase 25 EARLY-04:多 input
-// 任务(huawei_auto + usb)任一 watcher 触发 → mergeWatchers fan-in 立即生效。
-// 实现:EndTime 设 1 小时后,注入 2 个 close-only channels,close 第二个后
-// monitorTask 立即返回(mergeWatchers 单信号即可触发)。
-func TestMonitorTask_MultiInput_AnyEndsAll(t *testing.T) {
-	s := newSmartEndScheduler()
-	taskSvc := s.taskService.(*mockTaskService)
-	task := makeTaskForMonitor(6, false) // 远期 endTime
-	taskSvc.tasks[task.ID] = task
+// TestMonitorTask_MultiInput_AnyEndsAll 撤回 (Phase 25 智能退出撤回后,monitorTask
+// 不再监听 taskEndedCh,此测试不再适用)。
 
-	ch1 := make(chan struct{})
-	ch2 := make(chan struct{})
-	s.coordinator = &mockCoordinatorWithChannels{
-		mockCoordinator: newMockCoordinator(),
-		channels:        map[uint][]chan struct{}{task.ID: {ch1, ch2}},
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		s.monitorTask(ctx, task)
-	}()
-	// 50ms 后 close 第二个 channel(模拟"任一 watcher 触发")
-	time.Sleep(50 * time.Millisecond)
-	close(ch2)
-
-	select {
-	case <-done:
-		// success:mergeWatchers 在 ch2 关闭后立即触发
-	case <-time.After(2 * time.Second):
-		t.Fatal("multi-input 任一 channel close 后 2s 内 monitorTask 未返回 — EARLY-04 fan-in 失效")
-	}
-}
 
 // TestMonitorTask_SmartEndDisabled 验证 Phase 25 CFG-03:SmartEnd.Enabled=false
 // 时 monitorTask 退回 monitorTaskEndTimeOnly(纯 EndTime 行为,不读 taskEndedCh)。
@@ -800,13 +740,14 @@ func TestMonitorTask_SmartEndDisabled(t *testing.T) {
 // 实现:t.Run 串联 7 个 monitorTask 测试;任一失败或 race 报告导致本测试失败。
 // 测试结尾调 runtime.GC() 鼓励 race detector flush 待报告的 goroutine。
 func TestScheduler_RaceDetectorFullSweep(t *testing.T) {
-	// 复用 7 个 monitorTask E2E 子测(每个作为独立 subtest 跑一次)
+	// 复用 5 个 monitorTask E2E 子测(每个作为独立 subtest 跑一次)。
+	// Phase 25 撤回后,TaskEnded_PreemptsTimer / MultiInput_AnyEndsAll 整组删除
+	// (taskEndedCh 路径整体撤),保留 5 个覆盖 timer / updateChan / extend / disabled
+	// 路径的子测。
 	t.Run("TripleSelect", func(t *testing.T) { TestMonitorTask_TripleSelect(t) })
 	t.Run("OnTimerActive_Extends", func(t *testing.T) { TestMonitorTask_OnTimerActive_Extends(t) })
-	t.Run("TaskEnded_PreemptsTimer", func(t *testing.T) { TestMonitorTask_TaskEnded_PreemptsTimer(t) })
 	t.Run("ManualUpdateDoesNotResetCount", func(t *testing.T) { TestMonitorTask_ManualUpdateDoesNotResetCount(t) })
 	t.Run("MaxExtendReached", func(t *testing.T) { TestMonitorTask_MaxExtendReached(t) })
-	t.Run("MultiInput_AnyEndsAll", func(t *testing.T) { TestMonitorTask_MultiInput_AnyEndsAll(t) })
 	t.Run("SmartEndDisabled", func(t *testing.T) { TestMonitorTask_SmartEndDisabled(t) })
 	// race detector flush 提示
 	runtime.GC()

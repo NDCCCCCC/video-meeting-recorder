@@ -34,48 +34,26 @@ func skipIfMissing(t *testing.T, path string) {
 	}
 }
 
-// expectedSmartEndKeys 是 REQUIREMENTS.md:58 与 23-RESEARCH.md CFG-02 节明确锁定的
-// 14 项 smart_end 配置键集合。任意漂移(多一个/少一个/重命名)都应被本测试捕获。
+// expectedSmartEndKeys 是 Phase 25 智能退出撤回后保留的 3 项 smart_end 配置键集合。
+// 任意漂移(多一个/少一个/重命名)都应被本测试捕获。
 //
 // 顺序与 SmartEndConfig struct 字段顺序保持一致以便 diff 友好。
 var expectedSmartEndKeys = []string{
 	"enabled",
-	"silence_db",
-	"silence_duration_s",
-	"file_stall_s",
-	"file_min_growth_bps",
-	"huawei_enabled",
-	"huawei_poll_interval_s",
-	"huawei_persist_s",
-	"huawei_failure_threshold",
-	"check_interval_s",
 	"extend_step_min",
 	"max_extend_count",
-	"stat_failure_threshold",
-	"degrade_on_silence_loss",
 }
 
-// expectedSmartEndDefaults 与 REQUIREMENTS.md:58 及 applySmartEndDefaults + Viper
-// SetDefault 三处保持一致的默认值。TestSmartEndYAML_ExpectedDefaults 校验根
-// config.yaml 中的字面值与此映射逐项相等。
+// expectedSmartEndDefaults 与 applySmartEndDefaults + Viper SetDefault 两处保持一致
+// 的默认值。TestSmartEndYAML_ExpectedDefaults 校验根 config.yaml 中的字面值与此
+// 映射逐项相等。
 //
 // 期望与 SmartEndConfig 实际加载值在 Viper Unmarshal + setDefaults 后等价 —
 // 即 cfg.SmartEnd.* 的运行期值等于此 map(前提是 YAML 字面值就是这些默认)。
 var expectedSmartEndDefaults = map[string]interface{}{
-	"enabled":                  true,
-	"silence_db":               -30,
-	"silence_duration_s":       30,
-	"file_stall_s":             120,
-	"file_min_growth_bps":      int64(1024),
-	"huawei_enabled":           true,
-	"huawei_poll_interval_s":   30,
-	"huawei_persist_s":         30,
-	"huawei_failure_threshold": 3,
-	"check_interval_s":         5,
-	"extend_step_min":          30,
-	"max_extend_count":         4,
-	"stat_failure_threshold":   6,
-	"degrade_on_silence_loss":  true,
+	"enabled":          true,
+	"extend_step_min":  30,
+	"max_extend_count": 4,
 }
 
 // projectRoot 返回本测试源文件相对仓库根的解析路径。内部测试运行的工作目录
@@ -194,8 +172,8 @@ func TestSmartEndYAML_Exactly14Keys(t *testing.T) {
 			skipIfMissing(t, tc.path)
 			n := loadSmartEndSection(t, tc.path)
 			m, _ := smartEndMap(t, n)
-			assert.Equal(t, 14, len(m),
-				"%s smart_end must have exactly 14 keys, got %d (%v)",
+			assert.Equal(t, 3, len(m),
+				"%s smart_end must have exactly 3 keys, got %d (%v)",
 				tc.path, len(m), sortedKeys(m))
 			// 取出 YAML 实际键集合,与期望做集合相等比对(顺序不敏感)
 			actual := sortedKeys(m)
@@ -307,19 +285,8 @@ func TestSmartEndYAML_ViperLoadsCleanly(t *testing.T) {
 
 	// spot-check 关键字段,证明 mapstructure 解析无误
 	assert.True(t, cfg.SmartEnd.Enabled, "Enabled must be true from YAML default")
-	assert.Equal(t, -30, cfg.SmartEnd.SilenceDB)
-	assert.Equal(t, 30, cfg.SmartEnd.SilenceDurationS)
-	assert.Equal(t, 120, cfg.SmartEnd.FileStallS)
-	assert.Equal(t, int64(1024), cfg.SmartEnd.FileMinGrowthBPS)
-	assert.True(t, cfg.SmartEnd.HuaweiEnabled)
-	assert.Equal(t, 30, cfg.SmartEnd.HuaweiPollIntervalS)
-	assert.Equal(t, 30, cfg.SmartEnd.HuaweiPersistS)
-	assert.Equal(t, 3, cfg.SmartEnd.HuaweiFailureThreshold)
-	assert.Equal(t, 5, cfg.SmartEnd.CheckIntervalS)
 	assert.Equal(t, 30, cfg.SmartEnd.ExtendStepMin)
 	assert.Equal(t, 4, cfg.SmartEnd.MaxExtendCount)
-	assert.Equal(t, 6, cfg.SmartEnd.StatFailureThreshold)
-	assert.True(t, cfg.SmartEnd.DegradeOnSilenceLoss)
 }
 
 // sortedKeys 返回 map 键的有序切片(便于 set comparison + 错误信息可读)。

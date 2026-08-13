@@ -24,7 +24,6 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/recorder"
 	auditpkg "github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 )
 
@@ -63,22 +62,12 @@ func newTestDB(t *testing.T) *gorm.DB {
 }
 
 // newTestConfig 构造带 SmartEnd 默认值的 cfg,MaxExtendCount=4。
+// Phase 25 撤回后 SmartEnd 仅保留 Enabled / ExtendStepMin / MaxExtendCount 3 字段。
 func newTestConfig() *config.Config {
 	return &config.Config{SmartEnd: config.SmartEndConfig{
-		Enabled:                true,
-		HuaweiEnabled:          false,
-		DegradeOnSilenceLoss:   false,
-		SilenceDB:              -30,
-		SilenceDurationS:       30,
-		FileStallS:             120,
-		FileMinGrowthBPS:       1024,
-		HuaweiPollIntervalS:    30,
-		HuaweiPersistS:         30,
-		HuaweiFailureThreshold: 3,
-		CheckIntervalS:         1,
-		ExtendStepMin:          30,
-		MaxExtendCount:         4,
-		StatFailureThreshold:   3,
+		Enabled:        true,
+		ExtendStepMin:  30,
+		MaxExtendCount: 4,
 	}}
 }
 
@@ -259,19 +248,18 @@ func TestVideoRecordingTaskService_CancellationPropagation(t *testing.T) {
 // Phase 25 AUDIT-04 + EXTEND-01/02 + EARLY-01/02 — UpdateTaskExtension / MarkTaskEndedEarly
 // ---------------------------------------------------------------------------
 
-// TestUpdateTaskExtension_Exists 验证反射可发现 UpdateTaskExtension 与
-// MarkTaskEndedEarly 两个方法 (Phase 25 AUDIT-04 单一入口契约)。用 reflect
-// 而非直接调用,目的:未来若有人删除方法签名,reflect 直接拿到 ErrMethod
-// 比跑测试快且意图明确。
+// TestUpdateTaskExtension_Exists 验证反射可发现 UpdateTaskExtension 方法
+// (Phase 25 撤回后唯一服务入口)。用 reflect 而非直接调用,目的:未来若有人
+// 删除方法签名,reflect 直接拿到 ErrMethod 比跑测试快且意图明确。
 func TestUpdateTaskExtension_Exists(t *testing.T) {
 	// 方法是 *VideoRecordingTaskService pointer receiver,reflect.TypeOf(*T)(nil)
 	// 不再 .Elem() 直接得 *T 才能看到方法。
 	typ := reflect.TypeOf((*VideoRecordingTaskService)(nil))
-	for _, name := range []string{"UpdateTaskExtension", "MarkTaskEndedEarly"} {
+	for _, name := range []string{"UpdateTaskExtension"} {
 		m, ok := typ.MethodByName(name)
 		require.True(t, ok, "VideoRecordingTaskService 必须有 %s 方法", name)
-		// NumIn 包括 receiver,所以 UpdateTaskExtension(ctx, taskID, deltaMin, reason, snap) = 6
-		require.Equal(t, 6, m.Type.NumIn(),
+		// NumIn 包括 receiver,所以 UpdateTaskExtension(ctx, taskID, deltaMin, reason) = 5
+		require.Equal(t, 5, m.Type.NumIn(),
 			"%s 签名参数数量变化,请同步更新 Phase 25-01 文档", name)
 		require.Equal(t, 1, m.Type.NumOut(),
 			"%s 必须返回 error", name)
@@ -307,18 +295,12 @@ func TestUpdateTaskExtension_AuditSnapshot(t *testing.T) {
 	require.NoError(t, db.Create(&task).Error)
 	originalEnd := task.EndTime
 
-	fixedTime := time.Now().UTC().Add(-10 * time.Second)
-	snap := recorder.ActivitySnapshot{
-		FileSizeBytes:    1024,
-		FileGrowthBps:    2048,
-		LastFileGrowthAt: fixedTime,
-		SilenceSince:     fixedTime,
-	}
+	// 注: Phase 25 智能退出撤回后,UpdateTaskExtension 不再接收 ActivitySnapshot 参数。
 
-	err := svc.UpdateTaskExtension(context.Background(), task.ID, 30, "active_meeting", snap)
+	err := svc.UpdateTaskExtension(context.Background(), task.ID, 30, "active_meeting")
 	require.NoError(t, err)
 
-	// GORM 字段断言 (5 字段实际此处只更新 3 — EndedEarly* 不在延长路径)
+	// GORM 字段断言 (3 字段实际此处只更新 3)
 	var got models.VideoRecordingTask
 	require.NoError(t, db.First(&got, task.ID).Error)
 	assert.Equal(t, 1, got.ExtensionCount, "ExtensionCount 应 +1")
@@ -326,7 +308,6 @@ func TestUpdateTaskExtension_AuditSnapshot(t *testing.T) {
 	assert.True(t, got.EndTime.Equal(originalEnd.Add(30*time.Minute)),
 		"EndTime 应推进 30min,原 %v 期望 %v 实际 %v",
 		originalEnd, originalEnd.Add(30*time.Minute), got.EndTime)
-	assert.False(t, got.EndedEarly, "延长路径不应改 EndedEarly")
 
 	// AUDIT-02:audit_logs 行存在,JSON 含 6 关键字段
 	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
@@ -343,15 +324,11 @@ func TestUpdateTaskExtension_AuditSnapshot(t *testing.T) {
 
 	var newDataMap map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(auditLog.NewData), &newDataMap))
-	assert.EqualValues(t, 1024, newDataMap["file_size_bytes"], "file_size_bytes 字段必须保留")
-	assert.EqualValues(t, 2048, newDataMap["file_growth_bps"], "file_growth_bps 字段必须保留")
+	// 注: Phase 25 撤回后,ActivitySnapshot 整类型删除,file_size_bytes /
+	// file_growth_bps / silence_since / last_file_growth 字段都不再写入 audit log。
+	// SmartEndSnapshot 仅剩 ExtensionCount + NewEndTime 2 字段。
 	assert.EqualValues(t, 1, newDataMap["extension_count"], "extension_count 字段必须保留")
 	assert.NotNil(t, newDataMap["new_end_time"], "new_end_time 字段必须保留")
-	// silence_since / last_file_growth 用 *time.Time → JSON null / string 均可,只要 key 存在
-	_, hasSilence := newDataMap["silence_since"]
-	_, hasLastGrowth := newDataMap["last_file_growth"]
-	assert.True(t, hasSilence, "silence_since key 必须存在 JSON")
-	assert.True(t, hasLastGrowth, "last_file_growth key 必须存在 JSON")
 
 	// OldData must preserve the pre-Updates end_time and extension_count values.
 	var oldDataMap map[string]interface{}
@@ -385,7 +362,7 @@ func TestUpdateTaskExtension_MaxLimit(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&task).Error)
 
-	err := svc.UpdateTaskExtension(context.Background(), task.ID, 30, "active_meeting", recorder.ActivitySnapshot{})
+	err := svc.UpdateTaskExtension(context.Background(), task.ID, 30, "active_meeting")
 	require.Error(t, err, "已经达到 MaxExtendCount 时延长应被拒绝")
 	assert.True(t, errors.Is(err, apperrors.ErrRecordingSmartExtend),
 		"返回错误必须链上 apperrors.ErrRecordingSmartExtend,实际 %v", err)
@@ -397,111 +374,10 @@ func TestUpdateTaskExtension_MaxLimit(t *testing.T) {
 	assert.Equal(t, "", got.LastExtensionReason, "拒绝路径不应改 LastExtensionReason")
 }
 
-// TestMarkTaskEndedEarly_HuaweiSignal 验证 Phase 25 EARLY-01:H 信号触发
-// 时,MarkTaskEndedEarly 写 3 GORM 字段 (ended_early / ended_early_reason /
-// ended_by_huawei_api) + audit log 1 行。
-func TestMarkTaskEndedEarly_HuaweiSignal(t *testing.T) {
-	db := newTestDB(t)
-	svc := NewVideoRecordingTaskService(db, zap.NewNop())
-	auditSvc := auditpkg.NewAuditLogService(db, zap.NewNop())
-	defer auditSvc.Stop()
-	svc.SetAuditService(auditSvc)
-
-	task := models.VideoRecordingTask{
-		Name:           "huawei-early-end",
-		StartTime:      time.Now().UTC().Add(-time.Hour),
-		EndTime:        time.Now().UTC().Add(30 * time.Minute),
-		Status:         models.VideoStatusRecording,
-		PreJoinMinutes: 0,
-		CreatedBy:      1,
-	}
-	require.NoError(t, db.Create(&task).Error)
-
-	fixedTime := time.Now().UTC().Add(-30 * time.Second)
-	snap := recorder.ActivitySnapshot{
-		FileSizeBytes:    4096,
-		FileGrowthBps:    0, // 华为主信号,文件停滞不意味停滞
-		LastFileGrowthAt: fixedTime,
-		HuaWeiEmptySince: fixedTime,
-	}
-
-	err := svc.MarkTaskEndedEarly(context.Background(), task.ID, "huawei_state_empty", true, snap)
-	require.NoError(t, err)
-
-	// GORM 字段断言
-	var got models.VideoRecordingTask
-	require.NoError(t, db.First(&got, task.ID).Error)
-	assert.True(t, got.EndedEarly, "EndedEarly 应 true")
-	assert.Equal(t, "huawei_state_empty", got.EndedEarlyReason)
-	assert.True(t, got.EndedByHuaWeAPI, "EndedByHuaWeAPI 应 true (H 信号)")
-
-	// audit log 断言:processQueue 每 1s ticker flush,waitForAuditLogs 上限 2s 让其落入 DB
-	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
-	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
-	auditSvc.FlushNow(context.Background())
-	logs := waitForAuditLogs(t, db, 1)
-	require.GreaterOrEqual(t, len(logs), 1)
-	auditLog := logs[0]
-	require.NotNil(t, auditLog.ResourceID)
-	assert.Equal(t, task.ID, *auditLog.ResourceID)
-
-	var newDataMap map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(auditLog.NewData), &newDataMap))
-	assert.Equal(t, true, newDataMap["ended_by_huawei_api"])
-	assert.Equal(t, "huawei_state_empty", newDataMap["ended_early_reason"])
-	assert.EqualValues(t, 4096, newDataMap["file_size_bytes"])
-}
-
-// TestMarkTaskEndedEarly_BothSilenceAndStall 验证 Phase 25 EARLY-02:A+B 双
-// AND 触发时,MarkTaskEndedEarly 写 ended_early=true + ended_by_huawei_api=false。
-func TestMarkTaskEndedEarly_BothSilenceAndStall(t *testing.T) {
-	db := newTestDB(t)
-	svc := NewVideoRecordingTaskService(db, zap.NewNop())
-	auditSvc := auditpkg.NewAuditLogService(db, zap.NewNop())
-	defer auditSvc.Stop()
-	svc.SetAuditService(auditSvc)
-
-	task := models.VideoRecordingTask{
-		Name:           "ab-early-end",
-		StartTime:      time.Now().UTC().Add(-time.Hour),
-		EndTime:        time.Now().UTC().Add(30 * time.Minute),
-		Status:         models.VideoStatusRecording,
-		PreJoinMinutes: 0,
-		CreatedBy:      1,
-	}
-	require.NoError(t, db.Create(&task).Error)
-
-	fixedTime := time.Now().UTC().Add(-120 * time.Second)
-	snap := recorder.ActivitySnapshot{
-		FileSizeBytes:    8192,
-		FileGrowthBps:    0, // 文件停滞
-		LastFileGrowthAt: fixedTime,
-		SilenceSince:     fixedTime,
-	}
-
-	err := svc.MarkTaskEndedEarly(context.Background(), task.ID, "both_silence_and_stall", false, snap)
-	require.NoError(t, err)
-
-	// GORM 字段断言
-	var got models.VideoRecordingTask
-	require.NoError(t, db.First(&got, task.ID).Error)
-	assert.True(t, got.EndedEarly)
-	assert.Equal(t, "both_silence_and_stall", got.EndedEarlyReason)
-	assert.False(t, got.EndedByHuaWeAPI, "A+B 路径 EndedByHuaWeAPI 应 false")
-
-	// audit log 断言
-	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
-	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
-	auditSvc.FlushNow(context.Background())
-	logs := waitForAuditLogs(t, db, 1)
-	require.GreaterOrEqual(t, len(logs), 1)
-	auditLog := logs[0]
-	var newDataMap map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(auditLog.NewData), &newDataMap))
-	assert.Equal(t, false, newDataMap["ended_by_huawei_api"],
-		"A+B 路径 audit NewData.ended_by_huawei_api 应 false")
-	assert.Equal(t, "both_silence_and_stall", newDataMap["ended_early_reason"])
-}
+// 注: Phase 25 智能退出撤回后,MarkTaskEndedEarly 整方法与其 3 个测试
+// (H 信号 / A+B 双信号 / AuditSnapshot) 全部删除。提前结束流程改由
+// monitorProcess(ffmpeg 退出) + IsProcessAlive(endtime 查 ProcessState) 接管。
+// 详见 .planning/debug/huawei-auto-smart-end.md 撤回决策。
 
 // ---------------------------------------------------------------------------
 // Phase 25 Plan 04 — Nyquist 闭环测试（gold JSON + antipattern grep）
@@ -547,153 +423,9 @@ func TestServiceEntrypoint_OnlyPath(t *testing.T) {
 		"scheduler 不应直 GORM 写 task 局部变量;应走 service.UpdateTaskExtension / MarkTaskEndedEarly")
 }
 
-// TestMarkTaskEndedEarly_AuditSnapshot 验证 Phase 25 AUDIT-03:MarkTaskEndedEarly
-// 写 3 GORM 字段 (ended_early / ended_early_reason / ended_by_huawei_api) +
-// audit log 1 行,NewData JSON 含 5+ 字段 (ended_early / ended_early_reason /
-// ended_by_huawei_api + 4 snapshot 字段 file_size_bytes / file_growth_bps /
-// silence_since / last_file_growth)。
-//
-// 与 TestMarkTaskEndedEarly_HuaweiSignal / _BothSilenceAndStall 的差异:本测试
-// (1) 显式断言 audit 行 module='task' / action='update';(2) 同 task 路径连续
-// 跑两个 reason,验证 GORM 字段互不污染(ExtensionCount 不变 + EndedEarlyReason
-// 切换为最后一次写入的值);(3) 验证 OldData 仅含 ended_early:false (Pitfall 4
-// 缓解 — end_time 旧值由 audit_ui 按 DiffData 自动呈现)。
-func TestMarkTaskEndedEarly_AuditSnapshot(t *testing.T) {
-	db := newTestDB(t)
-	svc := NewVideoRecordingTaskService(db, zap.NewNop())
-	auditSvc := auditpkg.NewAuditLogService(db, zap.NewNop())
-	defer auditSvc.Stop()
-	svc.SetAuditService(auditSvc)
+// TestMarkTaskEndedEarly_AuditSnapshot 撤回 (Phase 25 撤回后 MarkTaskEndedEarly 删除)。
 
-	now := time.Now().UTC()
-	task := models.VideoRecordingTask{
-		Name:           "early-end-audit-test",
-		StartTime:      now.Add(-time.Hour),
-		EndTime:        now.Add(30 * time.Minute),
-		Status:         models.VideoStatusRecording,
-		PreJoinMinutes: 0,
-		CreatedBy:      1,
-		ExtensionCount: 2, // 验证 MarkTaskEndedEarly 不会动 ExtensionCount
-	}
-	require.NoError(t, db.Create(&task).Error)
-	originalExtensionCount := task.ExtensionCount
-
-	fixedTime := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
-	// Step 1: H 信号 (huawei_state_empty, byHuaWeiAPI=true)
-	snap1 := recorder.ActivitySnapshot{
-		FileSizeBytes:        16384,
-		FileGrowthBps:        4096,
-		LastFileGrowthAt:     fixedTime,
-		HuaWeiEmptySince:     fixedTime,
-		LastHuaWeiStateEmpty: true,
-	}
-	err := svc.MarkTaskEndedEarly(context.Background(), task.ID, "huawei_state_empty", true, snap1)
-	require.NoError(t, err)
-
-	// GORM 字段断言:H 路径
-	var got models.VideoRecordingTask
-	require.NoError(t, db.First(&got, task.ID).Error)
-	assert.True(t, got.EndedEarly, "EndedEarly 应 true")
-	assert.Equal(t, "huawei_state_empty", got.EndedEarlyReason, "EndedEarlyReason 应 huawei_state_empty")
-	assert.True(t, got.EndedByHuaWeAPI, "EndedByHuaWeAPI 应 true (H 信号路径)")
-	assert.Equal(t, originalExtensionCount, got.ExtensionCount,
-		"MarkTaskEndedEarly 不应改 ExtensionCount(应保持 %d)", originalExtensionCount)
-
-	// AUDIT-03 断言:audit 行 module='task' / action='update'
-	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
-	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
-	auditSvc.FlushNow(context.Background())
-	logs := waitForAuditLogs(t, db, 1)
-	require.GreaterOrEqual(t, len(logs), 1, "audit_logs 应至少 1 行")
-	auditLog := logs[0]
-	assert.Equal(t, models.ActionUpdate, auditLog.Action, "audit action 应 update")
-	assert.Equal(t, models.ModuleTask, auditLog.Module, "audit module 应 task")
-	require.NotNil(t, auditLog.ResourceID)
-	assert.Equal(t, task.ID, *auditLog.ResourceID, "ResourceID 应指向本任务")
-
-	var newDataMap map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(auditLog.NewData), &newDataMap))
-	// AUDIT-03 必含字段:ended_early_reason / ended_by_huawei_api (SmartEndSnapshot 字段)
-	assert.Equal(t, "huawei_state_empty", newDataMap["ended_early_reason"], "NewData.ended_early_reason")
-	assert.Equal(t, true, newDataMap["ended_by_huawei_api"], "NewData.ended_by_huawei_api 应 true")
-	// 4 个 snapshot 字段
-	assert.EqualValues(t, 16384, newDataMap["file_size_bytes"], "NewData.file_size_bytes")
-	assert.EqualValues(t, 4096, newDataMap["file_growth_bps"], "NewData.file_growth_bps")
-	// silence_since / last_file_growth 是 *time.Time + omitempty;Step 1 snap.SilenceSince
-	// 是零值(nilIfZero → nil pointer)→ JSON 字段被 omitempty 抹去,key 不存在。
-	// 这是 Step 2 路径(有非零时间)才验证,见下面 last_file_growth。
-	_, hasLastGrowth := newDataMap["last_file_growth"]
-	assert.True(t, hasLastGrowth, "last_file_growth key 应在 JSON 中(snap.LastFileGrowthAt 非零)")
-
-	// OldData mirrors all three smart-end fields from the pre-Updates snapshot.
-	var oldDataMap map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(auditLog.OldData), &oldDataMap))
-	assert.Equal(t, false, oldDataMap["ended_early"],
-		"OldData.ended_early 应为 false(GORM Updates 前状态)")
-	assert.Equal(t, "", oldDataMap["ended_early_reason"])
-	assert.Equal(t, false, oldDataMap["ended_by_huawei_api"])
-}
-
-// TestAuditSnapshot_ZeroTimeOmitsSilence 验证 Phase 25 AUDIT-02 Pitfall 4:
-func TestAuditSnapshot_ZeroTimeOmitsSilence(t *testing.T) {
-	db := newTestDB(t)
-	cfg := newTestConfig()
-	svc := NewVideoRecordingTaskService(db, zap.NewNop())
-	svc.SetConfig(cfg)
-	auditSvc := auditpkg.NewAuditLogService(db, zap.NewNop())
-	defer auditSvc.Stop()
-	svc.SetAuditService(auditSvc)
-
-	now := time.Now().UTC()
-	task := models.VideoRecordingTask{
-		Name:           "zero-time-silence",
-		StartTime:      now.Add(-time.Hour),
-		EndTime:        now.Add(30 * time.Minute),
-		Status:         models.VideoStatusRecording,
-		PreJoinMinutes: 0,
-		CreatedBy:      1,
-		ExtensionCount: 0,
-	}
-	require.NoError(t, db.Create(&task).Error)
-
-	// SilenceSince 故意置零(零值);其他字段填上以验证选择性
-	snap := recorder.ActivitySnapshot{
-		FileSizeBytes:    512,
-		FileGrowthBps:    1024,
-		LastFileGrowthAt: now.Add(-time.Minute),
-		SilenceSince:     time.Time{}, // 零值
-	}
-
-	err := svc.UpdateTaskExtension(context.Background(), task.ID, 30, "active_meeting", snap)
-	require.NoError(t, err)
-
-	// 等待 audit 写入 + 查最近一行
-	// FlushNow: 显式落库避免 1s ticker 未到点导致 waitForAuditLogs 拿空表
-	// (CI 上 ticker 时序 + race detector 调度可能与本地不同)
-	auditSvc.FlushNow(context.Background())
-	logs := waitForAuditLogs(t, db, 1)
-	require.GreaterOrEqual(t, len(logs), 1, "audit_logs 应至少 1 行")
-	auditLog := logs[0]
-
-	// 1. JSON raw 文本: "silence_since" 字段必须不存在(omitempty + nil pointer)
-	// 或序列化为 null。我们宽容两种:raw 文本不应包含 "0001-01-01"
-	assert.NotContains(t, auditLog.NewData, "0001-01-01",
-		"NewData JSON 不应包含 time.Time 零值的 '0001-01-01' 字符串;Pitfall 4 trap")
-
-	// 2. unmarshal 到 map[string]interface{} 后,silence_since 应为 nil(omitempty 抹去)
-	// 或为 null;unmarshal 后 nil 落入 map
-	var newDataMap map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(auditLog.NewData), &newDataMap))
-	silenceVal, present := newDataMap["silence_since"]
-	if present {
-		// 如果字段存在(序列化保留),它必须不是 time.Time 零值字符串
-		assert.Nil(t, silenceVal,
-			"silence_since 存在时必须为 nil/unmarshalled-null,实际 %T %v", silenceVal, silenceVal)
-	}
-	// 如果字段被 omitempty 抹去,present=false 即可;两种行为都接受
-
-	// 3. 非零字段(file_size_bytes / file_growth_bps)必须保留
-	assert.EqualValues(t, 512, newDataMap["file_size_bytes"])
-	assert.EqualValues(t, 1024, newDataMap["file_growth_bps"])
-	assert.EqualValues(t, 1, newDataMap["extension_count"])
-}
+// TestAuditSnapshot_ZeroTimeOmitsSilence 撤回 (Phase 25 撤回后,ActivitySnapshot
+// 整类型删除,SilenceSince/LastFileGrowthAt/FileSizeBytes/FileGrowthBps 等字段
+// 都不再写入 audit log NewData。TestUpdateTaskExtension_AuditSnapshot 仍保留
+// 覆盖 audit snapshot 字段 (extension_count / new_end_time) 的存在性)。

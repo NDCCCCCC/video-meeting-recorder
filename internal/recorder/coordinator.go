@@ -24,27 +24,9 @@ type SimpleRecordingCoordinator struct {
 	config    *config.Config
 	processes map[string]*RecordingProcess // 使用字符串键支持多配置 (taskID_configType)
 	mu        sync.RWMutex
-	// huaweiCli 注入给 ActivityWatcher 用于 H 信号轮询。可选 (HuaweiStateClient interface)。
-	// 由 cmd/server (Phase 25) 在 app.go 通过 SetHuaweiCli 注入;nil 时 watcher huaweiPoller
-	// 入口直接 return (RESEARCH.md Open Question 2 推荐)。Phase 24 仅声明字段+setter,
-	// 接线由 Phase 25 SCHED-01 落地的 caller 配合完成。
-	huaweiCli HuaweiStateClient
-}
-
-// SetHuaweiCli 注入华为状态客户端 (Phase 25 接线入口)。
-// nil-safe;多次调用后者覆盖前者;调用后已运行的 watcher 不感知(huaweiPoller 周期内
-// self 已 copy cli,见 activity_watcher.go huaweiPoller 实现)。
-func (c *SimpleRecordingCoordinator) SetHuaweiCli(cli HuaweiStateClient) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.huaweiCli = cli
-}
-
-// huaweiClient 安全读取 huaweiCli (供 ActivityWatcher 构造时调用)。
-func (c *SimpleRecordingCoordinator) huaweiClient() HuaweiStateClient {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.huaweiCli
+	// taskIDProcessKeyIndex taskID -> 当前活跃的过程 key (per-task 只允许 1 个
+	// in-flight 录制;IsProcessAlive(taskID) 通过该索引定位 cmd 读 ProcessState)。
+	taskIDProcessKeyIndex map[uint]string
 }
 
 // RecordingProcess 录制进程
@@ -65,20 +47,6 @@ type RecordingProcess struct {
 	MaxReconnects   int                        // 最大重连次数
 	ReconnectDelay  time.Duration              // 重连间隔
 	ShouldReconnect bool                       // 是否应该重连（仅对流媒体有效）
-
-	// Phase 24 / WATCH-05: OnReconnect 在 attemptReconnect 启动新 ffmpeg 之前由 watcher
-	// 等外部观察者注册;重连期间 watcher 应清理 silenceSince (避免断流期间假静音),
-	// 但保留 lastFileGrowthAt / huaweiEmptySince 等长周期计时不被重置。
-	OnReconnect func()
-
-	// Phase 24 / WATCH-01: ActivityWatcher 指针,StartRecordingWithConfig 内构造,
-	// StopRecording 内 Stop。nil 时 StartRecordingWithConfig 跳过 watcher 构造
-	// (cfg.SmartEnd.Enabled=false 路径)。
-	ActivityWatcher *ActivityWatcher
-
-	// Phase 24 / WATCH-01: close-only channel reference, backed by the
-	// ActivityWatcher close-once channel. Phase 25 wires it after watcher creation.
-	taskEndedCh <-chan struct{}
 }
 
 // InputSourceType 输入源类型
@@ -112,10 +80,33 @@ type RecordingInput struct {
 // NewSimpleRecordingCoordinator 创建录制协调器
 func NewSimpleRecordingCoordinator(logger *zap.Logger, cfg *config.Config) *SimpleRecordingCoordinator {
 	return &SimpleRecordingCoordinator{
-		logger:    logger,
-		config:    cfg,
-		processes: make(map[string]*RecordingProcess),
+		logger:                 logger,
+		config:                 cfg,
+		processes:              make(map[string]*RecordingProcess),
+		taskIDProcessKeyIndex:  make(map[uint]string),
 	}
+}
+
+// IsProcessAlive 检查 taskID 对应的 ffmpeg 进程是否仍在运行。
+//
+// 返回 true 表示 ffmpeg 进程处于活跃状态 (cmd.ProcessState == nil),
+// scheduler 据此在 endtime 到达时决定:
+//   - true  → 走 UpdateTaskExtension 延长会议
+//   - false → 走 completeTask 走收尾转码
+//
+// taskID 找不到活跃进程时返回 false (scheduler 把它当 ffmpeg 已退出处理)。
+func (c *SimpleRecordingCoordinator) IsProcessAlive(taskID uint) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	processKey, ok := c.taskIDProcessKeyIndex[taskID]
+	if !ok {
+		return false
+	}
+	proc, ok := c.processes[processKey]
+	if !ok || proc == nil || proc.Cmd == nil {
+		return false
+	}
+	return proc.Cmd.ProcessState == nil
 }
 
 // StartRecording 启动录制
@@ -187,36 +178,14 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 	// 最小临界区：仅做 map 注册（PERF-004）
 	c.mu.Lock()
 	c.processes[processKey] = rec
+	if c.taskIDProcessKeyIndex == nil {
+		c.taskIDProcessKeyIndex = make(map[uint]string)
+	}
+	c.taskIDProcessKeyIndex[task.ID] = processKey
 	c.mu.Unlock()
 
-	// Phase 24 / WATCH-01: per-task owned ActivityWatcher (RESEARCH.md Architecture Decision 4)。
-	// 仅在 cfg.SmartEnd.Enabled 为 true 时构造;false 时纯 EndTime 行为 (Phase 25 CFG-03 守门)。
-	// nil huaweiCli 安全 (huaweiPoller 入口检查 cfg.SmartEnd.HuaweiEnabled 后直接 return)。
-	if c.config != nil && c.config.SmartEnd.Enabled && rec != nil {
-		rec.ActivityWatcher = NewActivityWatcher(
-			c.config,
-			c.huaweiClient(),
-			mkvPath,
-			logFile,
-			c.logger,
-		)
-		rec.taskEndedCh = rec.ActivityWatcher.EndedCh()   // bridge to the live watcher channel
-		rec.OnReconnect = rec.ActivityWatcher.OnReconnect // WATCH-05
-		// Bug B 修复:把 ffmpeg 进程存活回调注入 ActivityWatcher,fileTicker 在
-		// grace window 外遇到 stat 失败时,若 ffmpeg 已退出则不计入失败计数,
-		// 避免 file_stat_failed 与 monitorProcess 触发双重结束信号。
-		// 详见 .planning/debug/huawei-auto-smart-end.md Bug B。
-		rec.ActivityWatcher.SetProcessAliveCheck(func() bool {
-			return cmd != nil && cmd.ProcessState == nil
-		})
-		rec.ActivityWatcher.Start() // 启 4 goroutines
-		if c.logger != nil {
-			c.logger.Info("ActivityWatcher 已启动",
-				zap.Uint("task_id", task.ID),
-				zap.String("process_key", processKey),
-			)
-		}
-	}
+	// 注: Phase 25 智能退出撤回后,ActivityWatcher 整文件删除,不再构造 watcher。
+	// scheduler 改为调 IsProcessAlive(taskID) 直接查 ffmpeg cmd.ProcessState。
 
 	// 总是用本次启动的 mkvPath 刷新 task.MKVFilePath / RecordingFile / HLSPreviewPath,
 	// 无论 configType 是 usb / huawei_auto / stream。Phase 18 (bb3dc93e) 引入的条件
@@ -422,16 +391,9 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 		return fmt.Errorf("构建录制命令失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
-	// Phase 24 / WATCH-05: notify the current watcher before teardown so it can
-	// clear reconnect-sensitive silence state before the old process is replaced.
-	if process.OnReconnect != nil {
-		process.OnReconnect()
-	}
-	// The watcher owns goroutines bound to the old log file and output path.
-	// Stop it before closing the file so those goroutines exit cleanly.
-	if process.ActivityWatcher != nil {
-		process.ActivityWatcher.Stop()
-	}
+	// 注: Phase 25 智能退出撤回后,不再有 ActivityWatcher 需要 Stop / OnReconnect。
+	// 旧代码(OnReconnect / ActivityWatcher.Stop)随 activity_watcher.go 整文件删除。
+
 	if process.logFile != nil {
 		_ = process.logFile.Close()
 		process.logFile = nil
@@ -459,24 +421,7 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 	process.CancelFunc = cancel
 	process.logFile = logFile
 
-	// Recreate the watcher so silenceScanner and fileTicker bind to the new
-	// ffmpeg log file and MKV path instead of the closed, previous recording.
-	if c.config != nil && c.config.SmartEnd.Enabled {
-		process.ActivityWatcher = NewActivityWatcher(
-			c.config,
-			c.huaweiClient(),
-			mkvPath,
-			logFile,
-			c.logger,
-		)
-		process.taskEndedCh = process.ActivityWatcher.EndedCh()
-		process.OnReconnect = process.ActivityWatcher.OnReconnect
-		process.ActivityWatcher.Start()
-	} else {
-		process.ActivityWatcher = nil
-		process.OnReconnect = nil
-		process.taskEndedCh = nil
-	}
+	// 注: 不再重建 ActivityWatcher(IsProcessAlive 直接查 cmd.ProcessState)。
 
 	c.logger.Info("重连录制已启动",
 		zap.String("process_key", processKey),
@@ -649,11 +594,7 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 		if strings.HasPrefix(key, fmt.Sprintf("%d_", taskID)) {
 			process := c.processes[key]
 			if process != nil && process.Status == "running" {
-				// Phase 24 / WATCH-01: 先停 watcher (优雅关闭 goroutines),再 cancel ffmpeg。
-				// 顺序避免 watcher 在 ffmpeg 已死时尝试读 logFile 触发 EOF 误报为 stat 死亡。
-				if process.ActivityWatcher != nil {
-					process.ActivityWatcher.Stop()
-				}
+				// 注: Phase 25 智能退出撤回后,不再有 ActivityWatcher 需要 Stop。
 				process.CancelFunc()
 				if process.logFile != nil {
 					_ = process.logFile.Close()
@@ -665,9 +606,6 @@ func (c *SimpleRecordingCoordinator) StopRecording(taskID uint) error {
 
 	// 也检查旧的单键格式（向后兼容）
 	if process, ok := c.processes[fmt.Sprintf("%d", taskID)]; ok && process.Status == "running" {
-		if process.ActivityWatcher != nil {
-			process.ActivityWatcher.Stop()
-		}
 		process.CancelFunc()
 		if process.logFile != nil {
 			_ = process.logFile.Close()
@@ -714,24 +652,8 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	// MKV 和 HLS 容器需要全局存储的比特流参数
 	args = append(args, "-flags", "+global_header")
 
-	// Phase 24 / DETECT-02: 注入 silencedetect 音频过滤器 (A 信号源,ActivityWatcher 解析)。
-	// 仅当 cfg.SmartEnd.Enabled 才注入 (CFG-03 守门预期,Phase 25 调度不启 watcher 时
-	// 不增加 ffmpeg 开销)。fmt.Sprintf 数字字段受 cfg.Validate 限定范围 (SilenceDB ∈ [-100,0]),
-	// 不拼接用户输入 (T-24-07 threat model)。
-	if c.config != nil && c.config.SmartEnd.Enabled {
-		afSpec := fmt.Sprintf("silencedetect=noise=%ddB:d=%d",
-			c.config.SmartEnd.SilenceDB,
-			c.config.SmartEnd.SilenceDurationS,
-		)
-		args = append(args, "-af", afSpec)
-		if c.logger != nil {
-			c.logger.Info("注入 silencedetect 过滤器 (ActivityWatcher A 信号源)",
-				zap.String("af_spec", afSpec),
-				zap.Int("silence_db", c.config.SmartEnd.SilenceDB),
-				zap.Int("silence_duration_s", c.config.SmartEnd.SilenceDurationS),
-			)
-		}
-	}
+	// 注: Phase 25 智能退出撤回后,不再注入 silencedetect 过滤器 (A 信号源随
+	// activity_watcher.go 整文件删除)。
 
 	// 映射流：需要根据输入源类型确定正确的输入索引
 	args = append(args, "-map", "0:v")
@@ -1084,10 +1006,10 @@ func (c *SimpleRecordingCoordinator) WatcherChannels(taskID uint) []<-chan struc
 		if !strings.HasPrefix(key, prefix) {
 			continue
 		}
-		if proc == nil || proc.taskEndedCh == nil {
-			continue
-		}
-		out = append(out, proc.taskEndedCh)
+		// 注: Phase 25 智能退出撤回后,proc.taskEndedCh 字段整体删除;此函数保留
+		// 仅为 RecorderCoordinatorInterface 接口兼容 (scheduler 端整段 mergeWatchers
+		// 取消,但 video_scheduler 的接口契约保留)。
+		_ = proc
 	}
 	return out
 }

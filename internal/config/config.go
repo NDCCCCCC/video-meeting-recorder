@@ -394,13 +394,9 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to merge expanded config: %w: %w", apperrors.ErrInternal, err)
 	}
 
-	// Phase 23 (CFG-01) + RESEARCH.md Pitfall 3 修复:smart_end 的 3 个 true-valued
-	// bool 字段必须通过 Viper SetDefault **在 Unmarshal 之前** 注册,这样当用户
-	// 在 config.yaml 里显式写 `smart_end.enabled: false` 时,SetDefault(true) 不会
-	// 把它覆盖为 true (CFG-03/04 退回开关)。YAML 读取顺序天然优先于默认。
+	// Phase 25 撤回后:smart_end 仅保留 1 个 bool 字段 (enabled),SetDefault 在
+	// Unmarshal 之前注册,这样 YAML 显式 false 能覆盖默认 true (CFG-03 退回开关)。
 	v.SetDefault("smart_end.enabled", true)
-	v.SetDefault("smart_end.huawei_enabled", true)
-	v.SetDefault("smart_end.degrade_on_silence_loss", true)
 
 	// SEC-001: 显式绑定部署文档中的环境变量名（无 RECORD 前缀），使运维设置的
 	// SM4_SECRET/HLS_TOKEN_SECRET 等真正加载到配置结构（绕过 SetEnvPrefix 机制）。
@@ -863,26 +859,12 @@ tingwu:
 python:
   prefer_uv: true  # 优先使用uv管理Python依赖（需要安装uv）
 
-# Phase 23 (CFG-02) + 23-RESEARCH.md: smart_end 段 — 与 SmartEndConfig struct 14
-# 字段一一对应。auto-generated config.yaml 自动含此段,与 bin/config.yaml 部署
-# 模板及 REQUIREMENTS.md:58 锁定列表保持同步,smart_end_yaml_test.go 的 RED gate
-# 因此在干净 checkout 上可正常验证 root config.yaml(部署期 bin/config.yaml
-# 仍由运维手工准备,测试在缺失时安全 skip)。
+# Phase 25 撤回后:smart_end 段仅 3 字段(enabled + extend_step_min +
+# max_extend_count),控制"按 ffmpeg 进程状态自动延长会议",不再触发提前结束。
 smart_end:
   enabled: true
-  silence_db: -30
-  silence_duration_s: 30
-  file_stall_s: 120
-  file_min_growth_bps: 1024
-  huawei_enabled: true
-  huawei_poll_interval_s: 30
-  huawei_persist_s: 30
-  huawei_failure_threshold: 3
-  check_interval_s: 5
   extend_step_min: 30
   max_extend_count: 4
-  stat_failure_threshold: 6
-  degrade_on_silence_loss: true
 `
 
 	// 写入配置文件

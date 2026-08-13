@@ -3,13 +3,12 @@ package recorder
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
@@ -17,15 +16,38 @@ import (
 )
 
 func TestRecorderCoordinator_WatcherChannels(t *testing.T) {
+	// Phase 25 智能退出撤回后,WatcherChannels 函数体仅返回空切片(无 taskEndedCh
+	// 字段)。保留此测试用于验证接口契约:空切片即可,数量为 0。
 	c := NewSimpleRecordingCoordinator(zap.NewNop(), &config.Config{})
-	c.processes["1_usb"] = &RecordingProcess{taskEndedCh: make(chan struct{})}
-	c.processes["1_stream"] = &RecordingProcess{taskEndedCh: make(chan struct{})}
-	c.processes["2_usb"] = &RecordingProcess{taskEndedCh: make(chan struct{})}
+	c.processes["1_usb"] = &RecordingProcess{}
+	c.processes["1_stream"] = &RecordingProcess{}
+	c.processes["2_usb"] = &RecordingProcess{}
 
-	assert.Len(t, c.WatcherChannels(1), 2)
-	assert.Len(t, c.WatcherChannels(2), 1)
+	assert.Empty(t, c.WatcherChannels(1))
+	assert.Empty(t, c.WatcherChannels(2))
 	assert.NotNil(t, c.WatcherChannels(99))
 	assert.Empty(t, c.WatcherChannels(99))
+}
+
+// TestRecorderCoordinator_IsProcessAlive 验证 Phase 25 撤回后的 ffmpeg 进程活跃
+// 判断逻辑:taskID 命中索引 + ProcessState == nil 返回 true;否则 false。
+func TestRecorderCoordinator_IsProcessAlive(t *testing.T) {
+	c := NewSimpleRecordingCoordinator(zap.NewNop(), &config.Config{})
+
+	// 1. 完全空状态
+	assert.False(t, c.IsProcessAlive(1), "无索引应返回 false")
+
+	// 2. 索引存在但 processes 不存在
+	c.taskIDProcessKeyIndex[1] = "1_usb"
+	assert.False(t, c.IsProcessAlive(1), "processes 不存在应返回 false")
+
+	// 3. 进程存在但 Cmd 为 nil
+	c.processes["1_usb"] = &RecordingProcess{}
+	assert.False(t, c.IsProcessAlive(1), "Cmd 为 nil 应返回 false")
+
+	// 4. 进程存在,Cmd 存在,ProcessState == nil (存活)
+	c.processes["1_usb"] = &RecordingProcess{Cmd: &exec.Cmd{}}
+	assert.True(t, c.IsProcessAlive(1), "Cmd 存在且 ProcessState == nil 应返回 true")
 }
 
 func TestNewSimpleRecordingCoordinator(t *testing.T) {
@@ -468,66 +490,10 @@ func TestRecordingProcess_ReconnectCountAtomic(t *testing.T) {
 	}
 }
 
-// TestBuildRecordingCommand_SilenceDetect 验证 24-03 (DETECT-02 wiring):
-// cfg.SmartEnd.Enabled=true 时 buildRecordingCommand args 含 -af silencedetect=...
-// 过滤器（带 SilenceDB / SilenceDurationS 数字字段）;Enabled=false 时不含 -af。
-func TestBuildRecordingCommand_SilenceDetect(t *testing.T) {
-	cases := []struct {
-		name    string
-		enabled bool
-		wantHas bool
-		wantAf  string
-	}{
-		{"enabled_true_injects_silencedetect", true, true, "silencedetect=noise=-30dB:d=30"},
-		{"enabled_false_omits_af", false, false, ""},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := NewSimpleRecordingCoordinator(zap.NewNop(), &config.Config{
-				Storage:  config.StorageConfig{RecordingsPath: t.TempDir(), HLSPath: t.TempDir()},
-				FFmpeg:   config.FFmpegConfig{Path: "ffmpeg", HLSSegmentDuration: 10, HLSListSize: 6, CRF: 23, Preset: "medium", MaxVideoBitrate: "3M", VideoBufSize: "6M"},
-				SmartEnd: config.SmartEndConfig{Enabled: tc.enabled, SilenceDB: -30, SilenceDurationS: 30},
-			})
-			input := RecordingInput{Type: InputSourceRTSP, RTSPURL: "rtsp://example.com/stream", CameraBackend: "dshow"}
-			args, err := c.buildRecordingCommand(input, "out.mkv", "hls_dir", time.Minute, 1)
-			if err != nil {
-				t.Fatalf("buildRecordingCommand: %v", err)
-			}
-			var foundAf string
-			afPresent := false
-			for i, a := range args {
-				if a == "-af" && i+1 < len(args) {
-					afPresent = true
-					foundAf = args[i+1]
-				}
-			}
-			if afPresent != tc.wantHas {
-				t.Fatalf("-af present=%v, want %v (args=%v)", afPresent, tc.wantHas, args)
-			}
-			if tc.wantHas && foundAf != tc.wantAf {
-				t.Fatalf("-af value=%q, want %q", foundAf, tc.wantAf)
-			}
-		})
-	}
-}
+// TestBuildRecordingCommand_SilenceDetect 撤回 (Phase 25 智能退出撤回后,不再注入
+// -af silencedetect 过滤器。ActivityWatcher 整文件连带 silence_parser.go 删除,
+// SilenceDB / SilenceDurationS 字段也从 SmartEndConfig 删除)。
 
-// TestRestartRecording_OnReconnect 验证 24-03 (WATCH-05 wiring):
-// RecordingProcess.OnReconnect 字段存在 + nil-safe + 非 nil 时同步被调用一次;
-// 不实际启 ffmpeg（仅断言回调函数调用契约）。
-func TestRestartRecording_OnReconnect(t *testing.T) {
-	t.Run("nil_safe", func(t *testing.T) {
-		var p *RecordingProcess
-		require.NotPanics(t, func() {
-			if p != nil && p.OnReconnect != nil {
-				p.OnReconnect()
-			}
-		})
-	})
-	t.Run("non_nil_invokes_once", func(t *testing.T) {
-		var calls int32
-		p := &RecordingProcess{OnReconnect: func() { atomic.AddInt32(&calls, 1) }}
-		p.OnReconnect()
-		p.OnReconnect()
-		require.Equal(t, int32(2), atomic.LoadInt32(&calls))
-	})
-}
+// TestRestartRecording_OnReconnect 撤回 (Phase 25 智能退出撤回后,ActivityWatcher
+// 删除连带 OnReconnect 字段删除。重连路径保留 attemptReconnect,仅 watcher 通知
+// 钩子不再需要。)。

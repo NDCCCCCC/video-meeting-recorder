@@ -36,12 +36,13 @@ type VideoRecordingTask struct {
 	ConversionCompletedAt *time.Time       `json:"conversion_completed_at,omitempty"`                           // 转换完成时间
 	ConversionRetryCount  int              `gorm:"default:0" json:"conversion_retry_count"`                     // 转换重试次数
 
-	// Smart-end audit fields (Phase 23 AUDIT-01). Written by service layer in Phase 25. Columns are added via AutoMigrate on next boot.
+	// Smart-extend audit fields (Phase 23 AUDIT-01, kept after early-end revert).
+	// Written by service.UpdateTaskExtension when ffmpeg is still alive at EndTime.
+	// Columns are added via AutoMigrate on next boot.
 	ExtensionCount      int    `gorm:"not null;default:0" json:"extension_count"`
 	LastExtensionReason string `gorm:"type:text;not null;default:''" json:"last_extension_reason,omitempty"`
-	EndedEarly          bool   `gorm:"not null;default:false" json:"ended_early"`
-	EndedEarlyReason    string `gorm:"type:text" json:"ended_early_reason,omitempty"`
-	EndedByHuaWeAPI     bool   `gorm:"not null;default:false;column:ended_by_huawei_api" json:"ended_by_huawei_api"`
+	// 注:智能退出（ended_early / ended_early_reason / ended_by_huawei_api）撤回，
+	// Phase 25 不再写入。保留列以兼容历史 audit_logs 引用。
 
 	CreatedBy uint  `gorm:"not null" json:"created_by"`
 	Creator   *User `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`

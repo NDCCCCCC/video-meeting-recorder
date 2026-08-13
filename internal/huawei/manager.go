@@ -289,25 +289,6 @@ func (m *Manager) createClient(ctx context.Context, configID uint) (*HuaweiClien
 	return client, nil
 }
 
-// GetFirstRegisteredClient 返回当前已注册的第一个 HuaweiClient（按 map 迭代顺序
-// 非确定；仅用于单设备部署中 Phase 25 SCHED-01 把 *Manager 桥接到 recorder
-// HuaweiStateClient 的场景）。bool=false 表示尚无 client 注册 — caller 应视作
-// "H 信号不可用"并降级（HuaweiStateClient.GetConferenceState 返回 error →
-// ActivityWatcher 走 huaweiConsecFailures 累加路径）。
-//
-// 注意：仅返回已缓存 client，不触发 createClient。session 过期由调用方通过
-// HuaweiClient.hasSession() 自检或调用 GetClient(ctx, configID) 走重建路径。
-// 多设备场景请使用 GetClient(ctx, configID) 显式指定 configID，避免跨终端
-// 状态错配。
-func (m *Manager) GetFirstRegisteredClient() (*HuaweiClient, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, client := range m.clients {
-		return client, true
-	}
-	return nil, false
-}
-
 // removeClient 移除客户端（SEC-003a：透传 ctx；PERF-004：Logout 移出锁，仅 map 操作进锁）
 func (m *Manager) removeClient(ctx context.Context, configID uint) {
 	m.mu.Lock()

@@ -13,7 +13,6 @@ import (
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/observability"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/recorder"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/scheduler"
 	auditpkg "github.com/NDCCCCCC/video-meeting-recorder/internal/services/audit"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
@@ -1149,34 +1148,16 @@ func (s *VideoRecordingTaskService) UpdateRecordingPaths(ctx context.Context, id
 	return nil
 }
 
-// SmartEndSnapshot smart-end 事件 audit log snapshot 序列化结构 (Phase 25 AUDIT-02/03)。
-// 包含 watcher 状态 + 写后 GORM 5 字段的关键值,JSON 字段名与 audit_logs
-// NewData/OldData 直读体验对齐。
+// SmartEndSnapshot smart-extend 事件 audit log snapshot 序列化结构 (Phase 25 AUDIT-02)。
+// 包含写后 GORM 3 字段的关键值 (end_time + extension_count + last_extension_reason),
+// JSON 字段名与 audit_logs NewData 体验对齐。
 //
-// Snapshot 字段 (`silence_since` / `last_file_growth`) 使用 *time.Time (nil 时
-// JSON 序列化 null),避免 time.Time 零值在 DB 中以 "0001-01-01" 形式出现
-// (RESEARCH.md Pitfall 4)。
-// EndedByHuaWeiAPI 与 EndedEarlyReason 不带 omitempty — AUDIT-03 要求 audit
-// log 始终携带这两个字段,即使值是 false / "";UpdateTaskExtension 路径
-// 故意不设置它们(为 0 值),但 MarkTaskEndedEarly 路径必须写出。
+// 字段 (ExtensionCount / NewEndTime) 使用合适 omitempty,避免零值在 DB / log 中
+// 出现。注:智能退出（silence / file_size / file_growth / ended_*）字段已随
+// Phase 25 智能退出撤回整体删除。
 type SmartEndSnapshot struct {
-	SilenceSince     *time.Time `json:"silence_since,omitempty"`
-	LastFileGrowthAt *time.Time `json:"last_file_growth,omitempty"`
-	FileSizeBytes    int64      `json:"file_size_bytes"`
-	FileGrowthBps    int64      `json:"file_growth_bps"`
-	ExtensionCount   int        `json:"extension_count,omitempty"`
-	NewEndTime       *time.Time `json:"new_end_time,omitempty"`
-	EndedByHuaWeiAPI bool       `json:"ended_by_huawei_api"`
-	EndedEarlyReason string     `json:"ended_early_reason"`
-}
-
-// nilIfZero 把 time.Time 零值转换为 *time.Time nil (audit log JSON marshall
-// 友好),非零值返回指向 t 的指针。
-func nilIfZero(t time.Time) *time.Time {
-	if t.IsZero() {
-		return nil
-	}
-	return &t
+	ExtensionCount int        `json:"extension_count,omitempty"`
+	NewEndTime     *time.Time `json:"new_end_time,omitempty"`
 }
 
 // UpdateTaskExtension 智能延时单入口 (Phase 25 EXTEND-01 + AUDIT-02 + AUDIT-04)。
@@ -1195,11 +1176,13 @@ func nilIfZero(t time.Time) *time.Time {
 //   - taskID  : 任务 ID
 //   - deltaMin: 延时分钟数 (正数, 通常 = cfg.SmartEnd.ExtendStepMin = 30)
 //   - reason  : 延时原因字符串 (例: "active_meeting", "huawei_state_recovered")
-//   - snap    : ActivityWatcher 当前快照,aud-02 audit log 序列化使用
 //
 // 返回:成功 nil;达到 MaxExtendCount 时 wrapped ErrRecordingSmartExtend;DB
 // 错误 wrapped ErrInternal。
-func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, taskID uint, deltaMin int, reason string, snap recorder.ActivitySnapshot) error {
+//
+// 注: Phase 25 智能退出撤回后,本函数不再接收 ActivitySnapshot 参数。
+// ActivitySnapshot 整体类型连带 activity_watcher.go 整文件已删除。
+func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, taskID uint, deltaMin int, reason string) error {
 	// 1. 读 task
 	var task models.VideoRecordingTask
 	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
@@ -1246,12 +1229,8 @@ func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, tas
 	// 7. AUDIT-02 audit log snapshot (auditSvc nil 时静默跳过)
 	if s.auditSvc != nil {
 		snapPayload := SmartEndSnapshot{
-			SilenceSince:     nilIfZero(snap.SilenceSince),
-			LastFileGrowthAt: nilIfZero(snap.LastFileGrowthAt),
-			FileSizeBytes:    snap.FileSizeBytes,
-			FileGrowthBps:    snap.FileGrowthBps,
-			ExtensionCount:   newCount,
-			NewEndTime:       &newEnd,
+			ExtensionCount: newCount,
+			NewEndTime:     &newEnd,
 		}
 		// OldData schema: pre-update end_time and extension_count, both sourced
 		// from the immutable task snapshot captured before Updates.
@@ -1266,81 +1245,6 @@ func (s *VideoRecordingTaskService) UpdateTaskExtension(ctx context.Context, tas
 			ResourceID: &taskID,
 			OldData:    oldMap,
 			NewData:    snapPayload,
-		})
-	}
-
-	return nil
-}
-
-// MarkTaskEndedEarly 智能提前结束单入口 (Phase 25 EARLY-01/02 + AUDIT-03 + AUDIT-04)。
-//
-// 行为契约:
-//  1. 读 task;读不到 → wrapped apperrors.ErrInternal
-//  2. 写 ended_early=true + ended_early_reason + ended_by_huawei_api 三字段
-//  3. 同步本地 task
-//  4. OBS-02 INFO smart_early_end 日志 (含 snapshot JSON)
-//  5. AUDIT-03 audit log snapshot (auditSvc 非 nil 时)
-//
-// 注意: 本方法不写 Status 字段 (不调 completeTask);scheduler 调本方法后
-// 仍走既有 completeTask 路径转 converting 状态机。EndedEarly* 与 Status
-// 字段正交无冲突 (Phase 25 RESEARCH Pitfall 5)。
-func (s *VideoRecordingTaskService) MarkTaskEndedEarly(ctx context.Context, taskID uint, reason string, byHuaWeiAPI bool, snap recorder.ActivitySnapshot) error {
-	// 1. 读 task
-	var task models.VideoRecordingTask
-	if err := s.db.WithContext(ctx).First(&task, taskID).Error; err != nil {
-		return fmt.Errorf("MarkTaskEndedEarly: load task %d: %w: %w", taskID, apperrors.ErrInternal, err)
-	}
-	oldTask := task // immutable pre-Updates snapshot for audit OldData
-
-	// 2. 写 GORM 3 字段
-	if err := s.db.WithContext(ctx).Model(&task).Updates(map[string]interface{}{
-		"ended_early":         true,
-		"ended_early_reason":  reason,
-		"ended_by_huawei_api": byHuaWeiAPI,
-	}).Error; err != nil {
-		return fmt.Errorf("MarkTaskEndedEarly: update task %d: %w: %w", taskID, apperrors.ErrInternal, err)
-	}
-
-	// 3. 同步本地 task
-	task.EndedEarly = true
-	task.EndedEarlyReason = reason
-	task.EndedByHuaWeAPI = byHuaWeiAPI
-
-	// 4. OBS-02 INFO smart_early_end (字段名 task 锁定)
-	snapshotMap := SmartEndSnapshot{
-		SilenceSince:     nilIfZero(snap.SilenceSince),
-		LastFileGrowthAt: nilIfZero(snap.LastFileGrowthAt),
-		FileSizeBytes:    snap.FileSizeBytes,
-		FileGrowthBps:    snap.FileGrowthBps,
-		EndedByHuaWeiAPI: byHuaWeiAPI,
-		EndedEarlyReason: reason,
-	}
-	s.logger.Info("smart_early_end",
-		zap.Uint("task", taskID),
-		zap.String("reason", reason),
-		zap.Any("snapshot", snapshotMap),
-	)
-
-	// OBS-05: atomic counter +1 (success-path only,Updates 已成功)。
-	// 位置放在 audit log 块之前,确保 auditSvc=nil 时计数器仍递增。
-	observability.RecordSmartEarlyEnd()
-
-	// 5. AUDIT-03 audit log snapshot (auditSvc nil 时静默跳过)
-	if s.auditSvc != nil {
-		// OldData mirrors all three smart-end fields changed by this method and
-		// comes from the immutable pre-Updates task snapshot.
-		oldMap := map[string]interface{}{
-			"ended_early":         oldTask.EndedEarly,
-			"ended_early_reason":  oldTask.EndedEarlyReason,
-			"ended_by_huawei_api": oldTask.EndedByHuaWeAPI,
-		}
-		_ = s.auditSvc.RecordChange(ctx, auditpkg.RecordChangeOpts{
-			Action:     models.ActionUpdate,
-			Module:     models.ModuleTask,
-			Resource:   "video_recording_task",
-			ResourceID: &taskID,
-			OldData:    oldMap,
-			NewData:    snapshotMap,
 		})
 	}
 

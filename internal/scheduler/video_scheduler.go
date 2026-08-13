@@ -15,7 +15,6 @@ import (
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/config"
 	apperrors "github.com/NDCCCCCC/video-meeting-recorder/internal/errors"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/models"
-	"github.com/NDCCCCCC/video-meeting-recorder/internal/recorder"
 	"github.com/NDCCCCCC/video-meeting-recorder/internal/services/video_recording"
 	"github.com/NDCCCCCC/video-meeting-recorder/pkg/response"
 )
@@ -92,10 +91,6 @@ type VideoFileServiceInterface interface {
 	CreateFileFromTask(ctx context.Context, task *models.VideoRecordingTask, format *string) (*models.VideoFile, error)
 }
 
-// TaskServiceInterface 任务服务接口
-// Phase 19 Wave 4 (PERF-003/BUG-005)：5 个业务方法均以 ctx context.Context 作首参，
-// 调用方透传 executeTask/cleanupCtx 的 ctx 以支持优雅关停时的查询取消。
-// GetDB() 保留无参（返回原始 *gorm.DB 供遗留调用方使用）。
 type TaskServiceInterface interface {
 	GetTask(ctx context.Context, id uint) (*models.VideoRecordingTask, error)
 	// GetPendingTasks Phase 19 D2：返回类型由 []*VideoRecordingTask 改为
@@ -107,6 +102,9 @@ type TaskServiceInterface interface {
 	UpdateRecordingPaths(ctx context.Context, id uint, mkvPath, hlsPath string) error
 	GetInputConfig(ctx context.Context, id uint) (*models.InputConfig, error)
 	GetDB() *gorm.DB
+	// UpdateTaskExtension EXTEND-01 延长入口 (Phase 25 撤回 watcher 后唯一延长路径)。
+	// 调用方: scheduler.handleEndTimeReached(IsProcessAlive=true 时)。
+	UpdateTaskExtension(ctx context.Context, taskID uint, deltaMin int, reason string) error
 }
 
 // RecorderCoordinatorInterface 录制协调器接口
@@ -114,7 +112,7 @@ type RecorderCoordinatorInterface interface {
 	StartRecording(task *models.VideoRecordingTask, config *models.InputConfig) error
 	StartRecordingWithConfig(task *models.VideoRecordingTask, config *models.InputConfig, configType string) error
 	StopRecording(taskID uint) error
-	WatcherChannels(taskID uint) []<-chan struct{}
+	IsProcessAlive(taskID uint) bool
 	HealthCheck() error
 }
 
@@ -560,7 +558,9 @@ func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.Vid
 		return
 	}
 
-	taskEndedCh := mergeWatchers(ctx, s.coordinator.WatcherChannels(task.ID), s.logger)
+	// 注: Phase 25 智能退出撤回后,不再监听 taskEndedCh (ActivityWatcher 已被删除)。
+	// endtime 到达时由 handleEndTimeReached 通过 coordinator.IsProcessAlive(task.ID)
+	// 直接查 ffmpeg cmd.ProcessState 决定延长 vs 收尾。
 	endTime := task.EndTime
 	for {
 		remaining := time.Until(endTime)
@@ -569,10 +569,6 @@ func (s *VideoSimpleScheduler) monitorTask(ctx context.Context, task *models.Vid
 		}
 		timer := time.NewTimer(remaining)
 		select {
-		case <-taskEndedCh: // SCHED-03/EARLY-03: a close is immediately ready and preempts the deadline.
-			timer.Stop()
-			s.handleTaskEnded(ctx, task)
-			return
 		case <-ctx.Done():
 			timer.Stop()
 			return
@@ -617,27 +613,13 @@ func (s *VideoSimpleScheduler) monitorTaskEndTimeOnly(ctx context.Context, task 
 	}
 }
 
-func (s *VideoSimpleScheduler) watcherForTask(taskID uint) *recorder.ActivityWatcher {
-	return nil
-}
-
-func (s *VideoSimpleScheduler) handleTaskEnded(ctx context.Context, task *models.VideoRecordingTask) {
-	if watcher := s.watcherForTask(task.ID); watcher != nil {
-		snap := watcher.Snapshot()
-		if svc, ok := s.taskService.(interface {
-			MarkTaskEndedEarly(context.Context, uint, string, bool, recorder.ActivitySnapshot) error
-		}); ok {
-			if err := svc.MarkTaskEndedEarly(ctx, task.ID, snap.EndedReason, snap.LastHuaWeiStateEmpty, snap); err != nil {
-				s.logger.Error("记录提前结束失败", zap.Uint("task_id", task.ID), zap.Error(err))
-			}
-		}
-	}
-	s.completeTask(ctx, task.ID)
-}
-
 func (s *VideoSimpleScheduler) handleEndTimeReached(ctx context.Context, task *models.VideoRecordingTask, endTime *time.Time) bool {
-	watcher := s.watcherForTask(task.ID)
-	if watcher == nil || !watcher.IsActive() {
+	// Phase 25 智能退出撤回: 不再读 watcher 状态,改查 coordinator.IsProcessAlive(task.ID)
+	// (= ffmpeg cmd.ProcessState == nil)。
+	if !s.coordinator.IsProcessAlive(task.ID) {
+		s.logger.Info("endtime 到达但 ffmpeg 已退出, 走收尾转码",
+			zap.Uint("task_id", task.ID),
+		)
 		s.completeTask(ctx, task.ID)
 		return true
 	}
@@ -661,19 +643,15 @@ func (s *VideoSimpleScheduler) handleEndTimeReached(ctx context.Context, task *m
 		s.completeTask(ctx, task.ID)
 		return true
 	}
-	if svc, ok := s.taskService.(interface {
-		UpdateTaskExtension(context.Context, uint, int, string, recorder.ActivitySnapshot) error
-	}); ok {
-		if err := svc.UpdateTaskExtension(ctx, task.ID, s.config.SmartEnd.ExtendStepMin, "smart_extend", watcher.Snapshot()); err != nil {
-			s.logger.Error("自动延时失败", zap.Uint("task_id", task.ID), zap.Error(err))
-			return true
-		}
-		updated, getErr := s.taskService.GetTask(ctx, task.ID)
-		if getErr == nil {
-			*endTime = updated.EndTime
-		} else {
-			*endTime = endTime.Add(time.Duration(s.config.SmartEnd.ExtendStepMin) * time.Minute)
-		}
+	if err := s.taskService.UpdateTaskExtension(ctx, task.ID, s.config.SmartEnd.ExtendStepMin, "smart_extend"); err != nil {
+		s.logger.Error("自动延时失败", zap.Uint("task_id", task.ID), zap.Error(err))
+		return true
+	}
+	updated, getErr := s.taskService.GetTask(ctx, task.ID)
+	if getErr == nil {
+		*endTime = updated.EndTime
+	} else {
+		*endTime = endTime.Add(time.Duration(s.config.SmartEnd.ExtendStepMin) * time.Minute)
 	}
 	return false
 }

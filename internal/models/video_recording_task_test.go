@@ -23,15 +23,16 @@ func newTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestVideoRecordingTaskSmartEndFields_SchemaMigration(t *testing.T) {
+func TestVideoRecordingTaskSmartExtendFields_SchemaMigration(t *testing.T) {
+	// Phase 25 智能退出撤回后,仅保留 ExtensionCount / LastExtensionReason 两个
+	// smart_extend 字段;早期结束字段 (ended_early / ended_early_reason /
+	// ended_by_huawei_api) 已从 model 删除,数据库列由 GORM AutoMigrate 保留
+	// (不 drop)以兼容历史 audit_logs。
 	db := newTestDB(t)
 
 	columns := []string{
 		"extension_count",
 		"last_extension_reason",
-		"ended_early",
-		"ended_early_reason",
-		"ended_by_huawei_api",
 	}
 	for _, column := range columns {
 		t.Run(column, func(t *testing.T) {
@@ -41,7 +42,7 @@ func TestVideoRecordingTaskSmartEndFields_SchemaMigration(t *testing.T) {
 	}
 }
 
-func TestVideoRecordingTaskSmartEndFields_Defaults(t *testing.T) {
+func TestVideoRecordingTaskSmartExtendFields_Defaults(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Now()
 	task := VideoRecordingTask{
@@ -53,41 +54,32 @@ func TestVideoRecordingTaskSmartEndFields_Defaults(t *testing.T) {
 		CreatedBy:        1,
 	}
 
-	require.NoError(t, db.Create(&task).Error, "创建使用默认智能收尾字段的任务")
+	require.NoError(t, db.Create(&task).Error, "创建使用默认智能延长字段的任务")
 
 	var got VideoRecordingTask
 	require.NoError(t, db.First(&got, task.ID).Error, "重新读取任务")
 	assert.Equal(t, 0, got.ExtensionCount)
 	assert.Equal(t, "", got.LastExtensionReason)
-	assert.False(t, got.EndedEarly)
-	assert.Equal(t, "", got.EndedEarlyReason)
-	assert.False(t, got.EndedByHuaWeAPI)
 }
 
-func TestVideoRecordingTaskSmartEndFields_RoundTrip(t *testing.T) {
+func TestVideoRecordingTaskSmartExtendFields_RoundTrip(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Now()
 	task := VideoRecordingTask{
-		Name:                "smart-end-round-trip",
+		Name:                "smart-extend-round-trip",
 		StartTime:           now.Add(-time.Hour),
 		EndTime:             now.Add(time.Hour),
 		ConferenceNumber:    "TEST",
 		Status:              VideoStatusPending,
 		CreatedBy:           1,
 		ExtensionCount:      3,
-		LastExtensionReason: "huawei_persist",
-		EndedEarly:          true,
-		EndedEarlyReason:    "both_silence_and_stall",
-		EndedByHuaWeAPI:     true,
+		LastExtensionReason: "smart_extend",
 	}
 
-	require.NoError(t, db.Create(&task).Error, "创建包含智能收尾审计值的任务")
+	require.NoError(t, db.Create(&task).Error, "创建包含智能延长审计值的任务")
 
 	var got VideoRecordingTask
 	require.NoError(t, db.First(&got, task.ID).Error, "重新读取任务")
 	assert.Equal(t, task.ExtensionCount, got.ExtensionCount)
 	assert.Equal(t, task.LastExtensionReason, got.LastExtensionReason)
-	assert.Equal(t, task.EndedEarly, got.EndedEarly)
-	assert.Equal(t, task.EndedEarlyReason, got.EndedEarlyReason)
-	assert.Equal(t, task.EndedByHuaWeAPI, got.EndedByHuaWeAPI)
 }
