@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -277,50 +278,117 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 	}
 	s.db.WithContext(ctx).Model(&task).Updates(updates)
 
-	// 执行转换
-	outputPath, err := s.convertMKVToMP4(ctx, &task)
-	if err != nil {
-		s.handleConversionError(ctx, &task, err)
+	// Bug K: 多输入源 (usb + stream) 时, 扫描录制目录所有 mkv, 每个都转 mp4。
+	// 之前只转 task.MKVFilePath (= 最后一个 configType, 通常是 stream), 其余 mkv
+	// (如 usb) 沦为孤儿文件不转。现在 glob 目录所有 .mkv, 逐个转换 + 建文件记录。
+	recordingsDir := filepath.Dir(task.MKVFilePath)
+	mkvFiles, globErr := filepath.Glob(filepath.Join(recordingsDir, "*.mkv"))
+	if globErr != nil || len(mkvFiles) == 0 {
+		// 兜底: glob 失败或目录空时, 至少尝试 task.MKVFilePath
+		s.logger.Warn("扫描 mkv 目录为空或失败, 兜底用 task.MKVFilePath",
+			zap.Uint("task_id", taskID),
+			zap.String("dir", recordingsDir),
+			zap.Error(globErr),
+		)
+		mkvFiles = []string{task.MKVFilePath}
+	}
+
+	s.logger.Info("扫描到待转换 mkv 文件",
+		zap.Uint("task_id", taskID),
+		zap.Int("count", len(mkvFiles)),
+		zap.Strings("files", mkvFiles),
+	)
+
+	var (
+		primaryMP4Path string // 主 mp4 (存 task.mp4_file_path): 优先非 stream
+		lastConvErr    error
+		convertedCount int
+		durationSet    bool // recording_duration 只取第一个有时长的
+	)
+
+	for _, mkvPath := range mkvFiles {
+		// 跳过 0 字节 mkv (空录制 / ffmpeg hang 未产出)
+		if info, statErr := os.Stat(mkvPath); statErr != nil {
+			s.logger.Warn("跳过不存在的 mkv",
+				zap.Uint("task_id", taskID),
+				zap.String("mkv", mkvPath),
+			)
+			continue
+		} else if info.Size() == 0 {
+			s.logger.Warn("跳过 0 字节 mkv",
+				zap.Uint("task_id", taskID),
+				zap.String("mkv", mkvPath),
+			)
+			continue
+		}
+
+		// 临时设 task.MKVFilePath 供 convertMKVToMP4 读取当前文件
+		origMKV := task.MKVFilePath
+		task.MKVFilePath = mkvPath
+		outputPath, convErr := s.convertMKVToMP4(ctx, &task)
+		task.MKVFilePath = origMKV
+
+		if convErr != nil {
+			s.logger.Error("单个 mkv 转换失败, 继续下一个",
+				zap.Uint("task_id", taskID),
+				zap.String("mkv", mkvPath),
+				zap.Error(convErr),
+				response.SentinelField(convErr),
+			)
+			lastConvErr = convErr
+			continue
+		}
+
+		// 主 mp4 选择: 优先非 stream (usb/huawei_auto 更可靠: 本地直采, 完整 video+audio)
+		if primaryMP4Path == "" || !strings.Contains(mkvPath, "_stream") {
+			primaryMP4Path = outputPath
+		}
+
+		// 为每个 mp4 创建 video_files 记录 (CreateFileFromTask 读 task.MP4FilePath)
+		task.MP4FilePath = outputPath
+		if s.videoFileService != nil {
+			mp4Type := "mp4"
+			videoFile, createErr := s.videoFileService.CreateFileFromTask(ctx, &task, &mp4Type)
+			if createErr != nil {
+				s.logger.Error("创建MP4文件记录失败",
+					zap.Uint("task_id", taskID),
+					zap.String("mp4", outputPath),
+					zap.Error(createErr),
+					response.SentinelField(createErr),
+				)
+			} else if videoFile != nil && videoFile.Duration > 0 && !durationSet {
+				updates["recording_duration"] = videoFile.Duration
+				durationSet = true
+			}
+		}
+		convertedCount++
+	}
+
+	// 所有 mkv 都失败才算转换失败
+	if convertedCount == 0 {
+		if lastConvErr == nil {
+			// 所有 mkv 都被跳过 (0 字节/不存在), 没有实际转换错误
+			lastConvErr = fmt.Errorf("录制目录无有效 mkv 文件 (均为 0 字节或不存在): %s", recordingsDir)
+		}
+		s.handleConversionError(ctx, &task, lastConvErr)
 		return
 	}
 
-	// 转换成功，更新转换状态和任务状态
-	// PERF-013: 复用上面 now 变量，避免第二次 time.Now() 调用产生不一致时间
-	updates = map[string]interface{}{
-		"conversion_status":       models.ConversionStatusCompleted,
-		"conversion_completed_at": &now,
-		"conversion_error_msg":    "",
-		"mp4_file_path":           outputPath,
-		// 同时更新任务状态为已完成
-		"status": models.VideoStatusCompleted,
-	}
-
-	// Bug E 修复: CreateFileFromTask 读 task.MP4FilePath 内存值,但 line 314 的
-	// GORM Updates 还未执行,task.MP4FilePath 仍是空字符串。先同步内存 task,
-	// 让 CreateFileFromTask 能拿到 mp4 路径。
-	task.MP4FilePath = outputPath
-
-	// 创建 MP4 文件记录，并获取实际视频时长
-	if s.videoFileService != nil {
-		mp4 := "mp4"
-		videoFile, err := s.videoFileService.CreateFileFromTask(ctx, &task, &mp4)
-		if err != nil {
-			s.logger.Error("创建MP4文件记录失败",
-				zap.Uint("task_id", taskID),
-				zap.Error(err),
-				response.SentinelField(err),
-			)
-		} else if videoFile != nil && videoFile.Duration > 0 {
-			// 更新录制时长（从视频文件元数据获取）
-			updates["recording_duration"] = videoFile.Duration
-		}
-	}
+	// 转换成功, 更新转换状态 (mp4_file_path = 主 mp4)
+	// PERF-013: 复用 now 变量
+	updates["conversion_status"] = models.ConversionStatusCompleted
+	updates["conversion_completed_at"] = &now
+	updates["conversion_error_msg"] = ""
+	updates["mp4_file_path"] = primaryMP4Path
+	updates["status"] = models.VideoStatusCompleted
+	task.MP4FilePath = primaryMP4Path
 
 	s.db.WithContext(ctx).Model(&task).Updates(updates)
 
 	s.logger.Info("转换完成，任务已结束",
 		zap.Uint("task_id", taskID),
-		zap.String("mp4_file", outputPath),
+		zap.Int("converted_count", convertedCount),
+		zap.String("primary_mp4", primaryMP4Path),
 	)
 
 	// 自动扫描视频文件
