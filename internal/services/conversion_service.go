@@ -295,6 +295,11 @@ func (s *FFmpegConversionService) processTask(ctx context.Context, taskID uint) 
 		"status": models.VideoStatusCompleted,
 	}
 
+	// Bug E 修复: CreateFileFromTask 读 task.MP4FilePath 内存值,但 line 314 的
+	// GORM Updates 还未执行,task.MP4FilePath 仍是空字符串。先同步内存 task,
+	// 让 CreateFileFromTask 能拿到 mp4 路径。
+	task.MP4FilePath = outputPath
+
 	// 创建 MP4 文件记录，并获取实际视频时长
 	if s.videoFileService != nil {
 		mp4 := "mp4"
