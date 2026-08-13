@@ -642,19 +642,18 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 		"-pix_fmt", "yuv420p",
 	)
 
-	// Bug G 真正修法: 上游 HLS 编码器缺 audio sample rate 元数据时,
-	// analyzeduration/probesize 探测不出来 (10MB 也不够), aresample 也
-	// 无法在没有 input rate 的情况下 init filter graph → aac encoder
-	// 永远起不来, tee muxer hang 在 Stream mapping 后无任何输出。
+	// Bug G 三修: HLS 输入缺 audio sample rate 元数据,
+	// analyzeduration/probesize/aresample 都无法启动 aac encoder。
+	// 但上游确实有 audio 数据, 业务方需要 audio track。
 	//
-	// 解法: 检测 HLS 输入时跳过 audio stream (-an),只 encode video。
-	// 这样 mkv/hls 都只有 video 轨,无 audio — 比 hang 无产出好。
+	// 解法: 双 input (lavfi anullsrc 静音 + 真实 HLS), 用 lavfi 的 audio
+	// (有完整 metadata) 启动 encoder, map 真实 HLS 的 video + lavfi 的 audio。
 	//
-	// 注: 这是 fallback;如果上游修复 metadata,可考虑改回。
-	isHLSNoAudio := input.Type == InputSourceStream && input.StreamProtocol == "hls"
+	// isHLSWithSilentAudio = HLS 输入场景下用静音 audio 兜底
+	isHLSWithSilentAudio := input.Type == InputSourceStream && input.StreamProtocol == "hls"
 
-	// 添加音频编码参数（如果有音频 且 不是 HLS 缺元数据场景）
-	if input.hasAudio && !isHLSNoAudio {
+	// 添加音频编码参数（如果有音频）
+	if input.hasAudio {
 		args = append(args,
 			"-c:a", "aac",
 			"-b:a", c.config.FFmpeg.DefaultAudioBitrate+"k",
@@ -674,15 +673,23 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 	// activity_watcher.go 整文件删除)。
 
 	// 映射流：需要根据输入源类型确定正确的输入索引
-	args = append(args, "-map", "0:v")
-	if input.hasAudio && !isHLSNoAudio {
-		// 检查是否有独立的音频输入源（USB或Mixed类型）
-		if input.Type == InputSourceUSB || input.Type == InputSourceMixed {
-			// 分离的音频设备，使用第二个输入索引
-			args = append(args, "-map", "1:a")
-		} else {
-			// RTSP等单一输入源，使用第一个输入索引
-			args = append(args, "-map", "0:a")
+	if isHLSWithSilentAudio {
+		// Bug G 三修: HLS 输入用 lavfi audio 兜底
+		// map 0:v (真实 HLS video) + 1:a (lavfi anullsrc 静音 audio)
+		args = append(args, "-map", "0:v", "-map", "1:a")
+		// 加 -shortest 让 lavfi (无限流) 跟随真实 HLS 长度结束
+		args = append(args, "-shortest")
+	} else {
+		args = append(args, "-map", "0:v")
+		if input.hasAudio {
+			// 检查是否有独立的音频输入源（USB或Mixed类型）
+			if input.Type == InputSourceUSB || input.Type == InputSourceMixed {
+				// 分离的音频设备，使用第二个输入索引
+				args = append(args, "-map", "1:a")
+			} else {
+				// RTSP等单一输入源，使用第一个输入索引
+				args = append(args, "-map", "0:a")
+			}
 		}
 	}
 
@@ -958,15 +965,25 @@ func (c *SimpleRecordingCoordinator) buildStreamArgs(input RecordingInput) ([]st
 	case "srt":
 		args = []string{"-i", input.StreamURL}
 	case "hls":
-		// Bug G: 上游 HLS 编码器可能不写 audio sample rate 元数据,
-		// ffmpeg 默认 analyzeduration=5s / probesize=5MB 不足以探测,
-		// 导致 aac encoder init 失败 muxer hang (Stream mapping 后无 Output)。
-		// 加大探测窗口让 ffmpeg 在更长时间内解析 sample rate;
-		// 若仍失败, 由 buildRecordingCommand 的 -af aresample=48000 兜底。
+		// Bug G: 上游 HLS 编码器 audio ts 段缺 sample rate 元数据,
+		// ffmpeg 报 "unspecified sample rate" 并 hang 在 Stream mapping 后。
+		// 但上游确实有 audio 数据 (业务方实测有声音) — 只是元数据缺失。
+		//
+		// 解法: 双 input 兜底
+		//   input 0 = 真实 HLS (video only, audio 解析可能失败)
+		//   input 1 = lavfi anullsrc (48000 Hz stereo 静音 audio)
+		// 然后 map 0:v + 1:a, 让 aac encoder 从 lavfi (有完整 metadata) 启动。
+		// 这样 mkv 一定有 audio track (静音), video 从真实 HLS 取。
+		//
+		// 局限: audio 是静音不是真实音 — 但比"完全无 audio 轨"更接近业务需求,
+		// 且 ffmpeg 不再 hang。如果业务方需要真实 audio, 需上游修 ts metadata。
 		args = []string{
-			"-analyzeduration", "10000000", // 10 秒
-			"-probesize", "10000000",       // 10 MB
+			"-analyzeduration", "10000000",
+			"-probesize", "10000000",
 			"-i", input.StreamURL,
+			// 第二个 input: lavfi 静音 audio (48kHz stereo)
+			"-f", "lavfi",
+			"-i", "anullsrc=r=48000:cl=stereo",
 		}
 	default:
 		return nil, fmt.Errorf("不支持的流媒体协议: %s: %w", protocol, apperrors.ErrInvalidInput)
