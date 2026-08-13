@@ -70,6 +70,10 @@ frontend/.env.production
 
 # Claude agent 临时工作树（不应进入版本控制）
 .claude/worktrees/
+.worktrees/
+
+# clean/ 是独立的敏感数据清理工具项目 (有自己的 go.mod), 不应被本仓库跟踪
+clean/
 
 # Claude / GSD 流程记录（项目级 skill 流程、个人笔记，不入仓库）
 /.claude/
