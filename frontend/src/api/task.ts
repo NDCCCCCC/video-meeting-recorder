@@ -101,6 +101,9 @@ export async function getTaskPreview(
     status: string
     ready?: boolean
     message?: string
+    // 多输入源预览: 每个源一个带 source query 的 url; 单源任务只有 1 项
+    streams?: { label: string; source: string; url: string }[]
+    default_source?: string // 默认源标识 (huawei_auto / stream), 前端初始显示它
   }>
 > {
   return apiRequest(`/api/v1/recordings/${id}/preview`)

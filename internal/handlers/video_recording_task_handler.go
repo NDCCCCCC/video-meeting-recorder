@@ -628,6 +628,86 @@ func (h *VideoRecordingTaskHandler) RetryConversion(c *gin.Context) {
 	response.GinSuccess(c, gin.H{"message": "转换任务已重新提交"})
 }
 
+// hlsSource 描述一个可预览的 HLS 输入源 (USB / 流媒体)。
+type hlsSource struct {
+	Label  string `json:"label"`  // 展示名: "USB" / "流媒体"
+	Source string `json:"source"` // 标识: "huawei_auto" / "stream"
+	Dir    string `json:"-"`      // HLS 子目录绝对路径 (内部定位用, 不序列化)
+}
+
+// discoverHLSSources 扫描 task 的 HLS 目录 (data/hls/task_XXX/), 发现所有可预览的输入源。
+// 每个子目录若有 index.m3u8 则算有效源; 从目录名后缀判断类型:
+//   - "_stream" 结尾 → 流媒体 (stream)
+//   - 否则         → USB (huawei_auto)
+//
+// 返回顺序: USB 优先 (默认源), 流媒体在后。每个类别取 mtime 最新的子目录
+// (覆盖重连产生多个目录的场景)。找不到任何源时返回 nil。
+func discoverHLSSources(task *models.VideoRecordingTask) []hlsSource {
+	if task.HLSPreviewPath == "" {
+		return nil
+	}
+	// task_XXX 目录 = m3u8 路径上两级 (index.m3u8 -> 子目录 -> task_XXX)
+	taskHLSDir := filepath.Dir(filepath.Dir(task.HLSPreviewPath))
+	entries, err := os.ReadDir(taskHLSDir)
+	if err != nil {
+		return nil
+	}
+
+	var latestUSBDir, latestStreamDir string
+	var latestUTime, latestSTime time.Time
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		subDir := filepath.Join(taskHLSDir, e.Name())
+		// 必须有 index.m3u8 才算有效源
+		if _, err := os.Stat(filepath.Join(subDir, "index.m3u8")); err != nil {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if strings.HasSuffix(e.Name(), "_stream") {
+			if info.ModTime().After(latestSTime) {
+				latestStreamDir = subDir
+				latestSTime = info.ModTime()
+			}
+		} else {
+			if info.ModTime().After(latestUTime) {
+				latestUSBDir = subDir
+				latestUTime = info.ModTime()
+			}
+		}
+	}
+
+	var out []hlsSource
+	if latestUSBDir != "" {
+		out = append(out, hlsSource{Label: "USB", Source: "huawei_auto", Dir: latestUSBDir})
+	}
+	if latestStreamDir != "" {
+		out = append(out, hlsSource{Label: "流媒体", Source: "stream", Dir: latestStreamDir})
+	}
+	return out
+}
+
+// resolveHLSDir 根据 source (huawei_auto / stream) 定位对应的 HLS 子目录。
+// 找不到匹配源时 fallback 到 task.HLSPreviewPath 的目录 (兼容旧 URL)。
+func resolveHLSDir(task *models.VideoRecordingTask, source string) string {
+	sources := discoverHLSSources(task)
+	wantStream := source == "stream"
+	for _, s := range sources {
+		if (s.Source == "stream") == wantStream {
+			return s.Dir
+		}
+	}
+	// fallback: 旧 URL 或 source 缺失, 用 DB 记录的路径
+	if task.HLSPreviewPath != "" {
+		return filepath.Dir(task.HLSPreviewPath)
+	}
+	return ""
+}
+
 // GetHLSPreview 获取HLS预览信息
 // @Summary 获取HLS预览信息
 // @Description 获取任务的HLS实时预览播放地址（仅任务创建者可访问）
@@ -682,31 +762,62 @@ func (h *VideoRecordingTaskHandler) GetHLSPreview(c *gin.Context) {
 		return
 	}
 
-	// 根据状态和文件存在性返回不同响应
-	// 返回完整的 m3u8 播放列表 URL（包含 token）
-	playbackURL := fmt.Sprintf("/api/v1/recordings/%d/preview/stream/index.m3u8", id)
+	// 多源预览: 扫描 task HLS 目录发现所有输入源 (USB / 流媒体)。
+	// USB 优先作为默认源 (本地摄像头更可靠); 单源任务 streams 只有 1 项。
+	sources := discoverHLSSources(task)
 
-	// 生成访问 token
+	// 生成访问 token (源间共用, per task+user)
 	accessToken := h.hlsToken.Generate(id, userID)
-	playbackURLWithToken := fmt.Sprintf("%s?token=%s", playbackURL, accessToken)
+	baseURL := fmt.Sprintf("/api/v1/recordings/%d/preview/stream/index.m3u8", id)
+
+	// 构建 streams 列表 (每个源一个带 source query 的 url)
+	var streams []gin.H
+	var defaultURL string
+	var defaultSource string
+	for _, s := range sources {
+		srcURL := fmt.Sprintf("%s?source=%s&token=%s", baseURL, s.Source, accessToken)
+		streams = append(streams, gin.H{
+			"label":  s.Label,
+			"source": s.Source,
+			"url":    srcURL,
+		})
+		if defaultURL == "" { // 第一个 (USB 优先) 为默认
+			defaultURL = srcURL
+			defaultSource = s.Source
+		}
+	}
+
+	// ready 判断: 默认源 (sources[0], 通常 USB) 的 m3u8 是否存在。
+	// 无源时 fallback 用 task.HLSPreviewPath (旧行为)。
+	ready := false
+	if len(sources) > 0 {
+		_, err := os.Stat(filepath.Join(sources[0].Dir, "index.m3u8"))
+		ready = err == nil
+	} else {
+		ready = m3u8Exists
+	}
 
 	switch {
-	case task.Status == "recording" && !m3u8Exists:
+	case task.Status == "recording" && !ready:
 		response.GinSuccess(c, gin.H{
-			"task_id":      id,
-			"playback_url": playbackURLWithToken,
-			"status":       task.Status,
-			"ready":        false,
-			"message":      "HLS预览正在准备中，请稍后刷新",
+			"task_id":        id,
+			"playback_url":   defaultURL,
+			"status":         task.Status,
+			"ready":          false,
+			"message":        "HLS预览正在准备中，请稍后刷新",
+			"default_source": defaultSource,
+			"streams":        streams,
 		})
-	case !m3u8Exists:
+	case !ready && len(sources) == 0:
 		response.GinError(c, response.CodeNotFound, "HLS预览文件不存在")
 	default:
 		response.GinSuccess(c, gin.H{
-			"task_id":      id,
-			"playback_url": playbackURLWithToken,
-			"status":       task.Status,
-			"ready":        true,
+			"task_id":        id,
+			"playback_url":   defaultURL,
+			"status":         task.Status,
+			"ready":          true,
+			"default_source": defaultSource,
+			"streams":        streams,
 		})
 	}
 }
@@ -796,7 +907,15 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 	}
 
 	// 构建完整的文件路径
-	hlsDir := filepath.Dir(task.HLSPreviewPath)
+	// 多源预览: 根据 ?source= query 定位对应输入源的 HLS 目录 (USB / 流媒体)。
+	// source 缺失时 fallback 到 task.HLSPreviewPath 目录 (兼容旧 URL)。
+	source := c.DefaultQuery("source", "")
+	hlsDir := resolveHLSDir(task, source)
+	if hlsDir == "" {
+		c.Status(404)
+		c.Abort()
+		return
+	}
 	fullPath := filepath.Join(hlsDir, filePath)
 
 	// 安全检查：确保请求的文件在HLS目录内
@@ -851,8 +970,9 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 			return
 		}
 
-		// 重写 m3u8 内容：在分段 URL 中添加 fresh token 参数
-		rewrittenContent := h.rewriteM3U8WithToken(string(content), freshToken, id)
+		// 重写 m3u8 内容：在分段 URL 中添加 fresh token + source 参数
+		// source 必须透传到 .ts URL, 否则 hls.js 拉 segment 时 ServeHLSStream 定位错目录
+		rewrittenContent := h.rewriteM3U8WithToken(string(content), freshToken, source, id)
 		rewrittenBytes := []byte(rewrittenContent)
 		// 仅 cache 当 m3u8 在合理范围（< 64KB）— 太大留给路径上的 CDN。
 		if len(rewrittenBytes) < 64*1024 {
@@ -870,12 +990,13 @@ func (h *VideoRecordingTaskHandler) ServeHLSStream(c *gin.Context) {
 	c.File(fullPath)
 }
 
-// rewriteM3U8WithToken 重写 m3u8 播放列表，在分段 URL 中添加 token 参数
+// rewriteM3U8WithToken 重写 m3u8 播放列表，在分段 URL 中添加 token + source 参数
 // PERF-005/D-03.8: 对 .ts/.m3u8 分段 URL 的 tokenize 改用 bounded concurrency，
 // 限制在 cfg.FFmpeg.HLSRewriteConcurrency（默认 2）以避免突发请求耗尽 FFmpeg 子进程槽位。
-func (h *VideoRecordingTaskHandler) rewriteM3U8WithToken(content, token string, taskID uint) string {
+func (h *VideoRecordingTaskHandler) rewriteM3U8WithToken(content, token, source string, taskID uint) string {
 	lines := strings.Split(content, "\n")
-	tokenParam := fmt.Sprintf("?token=%s", token)
+	// source 透传到 .ts URL, 让 ServeHLSStream 能按 source 定位正确目录
+	tokenParam := fmt.Sprintf("?token=%s&source=%s", token, source)
 	_ = taskID
 
 	result := make([]string, len(lines))

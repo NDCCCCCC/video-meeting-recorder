@@ -1,7 +1,7 @@
 // HLS 实时预览组件
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Button, Modal, Alert, Space } from 'antd'
+import { Button, Modal, Alert, Space, Segmented } from 'antd'
 import { ReloadOutlined, EyeOutlined } from '@ant-design/icons'
 import { getTaskPreview } from '../api/task'
 import type { VideoRecordingTask } from '../types/task'
@@ -124,6 +124,9 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
   const [isPreparing, setIsPreparing] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
+  // 多源预览: 可切换的输入源列表 (USB / 流媒体); currentSource 跟踪当前选中
+  const [streams, setStreams] = useState<{ label: string; source: string; url: string }[]>([])
+  const [currentSource, setCurrentSource] = useState<string>()
 
   const MAX_RETRY_COUNT = 10 // 最大重试次数
 
@@ -146,6 +149,8 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
     setLoading(true)
     setError(undefined)
     setHlsUrl(undefined)
+    setStreams([])
+    setCurrentSource(undefined)
     setIsPreparing(false)
     setRetryCount(0) // 重置重试计数
 
@@ -179,6 +184,10 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
           setIsPreparing(false)
           setError(undefined)
           setRetryCount(0) // 成功后重置计数
+          // 多源: 记录 streams 列表 + 默认源 (后端已把 USB 排第一)
+          const srcs = response.data.streams ?? []
+          setStreams(srcs)
+          setCurrentSource(response.data.default_source ?? srcs[0]?.source)
         }
       }
     } catch (err) {
@@ -189,6 +198,16 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
       setLoading(false)
     }
   }
+
+  // 切换输入源: 找到对应 url, 更新 hlsUrl + currentSource
+  // HLSPlayer 用 key={currentSource} 强制重建, 让 hls.js 重新 load 新源
+  const handleSourceChange = useCallback((source: string) => {
+    const target = streams.find((s) => s.source === source)
+    if (target) {
+      setCurrentSource(source)
+      setHlsUrl(target.url)
+    }
+  }, [streams])
 
   const handleRefresh = useCallback(() => {
     openPreview()
@@ -203,6 +222,8 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
     setVisible(false)
     setHlsUrl(undefined)
     setError(undefined)
+    setStreams([])
+    setCurrentSource(undefined)
   }, [])
 
   return (
@@ -248,7 +269,19 @@ export function HLSPreview({ taskId, taskName, status }: HLSPreviewProps) {
 
         {hlsUrl && !error && (
           <>
-            <HLSPlayer src={hlsUrl} onError={handlePlayerError} />
+            {/* 多源切换: 仅当有 >1 个输入源时显示 (单源任务行为不变) */}
+            {streams.length > 1 && (
+              <div style={{ marginBottom: 12 }}>
+                <Segmented
+                  value={currentSource}
+                  onChange={(val) => handleSourceChange(val as string)}
+                  options={streams.map((s) => ({ label: s.label, value: s.source }))}
+                  block
+                />
+              </div>
+            )}
+            {/* key=currentSource: 切换源时强制重建 HLSPlayer, 让 hls.js 重新 load */}
+            <HLSPlayer key={currentSource} src={hlsUrl} onError={handlePlayerError} />
             <div style={{ marginTop: 16, color: '#999', fontSize: 12 }}>
               <Space>
                 <span>状态: {currentStatus === 'recording' ? '录制中' : currentStatus}</span>

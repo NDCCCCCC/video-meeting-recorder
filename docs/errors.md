@@ -27,9 +27,9 @@
 | ErrForeignKeyConstraint | Sentinel | 500 | 15 |
 | ErrHuaweiAuthFailed | Sentinel | 500 | 2 |
 | ErrInsufficientQuota | Sentinel | 429 | 12 |
-| ErrInternal | Sentinel | 500 | 117 |
+| ErrInternal | Sentinel | 500 | 114 |
 | ErrInvalidFileType | Sentinel | 400 | 5 |
-| ErrInvalidInput | Sentinel | 400 | 173 |
+| ErrInvalidInput | Sentinel | 400 | 161 |
 | ErrNotFound | Sentinel | 404 | 31 |
 | ErrPPTFileNotFound | Sentinel | 404 | 9 |
 | ErrPermissionNotFound | Sentinel | 404 | 5 |
