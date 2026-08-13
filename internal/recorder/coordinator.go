@@ -142,7 +142,7 @@ func (c *SimpleRecordingCoordinator) StartRecordingWithConfig(task *models.Video
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, c.config.FFmpeg.Path, args...)
 
-	logFile, err := c.startFFmpegProcess(cmd, mkvPath)
+	logFile, err := c.startFFmpegProcess(cmd, mkvPath, configType)
 	if err != nil {
 		cancel()
 		return err
@@ -403,7 +403,7 @@ func (c *SimpleRecordingCoordinator) restartRecording(processKey string, process
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, c.config.FFmpeg.Path, args...)
 
-	logFile, err := c.startFFmpegProcess(cmd, mkvPath)
+	logFile, err := c.startFFmpegProcess(cmd, mkvPath, configType)
 	if err != nil {
 		cancel()
 		return err
@@ -644,7 +644,16 @@ func (c *SimpleRecordingCoordinator) buildRecordingCommand(input RecordingInput,
 
 	// 添加音频编码参数（如果有音频）
 	if input.hasAudio {
-		args = append(args, "-c:a", "aac", "-b:a", c.config.FFmpeg.DefaultAudioBitrate+"k")
+		// Bug G: 加 aresample=48000 filter 强制 resample 到 48kHz,
+		// 解决上游 HLS 缺 audio sample rate 元数据 (aac encoder init fail
+		// 导致 tee muxer hang) 的问题。即使 input sample rate 探测失败,
+		// aresample 会让 ffmpeg 用 silent frames 启动 encoder。
+		args = append(args,
+			"-c:a", "aac",
+			"-b:a", c.config.FFmpeg.DefaultAudioBitrate+"k",
+			"-af", "aresample=48000",
+			"-ar", "48000",
+		)
 	}
 
 	// 添加时长限制
@@ -944,7 +953,16 @@ func (c *SimpleRecordingCoordinator) buildStreamArgs(input RecordingInput) ([]st
 	case "srt":
 		args = []string{"-i", input.StreamURL}
 	case "hls":
-		args = []string{"-i", input.StreamURL}
+		// Bug G: 上游 HLS 编码器可能不写 audio sample rate 元数据,
+		// ffmpeg 默认 analyzeduration=5s / probesize=5MB 不足以探测,
+		// 导致 aac encoder init 失败 muxer hang (Stream mapping 后无 Output)。
+		// 加大探测窗口让 ffmpeg 在更长时间内解析 sample rate;
+		// 若仍失败, 由 buildRecordingCommand 的 -af aresample=48000 兜底。
+		args = []string{
+			"-analyzeduration", "10000000", // 10 秒
+			"-probesize", "10000000",       // 10 MB
+			"-i", input.StreamURL,
+		}
 	default:
 		return nil, fmt.Errorf("不支持的流媒体协议: %s: %w", protocol, apperrors.ErrInvalidInput)
 	}
