@@ -22,7 +22,7 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Shanghai"
-    # 与 CI 对齐:Node 20
+    # 与 CI 对齐:Node 24
     target-branch: "main"
     commit-message:
       prefix: "chore(frontend)"

@@ -24,7 +24,7 @@
 | `go`（go.mod） | `1.25.x` | 项目目标版本 |
 | `golangci-lint` | `>= v2.12.2`（需 go1.25 构建） | 旧版（v1.x / v2.7.x）会报 Go 语言版本过低 |
 | `golangci/golangci-lint-action` | `>= v7`（v2 需 v7+） | v6 不支持 v2 lint |
-| `node` | `20` | `actions/setup-node@v4` 默认 |
+| `node` | `24` | `actions/setup-node@v4` 默认 |
 | `.golangci.yml` schema | **v2** | v1 schema 与 v2 lint 不兼容 |
 | `frontend/antd` | `^6` | 不要回退 v5（pro-layout 是死路） |
 
