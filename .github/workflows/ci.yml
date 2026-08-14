@@ -73,7 +73,7 @@ jobs:
           HLS_TOKEN_SECRET: 0123456789abcdef0123456789abcdef
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           # 固定到 v2.12.2：需用 go1.25 构建的 golangci-lint 才能分析 go1.25 代码。
           # v1.x / v2.7.x（go1.24 构建）会报 "Go language version ... is lower
