@@ -1,0 +1,39 @@
+name: Dependabot Auto-merge
+
+# 对 Dependabot 提交的依赖升级 PR：自动开启 auto-merge（squash）。
+#
+# 设计说明（在 require_code_owner_reviews=true 下）：
+#   - 本 workflow 只设置 auto-merge，不 auto-approve —— bot 的 approve 不满足
+#     code owner 要求（会被 GitHub 判为无效），且依赖升级应由 owner 人工审查。
+#   - 实际流程：Dependabot 开 PR → 本 workflow 设好 auto-merge → 等待 owner(@NDCCCCCC)
+#     approve + ci-status 全绿 → GitHub 自动 squash 合并。
+#   - 安全边界：若 ci-status 失败，PR 保持 open 不合并；owner 未 approve 也不合并。
+#
+# 收益：owner 只需 approve 一次，无需再手动点 merge；合并时机由 CI 通过决定。
+
+on:
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  contents: write        # 设置 auto-merge 需要
+  pull-requests: write
+
+jobs:
+  dependabot-auto-merge:
+    name: Enable auto-merge for Dependabot PR
+    runs-on: ubuntu-latest
+    # 仅处理 Dependabot 开的 PR
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata (验证依赖信息)
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge (squash) once approved + checks pass
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}

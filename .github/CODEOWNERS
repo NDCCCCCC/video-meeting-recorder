@@ -1,0 +1,7 @@
+# CODEOWNERS — 指定代码所有者，配合分支保护 require_code_owner_reviews 收紧审批权。
+# 语法：<pattern> <owner1> <owner2> ...
+# 这里将整个仓库的所有者设为 @NDCCCCCC（须对仓库有 write 权限才生效）。
+# 仅 CODEOWNERS 成员的 approve 计入 required_approving_review_count；
+# 其他 GitHub 用户（路人/外部贡献者）的 approve 不生效。
+
+* @NDCCCCCC
