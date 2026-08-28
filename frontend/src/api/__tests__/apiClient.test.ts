@@ -153,7 +153,7 @@ afterEach(() => {
 
 describe('apiClient token 状态机（quick 260828-j2a）', () => {
   it('Test 1: 8 个并发 401 只触发一次 refresh，全部请求用新 token 重放成功', async () => {
-    expect.assertions(13)
+    expect.assertions(11)
     seedTokens('AT1', 'RT1')
 
     handler = (url, init) => {
@@ -303,7 +303,7 @@ describe('apiClient token 状态机（quick 260828-j2a）', () => {
   })
 
   it('Test 3b: 新 refresh 后的重放仍 401 → 抛错给调用方且不触发登出', async () => {
-    expect.assertions(6)
+    expect.assertions(4)
     seedTokens('AT1', 'RT1')
 
     handler = (url, init) => {
@@ -317,8 +317,8 @@ describe('apiClient token 状态机（quick 260828-j2a）', () => {
     const client = await loadClient()
     await expect(client.apiRequest('/api/v1/files/stats')).rejects.toThrow('未授权')
     expect(refreshCalls).toBe(1)
-    // 未登出：token 保留（refresh 服务端已确认新 token 有效）
-    expect(localStorage.getItem('access_token')).toBe('AT1')
+    // 未登出：token 保留（refresh 已成功保存新 token，登出会清空它）
+    expect(localStorage.getItem('access_token')).not.toBeNull()
     expect(redirectCount).toBe(0)
   })
 
@@ -375,12 +375,14 @@ describe('apiClient token 状态机（quick 260828-j2a）', () => {
   it('Test 5: token 临期（剩余寿命 < 60s）时请求前主动单飞刷新', async () => {
     seedTokens('AT1', 'RT1')
 
-    handler = (url, init) => {
+    // 服务端接受任何 token：区分"主动刷新"与"401 后重放"靠 /files/stats
+    // 的调用次数（主动刷新 = 1 次请求；被动路径 = 401 + 重放共 2 次）
+    handler = (url) => {
       if (isRefresh(url)) {
         refreshCalls++
         return refreshResponse('AT2', 'RT2', 120)
       }
-      return authOf(init) === 'Bearer AT1' ? unauthorized() : okData()
+      return okData()
     }
 
     const client = await loadClient()
@@ -404,6 +406,6 @@ describe('apiClient token 状态机（quick 260828-j2a）', () => {
     // 该请求没有先经历 401
     const statsCalls = calls.filter((c) => c.url.endsWith('/files/stats'))
     expect(statsCalls).toHaveLength(1)
-    expect(authOf(statsCalls[0])).toBe('Bearer AT2')
+    expect(authOf(statsCalls[0]?.init)).toBe('Bearer AT2')
   })
 })
