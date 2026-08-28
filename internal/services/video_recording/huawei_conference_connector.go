@@ -76,8 +76,23 @@ func (c *HuaweiConferenceConnector) ConnectToConference(ctx context.Context, tas
 	}
 
 	if err := c.manager.SafeCallConference(ctx, configID, callReq); err != nil {
-		_ = c.unlockTerminal(ctx, config.ID) // 释放锁
-		return fmt.Errorf("呼叫会议失败: %w", err)
+		// quick 260828-huawei-call-retry 方案一：调用失败怀疑本地缓存客户端持有
+		// 已与远端失同步的 session；强制从缓存移除并重试一次。
+		// 重试会走 createClient → InitializeAndStartKeepAlive 重建会话。
+		c.logger.Warn("首次呼叫会议失败，移除客户端缓存并重试",
+			zap.Uint("task_id", task.ID),
+			zap.Uint("config_id", configID),
+			response.SentinelField(err),
+		)
+		c.manager.RemoveClient(ctx, configID)
+		if err2 := c.manager.SafeCallConference(ctx, configID, callReq); err2 != nil {
+			_ = c.unlockTerminal(ctx, config.ID) // 释放锁
+			return fmt.Errorf("呼叫会议失败(重试后): %w", err2)
+		}
+		c.logger.Info("呼叫会议重试成功",
+			zap.Uint("task_id", task.ID),
+			zap.Uint("config_id", configID),
+		)
 	}
 
 	// 5. 等待连接确认

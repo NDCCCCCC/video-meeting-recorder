@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -305,6 +306,16 @@ func (m *Manager) removeClient(ctx context.Context, configID uint) {
 	}
 }
 
+// RemoveClient 导出方法：从缓存中强制移除指定 configID 的客户端。
+// 用于 CallConference 等操作失败后，怀疑本地会话已与远端失同步时
+// 强制下次 GetClient 走 createClient 重建（quick 260828-huawei-call-retry 方案一）。
+func (m *Manager) RemoveClient(ctx context.Context, configID uint) {
+	m.logger.Info("主动移除华为客户端缓存",
+		zap.Uint("config_id", configID),
+	)
+	m.removeClient(ctx, configID)
+}
+
 // Close 关闭管理器，清理所有客户端（PERF-004：批量取客户端后解锁，再逐个 Logout）
 func (m *Manager) Close(ctx context.Context) error {
 	m.mu.Lock()
@@ -405,6 +416,24 @@ func (m *Manager) SafeCallConference(ctx context.Context, configID uint, req *Ca
 
 	// 4. 呼叫会议
 	if err := client.CallConference(ctx, req.ConferenceNumber); err != nil {
+		// 方案二（quick 260828-huawei-call-retry）：补日志暴露 HuaweiError.Code，
+		// 让运维区分是网络层错误还是华为侧拒绝。Code 本身不含凭据，安全。
+		var huaweiErr *HuaweiError
+		if errors.As(err, &huaweiErr) {
+			m.logger.Warn("呼叫会议被华为侧拒绝",
+				zap.Uint("config_id", configID),
+				zap.String("conference_number", req.ConferenceNumber),
+				zap.String("terminal_number", req.TerminalNumber),
+				zap.Int("huawei_error_code", huaweiErr.Code),
+				zap.String("huawei_error_message", huaweiErr.Message),
+			)
+		} else {
+			m.logger.Warn("呼叫会议失败（非华为错误）",
+				zap.Uint("config_id", configID),
+				zap.String("conference_number", req.ConferenceNumber),
+				response.SentinelField(err),
+			)
+		}
 		return fmt.Errorf("呼叫会议失败: %w: %w", apperrors.ErrInternal, err)
 	}
 
