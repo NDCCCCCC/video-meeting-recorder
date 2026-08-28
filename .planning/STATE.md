@@ -233,6 +233,7 @@ Last activity: 2026-08-06 -- Phase 25 plan 04 executed (3 commits: f0bdd1e + f49
 | 260811-cxl | 时间选择器分钟仅 00/15/30/45 可选，秒列隐藏默认 00 | 2026-08-11 | c4341a0 | [260811-cxl-00-15-30-45-00](./quick/260811-cxl-00-15-30-45-00/) |
 | 260812-jc2 | 为 clean 工具增加 HTML 报告输出（结构对齐 MD 五节），文件路径渲染为可点击打开资源管理器的 file:/// 超链接 | 2026-08-12 | f87e9ac | [260812-jc2-clean-report-html-md](./quick/260812-jc2-clean-report-html-md/) |
 | 260828-huawei | 华为呼叫会议瞬时失败自愈：失败时暴露 HuaweiError 错误码并清缓存重建客户端重试一次 | 2026-08-28 | 542f1dc | [260828-huawei-call-retry](./quick/260828-huawei-call-retry/) |
+| 260828-krh | 输入配置列表为每一项添加视频画面预览（按需 ffmpeg 单帧抓取，10s 自动轮询可选） | 2026-08-28 | 70ab16e,9726a07 | [260828-krh-input-config-column-video-preview](./quick/260828-krh-input-config-column-video-preview/) |
 | 260828-j2a | 前端偶发 401 修复：token 刷新单飞 + 缓存重放 + 主动刷新 + 后端宽限期 5s→30s，并发 401 后自动恢复无需刷新页面 | 2026-08-28 | b6a366f | [260828-j2a-401-token](./quick/260828-j2a-401-token/) |
 
 ---
