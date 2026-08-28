@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AuthState, LoginRequest, ChangePasswordRequest } from '../types/auth'
 import * as authApi from '../api/auth'
+import { setOnTokenRefresh } from '../api/apiClient'
 
 interface AuthStore extends AuthState {
   // Actions
@@ -108,3 +109,9 @@ export const useAuthStore = create<AuthStore>()(
     }
   )
 )
+
+// 内存/存储分叉修复（quick 260828-j2a）：apiClient 通过回调把最新凭据推给本 store，
+// zustand persist 自动同步 localStorage，避免 in-memory token 与 localStorage 不一致
+setOnTokenRefresh((accessToken, refreshToken) => {
+  useAuthStore.setState({ token: accessToken, refreshToken, isAuthenticated: true })
+})

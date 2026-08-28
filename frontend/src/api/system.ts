@@ -1,7 +1,7 @@
 // 系统设置 API 客户端
 
 import type { ApiResponse } from '../types/auth'
-import { apiRequest, getToken } from './apiClient'
+import { apiRequest, authedFetch } from './apiClient'
 
 // 系统配置
 export interface SystemConfig {
@@ -44,13 +44,9 @@ export async function getSystemConfig(): Promise<ApiResponse<SystemConfig>> {
 export async function updateSystemConfig(
   data: UpdateSystemConfigRequest
 ): Promise<ApiResponse<{ message: string }>> {
-  const token = getToken()
-  const response = await fetch('/api/v1/system/config', {
+  const response = await authedFetch('/api/v1/system/config', {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
 

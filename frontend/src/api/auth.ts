@@ -54,7 +54,7 @@ export async function login(req: LoginRequest): Promise<ApiResponse<LoginRespons
   }
 
   if (data.data) {
-    saveToken(data.data.access_token, data.data.refresh_token)
+    saveToken(data.data.access_token, data.data.refresh_token, data.data.expires_in)
     // 注意：不再手动更新 auth-storage，避免与 zustand persist 竞态
     // zustand persist 会在 authStore.login() 的 set() 调用时自动处理持久化
   }

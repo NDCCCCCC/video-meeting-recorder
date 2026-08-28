@@ -127,6 +127,11 @@ const saveToken = (accessToken: string, refreshToken: string, expiresInSec?: num
   // 立即更新缓存变量，避免下次读取时使用旧值
   cachedToken = accessToken
   cachedRefreshToken = refreshToken
+
+  // 通知 authStore 同步 in-memory token（避免循环依赖：走回调注入而非直接 import）
+  if (onTokenRefresh) {
+    onTokenRefresh(accessToken, refreshToken)
+  }
 }
 
 // 清除 Token
@@ -428,3 +433,104 @@ export { clearToken as apiClearToken }
 
 // 导出 saveToken 供 auth.ts 使用
 export { saveToken }
+
+// ---------------- Task 2: 收口所有认证路径 + 同步内存/store ----------------
+
+// 内存/存储分叉修复：apiClient 通过 setOnTokenRefresh 把最新凭据推给 authStore，
+// 由 zustand persist 自动同步 localStorage，in-memory 与 localStorage 不再分叉。
+// 注意：apiClient 不直接 import authStore（会形成 apiClient → authStore → auth → apiClient
+// 循环依赖），必须走回调注入；回调在 authStore 模块加载时注册。
+let onTokenRefresh: ((accessToken: string, refreshToken: string) => void) | null = null
+
+export function setOnTokenRefresh(
+  cb: (accessToken: string, refreshToken: string) => void
+): void {
+  onTokenRefresh = cb
+}
+
+/**
+ * 带认证的 fetch：复用 apiRequest 的 401 单飞 / 缓存重放 / 升级再刷新状态机，
+ * 返回原始 Response 供调用方做自定义解析（Blob / 流式 / 直接 DOM 下载）。
+ * 401 兜底完成后仍返回 Response（可能仍是 401），调用方按 .ok 处理。
+ */
+export async function authedFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const url = typeof input === 'string' ? input : String(input)
+  const baseHeaders: Record<string, string> = {
+    ...(init?.headers as Record<string, string>),
+  }
+
+  // 临期主动刷新：与 apiRequest 共用同一单飞 / 缓存状态机
+  const proactiveToken = await ensureFreshToken()
+  if (proactiveToken) {
+    baseHeaders['Authorization'] = `Bearer ${proactiveToken}`
+  }
+
+  let response = await fetch(url, { ...init, headers: baseHeaders })
+
+  if (response.status !== 401) {
+    return response
+  }
+
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) {
+    handleUnauthorized()
+    throw new Error('Unauthorized - no refresh token')
+  }
+  if (lastRefreshFailureTime > 0 && Date.now() - lastRefreshFailureTime < REFRESH_COOLDOWN) {
+    throw new TokenRefreshCooldownError()
+  }
+
+  // 复用 401 单飞 / 缓存重放 / 升级再刷新 token 解析
+  const { token, source } = await resolveRetryToken()
+
+  response = await fetch(url, {
+    ...init,
+    headers: { ...baseHeaders, Authorization: `Bearer ${token}` },
+  })
+  if (response.status !== 401) {
+    return response
+  }
+  // 已用新 refresh 的 token 仍 401 → 让调用方按 .ok 处理，不强制登出
+  if (source !== 'cache') {
+    return response
+  }
+  // 缓存 token 重放仍 401 → 升级为新 refresh 再重放一次
+  const freshToken = await startRefresh()
+  return fetch(url, {
+    ...init,
+    headers: { ...baseHeaders, Authorization: `Bearer ${freshToken}` },
+  })
+}
+
+type TokenSource = 'in-flight' | 'cache' | 'new-refresh'
+
+async function resolveRetryToken(): Promise<{ token: string; source: TokenSource }> {
+  if (refreshingPromise) {
+    return { token: await refreshingPromise, source: 'in-flight' }
+  }
+  if (recentRefresh && Date.now() - recentRefresh.at < REFRESH_GRACE_MS) {
+    return { token: recentRefresh.token, source: 'cache' }
+  }
+  return { token: await startRefresh(), source: 'new-refresh' }
+}
+
+/**
+ * 获取新鲜 token（access）：临期会自动刷新。供 XHR 等非 fetch 场景调用。
+ * 刷新失败时返回当前 token（不阻断调用，由 401 兜底路径处理）。
+ */
+export async function getFreshToken(): Promise<string | null> {
+  return ensureFreshToken()
+}
+
+/**
+ * 给 XMLHttpRequest 设置 Bearer 认证头：供 uploadVideoFile 等非 fetch 场景复用。
+ * 把 'Bearer ' 字面量收敛到 apiClient 内，外部模块不手拼授权头。
+ */
+export function applyAuthHeader(xhr: XMLHttpRequest, token: string | null): void {
+  if (token) {
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+  }
+}

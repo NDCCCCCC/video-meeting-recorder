@@ -7,7 +7,7 @@ import type {
   AuditLogApiResponse,
 } from '../types/audit'
 import type { ApiResponse } from '../types/auth'
-import { apiRequest } from './apiClient'
+import { apiRequest, authedFetch } from './apiClient'
 
 // 获取审计日志列表
 export async function getAuditLogs(params: AuditLogListParams): Promise<AuditLogListApiResponse> {
@@ -40,11 +40,7 @@ export async function exportAuditLogs(params: AuditLogExportParams): Promise<Blo
   queryParams.append('format', params.format || 'csv')
 
   const query = queryParams.toString()
-  const response = await fetch(`/api/v1/audit/logs/export${query ? `?${query}` : ''}`, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-    },
-  })
+  const response = await authedFetch(`/api/v1/audit/logs/export${query ? `?${query}` : ''}`)
 
   if (!response.ok) {
     throw new Error(`导出失败: ${response.statusText}`)

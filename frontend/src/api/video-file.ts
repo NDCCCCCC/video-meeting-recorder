@@ -7,7 +7,7 @@ import type {
   VideoFileStats,
 } from '../types/video-file'
 import type { ApiResponse } from '../types/auth'
-import { apiRequest, getToken } from './apiClient'
+import { apiRequest, authedFetch, applyAuthHeader, getFreshToken } from './apiClient'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
@@ -48,14 +48,9 @@ export async function getVideoPlaybackUrl(
 
 // 下载文件（触发浏览器原生下载，显示进度）
 export function downloadVideoFile(id: number, fileName?: string): void {
-  const token = getToken()
   const url = `${API_BASE_URL}/api/v1/files/${id}/download`
 
-  fetch(url, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  })
+  authedFetch(url)
     .then((response) => response.blob())
     .then((blob) => {
       const blobUrl = URL.createObjectURL(blob)
@@ -223,16 +218,20 @@ export function uploadVideoFile(
     })
 
     // Open and send request
-    const token = getToken()
-    xhr.open('POST', `${API_BASE_URL}/api/v1/storage/upload`)
-    if (token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-    }
-    // Expose xhr to caller for cancellation support
-    if (onXhrCreated) {
-      onXhrCreated(xhr)
-    }
-    xhr.send(formData)
+    void getFreshToken()
+      .then((token) => {
+        xhr.open('POST', `${API_BASE_URL}/api/v1/storage/upload`)
+        applyAuthHeader(xhr, token)
+        // Expose xhr to caller for cancellation support
+        if (onXhrCreated) {
+          onXhrCreated(xhr)
+        }
+        xhr.send(formData)
+      })
+      .catch((error: unknown) => {
+        // ensureFreshToken 内部已捕获所有错误并返回旧 token，此处仅为防御性兜底
+        reject(error instanceof Error ? error : new Error('Failed to acquire token'))
+      })
   })
 }
 
@@ -243,18 +242,14 @@ import dayjs from 'dayjs'
 
 // 批量下载文件（打包为ZIP）
 export function batchDownloadFiles(ids: number[]): void {
-  const token = getToken()
   const url = `${API_BASE_URL}/api/v1/files/batch/download`
 
   // 显示加载提示
   const hide = message.loading('正在打包文件，请稍候...', 0)
 
-  fetch(url, {
+  authedFetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids }),
   })
     .then((response) => {
