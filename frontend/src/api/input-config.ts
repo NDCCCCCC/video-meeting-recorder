@@ -10,7 +10,9 @@ import type {
   USBDevicesScanResult,
 } from '../types/input-config'
 import type { ApiResponse } from '../types/auth'
-import { apiRequest } from './apiClient'
+import { apiRequest, authedFetch } from './apiClient'
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 // 获取输入配置列表
 export async function getInputConfigList(
@@ -78,4 +80,20 @@ export async function scanUSBDevices(): Promise<ApiResponse<USBDevicesScanResult
 // 获取激活的输入配置
 export async function getActiveInputConfigs(): Promise<ApiResponse<InputConfig[]>> {
   return apiRequest('/api/v1/input-configs/active')
+}
+
+// 获取输入配置的实时画面预览（Blob → 调用方负责 revokeObjectURL）
+export async function getInputConfigPreview(id: number): Promise<Blob> {
+  const res = await authedFetch(`${API_BASE_URL}/api/v1/input-configs/${id}/preview`)
+  if (!res.ok) {
+    let msg = `预览请求失败: ${res.status}`
+    try {
+      const json = await res.json()
+      if (json?.message) msg = json.message
+    } catch {
+      // ignore parse error
+    }
+    throw new Error(msg)
+  }
+  return res.blob()
 }

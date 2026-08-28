@@ -29,6 +29,7 @@ import * as inputConfigApi from '../../../api/input-config'
 import type { InputConfig, InputConfigListParams, ConfigType } from '../../../types/input-config'
 import { buildCreatePayload, buildUpdatePayload } from './utils'
 import { InputConfigDetailModal } from './components/InputConfigDetailModal'
+import { InputPreviewCell } from './components/InputPreviewCell'
 import { useUSBDeviceScan } from './hooks/useUSBDeviceScan'
 import { BasicConfigTab } from './components/BasicConfigTab'
 import { HuaweiConfigTab } from './components/HuaweiConfigTab'
@@ -243,6 +244,12 @@ export default function InputConfigManagement() {
       width: 200,
     },
     {
+      title: '预览',
+      key: 'preview',
+      width: 150,
+      render: (_, record) => <InputPreviewCell config={record} />,
+    },
+    {
       title: '状态',
       dataIndex: 'is_active',
       width: 100,
@@ -345,7 +352,7 @@ export default function InputConfigManagement() {
         dataSource={configs}
         rowKey="id"
         loading={loading}
-        scroll={{ x: 1200 }}
+        scroll={{ x: 1360 }}
         pagination={{
           current: params.page,
           pageSize: params.page_size,
