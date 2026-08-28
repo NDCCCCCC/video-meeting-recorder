@@ -104,7 +104,7 @@ func (s *InputPreviewService) resolveSource(cfg *models.InputConfig) (previewSou
 
 // buildArgs 构建 ffmpeg argv
 func (s *InputPreviewService) buildArgs(src previewSource, outputPath string) ([]string, error) {
-	var args []string
+	var args []string //nolint:prealloc // 动态大小由 protocol/backend 决定，无需预分配
 
 	switch src.kind {
 	case "stream":
@@ -201,8 +201,10 @@ func (s *InputPreviewService) capture(ctx context.Context, src previewSource) ([
 		return nil, fmt.Errorf("创建临时文件失败: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	tmpFile.Close()
-	defer os.Remove(tmpPath)
+	if err := tmpFile.Close(); err != nil {
+		return nil, fmt.Errorf("关闭临时文件失败: %w", err)
+	}
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	args, err := s.buildArgs(src, tmpPath)
 	if err != nil {
