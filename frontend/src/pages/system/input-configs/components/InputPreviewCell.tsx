@@ -2,8 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button, Switch, Tooltip, Space } from 'antd'
 import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
-import { getInputConfigPreview } from '../../../api/input-config'
-import type { InputConfig } from '../../../types/input-config'
+import { getInputConfigPreview } from '../../../../api/input-config'
+import type { InputConfig } from '../../../../types/input-config'
 
 interface Props {
   config: InputConfig
