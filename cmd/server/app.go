@@ -744,6 +744,7 @@ func (a *MinimalApp) initHandlers() error {
 	a.videoFileService.SetHLSPath(a.config.Storage.HLSPath)
 	usbScanner := services.NewUSBDeviceScanner(a.logger)
 	inputConfigService := services.NewInputConfigService(a.db, a.logger, a.config, usbScanner, a.credentialEncryptor)
+	previewService := services.NewInputPreviewService(a.db, a.logger, a.config.FFmpeg.Path)
 
 	// 审计日志服务（必须在 userService 之前创建）
 	auditService := audit.NewAuditLogService(a.db, a.logger)
@@ -866,7 +867,7 @@ func (a *MinimalApp) initHandlers() error {
 		Role:          handlers.NewRoleHandler(roleService, auditService, a.logger),
 		Admin:         handlers.NewAdminHandler(a.config, a.logger, configService, authService, a.db, a.credentialEncryptor),
 		VideoTask:     handlers.NewVideoRecordingTaskHandler(a.videoTaskService, auditService, a.logger, a.config, a.db),
-		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, auditService, a.logger, usbScanner),
+		InputConfig:   handlers.NewInputConfigHandler(inputConfigService, auditService, a.logger, usbScanner, previewService),
 		VideoFile:     handlers.NewVideoFileHandler(a.videoFileService, auditService, a.logger, a.config),
 		File:          fileHandler,
 		Audit:         auditHandler,
@@ -1024,6 +1025,9 @@ func (a *MinimalApp) registerRoutes() error {
 		inputConfigs.DELETE("/:id", auditOp(models.ModuleInputConfig, "delete"), a.handlers.InputConfig.DeleteConfig)
 		inputConfigs.POST("/:id/test", auditOp(models.ModuleInputConfig, "test_connection"), a.handlers.InputConfig.TestConnection)
 		inputConfigs.POST("/scan-usb", auditOp(models.ModuleInputConfig, "scan_usb"), a.handlers.InputConfig.ScanUSBDevices)
+		// 预览是高频只读媒体端点，刻意跳过 auditOp 避免污染审计日志（先例：validate-password :902-903）
+		// 认证由 api 组 MultiAuth (:933) 强制
+		inputConfigs.GET("/:id/preview", a.handlers.InputConfig.GetConfigPreview)
 	}
 
 	// 文件存储管理

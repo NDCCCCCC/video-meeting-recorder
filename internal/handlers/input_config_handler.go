@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -15,10 +16,11 @@ import (
 
 // InputConfigHandler 输入配置处理器
 type InputConfigHandler struct {
-	configService *services.InputConfigService
-	auditService  *audit.AuditLogService
-	logger        *zap.Logger
-	usbScanner    *services.USBDeviceScanner
+	configService  *services.InputConfigService
+	auditService   *audit.AuditLogService
+	logger         *zap.Logger
+	usbScanner     *services.USBDeviceScanner
+	previewService *services.InputPreviewService
 }
 
 // NewInputConfigHandler 创建输入配置处理器
@@ -27,12 +29,14 @@ func NewInputConfigHandler(
 	auditService *audit.AuditLogService,
 	logger *zap.Logger,
 	usbScanner *services.USBDeviceScanner,
+	previewService *services.InputPreviewService,
 ) *InputConfigHandler {
 	return &InputConfigHandler{
-		configService: configService,
-		auditService:  auditService,
-		logger:        logger,
-		usbScanner:    usbScanner,
+		configService:  configService,
+		auditService:   auditService,
+		logger:         logger,
+		usbScanner:     usbScanner,
+		previewService: previewService,
 	}
 }
 
@@ -281,4 +285,34 @@ func (h *InputConfigHandler) GetActiveConfigs(c *gin.Context) {
 	}
 
 	response.GinSuccess(c, result.Items)
+}
+
+// GetConfigPreview 获取输入配置的实时画面预览（单帧 JPEG）
+// @Summary 获取输入配置预览
+// @Description 按需从 USB / RTSP-RTMP-SRT-HLS 流 / 华为终端 RTSP 抓取单帧 JPEG
+// @Tags 输入配置
+// @Security Bearer
+// @Param id path int true "配置ID"
+// @Success 200 "image/jpeg"
+// @Router /api/v1/input-configs/{id}/preview [get]
+func (h *InputConfigHandler) GetConfigPreview(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, strconv.IntSize)
+	if err != nil {
+		response.GinError(c, response.CodeInvalidRequest, "无效的配置ID")
+		return
+	}
+
+	jpeg, err := h.previewService.CapturePreview(c.Request.Context(), uint(id))
+	if err != nil {
+		h.logger.Error("Failed to capture input config preview",
+			zap.Uint("config_id", uint(id)),
+			zap.Error(err),
+			response.SentinelField(err))
+		response.HandleError(c, err)
+		return
+	}
+
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "image/jpeg", jpeg)
 }
