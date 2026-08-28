@@ -22,15 +22,15 @@
 | ErrCredentialAccess | Sentinel | 500 | 2 |
 | ErrDuplicateRecord | Sentinel | 500 | 4 |
 | ErrEmailExists | Sentinel | 409 | 6 |
-| ErrFFmpegFailed | Sentinel | 500 | 6 |
+| ErrFFmpegFailed | Sentinel | 500 | 8 |
 | ErrForbidden | Sentinel | 403 | 24 |
 | ErrForeignKeyConstraint | Sentinel | 500 | 15 |
 | ErrHuaweiAuthFailed | Sentinel | 500 | 2 |
 | ErrInsufficientQuota | Sentinel | 429 | 12 |
 | ErrInternal | Sentinel | 500 | 114 |
 | ErrInvalidFileType | Sentinel | 400 | 5 |
-| ErrInvalidInput | Sentinel | 400 | 161 |
-| ErrNotFound | Sentinel | 404 | 31 |
+| ErrInvalidInput | Sentinel | 400 | 168 |
+| ErrNotFound | Sentinel | 404 | 32 |
 | ErrPPTFileNotFound | Sentinel | 404 | 9 |
 | ErrPermissionNotFound | Sentinel | 404 | 5 |
 | ErrRecordingHuaWeiStateFetchFailed | Sentinel | 500 | 20 |
@@ -48,7 +48,7 @@
 | ErrTokenExpired | Sentinel | 401 | 11 |
 | ErrTokenInvalid | Sentinel | 401 | 27 |
 | ErrTokenNotYetValid | Sentinel | 401 | 6 |
-| ErrTokenReplayed | Sentinel | 401 | 9 |
+| ErrTokenReplayed | Sentinel | 401 | 15 |
 | ErrTranscriptionFailed | Sentinel | 500 | 24 |
 | ErrTranscriptionUnavailable | Sentinel | 503 | 17 |
 | ErrUnauthorized | Sentinel | 401 | 23 |
