@@ -306,7 +306,7 @@ describe('apiClient token 状态机（quick 260828-j2a）', () => {
     expect.assertions(4)
     seedTokens('AT1', 'RT1')
 
-    handler = (url, init) => {
+    handler = (url, _init) => {
       if (isRefresh(url)) {
         refreshCalls++
         return refreshResponse('AT2', 'RT2')
