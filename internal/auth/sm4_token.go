@@ -30,8 +30,19 @@ type TokenCacheEntry struct {
 }
 
 const (
-	// GracePeriod 宽限期时间：5秒内重复刷新请求返回相同的 token 对
-	GracePeriod = 5 * time.Second
+	// GracePeriod 宽限期时间（quick 260828-j2a）：30 秒内同一 Refresh Token
+	// 重复刷新请求返回相同的 token 对（幂等）。
+	//
+	// 设计要点：
+	//  1. 该窗口是"同一 RT 重复刷新返回幂等结果"的宽限期，不改变超窗重放判定与
+	//     RevokeUserSessions 语义——宽限期外再用旧 RT 仍返回 ErrTokenReplayed
+	//     并撤销该用户全部会话（见 RefreshAccessTokenWithContext）。
+	//  2. 与前端 apiClient REFRESH_GRACE_MS(30s) 对应：确保前端迟到 401 的缓存
+	//     重放窗口覆盖后端宽限期。多标签页 / 网络抖动下的良性并发刷新不再被
+	//     误判为重放攻击而撤销该用户全部会话。
+	//  3. 历史值 5s 因前端 refresh 单飞窗口过窄被误触发 RevokeUserSessions，
+	//     把整会话撤销（根因 RCA-5）。后端放宽到 30s 后，超窗重放检测仍有效。
+	GracePeriod = 30 * time.Second
 )
 
 // SM4TokenService 基于SM4-GCM的Token服务，替代JWT。
@@ -49,6 +60,9 @@ type SM4TokenService struct {
 	// token 缓存：支持宽限期机制
 	tokenCache      map[string]*TokenCacheEntry // key: refresh token, value: 缓存的 token 对
 	tokenCacheMutex sync.RWMutex
+	// gracePeriod 宽限期实际生效值（默认 = GracePeriod 常量）。
+	// 测试可注入短窗口以验证宽限期/超窗重放逻辑，无需 sleep 30s。
+	gracePeriod time.Duration
 }
 
 // Claims Token声明
@@ -97,6 +111,7 @@ func NewSM4TokenService(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *SM
 		logger:                  logger,
 		allowedTokenURLPrefixes: append([]string(nil), cfg.Security.AllowedTokenURLPrefixes...),
 		tokenCache:              make(map[string]*TokenCacheEntry),
+		gracePeriod:             GracePeriod,
 	}
 }
 
@@ -321,12 +336,12 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 			// token 已被使用过
 			if session.LastUsedAt != nil {
 				timeSinceLastUse := now.Sub(*session.LastUsedAt)
-				if timeSinceLastUse < GracePeriod {
+				if timeSinceLastUse < s.gracePeriod {
 					// 在宽限期内，查找最近生成的新 token
 					var newSession models.Session
 					err := s.db.WithContext(ctx).Where("user_id = ? AND created_at > ?",
 						claims.UserID,
-						now.Add(-GracePeriod),
+						now.Add(-s.gracePeriod),
 					).Order("created_at DESC").First(&newSession).Error
 
 					if err == nil {
@@ -350,7 +365,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 						s.tokenCacheMutex.Lock()
 						s.tokenCache[refreshToken] = &TokenCacheEntry{
 							TokenPair:    newTokenPair,
-							ExpiresAt:    now.Add(GracePeriod),
+							ExpiresAt:    now.Add(s.gracePeriod),
 							RefreshToken: refreshToken,
 						}
 						s.tokenCacheMutex.Unlock()
@@ -399,7 +414,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 	s.tokenCacheMutex.Lock()
 	s.tokenCache[refreshToken] = &TokenCacheEntry{
 		TokenPair:    newTokenPair,
-		ExpiresAt:    now.Add(GracePeriod),
+		ExpiresAt:    now.Add(s.gracePeriod),
 		RefreshToken: refreshToken,
 	}
 	s.tokenCacheMutex.Unlock()
@@ -412,7 +427,7 @@ func (s *SM4TokenService) RefreshAccessTokenWithContext(ctx context.Context, ref
 					zap.Any("recover", r), zap.Stack("stack"))
 			}
 		}()
-		timer := time.NewTimer(GracePeriod)
+		timer := time.NewTimer(s.gracePeriod)
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
